@@ -10,10 +10,13 @@
  */
 import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
+import { flagSteps, readFlag } from './dev_navigate'
+import { walkList } from './dev_drive'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
+import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, subtreeKeys, walkShown, withBox, applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel, remindItems } from './dev_preview_rules'
 
 
 interface Preview {
@@ -22,7 +25,7 @@ interface Preview {
   assembled: { sha: string; at: string; error: string | null; restart?: boolean; set?: string[] } | null
   pending?: boolean
   compat?: Compat
-  pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean } | null
+  pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean; head?: string; mergeCommit?: string } | null
   next?: { id: string; port: number }
   tested?: Tested | null
   session?: { id: string; path: string }
@@ -44,10 +47,11 @@ const CSS = `
 .twp .pillbox{display:inline-flex;border:1px solid #7a6a8c;border-radius:999px;overflow:hidden}.twp .pillbox .pill{border:0;border-radius:0}.twp .pillbox .pill.note{border-left:1px solid #7a6a8c;text-decoration:none}.twp .pillbox .pill.on.merge{background:#4fd7a0}
 .twp .srch{display:block;width:calc(100% - 20px);box-sizing:border-box;margin:2px 10px;padding:3px 6px;border-radius:6px;border:1px solid #7a6a8c;background:#1a1322;color:#fff;font:inherit}.twp .srchbtn{background:none;border:0;color:#fff;padding:0 10px;cursor:pointer}.twp .compat.bad{color:#ff9b8e}.twp .compat summary,.twp .remind summary{cursor:pointer;text-decoration:underline}.twp .compat ul{margin:2px 0 0;padding-left:16px}
 .twp .feat.glim{animation:twp-glim .9s ease-out}@keyframes twp-glim{0%{background:rgba(255,255,255,.95)}100%{background:transparent}}
-.twp .loadhead{display:block;width:calc(100% - 20px);margin:2px 10px;text-align:left;background:none;color:#fff;text-decoration:underline;padding:3px 0}
+.twp .loadrow{display:flex;gap:6px;align-items:center;margin:2px 10px}.twp .loadrow .loadhead{margin:0;flex:1}.twp .flagon{display:block;width:max-content;margin-top:3px}.twp .focus b{display:block;color:#4fd7a0}
+.twp .loadhead,.twp .remindhead{display:block;width:calc(100% - 20px);margin:2px 10px;text-align:left;background:none;color:#fff;text-decoration:underline;padding:3px 0}
 .twp .adv{margin-top:2px}.twp .adv summary{cursor:pointer;text-decoration:underline;color:#b7a8c9;padding:2px 0}
 @media (max-width:700px){.twp{max-height:calc(100dvh - 330px)}}
-.twp .remind{color:#ffc65c;font-weight:600}
+.twp .remindbtn{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}.twp .remind{color:#ffc65c;font-weight:600}
 .twf-ok .big:disabled{background:#8a8f94;color:#eceeef;opacity:1}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
@@ -60,7 +64,7 @@ const CSS = `
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp .btns.hdr{display:flex}.twp a{color:#4fd7a0}
 .twp button:disabled{opacity:.45;cursor:not-allowed}
 .twp pre.log{margin:0;max-height:8.5em;overflow:auto;font:10px/1.3 ui-monospace,monospace;background:#16101d;padding:4px;border-radius:6px;white-space:pre-wrap}
-.twp .pills{flex:1 0 100%;display:flex;flex-wrap:wrap;gap:3px;padding-left:31px;box-sizing:border-box}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
+.twp .flags{display:flex;flex-wrap:wrap;gap:3px;padding:0 10px 4px}.twp .pills{flex:1 0 100%;display:flex;flex-wrap:wrap;gap:3px;padding-left:31px;box-sizing:border-box}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
 .twp .pill.on.merge{background:#4fd7a0;color:#241b2e;border-color:#4fd7a0}.twp .pill.on.work{background:#e5484d;color:#fff;border-color:#e5484d}
 .twp .bar{position:sticky;bottom:0;margin:4px 0 0;padding:6px 10px;background:#3a2c48;display:grid;gap:5px;border-top:1px solid #7a6a8c}.twp .bar div{display:flex;gap:6px;align-items:center}.twp .bar button{text-decoration:underline}
 .twp .upd{margin-left:4px;padding:0 4px;border-radius:4px;background:#ffbf47;color:#241b2e;font-weight:700}
@@ -74,6 +78,9 @@ const POS = 'twp-pos'
 const folded = (id: string): string[] => foldStore(sessionStorage, id).get()
 const setFolded = (id: string, keys: string[]): void => { foldStore(sessionStorage, id).set(keys) }
 const seenKey = (id: string): string => 'twp-seen-' + id
+const flagOn = (f: PreviewFeature): boolean => !!f.flag && readFlag(f.flag, location.search, localStorage)
+/** Wave 30 (P5): a walk interrupted by its flag switch's reload goes on after it (sessionStorage, the row's key). */
+const RESUME = 'twp-walk-resume'
 const store = {
   get: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } },
   set: (k: string, v: string): void => { try { localStorage.setItem(k, v) } catch { /* private mode: not remembered */ } },
@@ -127,7 +134,16 @@ export function initDevPreview(): void {
   let query = '', searching = false   // the row search under the header line (Esc / empty clears)
   let retried = false
   const individual = individualStore(localStorage, p.id), loadOpen = loadOpenStore(sessionStorage, p.id), remindOpen = remindOpenStore(sessionStorage, p.id)
-  const applyLater = debounce(() => { if (p && autoApply(p, applying)) void apply() }, APPLY_DELAY_MS)
+  // An uncheck or needs work (`wanted`) always assembles, whatever the registry's pending flag says at that moment; a busy apply or write asks again.
+  let wanted = false
+  const focus = focusStore(sessionStorage, p.id)
+  const applyLater: ReturnType<typeof debounce> = debounce(() => {
+    if (!p) return
+    const due = applyDue(p, applying, wanted, inflight)
+    if (due === 'later') { applyLater(); return }
+    wanted = false
+    if (due === 'now') void apply()
+  }, APPLY_DELAY_MS)
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
@@ -185,21 +201,26 @@ export function initDevPreview(): void {
   }
 
   createDevice2(p.id, p.stockPort, mode, toast)
-  // Title tap / Walk: the feature's steps as the yellow card over the phone, always (a step may need the reviewer's own tap, which an
-  // automatic click-through gave up on); a feature without steps is only pointed at.
+  // Title tap / Walk: the feature's steps as the yellow card over the phone; wave 31: the card does each tap itself (ring first), a step it
+  // cannot reach waits for the reviewer's own tap; ? shows the steps for the reviewer to tap. A feature without steps is only pointed at.
   const walk = (f: PreviewFeature): void => { if (lit === f.key) lit = null; tap(f, true) }
+
+  // Walk and ? fold the panel while the steps run (wave 31: the driving Walk too, at 360 px the panel covers the app), unless the next step is the panel's flag switch.
+  const foldFor = (f: PreviewFeature): void => { if (steps.active() && f.context !== 'panel' && !(f.flag && !flagOn(f)) && fold.press(collapsed())) tab.set(true) }
 
   function tap(f: PreviewFeature, walking = false): void {
     seen = tapSeen(seen, f.key, f.ref ?? '')
     store.set(seenKey(p!.id), JSON.stringify(seen))
     lit = tapped(lit, f.key)
+    if (lit) focus.set(f.key)
     steps.close()
     // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
     if (lit) {
       const plan = walking && f.steps?.length ? 'walk' : rowPlan(pointer.set(f.selector), f.steps)
-      if (plan === 'walk') steps.open(f.steps!)
+      const own = flagSteps(f, flagOn(f))
+      if (plan === 'walk') void steps.open(walkList(own, f.title, f.selector), f.context, true)
       else if (plan === 'none') { lit = null; toast('nothing to point at for this feature') }
-      else if (plan === 'steps') steps.open([...f.steps!, f.selector ? `${f.title} @ ${f.selector}` : f.title])
+      else if (plan === 'steps') void steps.open([...own, f.selector ? `${f.title} @ ${f.selector}` : f.title], f.context)
     }
     render()
   }
@@ -213,13 +234,20 @@ export function initDevPreview(): void {
   }
   // A box or pill writes the registry (the CLI cascades requires/dependants). Approve and needs work only mark what gets pushed; the boxes assemble.
   const press = (key: string, v: 'merge' | 'needs-work'): void => {
+    focus.set(null)
     const loadFirst = v === 'merge' && !p!.features.find((x) => x.key === key)!.checked   // approve on an unticked row ticks it for the owner
     const base = v === 'merge' ? ensureLoaded(p!.features, key) : p!.features
     const next = pillPress(base, key, v)
-    const keys = next === 'needs-work' ? [key] : subtreeKeys(base, key)
+    const keys = [key]   // one row's press touches only that row, never its children or dependants
     individual.set(next === 'merge' ? [...new Set([...individual.get(), ...keys])] : individual.get().filter((k) => !keys.includes(k)))
     write(applyVerdicts(base, keys, next), async () => { if (loadFirst) await call('POST', '', { feature: key, checked: true }); let q: Preview | undefined; for (const k of keys) q = await call('POST', '/verdict', { feature: k, verdict: next }); return q! })
-    if (loadFirst) applyLater()
+    if (loadFirst || v === 'needs-work') { wanted = true; applyLater() }
+  }
+  const remindLink = (r: { key: string; title: string }): HTMLElement => {
+    const b = h('button', { className: 'remindbtn', textContent: r.title, title: 'Uncheck this row' })
+    b.dataset.remindKey = r.key
+    b.addEventListener('click', () => load(r.key, false))
+    return b
   }
   const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allLoaded(p!.features)) }))
   const approveAll = (): Promise<void> => act(null, async () => {
@@ -227,7 +255,7 @@ export function initDevPreview(): void {
     await approveEach(unapproved(p!.features), async (feature) => { q = await call('POST', '/verdict', { feature, verdict: 'merge' }); return true })
     return q
   })
-  const load = (feature: string, checked: boolean): void => { write(withBox(p!.features, feature, checked), () => call('POST', '', { feature, checked })); applyLater() }
+  const load = (feature: string, checked: boolean): void => { wanted = true; if (!checked) focus.set(null); write(withBox(p!.features, feature, checked), () => call('POST', '', { feature, checked })); applyLater() }
 
   // Assemble the approved set on the server (the vite config only restarts the server when its content changed), poll the registry
   // (pending / assembled.at) and reload when it is done; no registry change for 90 s = stuck, "Retry" asks again.
@@ -307,25 +335,30 @@ export function initDevPreview(): void {
     const go = h('button', { className: 'mini walk', textContent: walking ? 'Stop' : 'Walk', disabled: !!walkBtn?.disabled && !walking, title: walkBtn?.title ?? '' })
     go.addEventListener('click', (e) => {
       e.stopPropagation()
-      if (walking) { lit = null; render() } else { if (!d.checked) load(f.key, true); walk(f) }
+      if (walking) { lit = null; render() } else { if (!d.checked) load(f.key, true); walk(f); foldFor(f) }
     })
     const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
       const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading() })
-      b.addEventListener('click', (e) => { e.stopPropagation(); press(f.key, v) })
+      b.addEventListener('click', (e) => {
+        e.stopPropagation()
+        if (v === 'needs-work' && shownVerdict(f) !== v) { void copy(needsWorkNote(new Date().toISOString(), p!.id, f), 'needs-work line copied'); glim = f.key; setTimeout(() => { glim = null; render() }, 900) }
+        press(f.key, v)
+      })
       return b
     }
     // 📝: the reference to this feature to the clipboard (white glimmer, like the autocopy), and the approve.
     const note = h('button', { className: 'pill note', textContent: '📝', title: 'Approve, and copy the reference to this feature to paste into the pi session', disabled: loading() })
     note.addEventListener('click', (e) => {
       e.stopPropagation()
+      focus.set(null)
       void copy(noteText(p!.id, f), 'reference copied')
       glim = f.key; setTimeout(() => { glim = null; render() }, 900)
       if (shownVerdict(f) !== 'merge') press(f.key, 'merge')
-      else { individual.set([...new Set([...individual.get(), ...subtreeKeys(p!.features, f.key)])]); render() }   // approved by the registry before: the note is the owner's own press
+      else { individual.set([...new Set([...individual.get(), f.key])]); render() }   // approved by the registry before: the note is the owner's own press
     })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
-    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); if (steps.active() && fold.press(collapsed())) tab.set(true); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
+    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); foldFor(f); render() })
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, h('span', { className: 'go', textContent: mark.prefix + f.title }), ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : []), ...(f.flag && !flagOn(f) ? [flagOnButton(f)] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }
@@ -370,11 +403,12 @@ export function initDevPreview(): void {
 
   /** A merged PR: the way on to the preview that carries the unshipped boxes, else "shipped". */
   function mergedPart(): HTMLElement {
-    if (p!.next) {
-      const to = h('a', { href: `http://127.0.0.1:${p!.next.port}/`, textContent: `Continue in ${p!.next.id} (port ${p!.next.port})` })
-      return h('div', { className: 'btns' }, to, ...(opening ? [staying(p!.next.id)] : []))
+    const m = mergedLabel(p!)
+    if ('next' in m) {
+      const to = h('a', { href: `http://127.0.0.1:${m.next.port}/`, textContent: `Continue in ${m.next.id} (port ${m.next.port})` })
+      return h('div', { className: 'btns' }, to, ...(opening ? [staying(m.next.id)] : []))
     }
-    return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr!.number} shipped` }))
+    return h('div', { className: 'btns' }, h('small', { textContent: m.text }))
   }
 
   /** Clipboard API, else a textarea + execCommand('copy'), else the text in a selectable <pre> (the poll re-renders the panel, so it sits beside it). */
@@ -447,6 +481,32 @@ export function initDevPreview(): void {
     if (now - idClickAt < 400) { idClickAt = 0; copyId(id) } else idClickAt = now
   }
 
+  /** Wave 30 (P5): "Try <title>" for every loaded row with a flag: sets or clears the flag (localStorage and the URL) and reloads; an open walk of that row goes on after the reload. */
+  function setFlag(f: PreviewFeature, on: boolean): void {
+    if (lit === f.key && steps.active()) sessionStorage.setItem(RESUME, f.key)
+    if (on) localStorage.removeItem('twp-flag-' + f.flag!); else store.set('twp-flag-' + f.flag!, '1')
+    const url = new URL(location.href)
+    if (on) url.searchParams.delete(f.flag!); else url.searchParams.set(f.flag!, '1')
+    location.assign(url)
+  }
+
+  /** Wave 32: a plain underlined "Turn on <title>" right under the row's title (the walker taps it first); sets the flag and reloads. */
+  function flagOnButton(f: PreviewFeature): HTMLButtonElement {
+    const b = h('button', { className: 'pill flagon', textContent: S.flagOn(f.title) })
+    b.dataset.flagOn = f.flag
+    b.addEventListener('click', (e) => { e.stopPropagation(); setFlag(f, false) })
+    return b
+  }
+
+  function flagSwitch(f: PreviewFeature): HTMLButtonElement {
+    const on = flagOn(f)
+    const b = h('button', { className: 'pill' + (on ? ' on merge' : ''), textContent: (on ? '✓ ' : '') + S.flagTry(f.title), title: on ? 'On: tap to switch it off' : 'Off: tap to switch it on' })
+    b.dataset.flagSwitch = f.flag
+    b.setAttribute('aria-pressed', String(on))
+    b.addEventListener('click', (e) => { e.stopPropagation(); setFlag(f, on) })
+    return b
+  }
+
   /** All feature rows, section by section; the panel scrolls (max-height from the viewport) when there are more than fit. */
   const allRows = (secs: { sec: HTMLElement; rows: HTMLElement[] }[]): HTMLElement[] => secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
 
@@ -487,8 +547,16 @@ export function initDevPreview(): void {
       const rejected = visible(shown).filter((f) => shownVerdict(f) === 'needs-work' || (f.verdict === 'needs-work' && !f.checked))
       const loadHead = h('button', { className: 'loadhead', textContent: `${open ? '▾' : '▸'} Load (${visible(shown).filter((f) => f.checked).length} of ${visible(shown).length} loaded)`, title: open ? 'Collapse' : 'Expand' })
       loadHead.addEventListener('click', () => { loadOpen.set(!open); render() })
+      const assembleNow = h('button', { className: 'alt', textContent: S.panelAssembleNow, title: S.panelAssembleNowTip, disabled: !!applying && !applying.stuck })
+      assembleNow.dataset.assembleNow = ''
+      assembleNow.addEventListener('click', () => { void apply() })
+      const fs = focusSplit(shown, focus.get())
+      const showAll = h('button', { className: 'loadhead', textContent: S.panelShowAll })
+      showAll.dataset.focusOff = ''
+      showAll.addEventListener('click', () => { focus.set(null); loadOpen.set(true); render() })
       const waiting = unapproved(q.features)
-      const remindHead = h('button', { className: 'loadhead', textContent: `${waiting.length} loaded, not yet approved ${remindOpen.get() ? '▾' : '▸'}`, title: remindOpen.get() ? 'Collapse' : 'Expand' })
+      const flagged = visible(shown).filter((f) => f.flag && f.checked)
+      const remindHead = h('button', { className: 'remindhead', textContent: `${waiting.length} loaded, not yet approved ${remindOpen.get() ? '▾' : '▸'}`, title: remindOpen.get() ? 'Collapse' : 'Expand' })
       remindHead.addEventListener('click', () => { remindOpen.set(!remindOpen.get()); render() })
       const searchBtn = h('button', { className: 'srchbtn', textContent: '🔍', title: 'Search the rows' })
       searchBtn.addEventListener('click', () => { searching = !searching; if (!searching) query = ''; render() })
@@ -502,14 +570,16 @@ export function initDevPreview(): void {
       const approveAllBtn = h('button', { textContent: 'Approve all', disabled: loading() || waiting.length === 0 })
       approveAllBtn.addEventListener('click', () => { void approveAll() })
       root.append(
+        ...(fs ? [h('div', { className: 'row focus' }, h('b', { textContent: fs.wave }), h('div', { textContent: fs.row.title + (fs.row.where ? ' · ' + fs.row.where : '') }), row({ feature: fs.row, depth: 0, children: [] }, shown), showAll)] : []),
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` }), searchBtn),
         ...(searching ? [searchBox] : []),
         ...(compat ? [compat] : []),
+        ...(flagged.length ? [h('div', { className: 'row flags' }, ...flagged.map(flagSwitch))] : []),
         ...(open ? [h('div', { className: 'btns hdr' }, approveAllBtn, all)] : []),
         ...(waiting.length ? [h('div', { className: 'row remind' }, remindHead, ...(remindOpen.get() ? [h('div', { textContent: waiting.map((f) => f.title).join(', ') })] : []))] : []),
-        ...(rejected.length ? [h('div', { className: 'row remind rej', textContent: `needs work: ${rejected.map((f) => f.title).join(', ')}` })] : []),
-        loadHead,
-        ...(open || query ? allRows(sections(tree(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
+        ...(rejected.length ? [h('div', { className: 'row remind rej' }, 'needs work: ', ...remindItems(rejected).flatMap((r, i) => [...(i ? [', '] : []), remindLink(r)]))] : []),
+        h('div', { className: 'loadrow' }, loadHead, assembleNow),
+        ...((open || query) && !fs ? allRows(sections(tree(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn' }, hintParts('Fix the conflict first: ' + q.assembled.error).head, h('details', {}, h('summary', { textContent: 'details' }), h('div', {}, ...conflictNodes(q.assembled.error))))] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
@@ -545,5 +615,9 @@ export function initDevPreview(): void {
     render()
     if (autoApply(q, applying)) void apply()
     setInterval(() => { void watch() }, 2000)
+    const resume = sessionStorage.getItem(RESUME)
+    sessionStorage.removeItem(RESUME)
+    const f = resume ? q.features.find((x) => x.key === resume) : undefined
+    if (f) walk(f)
   }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }
