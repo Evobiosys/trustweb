@@ -7,9 +7,12 @@
  * switched on, and "Share to..." on an item or post, always the person's tap.
  */
 import { el } from '../../demo/src/ui/dom'
-import { buildFeed, PostKind } from './feed'
+import { buildFeed, filterFeed, FeedSource, PostKind } from './feed'
 import type { Post } from './feed'
-import { FetchProblem, handleText, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
+import { addGroupPost, followPosts, followText, followUrl, groupPosts, groupsOf, parseFeedText, parseFollow, sourceCounts } from './feed_sources'
+import type { FeedItem } from './feed_sources'
+import { loadColourTags } from './colour_tags'
+import { fetchFeedText, FetchProblem, handleText, safeRemoteUrl, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
 import type { RemoteStatus } from './fediverse'
 import type { ImageStore } from './image_store'
 import { shrink } from './image_store'
@@ -61,6 +64,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   const remote = new Map<string, { at: number; statuses: RemoteStatus[] | FetchProblem; accountId?: string }>()
   const fetching = new Set<string>()
   let objectUrls: string[] = []
+  const followed_ = new Map<string, { at: number; items: FeedItem[] | FetchProblem }>()
+  const chosen: { source?: FeedSource; group?: string } = {}
 
   const settings = (): FeedSettings => {
     const s = h.state()
@@ -115,7 +120,45 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     return out
   }
 
+  /** Followed accounts / hashtags and the news feed: one public RSS or JSON read each, kept in memory for REMOTE_TTL_MS. Nothing is read before the person added the address. */
+  function followSources(): { url: string; label: string; news: boolean }[] {
+    const f = h.state().feed
+    const news = f?.newsUrl && safeRemoteUrl(f.newsUrl, allowLocal)
+    return [
+      ...(f?.follows ?? []).flatMap((x) => { const p = parseFollow(x, allowLocal); return p ? [{ url: followUrl(p), label: followText(p), news: false }] : [] }),
+      ...(news ? [{ url: news, label: new URL(news).hostname, news: true }] : []),
+    ]
+  }
+
+  async function refreshFollow(url: string): Promise<void> {
+    if (fetching.has(url)) return
+    fetching.add(url)
+    try {
+      const text = await fetchFeedText(url, fetch)
+      followed_.set(url, { at: Date.now(), items: isProblem(text) ? text : parseFeedText(text, allowLocal) })
+    } finally {
+      fetching.delete(url)
+    }
+    h.redrawFeed()
+  }
+
+  function followedPosts(): Post[] {
+    return followSources().flatMap((src) => {
+      const got = followed_.get(src.url)
+      if (!got || Date.now() - got.at > REMOTE_TTL_MS) void refreshFollow(src.url)
+      return got && Array.isArray(got.items) ? followPosts(src.label, got.items, src.news) : []
+    })
+  }
+
   function problems(): HTMLElement[] {
+    const follows = followSources().flatMap((src) => {
+      const got = followed_.get(src.url)
+      return got && !Array.isArray(got.items) ? [el('p', { class: 'meta', 'data-follow-problem': got.items }, [S.fedProblem(src.label, S.fedProblemText[got.items])])] : []
+    })
+    return [...follows, ...personProblems()]
+  }
+
+  function personProblems(): HTMLElement[] {
     return followed().flatMap((p) => {
       const got = remote.get(p.fediverse?.handle ?? '')
       return got && !Array.isArray(got.statuses) ? [el('p', { class: 'meta', 'data-remote-problem': got.statuses }, [S.fedProblem(p.name, S.fedProblemText[got.statuses])])] : []
@@ -170,14 +213,47 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   function body(): HTMLElement {
     for (const u of objectUrls) URL.revokeObjectURL(u)
     objectUrls = []
-    const posts = buildFeed(h.state(), remoteFor())
+    const tags = loadColourTags()
+    const all = buildFeed(h.state(), [...remoteFor(), ...followedPosts(), ...groupPosts(h.state(), tags)])
+    const groups = groupsOf(h.state(), tags)
+    if (chosen.group && !groups.some((g) => g.id === chosen.group)) delete chosen.group
+    const posts = filterFeed(all, chosen)
+    const counts = sourceCounts(all)
+    const pick = (source?: FeedSource, group?: string): void => { chosen.source = source; if (group) chosen.group = group; else delete chosen.group; h.redrawFeed() }
+    const chip = (label: string, on: boolean, attrs: Record<string, string>, go: () => void): HTMLElement => el('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), ...attrs, onclick: go }, [label])
     return el('div', { class: 'scroll pad feed' }, [
+      el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedChipsLabel }, [
+        chip(S.feedAll, !chosen.source, { 'data-feed-src': 'all' }, () => pick()),
+        ...Object.values(FeedSource).map((src) => chip(`${S.feedSrc[src]} ${counts[src]}`, chosen.source === src, { 'data-feed-src': src }, () => pick(chosen.source === src ? undefined : src))),
+        el('button', { class: 'btn btn-electric btn-sm', 'data-feed-post': '1', onclick: () => postSheet(groups) }, [S.feedPost]),
+      ]),
+      chosen.source === FeedSource.Group && groups.length
+        ? el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedGroupsLabel }, groups.map((g) => chip(g.name, chosen.group === g.id, { 'data-feed-group': g.id }, () => pick(FeedSource.Group, chosen.group === g.id ? undefined : g.id))))
+        : null,
       ...problems(),
       posts.length
         ? el('div', { class: 'posts' }, posts.map(postEl))
         : el('div', { class: 'empty feed-empty', 'data-feed-empty': '1' }, [el('p', {}, [S.feedEmpty]), el('ul', {}, S.feedEmptyList.map((t) => el('li', {}, [t])))]),
       el('p', { class: 'foot' }, [S.feedFoot]),
     ])
+  }
+
+  /** "Post to <group>": only groups the person is in are offered. */
+  function postSheet(groups: readonly { id: string; name: string }[]): void {
+    if (!groups.length) { h.openSheet([el('h3', {}, [S.feedPost]), el('p', { class: 'meta', 'data-feed-nogroup': '1' }, [S.feedNoGroup])]); return }
+    let group = chosen.group && groups.some((g) => g.id === chosen.group) ? chosen.group : groups[0].id
+    const text = el('textarea', { class: 'field', rows: '3', placeholder: S.feedPostPh, 'aria-label': S.feedPostPh, 'data-feed-text': '1' }) as HTMLTextAreaElement
+    const rows = groups.map((g) => el('button', { class: 'radio' + (g.id === group ? ' on' : ''), 'aria-pressed': String(g.id === group), 'data-feed-to': g.id, onclick: (e: Event) => {
+      group = g.id
+      rows.forEach((r) => { const on = r === e.currentTarget; r.classList.toggle('on', on); r.setAttribute('aria-pressed', String(on)) })
+    } }, [el('b', {}, [S.feedPostTo(g.name)])]))
+    const send = (): void => {
+      const s = h.state()
+      if (!addGroupPost(s, group, text.value, Date.now(), loadColourTags())) { text.focus(); return }
+      h.save(); h.closeSheet(); chosen.source = FeedSource.Group; chosen.group = group; h.redrawFeed(); h.toast(S.feedPosted)
+    }
+    h.openSheet([el('h3', {}, [S.feedPost]), ...rows, text, el('p', { class: 'meta' }, [S.feedPostHint]), el('button', { class: 'btn btn-electric', 'data-feed-send': '1', onclick: send }, [S.feedPostSend])])
+    setTimeout(() => text.focus(), 0)
   }
 
   /** "Share to...": Mastodon (the text prefilled) or Pixelfed (paste), by the post's kind, the person's tap. */
@@ -212,10 +288,35 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   function settingsGroup(): HTMLElement[] {
     const s = h.state()
     const on = feedOn(s)
+    const textRow = (label: string, ph: string, attr: string, value: string, save: (v: string) => string | null): HTMLElement => {
+      const input = el('input', { class: 'field', placeholder: ph, value, 'aria-label': label, autocomplete: 'off', [attr]: '1' }) as HTMLInputElement
+      const msg = el('p', { class: 'meta' }, [])
+      const go = (): void => { const bad = save(input.value.trim()); if (bad) { msg.textContent = bad; input.focus() } else { h.save(); h.settings() } }
+      input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') go() })
+      return el('div', {}, [el('label', { class: 'meta' }, [label]), input, msg, el('button', { class: 'btn btn-ghost btn-sm', 'data-save-for': attr, onclick: go }, [S.chSave])])
+    }
+    const follows = s.feed?.follows ?? []
     return [
       el('h4', { class: 'eyebrow' }, [S.feedTitle]),
       toggle(S.feedToggle, S.feedToggleHint, on, 'data-feed-toggle', () => { settings().on = !on; h.save(); h.tabsChanged(); h.settings() }),
       on ? toggle(S.fedRemote, S.fedRemoteHint, remoteOn(), 'data-feed-remote', () => { settings().remote = !remoteOn(); h.save(); h.settings() }) : null,
+      on ? el('div', { class: 'feed-follows' }, [
+        el('h4', { class: 'eyebrow' }, [S.feedFollowTitle]),
+        ...follows.map((f) => el('div', { class: 'ch-row', 'data-follow': f }, [el('span', { class: 'ch-name' }, [f]), el('button', { class: 'mini', 'data-follow-remove': f, onclick: () => { settings().follows = follows.filter((x) => x !== f); h.save(); h.settings() } }, [S.imgRemove])])),
+        textRow(S.feedFollowLabel, S.feedFollowPh, 'data-follow-input', '', (v) => {
+          const p = parseFollow(v, allowLocal)
+          if (!p) return S.feedFollowBad
+          const text = followText(p)
+          if (!follows.includes(text)) settings().follows = [...follows, text]
+          return null
+        }),
+        textRow(S.feedNewsLabel, S.feedNewsPh, 'data-news-input', s.feed?.newsUrl ?? '', (v) => {
+          if (!v) { delete settings().newsUrl; return null }
+          if (!safeRemoteUrl(v, allowLocal)) return S.feedNewsBad
+          settings().newsUrl = v
+          return null
+        }),
+      ]) : null,
       on && remoteOn() ? toggle(S.fedImages, S.fedImagesHint, imagesOn(), 'data-feed-images', () => { settings().images = !imagesOn(); h.save(); h.settings() }) : null,
     ].filter((n): n is HTMLElement => n !== null)
   }

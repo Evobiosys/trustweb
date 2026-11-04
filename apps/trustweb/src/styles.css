@@ -247,6 +247,12 @@ textarea.field{resize:vertical; line-height:1.5}
 .row-pick{display:flex; align-items:center; gap:10px; flex:1; min-width:0; background:var(--card); border-radius:14px; padding:10px 12px; margin:0 0 8px; cursor:pointer}
 .row-pick.on{outline:2px solid var(--electric,#3a6cf0)}
 .row-pick small{display:block}
+.row-tool-hover{visibility:hidden}
+.person-row.tools-on .row-tool-hover,.person-row:focus-within .row-tool-hover{visibility:visible}
+@media (hover:hover){.person-row:hover .row-tool-hover{visibility:visible}}
+/* Wave 32: inline edit confirm green, cancel red (every ✓/✕ pair) */
+button.ok-mark{color:#2e9e6a}
+button.cancel-mark{color:#d9534f}
 .row-tool:disabled{opacity:.4; text-decoration:none}
 /* The tool bar sticks to the bottom of the list's scroll area, which ends above the tab bar; it wraps, never scrolls sideways. */
 .select-bar{position:sticky; bottom:0; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:6px 8px; margin-top:8px; background:var(--card); box-shadow:0 -2px 10px rgba(0,0,0,.3); border-radius:12px; max-width:100%}
@@ -1390,3 +1396,17 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .ask-web .btn,.ask-web .chip{text-decoration:underline}
 .ask-web-list{margin:4px 0; padding-left:18px}
 .ask-set{display:grid; gap:6px; margin:8px 0}
+
+.feed-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; align-items:center}
+.feed-chips .chip{text-decoration:underline}
+.feed-chips .btn{text-decoration:underline; margin-left:auto}
+
+/* Wave 31 (shared-notes): outline blocks wrap on a 360 px screen; every button is underlined */
+.shared-notes{margin-top:8px; overflow-wrap:anywhere; text-align:left}
+.shared-notes .btn,.shared-notes .note-text{text-decoration:underline}
+.note-text{background:none; border:0; padding:2px 0; font:inherit; color:inherit; text-align:left; cursor:pointer; max-width:100%; overflow-wrap:anywhere}
+.shared-notes ul{margin:2px 0 2px 16px; padding:0; list-style:disc}
+.note-annotation>.note-text{font-style:italic}
+.note-form,.note-share,.note-edit{display:flex; flex-direction:column; gap:6px; margin:6px 0}
+.note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.shared-notes .field{width:100%; box-sizing:border-box}

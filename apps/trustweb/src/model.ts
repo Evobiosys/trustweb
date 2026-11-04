@@ -18,6 +18,7 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
+import type { SharedNote } from './notes_outline'
 import type { ConnectRecord } from './connect_code'
 import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
@@ -398,6 +399,8 @@ export interface Person {
    * a provenance entry or any share or contact payload (test/unit/general_notes.test.mjs guards every place that names it). Absent: none.
    */
   generalNote?: string
+  /** Wave 31 (notes_outline.ts): outline notes shared with or received from this person, each with its provenance. Local record; leaves only in a link the owner makes. Absent: none. */
+  sharedNotes?: SharedNote[]
   /** Wave 6e: no longer chosen or shown; still read from older records and ignored. */
   signalProvider?: SignalProvider
   /**
@@ -978,6 +981,8 @@ export interface AppState {
   shareDefaultZone?: string
   /** Wave 29 (zone_tags.ts): tag ids per zone (ring value) with a stamp. Absent: none. */
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
+  /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
+  groupPosts?: GroupPost[]
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
   shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
@@ -1278,7 +1283,14 @@ export interface FeedSettings {
   myInstance?: string
   /** The person's own Pixelfed instance, for "Share to Pixelfed" (host only). */
   myPixelfed?: string
+  /** Wave 31: followed Mastodon accounts / hashtags ("@user@host", "#tag@host"), read through their public RSS. Absent: none. */
+  follows?: string[]
+  /** Wave 31: the news feed (RSS or JSON Feed address, https). Absent: none. */
+  newsUrl?: string
 }
+
+/** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
+export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
