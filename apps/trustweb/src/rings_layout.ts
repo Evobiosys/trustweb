@@ -1,6 +1,7 @@
 /** The rings view's geometry and the one place a drop changes a person: four rings, close in the centre, and a grey "not placed yet" ring outside them (drawn only when someone is on it). */
 import { CLOSENESS_KEY, Ring, RINGS, ringSlot } from './model'
 import type { AppState, Person } from './model'
+import { inExpanse } from './expanse'
 
 export const WEB_RINGS: readonly Ring[] = [...RINGS, Ring.Unsorted]
 
@@ -90,11 +91,11 @@ export function packLaps(angles: readonly number[], radius: number, dot: number)
  * Evenly spaced angles per ring (all rings, or just `ring`), keeping the order around the circle and the first dot where it is.
  * Returns each touched person's previous stored angle (undefined = none) for Undo.
  */
-export function spaceOut(s: Pick<AppState, 'people'>, ring?: Ring): Map<string, number | undefined> {
+export function spaceOut(s: Pick<AppState, 'people' | 'expanse'>, ring?: Ring): Map<string, number | undefined> {
   const before = new Map<string, number | undefined>()
   for (const r of WEB_RINGS) {
     if (ring && r !== ring) continue
-    const around = s.people.filter((p) => webSlot(p) === r).sort((a, b) => angleOf(a) - angleOf(b) || (a.id < b.id ? -1 : 1))
+    const around = s.people.filter((p) => webSlot(p) === r && !inExpanse(s, p.id)).sort((a, b) => angleOf(a) - angleOf(b) || (a.id < b.id ? -1 : 1))
     if (!around.length) continue
     const start = angleOf(around[0])
     around.forEach((p, i) => { before.set(p.id, p.angle); p.angle = (start + (360 * i) / around.length) % 360 })
