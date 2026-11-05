@@ -36,3 +36,21 @@ export function nameEdit(current: string, typed: string, how: 'save' | 'cancel')
   const name = how === 'save' ? renamedTo(current, typed) : null
   return name === null ? { kind: 'cancel' } : { kind: 'commit', name }
 }
+
+/** Wave 30: one row of the ring card: the name, or (after the pencil) an input with accept, cancel and archive. Blur is no event: an open edit stays open. */
+export interface RowState { editing: boolean; result?: NameEdit | { kind: 'archive' } }
+
+export type RowEvent =
+  | { type: 'open' | 'cancel' | 'archive' }
+  | { type: 'accept'; current: string; typed: string }
+
+export const ROW_VIEW: RowState = { editing: false }
+
+export function rowStep(s: RowState, e: RowEvent): RowState {
+  if (e.type === 'open') return { editing: true }
+  if (!s.editing) return s
+  if (e.type === 'accept') return { editing: false, result: nameEdit(e.current, e.typed, 'save') }
+  if (e.type === 'cancel') return { editing: false, result: { kind: 'cancel' } }
+  if (e.type === 'archive') return { editing: false, result: { kind: 'archive' } }
+  return s // blur and anything else: the edit stays open
+}

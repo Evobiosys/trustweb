@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, mergeResume, mergeResult, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, mergeResume, mergeResult, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -282,7 +282,7 @@ describe('approve (merge to main) rules', () => {
     expect(autoApply({ pending: false, tested: null }, null)).toBe(false)
     expect(autoApply(pend, { stamp: '', moved: 0, stuck: false })).toBe(false)
     expect(autoApply(pend, { stamp: '', moved: 0, stuck: true })).toBe(false)
-    expect(autoApply({ pending: true, tested: { sha: 'x', at: '', ok: null, running: true } }, null)).toBe(false)
+    expect(autoApply({ pending: true, tested: { sha: 'x', at: '', ok: null, running: true } }, null)).toBe(true)   // wave 32: a running test never swallows an uncheck
     expect(autoApply({ pending: true, tested: { sha: 'x', at: '', ok: true, running: false } }, null)).toBe(true)
   })
   it('the page reloads itself once the assembled sha moved away from the one it knows (a CLI apply, or the Approve press); unknown or same sha: stay', () => {
@@ -519,5 +519,41 @@ describe('panel-approve-2', () => {
   it('a long conflict hint folds into head and detail', () => {
     expect(hintParts('Fix the conflict first: a\nb')).toEqual({ head: 'Fix the conflict first', detail: 'a\nb' })
     expect(hintParts('Approve first: T-a')).toEqual({ head: 'Approve first: T-a', detail: '' })
+  })
+
+  describe('wave 32 panel-assemble', () => {
+    it('an uncheck or needs work always leads to an apply: due now when idle, later while an apply or a write is going, never lost', () => {
+      expect(applyDue({ pending: false }, null, true, 0)).toBe('now')
+      expect(applyDue({ pending: true, tested: { running: true } }, null, false, 0)).toBe('now')
+      expect(applyDue({ pending: false }, null, false, 0)).toBe('no')
+      expect(applyDue({ pending: false }, { stamp: '', moved: 0, stuck: false }, true, 0)).toBe('later')
+      expect(applyDue({ pending: true }, null, false, 2)).toBe('later')
+      expect(applyDue({ pending: true }, { stamp: '', moved: 0, stuck: true }, true, 0)).toBe('no')
+    })
+    it('the needs-work line for the clipboard', () => {
+      expect(needsWorkNote('2026-11-04T10:00:00.000Z', 'pv1', { key: 'k', title: 'T' })).toBe('2026-11-04T10:00:00.000Z | pv1 | k | T | needs work')
+    })
+    it('focus is stored per preview in the tab; broken storage reads as none', () => {
+      const m = {}
+      const st = { getItem: (k) => m[k] ?? null, setItem: (k, v) => { m[k] = v } }
+      expect(focusStore(st, 'a').get()).toBe(null)
+      focusStore(st, 'a').set('five-rings')
+      expect(focusStore(st, 'a').get()).toBe('five-rings')
+      expect(focusStore(st, 'b').get()).toBe(null)
+      focusStore(st, 'a').set(null)
+      expect(focusStore(st, 'a').get()).toBe(null)
+      expect(focusStore({ getItem: () => { throw new Error('x') }, setItem: () => { throw new Error('x') } }, 'a').get()).toBe(null)
+    })
+    it('focus splits the rows: wave name, the row, the rest; unknown or merged key = no focus', () => {
+      const rows = [{ ...f('a'), branch: 'wave31/a', where: 'W' }, { ...f('b'), branch: 'wave30/b' }, { ...f('m'), merged: true }]
+      const s = focusSplit(rows, 'a')
+      expect(s.wave).toBe('wave31')
+      expect(s.row.key).toBe('a')
+      expect(s.rest.map((x) => x.key)).toEqual(['b'])
+      expect(focusSplit(rows, 'zz')).toBe(null)
+      expect(focusSplit(rows, 'm')).toBe(null)
+      expect(focusSplit(rows, null)).toBe(null)
+      expect(focusSplit([{ ...f('n'), branch: 'solo' }], 'n').wave).toBe('solo')
+    })
   })
 })

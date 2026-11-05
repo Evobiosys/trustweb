@@ -12,6 +12,8 @@ import type { ImportedContact } from '../../crm/src/import/types'
 import { isWhatsAppChat, parseWhatsApp } from '../../crm/src/import/whatsapp'
 import type { Evidence } from '../../crm/src/import/evidence'
 import { Ring } from './model'
+import { parsePhoneExport, readPhoneExport } from './phone_export'
+import type { PhoneExtras } from './phone_export'
 import type { AppState, Person, ServiceBatch, ServiceDone, ServiceRow } from './model'
 import { fingerprint } from './safe_text'
 import { bulkAcceptable, propose, writeFor } from './zone_proposals'
@@ -49,15 +51,33 @@ function knownSigs(s: State): Map<string, string> {
   return known
 }
 
+/** "WhatsApp Chat with X.txt" / "WhatsApp Chat - X.txt" -> "X". */
+const groupName = (file: string): string => file.replace(/\.txt$/i, '').replace(/^WhatsApp Chat( with| -)? ?/i, '').trim() || file
+
 export function planServices(s: State, files: readonly ServiceFile[], o: PlanOptions): ServicePlan {
   const contacts: ImportedContact[] = []
   const evidence: Evidence[] = []
   let ambiguous = false
+  const direct = new Set<string>()
+  const groupOf = new Map<string, string>()
+  const extras = new Map<string, PhoneExtras>()
   const summaries: ServicePlan['files'] = files.map((f) => {
+    // Wave 31: the JSON of the phone tool joins the same evidence, group and row logic as a chat .txt.
+    const px = parsePhoneExport(f.text)
+    if (px) {
+      const r = readPhoneExport(px, f.name, o.now)
+      r.direct.forEach((x) => direct.add(x))
+      r.groupOf.forEach((g, x) => groupOf.set(x, g))
+      r.extras.forEach((e, x) => extras.set(x, e))
+      contacts.push(...r.contacts)
+      evidence.push(...r.evidence)
+      return { name: f.name, source: ContactSource.WhatsApp, count: r.contacts.length }
+    }
     const parsed = parseFile(f.name, f.text)
     if (!parsed.format && isWhatsAppChat(f.text)) {
       const r = parseWhatsApp(f.text, f.name, { me: o.me, dayFirst: o.dayFirst })
       ambiguous ||= r.dateOrder === 'ambiguous'
+      for (const c of r.contacts) (r.group ? groupOf.set(c.sourceRef, groupName(f.name)) : direct.add(c.sourceRef))
       contacts.push(...r.contacts)
       evidence.push(...r.evidence)
       return { name: f.name, source: ContactSource.WhatsApp, count: r.contacts.length }
@@ -71,15 +91,20 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
   const taken = new Set<string>()
   const rows: ServiceRow[] = []
   contacts.forEach((c, i) => {
+    // One person in several WhatsApp chats is one row: the evidence of all chats is already summed under the same key.
+    if (c.sourceRef.startsWith('wa:') && taken.has(c.sourceRef)) return
     let key = c.sourceRef.startsWith('wa:') ? c.sourceRef : `${c.source}:${normalizeName(c.name)}`
-    if (taken.has(key)) key += `|${c.sourceRef}`
+    const first = !taken.has(key)
+    if (!first) key += `|${c.sourceRef}`
     taken.add(key)
     const u = sums.get(key)
     const base = {
       key, name: c.name, source: c.source, file: c.file,
       ...(c.since !== undefined ? { since: c.since } : {}), ...(c.org ? { org: c.org } : {}),
-      n365: u?.n365 ?? 0, out: u?.out ?? 0, in: u?.in ?? 0, ...(u?.lastTs !== undefined ? { lastTs: u.lastTs } : {}),
+      n365: u?.n365 ?? 0, ...(u ? { days: u.days } : {}),
+      ...(first && !direct.has(c.sourceRef) && groupOf.has(c.sourceRef) ? { group: groupOf.get(c.sourceRef) } : {}), out: u?.out ?? 0, in: u?.in ?? 0, ...(u?.lastTs !== undefined ? { lastTs: u.lastTs } : {}),
       ids: (u?.ids ?? []).slice(-IDS_KEPT),
+      ...(first && extras.has(c.sourceRef) ? { closeness: extras.get(c.sourceRef)!.closeness, ...(extras.get(c.sourceRef)!.items.length ? { items: extras.get(c.sourceRef)!.items } : {}) } : {}),
       ...(grouped.has(i) || have.has(normalizeName(c.name)) ? { dupe: true } : {}),
     }
     rows.push({ ...base, sig: sigOf(base, c) })

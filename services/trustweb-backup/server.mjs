@@ -26,6 +26,8 @@
 //   <BACKUP_DIR>/organizers.json) and the operator-only POST /admin/org (plan switch). Never logged either: the modules have no logger.
 // Added 2026-11-02: the organizer store writes hit counters in the background (ORG_HIT_FLUSH_MS) and on close(), and an in-process sweeper (ORG_SWEEP_MS)
 //   drops orgs untouched for ORG_DAYS. close() is async now: it awaits the store's final write.
+// Added 2026-11-05 (wave 32): POST|GET|DELETE /notes/relay, an encrypted-blob mailbox for shared notes above ~100 items (notes_relay.mjs; NOTES_RELAY_* settings,
+//   store <BACKUP_DIR>/notes_relay). Never logged either.
 // The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
 // The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
 // (15 min) because a 20 MB upload from a phone takes minutes.
@@ -69,6 +71,7 @@ import { createHosted } from './hosted.mjs'
 import { createHostedStore } from './hosted_store.mjs'
 import { createConnect } from './connect.mjs'
 import { createConnectStore } from './connect_store.mjs'
+import { createShortAliases, openAliasStore } from './alias_routes.mjs'
 import { reservedChecker } from './connect_names.mjs'
 import { createNameCapAllow } from './name_cap.mjs'
 import { createOrganizer, isOrgPath } from './organizer.mjs'
@@ -78,6 +81,7 @@ import { createLinkStore } from './link_store.mjs'
 import { createLinks, notFoundPage } from './links.mjs'
 import { etagMatches, jsonError, sendJson, sha256Hex, tooManyRequests } from './http_util.mjs'
 import { createTranscriber } from './transcribe.mjs'
+import { isNotesRelayPath, openNotesRelay } from './notes_relay.mjs'
 import { createWebsearch, loadWebsearchConfig } from './websearch.mjs'
 
 const ID_RE = /^[0-9a-f]{64}$/
@@ -89,7 +93,7 @@ const MAX_TRACKED_CLIENTS = 10000
 /** The short-link routes: never logged (see the header). */
 const isLinkPath = (pathname) => pathname === '/link' || pathname.startsWith('/l/')
 /** The connect-code and username routes (wave 6b): never logged either. */
-const isConnectPath = (pathname) => pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname.startsWith('/c/') || pathname.startsWith('/who/')
+const isConnectPath = (pathname) => pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname.startsWith('/c/') || pathname.startsWith('/who/') || pathname === '/s' || pathname.startsWith('/s/')
 
 function hostOnly(value) {
   const v = String(value).trim().toLowerCase()
@@ -171,6 +175,15 @@ export async function startServer(options = {}) {
   const nameCapAllow = createNameCapAllow(cfg.nameCapAllowFile)
   process.on('SIGHUP', nameCapAllow.reload)
   const connect = connectStore === null ? null : createConnect({ cfg, store: connectStore, clientOf, now: cfg.now, nameCapAllow })
+  // Short aliases (wave 32): ride on the connect store's secrets; off when that store is off.
+  let shortAliases = null
+  if (connect !== null) {
+    try {
+      shortAliases = createShortAliases({ cfg, connectStore, gate: connect.gate, aliasStore: await openAliasStore(path.join(cfg.dir, 'short_aliases.json')) })
+    } catch {
+      cfg.log('short alias store unavailable: short aliases off')
+    }
+  }
   const connectSweep = connectStore === null ? null : setInterval(() => connectStore.prune().catch(() => undefined), cfg.connectSweepMs)
   connectSweep?.unref()
 
@@ -194,6 +207,13 @@ export async function startServer(options = {}) {
   // In-process on purpose, no CLI: the store lives in this process's memory, so a second process editing organizers.json would race it and be overwritten.
   const orgSweep = orgStore === null ? null : setInterval(() => orgStore.sweep().catch(() => undefined), cfg.orgSweepMs)
   orgSweep?.unref()
+  // Notes relay (wave 32): same rule, a store that cannot open turns the feature off (503 not_configured).
+  let notesRelay = null
+  try {
+    notesRelay = await openNotesRelay({ cfg, clientOf, withLock, now: cfg.now })
+  } catch {
+    cfg.log('notes relay unavailable: notes relay off')
+  }
   const admin = createAdmin({ cfg, store: connectStore, orgStore, clientOf, now: cfg.now })
   let boundPort = cfg.port // replaced by the port actually bound once the server listens (tests listen on 0)
 
@@ -389,10 +409,10 @@ export async function startServer(options = {}) {
       return 421
     }
     const pathname = (req.url ?? '').split('?')[0]
-    const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe'
+    const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe' || isNotesRelayPath(pathname)
     // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
     const isWebsearch = pathname === '/websearch' || pathname === '/websearch/engines'
-    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link' || pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || isOrgPath(pathname)
+    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link' || pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname === '/s' || isOrgPath(pathname)
     const slowDown = () => {
       const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
       if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
@@ -434,7 +454,10 @@ export async function startServer(options = {}) {
     if (pathname === '/name') return connect === null ? jsonError(res, 503, 'not_configured') : connect.name(req, res)
     if (pathname === '/names/cap-request') return connect === null ? jsonError(res, 503, 'not_configured') : connect.capRequest(req, res)
     if (pathname.startsWith('/c/')) return connect === null ? notFoundPage(res) : connect.open(req, res, pathname)
+    if (pathname === '/s') return shortAliases === null ? jsonError(res, 503, 'not_configured') : shortAliases.register(req, res)
+    if (pathname.startsWith('/s/')) return shortAliases === null ? notFoundPage(res) : shortAliases.open(req, res, pathname)
     if (pathname.startsWith('/who/')) return connect === null ? notFoundPage(res) : connect.who(req, res, pathname)
+    if (isNotesRelayPath(pathname)) return notesRelay === null ? jsonError(res, 503, 'not_configured') : notesRelay.handle(req, res)
     if (isOrgPath(pathname)) return organizer === null ? jsonError(res, 503, 'not_configured') : organizer.handle(req, res, pathname)
     if (pathname === '/feedback') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, OPTIONS' })
     if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
@@ -469,7 +492,7 @@ export async function startServer(options = {}) {
       })
       return
     }
-    const quiet = isLinkPath((req.url ?? '').split('?')[0]) || isConnectPath((req.url ?? '').split('?')[0]) || isOrgPath((req.url ?? '').split('?')[0])
+    const quiet = isLinkPath((req.url ?? '').split('?')[0]) || isConnectPath((req.url ?? '').split('?')[0]) || isOrgPath((req.url ?? '').split('?')[0]) || isNotesRelayPath((req.url ?? '').split('?')[0])
     route(req, res)
       .then((status) => {
         if (!quiet) cfg.log(`${req.method} ${status}`)
@@ -499,6 +522,7 @@ export async function startServer(options = {}) {
         server.close(() => resolve())
         server.closeAllConnections()
       })
+      await shortAliases?.flush().catch(() => undefined)
       await orgStore?.close().catch(() => undefined) // pending hit counters and touches reach the disk
     },
   }
