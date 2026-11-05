@@ -1337,6 +1337,13 @@ export const S = {
   notePermAnnotate: 'Can add notes',
   noteMakeLink: 'Make the link',
   noteExported: 'Note copied as plain text.',
+  noteRelaySent: (n: number) => `Sent sealed through the relay to ${n} ${n === 1 ? 'person' : 'people'}.`,
+  noteRelayFailed: 'The relay did not take it. Check the connection and try again.',
+  noteLinkFailed: 'The link could not be made. Check the connection and try again.',
+  noteRelayNeedsPerson: 'A long note goes sealed to one person at a time. Pick people, not groups.',
+  noteRelayArrived: (n: number) => `${n} shared ${n === 1 ? 'note' : 'notes'} arrived.`,
+  notesRelay: 'Notes relay: questhub',
+  notesRelayHint: 'Long shared notes (over 100 items) wait here, sealed for one person, until their app fetches them. The server cannot read them. Off: long notes cannot be sent or received on this device.',
   notesViewEmpty: 'No notes yet. Open a card and tap New note.',
   noteShareIn: (name: string, title: string) => `${name} shares a note with you: ${title}`,
   // Wave 31 (zone-share-link): a named link per zone, in Settings > Sharing links

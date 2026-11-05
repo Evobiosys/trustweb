@@ -29,6 +29,7 @@ import { linkButton } from './link_change_view'
 import { S } from './strings'
 import { setDeviceNameSource } from './device_name'
 import { readSyncMode, shouldSend, writeSyncMode } from './sync_mode'
+import { readRelayOn, writeRelayOn } from './notes_relay'
 
 export interface SyncViewHooks {
   persona: string
@@ -56,6 +57,8 @@ export interface SyncViewHooks {
   editLink?: () => void
   /** Wave 26 (R52): true when this device runs TrustWeb mobile (the phone, the holder in 'phoneHolds'). */
   isPhone: () => boolean
+  /** Wave 32: called after Sync now went through (the notes relay is polled then). */
+  afterSyncNow?: () => void
 }
 
 export interface SyncView {
@@ -185,6 +188,16 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     return el('div', {}, [
       el('label', { class: 'consent' }, [box, el('span', {}, [S.dvReceiveOnly])]),
       el('p', { class: 'meta', 'data-receive-only-hint': '1' }, [h.isPhone() ? S.dvReceiveOnlyPhone : S.dvReceiveOnlyHint]),
+    ])
+  }
+
+  /** Wave 32 (notes_relay.ts): the switch for the notes relay on the questhub server; stored on this device, never synced. */
+  function notesRelayRow(): HTMLElement {
+    const box = el('input', { type: 'checkbox', checked: readRelayOn() }) as HTMLInputElement
+    box.onchange = () => writeRelayOn(box.checked)
+    return el('div', {}, [
+      el('label', { class: 'consent', 'data-notes-relay': '' }, [box, el('span', {}, [S.notesRelay])]),
+      el('p', { class: 'meta' }, [S.notesRelayHint]),
     ])
   }
 
@@ -336,7 +349,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   }
 
   async function syncNow(p: Pairing): Promise<void> {
-    try { await link.syncNow(p.did); failed.delete(p.did); h.toast(S.dvSent) } catch (e) {
+    try { await link.syncNow(p.did); failed.delete(p.did); h.toast(S.dvSent); h.afterSyncNow?.() } catch (e) {
       failed.set(p.did, { version: S.dvUpdate(p.name), offline: S.dvOffline, 'too large': S.dvTooLarge, 'receive only': S.dvReceiveOnlyNow }[(e as Error).message] ?? S.dvSendFailed)
       devicesSheet()
     }
@@ -508,7 +521,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     settingsGroup: () => {
       const row = el('button', { class: 'radio', 'data-open-devices': '1', onclick: openDevices }, [el('b', {}, [S.dvOpen]), el('small', {}, [S.dvOpenHint])])
       const code = h.peek()?.connectCode
-      return code?.name && !code.stale ? [row, el('p', { class: 'meta', 'data-settings-username': '1' }, [`${S.unTitle}: `, h.editLink ? linkButton(code.name, h.editLink) : `trustweb.one/${code.name}`])] : [row]
+      const relay = notesRelayRow()
+      return code?.name && !code.stale ? [row, el('p', { class: 'meta', 'data-settings-username': '1' }, [`${S.unTitle}: `, h.editLink ? linkButton(code.name, h.editLink) : `trustweb.one/${code.name}`]), relay] : [row, relay]
     },
     start,
     open: openDevices,
