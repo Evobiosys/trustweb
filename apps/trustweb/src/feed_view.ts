@@ -9,8 +9,12 @@
 import { el } from '../../demo/src/ui/dom'
 import { buildFeed, filterFeed, FeedSource, PostKind } from './feed'
 import type { Post } from './feed'
-import { addGroupPost, followPosts, followText, followUrl, groupPosts, groupsOf, parseFeedText, parseFollow, sourceCounts } from './feed_sources'
+import { followPosts, followText, followUrl, groupPosts, groupsOf, parseFeedText, parseFollow, sourceCounts } from './feed_sources'
 import type { FeedItem } from './feed_sources'
+import { addGroupPosts, buildJoin, ensureNostrKey, groupTag, parseRelay, POST_TYPES } from './feed_nostr'
+import type { NostrEvent, PostType } from './feed_nostr'
+import { publish, readGroups } from './feed_relay'
+import { getPublicKey, hexToBytes } from '../../demo/src/nostr_lib'
 import { loadColourTags } from './colour_tags'
 import { fetchFeedText, FetchProblem, handleText, safeRemoteUrl, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
 import type { RemoteStatus } from './fediverse'
@@ -66,6 +70,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   let objectUrls: string[] = []
   const followed_ = new Map<string, { at: number; items: FeedItem[] | FetchProblem }>()
   const chosen: { source?: FeedSource; group?: string } = {}
+  const inbound = new Map<string, { at: number; posts: Post[] }>()
+  const joined = new Set<string>()
 
   const settings = (): FeedSettings => {
     const s = h.state()
@@ -150,6 +156,41 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     })
   }
 
+  /** Posts other people sent to my groups through the relays (kept in memory for REMOTE_TTL_MS; nothing is read with no relay set). */
+  function relayPosts(groups: readonly { id: string; name: string }[]): Post[] {
+    const s = h.state()
+    const urls = s.feed?.relays ?? []
+    if (!urls.length || !groups.length) return []
+    const mine = s.nostrKey ? getPublicKey(hexToBytes(s.nostrKey)) : ''
+    return urls.flatMap((url) => {
+      const got = inbound.get(url)
+      if (!got || Date.now() - got.at > REMOTE_TTL_MS) {
+        inbound.set(url, { at: Date.now(), posts: got?.posts ?? [] })
+        void readGroups(url, groups.map((g) => g.id)).then((found) => {
+          const byTag = new Map(groups.map((g) => [groupTag(g.id), g]))
+          inbound.set(url, { at: Date.now(), posts: found.filter((f) => f.pubkey !== mine && byTag.has(f.group)).map((f): Post => ({
+            id: `relay:${f.id}`, kind: PostKind.Group, who: f.pubkey.slice(0, 8), at: f.at, text: f.text, context: byTag.get(f.group)?.name, group: byTag.get(f.group)?.id, type: f.type, dummy: false, open: { kind: 'none' },
+          })) })
+          h.redrawFeed()
+        })
+      }
+      return got?.posts ?? []
+    })
+  }
+
+  /** Sends new posts (and, once per group and session, a join) to every relay set; marks them sent where one took them. */
+  async function sendOut(posts: readonly { id: string; group: string }[], events: readonly NostrEvent[], urls: readonly string[]): Promise<void> {
+    const sk = ensureNostrKey(h.state())
+    const fresh = [...new Set(posts.map((p) => p.group))].filter((g) => !joined.has(g))
+    fresh.forEach((g) => joined.add(g))
+    const out = [...fresh.map((g) => buildJoin(sk, g, Date.now())), ...events]
+    const took = (await Promise.all(urls.map((u) => publish(u, out)))).some(Boolean)
+    if (!took) { fresh.forEach((g) => joined.delete(g)); h.redrawFeed(); return }
+    const ids = new Set(posts.map((p) => p.id))
+    for (const gp of h.state().groupPosts ?? []) if (ids.has(gp.id)) gp.sent = true
+    h.save(); h.redrawFeed()
+  }
+
   function problems(): HTMLElement[] {
     const follows = followSources().flatMap((src) => {
       const got = followed_.get(src.url)
@@ -202,7 +243,10 @@ export function createFeedView(h: FeedViewHooks): FeedView {
           el('div', { class: 'post-head' }, [el('b', {}, [who]), el('span', { class: 'meta' }, [S.feedKind[post.kind] + ' · ' + ageLabel(post.at, Date.now())])]),
           el('p', { class: 'post-text' }, [post.text]),
           post.context ? el('p', { class: 'meta post-ctx' }, [post.kind === PostKind.Answer ? S.feedAsked(post.context) : post.context]) : null,
-          el('div', { class: 'post-tags' }, [provenanceChip(post.provenance ? { kind: post.provenance } : undefined), post.dummy ? h.dummyChip() : null]),
+          el('div', { class: 'post-tags' }, [
+            post.type ? el('span', { class: 'chip', 'data-post-type': post.type }, [S.feedType[post.type] ?? post.type]) : null,
+            post.unsent ? el('span', { class: 'meta', 'data-post-unsent': '1' }, [(h.state().feed?.relays ?? []).length ? S.feedNotSent : S.feedNotSentNoRelay]) : null,
+            provenanceChip(post.provenance ? { kind: post.provenance } : undefined), post.dummy ? h.dummyChip() : null]),
         ]),
       ]),
       imageEl(post),
@@ -214,8 +258,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     for (const u of objectUrls) URL.revokeObjectURL(u)
     objectUrls = []
     const tags = loadColourTags()
-    const all = buildFeed(h.state(), [...remoteFor(), ...followedPosts(), ...groupPosts(h.state(), tags)])
     const groups = groupsOf(h.state(), tags)
+    const all = buildFeed(h.state(), [...remoteFor(), ...followedPosts(), ...groupPosts(h.state(), tags), ...relayPosts(groups)])
     if (chosen.group && !groups.some((g) => g.id === chosen.group)) delete chosen.group
     const posts = filterFeed(all, chosen)
     const counts = sourceCounts(all)
@@ -241,18 +285,25 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   /** "Post to <group>": only groups the person is in are offered. */
   function postSheet(groups: readonly { id: string; name: string }[]): void {
     if (!groups.length) { h.openSheet([el('h3', {}, [S.feedPost]), el('p', { class: 'meta', 'data-feed-nogroup': '1' }, [S.feedNoGroup])]); return }
-    let group = chosen.group && groups.some((g) => g.id === chosen.group) ? chosen.group : groups[0].id
+    const picked = new Set([chosen.group && groups.some((g) => g.id === chosen.group) ? chosen.group : groups[0].id])
+    let type: PostType = 'discussion'
     const text = el('textarea', { class: 'field', rows: '3', placeholder: S.feedPostPh, 'aria-label': S.feedPostPh, 'data-feed-text': '1' }) as HTMLTextAreaElement
-    const rows = groups.map((g) => el('button', { class: 'radio' + (g.id === group ? ' on' : ''), 'aria-pressed': String(g.id === group), 'data-feed-to': g.id, onclick: (e: Event) => {
-      group = g.id
-      rows.forEach((r) => { const on = r === e.currentTarget; r.classList.toggle('on', on); r.setAttribute('aria-pressed', String(on)) })
+    const mark = (b: Element, on: boolean): void => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)) }
+    const types = POST_TYPES.map((ty) => el('button', { class: 'chip' + (ty === type ? ' on' : ''), 'aria-pressed': String(ty === type), 'data-feed-type': ty, onclick: () => { type = ty; types.forEach((b, i) => mark(b, POST_TYPES[i] === ty)) } }, [S.feedType[ty]]))
+    const rows = groups.map((g) => el('button', { class: 'radio' + (picked.has(g.id) ? ' on' : ''), 'aria-pressed': String(picked.has(g.id)), 'data-feed-to': g.id, onclick: (e: Event) => {
+      if (!picked.delete(g.id)) picked.add(g.id)
+      mark(e.currentTarget as Element, picked.has(g.id))
     } }, [el('b', {}, [S.feedPostTo(g.name)])]))
     const send = (): void => {
       const s = h.state()
-      if (!addGroupPost(s, group, text.value, Date.now(), loadColourTags())) { text.focus(); return }
-      h.save(); h.closeSheet(); chosen.source = FeedSource.Group; chosen.group = group; h.redrawFeed(); h.toast(S.feedPosted)
+      const { posts, events } = addGroupPosts(s, groups.map((g) => g.id).filter((id) => picked.has(id)), text.value, type, Date.now(), loadColourTags(), ensureNostrKey(s))
+      if (!posts.length) { text.focus(); return }
+      h.save(); h.closeSheet(); chosen.source = FeedSource.Group; chosen.group = posts.length === 1 ? posts[0].group : undefined; if (!chosen.group) delete chosen.group
+      h.redrawFeed(); h.toast(S.feedPosted)
+      const urls = s.feed?.relays ?? []
+      if (urls.length) void sendOut(posts, events, urls)
     }
-    h.openSheet([el('h3', {}, [S.feedPost]), ...rows, text, el('p', { class: 'meta' }, [S.feedPostHint]), el('button', { class: 'btn btn-electric', 'data-feed-send': '1', onclick: send }, [S.feedPostSend])])
+    h.openSheet([el('h3', {}, [S.feedPost]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedTypeLabel }, types), el('p', { class: 'meta' }, [S.feedGroupsPick]), ...rows, text, el('p', { class: 'meta' }, [S.feedPostHint]), el('button', { class: 'btn btn-electric', 'data-feed-send': '1', onclick: send }, [S.feedPostSend])])
     setTimeout(() => text.focus(), 0)
   }
 
@@ -316,6 +367,19 @@ export function createFeedView(h: FeedViewHooks): FeedView {
           settings().newsUrl = v
           return null
         }),
+      ]) : null,
+      on ? el('div', { class: 'feed-relays' }, [
+        el('h4', { class: 'eyebrow' }, [S.feedRelayTitle]),
+        ...(s.feed?.relays ?? []).map((r) => el('div', { class: 'ch-row', 'data-relay': r }, [el('span', { class: 'ch-name' }, [r]), el('button', { class: 'mini', 'data-relay-remove': r, onclick: () => { settings().relays = (s.feed?.relays ?? []).filter((x) => x !== r); h.save(); h.settings() } }, [S.imgRemove])])),
+        textRow(S.feedRelayLabel, S.feedRelayPh, 'data-feed-relay', '', (v) => {
+          if (!v) return null
+          const url = parseRelay(v, allowLocal)
+          if (!url) return S.feedRelayBad
+          const have = s.feed?.relays ?? []
+          if (!have.includes(url)) settings().relays = [...have, url]
+          return null
+        }),
+        el('p', { class: 'meta' }, [S.feedRelayHint]),
       ]) : null,
       on && remoteOn() ? toggle(S.fedImages, S.fedImagesHint, imagesOn(), 'data-feed-images', () => { settings().images = !imagesOn(); h.save(); h.settings() }) : null,
     ].filter((n): n is HTMLElement => n !== null)

@@ -959,6 +959,8 @@ export interface AppState {
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
   /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
   groupPosts?: GroupPost[]
+  /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
+  nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
   shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
@@ -1251,10 +1253,12 @@ export interface FeedSettings {
   follows?: string[]
   /** Wave 31: the news feed (RSS or JSON Feed address, https). Absent: none. */
   newsUrl?: string
+  /** Wave 32 (feed_nostr.ts): Nostr relays (wss://) that carry group posts. Absent or empty: posts stay on this phone. */
+  relays?: string[]
 }
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
-export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number }
+export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number; /** feed_nostr.ts: discussion, request, offer or event. Absent: discussion. */ type?: string; /** A relay took it. Absent: kept on this phone only. */ sent?: true }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
