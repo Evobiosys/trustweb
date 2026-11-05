@@ -41,7 +41,7 @@ export function addGroupPost(s: AppState, group: string, text: string, now: numb
 export function groupPosts(s: AppState, tags: readonly ColourTag[]): Post[] {
   const names = new Map(groupsOf(s, tags).map((g) => [g.id, g.name]))
   return (s.groupPosts ?? []).filter((p) => names.has(p.group)).map((p): Post => ({
-    id: `group:${p.id}`, kind: PostKind.Group, who: p.by === s.me.displayName ? null : p.by, at: p.at, text: p.text, context: names.get(p.group), group: p.group, type: p.type ?? 'discussion', unsent: p.sent !== true, dummy: false, open: { kind: 'none' },
+    id: `group:${p.id}`, kind: PostKind.Group, who: p.by === s.me.displayName ? null : p.by, at: p.at, text: p.text, context: p.channel ? `${names.get(p.group)} > ${s.feed?.groupMeta?.[p.group]?.channels?.find((c) => c.id === p.channel)?.name ?? p.channel}` : names.get(p.group), group: p.group, channel: p.channel, type: p.type ?? 'discussion', unsent: p.sent !== true, dummy: false, open: { kind: 'none' },
   }))
 }
 

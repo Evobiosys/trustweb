@@ -73,6 +73,8 @@ export interface Post {
   group?: string
   /** Followed items: the news feed rather than the fediverse. */
   news?: boolean
+  /** Group posts: the channel id inside the group. */
+  channel?: string
   /** Group posts: discussion, request, offer or event (feed_nostr.ts). */
   type?: string
   /** Group posts: no relay took it (it stays on this phone). */

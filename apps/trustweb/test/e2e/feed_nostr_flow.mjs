@@ -48,6 +48,25 @@ try {
   await a.locator('[data-feed-relay]').fill('wss://relay.example.org/')
   await a.locator('[data-save-for="data-feed-relay"]').click()
   c.ok('a wss relay is kept', JSON.stringify((await record(a)).feed?.relays) === '["wss://relay.example.org"]')
+
+  await a.locator('[data-feed-channel-input="event:e1"]').fill('Gear')
+  await a.locator('[data-feed-channel-add="event:e1"]').click()
+  await a.locator('[data-feed-gov-set="event:e2|vouch"]').click()
+  const meta = (await record(a)).feed?.groupMeta
+  c.ok('channel and governance are kept', meta?.['event:e1']?.channels?.[0]?.id === 'gear' && meta?.['event:e2']?.governance === 'vouch', JSON.stringify(meta))
+  await a.locator('nav.tabs button', { hasText: 'Feed' }).click()
+  await a.locator('[data-feed-post]').click()
+  c.ok('the Post sheet offers the channel, three hops and the vouch note', await a.locator('.sheet.on [data-feed-channel="event:e1|gear"]').count() === 1 && await a.locator('.sheet.on [data-feed-hops]').count() === 3 && await a.locator('.sheet.on [data-feed-needs-vouch="event:e2"]').count() === 1)
+  await a.locator('.sheet.on [data-feed-channel="event:e1|gear"]').click()
+  await a.locator('.sheet.on [data-feed-hops="1"]').click()
+  await a.locator('.sheet.on [data-feed-text]').fill('Gear swap')
+  await a.locator('.sheet.on [data-feed-send]').click()
+  const gp = (await record(a)).groupPosts
+  c.ok('posted to the channel with hops 1', gp.some((p) => p.channel === 'gear' && p.hops === 1 && p.text === 'Gear swap'), JSON.stringify(gp))
+  c.ok('the Groups chips show group > channel', await a.locator('[data-feed-channel-chip="event:e1|gear"]').count() === 1)
+  await a.locator('[data-feed-channel-chip="event:e1|gear"]').click()
+  c.ok('the governance label shows', await a.locator('[data-feed-governance="open"]').count() === 1)
+  c.ok('no horizontal scroll at 360 px (channels)', await a.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
   c.ok('no page errors', errors.length === 0, errors.join(' | '))
 } finally {
   await browser?.close()

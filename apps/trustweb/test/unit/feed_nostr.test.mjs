@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Feed over Nostr relays (NIP-29 groups): events, tags, post types, fan-out, relay setting. Fixed key, no network. */
-import { addGroupPosts, buildJoin, buildLeave, buildPost, ensureNostrKey, groupTag, parseGroupPost, parseMembers, parseRelay, POST_TYPES } from '../../src/feed_nostr.ts'
+import { addGroupPosts, buildJoin, buildMetadata, canPost, channelTag, GOVERNANCE, hopsOf, parseMetadata, tagIndex, visibleByHops, buildLeave, buildPost, ensureNostrKey, groupTag, parseGroupPost, parseMembers, parseRelay, POST_TYPES } from '../../src/feed_nostr.ts'
 import { finalizeEvent, hexToBytes } from '../../../demo/src/nostr_lib.ts'
+import { Ring } from '../../src/model.ts'
 import { groupPosts } from '../../src/feed_sources.ts'
 
 const SK = '0000000000000000000000000000000000000000000000000000000000000001'
@@ -87,5 +88,70 @@ describe('fan-out', () => {
     expect(groupPosts(s, tags)[0]).toMatchObject({ type: 'event', unsent: true })
     s.groupPosts[0].sent = true
     expect(groupPosts(s, tags)[0].unsent).toBe(false)
+  })
+})
+
+describe('channels (NIP-29 subgroups)', () => {
+  const meta = { 'tag:climbers': { channels: [{ id: 'gear', name: 'Gear' }] } }
+  it('a channel has its own h id; the metadata event names the parent', () => {
+    expect(channelTag('tag:climbers', 'gear')).toBe('tag-climbers_gear')
+    const ev = buildMetadata(SK, 'tag:climbers', { name: 'Gear', governance: 'open', parent: 'tag:climbers' }, NOW)
+    expect(ev.kind).toBe(39000)
+    expect(ev.tags).toContainEqual(['d', 'tag-climbers'])
+    expect(ev.tags).toContainEqual(['parent', 'tag-climbers'])
+    expect(ev.tags).toContainEqual(['governance', 'open'])
+    expect(parseMetadata(ev)).toEqual({ id: 'tag-climbers', name: 'Gear', governance: 'open', parent: 'tag-climbers' })
+  })
+  it('an unknown governance reads as open', () => {
+    expect(GOVERNANCE).toEqual(['open', 'invite', 'vouch', 'admin', 'consensus'])
+    expect(parseMetadata({ kind: 39000, tags: [['d', 'g'], ['governance', 'tyranny']] }).governance).toBe('open')
+  })
+  it('the h index maps groups and channels back to our ids', () => {
+    const idx = tagIndex([{ id: 'tag:climbers', name: 'Climbers' }], meta)
+    expect(idx.get('tag-climbers')).toEqual({ group: 'tag:climbers' })
+    expect(idx.get('tag-climbers_gear')).toEqual({ group: 'tag:climbers', channel: 'gear' })
+  })
+  it('a post to a channel carries its h id, hops and lands in the record', () => {
+    const s = state()
+    const { posts, events } = addGroupPosts(s, [{ group: 'tag:climbers', channel: 'gear' }, 'event:e1'], 'Rope', 'offer', NOW, tags, SK, { hops: 1, meta })
+    expect(posts.map((p) => [p.group, p.channel, p.hops])).toEqual([['tag:climbers', 'gear', 1], ['event:e1', undefined, 1]])
+    expect(events.map((e) => e.tags.find((t) => t[0] === 'h')[1])).toEqual(['tag-climbers_gear', 'event-e1'])
+    expect(parseGroupPost(events[0])).toMatchObject({ hops: 1, group: 'tag-climbers_gear' })
+    s.feed = { groupMeta: meta }
+    expect(groupPosts(s, tags)[0]).toMatchObject({ channel: 'gear', context: 'Climbers > Gear' })
+  })
+  it('an unknown channel is skipped', () => {
+    expect(addGroupPosts(state(), [{ group: 'tag:climbers', channel: 'nope' }], 'x', 'offer', NOW, tags, SK, { meta }).posts).toEqual([])
+  })
+})
+
+describe('governance', () => {
+  it('vouch: posting needs one member vouching; the others post freely for now', () => {
+    expect(canPost({ governance: 'vouch' })).toBe(false)
+    expect(canPost({ governance: 'vouch', vouchedBy: ['aa'] })).toBe(true)
+    expect(canPost({ governance: 'admin' })).toBe(true)
+    expect(canPost(undefined)).toBe(true)
+    const s = state()
+    const meta = { 'tag:climbers': { governance: 'vouch' } }
+    expect(addGroupPosts(s, ['tag:climbers', 'event:e1'], 'x', 'offer', NOW, tags, SK, { meta }).posts.map((p) => p.group)).toEqual(['event:e1'])
+  })
+})
+
+describe('trust-hop visibility', () => {
+  it('distance from the ring: closest, close, friends 1; acquaintances 2; others unknown', () => {
+    expect([Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending].map(hopsOf)).toEqual([1, 1, 1, 2, null])
+    expect(hopsOf(undefined)).toBeNull()
+  })
+  it('hops 0 = members only, 1 = friends of members, 2 = friends of friends', () => {
+    expect(visibleByHops(0, 1, false)).toBe(false)
+    expect(visibleByHops(0, null, true)).toBe(true)
+    expect(visibleByHops(1, 1, false)).toBe(true)
+    expect(visibleByHops(1, 2, false)).toBe(false)
+    expect(visibleByHops(2, 2, false)).toBe(true)
+    expect(visibleByHops(2, null, false)).toBe(false)
+  })
+  it('parse: hops default 0 and clamp to 0..2', () => {
+    const mk = (h) => finalizeEvent({ kind: 9, created_at: 1, tags: [['h', 'g'], ...(h === undefined ? [] : [['hops', h]])], content: 'x' }, hexToBytes(SK))
+    expect([undefined, '1', '2', '9', 'x'].map((h) => parseGroupPost(mk(h)).hops)).toEqual([0, 1, 2, 0, 0])
   })
 })
