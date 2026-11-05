@@ -215,6 +215,7 @@ import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { connectedPlaces } from './connected_places'
 import { resourceList, recentChip } from './resource_list'
 import { addPeerItem, peerItems } from './peer_items'
 import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
@@ -2368,7 +2369,7 @@ function webPageScreen(page: WebPage): Node[] {
     onAddResource: (c, title) => { if (addResourceIn(st(), c, title, randomId(8), Date.now())) save(); render() },
     onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
-    heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
+    heading: cardNameHeading(p), places: connectedPlaces(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
     onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     onQr: () => personQr(p),

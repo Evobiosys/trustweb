@@ -176,6 +176,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .card-shares{font-size:12.5px; color:var(--ink-soft)}
 .msg-glyphs{display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 0}
 .msg-glyph{display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; border:1.5px solid var(--teal); border-radius:8px; background:none; color:var(--teal); cursor:pointer; text-decoration:none}
+.connected-on .msg-glyph{width:24px; height:24px; border-radius:6px; cursor:default}
+.connected-on a.msg-glyph{cursor:pointer}
+.connected-on .msg-glyph svg{width:15px; height:15px}
 .msg-glyph.linked{border-style:dashed; color:var(--ink-soft); border-color:var(--ink-soft)}
 .msg-glyph svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2}
 .tl-head{display:flex; align-items:center; gap:6px}
