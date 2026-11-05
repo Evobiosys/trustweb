@@ -1,4 +1,5 @@
 /** Dev-only auto-walk: performs a feature's steps in the page (ripple, then a real click or the typed value). A step without a selector shows a yellow card and waits for its Next. Used by dev_preview.ts. */
+import { appScreen, appView, navNote, navPlan, runNav } from './dev_navigate'
 import { parseStep, typedValue } from './dev_preview_rules'
 
 const CSS = `
@@ -8,8 +9,8 @@ const CSS = `
 .twp-step.walk{left:50%;transform:translateX(-50%);bottom:16px;max-width:90vw}`
 
 export interface Walker {
-  /** Do `steps` one after the other; resolves when done, stopped, or an element did not show up within 4 s. */
-  run(steps: string[]): Promise<void>
+  /** Go to `context` (the row's view) first, then do `steps` one after the other; resolves when done, stopped, or an element did not show up within 4 s. */
+  run(steps: string[], context?: string): Promise<void>
   stop(): void
 }
 
@@ -72,8 +73,17 @@ export function createWalker(toast: (text: string) => void): Walker {
   }
 
   return {
-    async run(steps) {
+    async run(steps, context) {
       const me = ++token
+      const plan = navPlan(context, appScreen(), appView())
+      const went = await runNav(plan, async (t) => {
+        const el = await waitFor(t.selector, me)
+        if (!el || me !== token) return false
+        await glide(dot, el); ripple(el); (el as HTMLElement).click(); await sleep(GLIDE_MS)
+        return true
+      })
+      if (me !== token) return
+      if (!went) { dot.remove(); toast(navNote(plan)); return }
       const label = (i: number, text: string): string => `Step ${i + 1} of ${steps.length}: ${text}`
       try { for (const [i, s] of steps.entries()) {
         const { text, selector } = parseStep(s)
