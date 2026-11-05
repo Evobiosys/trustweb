@@ -2755,5 +2755,6 @@ export const S = {
   agrProposedToast: (name: string) => `${name} proposed an agreement`,
   // Dev preview panel (wave 30): the Walk / ? card when a view switch is missing on this build, and the feature-flag switch.
   walkNavigateFirst: (where: string) => `navigate to ${where} first`,
+  walkNotHere: (step: string) => `not on this screen: ${step}`,
   flagTry: (title: string) => `Try ${title}`,
 } as const
