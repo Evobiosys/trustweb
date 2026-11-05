@@ -3,7 +3,7 @@
 import { Ring } from '../../src/model.ts'
 import { planServices, commitPlan } from '../../src/services_import.ts'
 import { placeAll } from '../../src/onboarding_place.ts'
-import { isPhoneExport, phoneMessageCount } from '../../src/phone_export.ts'
+import { isPhoneExport, phoneMessageCount, namesSource, unnamedPeople, withNames } from '../../src/phone_export.ts'
 
 const NOW = Date.UTC(2026, 10, 4)
 const H = 3_600_000
@@ -85,5 +85,40 @@ describe('inventory guesses from an export with text', () => {
     commitPlan(s, plan(fixture()), 'b1', NOW)
     placeAll(s, NOW, () => 'x')
     expect(s.peerItems ?? []).toEqual([])
+  })
+})
+
+describe('names source and naming a number (wabridge-ingest, contacts)', () => {
+  const numbersOnly = () => {
+    const f = fixture()
+    f.contacts[1].name = null // Bea: number only
+    f.chats[1].name = null
+    return f
+  }
+  it('reads which name source the JSON carries', () => {
+    expect(namesSource(JSON.stringify({ ...fixture(), names_source: 'phone_contacts' }))).toBe('phone_contacts')
+    expect(namesSource(JSON.stringify({ ...fixture(), names_source: 'numbers_only' }))).toBe('numbers_only')
+    expect(namesSource(JSON.stringify(fixture()))).toBe('numbers_only')
+    expect(namesSource('[12.10.26, 09:00] Mira: hi')).toBeNull()
+  })
+  it('a person without a name shows the number as the placeholder, the ring guess stays', () => {
+    const p = plan(numbersOnly())
+    const row = p.rows.find((r) => r.name === '+222')
+    expect(row).toMatchObject({ source: 'whatsapp', out: 1 })
+    const s = { people: [], serviceImports: [] }
+    commitPlan(s, p, 'b1', NOW)
+    placeAll(s, NOW, (() => { let i = 0; return () => `id${i++}` })())
+    expect(s.people.find((x) => x.name === '+222').ring).toBe(Ring.Intending)
+  })
+  it('lists the people with no name, by number', () => {
+    expect(unnamedPeople(file(numbersOnly()).text)).toEqual([{ jid: '222@s.whatsapp.net', phone: '222' }])
+    expect(unnamedPeople(file(fixture()).text)).toEqual([])
+  })
+  it('naming one writes the name into the JSON and the plan keeps the same ring guess', () => {
+    const text = withNames(file(numbersOnly()).text, { '222@s.whatsapp.net': ' Bea Neu ' })
+    expect(unnamedPeople(text)).toEqual([])
+    const p = planServices({ people: [], serviceImports: [] }, [{ name: 'x.json', text }], { me: 'Me Owner', now: NOW })
+    expect(p.rows.find((r) => r.name === 'Bea Neu')).toMatchObject({ out: 1, in: 0 })
+    expect(withNames(file(numbersOnly()).text, { '222@s.whatsapp.net': '  ' })).toBe(file(numbersOnly()).text)
   })
 })

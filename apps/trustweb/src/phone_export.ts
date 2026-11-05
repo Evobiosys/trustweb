@@ -18,6 +18,8 @@ export interface PhoneExport {
   contacts: { jid: string; name?: string | null; phone?: string | null }[]
   chats: { jid: string; name?: string | null; is_group: boolean; participants?: string[] }[]
   messages: ExportMessage[]
+  /** What the phone tool read the names from; absent in older files. */
+  names_source?: 'phone_contacts' | 'numbers_only'
 }
 
 /** null unless the text is the phone export (cheap check first: chat .txt files never start with a brace). */
@@ -32,6 +34,33 @@ export const isPhoneExport = (text: string): boolean => parsePhoneExport(text) !
 /** Messages in the text without parsing it twice. */
 export const phoneMessageCount = (text: string): number => text.split('"from_me"').length - 1
 
+const digits = (jid: string): string => jid.split('@')[0].replace(/\D/g, '')
+
+/** Where the names came from: null unless the text is the phone export. */
+export function namesSource(text: string): 'phone_contacts' | 'numbers_only' | null {
+  const px = parsePhoneExport(text)
+  return px ? (px.names_source === 'phone_contacts' ? 'phone_contacts' : 'numbers_only') : null
+}
+
+const nameless = (px: PhoneExport, c: PhoneExport['contacts'][number]): boolean => !c.name && !px.chats.some((x) => x.jid === c.jid && !x.is_group && x.name)
+/** The people the file knows by number only. */
+export function unnamedPeople(text: string): { jid: string; phone: string }[] {
+  const px = parsePhoneExport(text)
+  return px ? px.contacts.filter((c) => nameless(px, c)).map((c) => ({ jid: c.jid, phone: c.phone || digits(c.jid) })) : []
+}
+
+/** The same export with the owner's names filled in for people who had none (blank names are ignored). */
+export function withNames(text: string, names: Record<string, string>): string {
+  const px = parsePhoneExport(text)
+  if (!px) return text
+  let changed = false
+  for (const c of px.contacts) {
+    const n = names[c.jid]?.trim()
+    if (n && nameless(px, c)) { c.name = n; changed = true }
+  }
+  return changed ? JSON.stringify(px) : text
+}
+
 export interface PhoneExtras { closeness: number; items: Guess[] }
 export interface PhoneRead {
   contacts: ImportedContact[]
@@ -44,7 +73,6 @@ export interface PhoneRead {
 }
 
 const ITEMS_MAX = 10
-const digits = (jid: string): string => jid.split('@')[0].replace(/\D/g, '')
 
 export function readPhoneExport(px: PhoneExport, file: string, now: number): PhoneRead {
   const known = new Map(px.contacts.map((c) => [c.jid, c]))
