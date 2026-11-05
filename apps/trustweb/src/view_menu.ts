@@ -59,5 +59,5 @@ export interface ScreenView { key: string; core: boolean; available: boolean }
 export function screenViews(screen: 'events' | 'inventory', solarInstalled: boolean): ScreenView[] {
   return screen === 'events'
     ? [{ key: 'calendar', core: true, available: true }, { key: 'list', core: true, available: true }, { key: 'solar', core: false, available: solarInstalled }]
-    : [{ key: 'list', core: true, available: true }, { key: 'outline', core: true, available: true }]
+    : [{ key: 'list', core: true, available: true }, { key: 'outline', core: true, available: true }, { key: 'matches', core: true, available: true }]
 }
