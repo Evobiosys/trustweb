@@ -24,6 +24,9 @@ import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
+import { addSupportIn, supportButton, supportCards, supportLine } from './support_ask_view'
+import type { SupportIo } from './support_ask_view'
+import { parseHereText, parseSupportText, recordHere } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -2437,6 +2440,10 @@ function trustwebThreads(): ThreadSummary[] {
 }
 
 /** Wave 24: every chat, newest first; a tap opens the chat sheet. Wave 28: the pill and the three dots choose which messengers join the list. */
+const supportIo: SupportIo = {
+  st, save, render, openSheet, closeSheet, toast, send: (peer, text) => net.sendText(peer, text), openChat: chatSheet, appUrl: APP_URL,
+}
+
 function screenChat(): Node[] {
   const s = st()
   const view = chatView({ sources: messengers, trustweb: trustwebThreads, openTrustweb: chatSheet, dndSince, redraw: () => go(Screen.Chat) })
@@ -2498,11 +2505,13 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
+    ...supportCards(supportIo),
     passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
+    supportLine(supportIo),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
@@ -3665,9 +3674,27 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?:
     case TextKind.Profile: onProfileText(peer, text, pic); return
     case TextKind.Agreement: onAgreementText(peer, text); return
     case TextKind.Forget: onForgetText(peer, text); return
+    case TextKind.Support: onSupportText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }
+}
+
+/** Wave 32 (support_ask.ts): an ask for support from a connected person (a calm card on Web), or their "I'm here" to mine. */
+function onSupportText(peer: Peer, text: string): void {
+  const s = st()
+  const ask = parseSupportText(APP_URL, text)
+  const person = personOf(s.people, peer.id)
+  if (ask) {
+    if (!person || ask.until <= Date.now()) return
+    s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id }, Date.now())
+    save()
+    toast(S.supportGotOne(person.name))
+    if (screen === Screen.Web) render()
+    return
+  }
+  const id = parseHereText(APP_URL, text)
+  if (id && recordHere(s.supportAsks ?? [], id, peer.id, Date.now())) { save(); if (screen === Screen.Web) render() }
 }
 
 /** Wave 27 (forget.ts): the sender owns what it shared here, so its forget request is accepted as is, then acknowledged. */
@@ -6647,6 +6674,7 @@ function queryDock(s: AppState): HTMLElement {
         class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,
         onclick: () => { void sendFromDock(queryText) },
       }, [S.querySend]),
+      run ? null : supportButton(supportIo),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
       !run && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryAnswers)]) : null,

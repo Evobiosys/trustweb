@@ -27,6 +27,7 @@ import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
 import type { NameReveal } from './events'
+import type { SupportAsk, SupportIn } from './support_ask'
 
 export enum Ring {
   /** The top trust zone (wave 25): the few you would call at 3 am. Family keeps its own closeness; this is a ring of its own. */
@@ -1071,6 +1072,9 @@ export interface AppState {
    * you were away"), newest first, at most AWAY_ASKS_MAX, each kept AWAY_ASK_KEEP_MS or until dismissed. Absent: none. Older builds ignore it.
    */
   awayAsks?: AwayAsk[]
+  /** Wave 32 (support_ask.ts): asks for support this phone sent, and received (the helper's card). Never in the feed, never searched. Absent: none. Older builds ignore it. */
+  supportAsks?: SupportAsk[]
+  supportIn?: SupportIn[]
   /** Wave 6h (late_answers.ts): this phone's asks of the last LATE_KEEP_MS, per connection, so a later yes can land. Absent: none. Older builds ignore it. */
   sentAsks?: SentAsk[]
   /** Wave 6h (late_answers.ts): yeses that came after their moment, newest first, kept LATE_KEEP_MS or until dismissed. Absent: none. */
