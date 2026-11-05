@@ -3,6 +3,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { chipInput } from './chip_input'
 import type { Person } from './model'
+import { relayNeeded } from './notes_relay'
 import { annotate, canAnnotate, editBlock, forward, newNote, noteShareLink, provenanceLine, serializeOutline, type NoteBlock, type NoteBy, type NotePerm, type SharedNote } from './notes_outline'
 import { suggest, type Candidate } from './share_page'
 import { S } from './strings'
@@ -15,6 +16,8 @@ export interface SharedNotesHooks {
   connectLink: () => Promise<string>
   save: () => void
   toast: (msg: string) => void
+  /** Wave 32 (notes_relay.ts): sealed delivery of a long note to people (person ids); resolves how many it reached. Absent where there is no relay. */
+  relay?: { on: () => boolean; send: (note: SharedNote, personIds: string[]) => Promise<number> }
 }
 
 /** Receiving side: keep the note a link carried on the sender's card; the same note id replaces the older copy. */
@@ -87,6 +90,23 @@ export function sharedNotesSection(p: Person, h: SharedNotesHooks): HTMLElement 
     ])
   }
 
+  /** Up to ~100 items travel as a link; above that, or when no link can be made, the note goes sealed through the relay to people. */
+  const shareOut = async (note: SharedNote, chosen: string[]): Promise<void> => {
+    const viaRelay = async (): Promise<void> => {
+      if (chosen.some((id) => !id.startsWith('person:'))) { h.toast(S.noteRelayNeedsPerson); return }
+      const sent = await h.relay!.send(note, chosen.length ? chosen.map((id) => id.slice('person:'.length)) : [p.id])
+      h.toast(sent ? S.noteRelaySent(sent) : S.noteRelayFailed)
+    }
+    const relay = h.relay?.on() === true
+    if (relay && relayNeeded(note)) return viaRelay()
+    try {
+      await send(noteShareLink(await h.connectLink(), note), h)
+    } catch {
+      if (relay) await viaRelay()
+      else h.toast(S.noteLinkFailed)
+    }
+  }
+
   const shareBox = (n: SharedNote): HTMLElement => {
     const chosen = audience.get(n.id) ?? []
     const label = (id: string): string => (id.startsWith('person:') ? '@' : '#') + (h.candidates.find((c) => c.id === id)?.label ?? id)
@@ -104,8 +124,8 @@ export function sharedNotesSection(p: Person, h: SharedNotesHooks): HTMLElement 
       }, [label(id) + ' ×']))),
       input, hits, perm,
       el('button', { class: 'btn btn-electric btn-sm', 'data-note-link': n.id, onclick: () => {
-        const to = chosen.length ? chosen.map(label).join(', ') : p.name
-        void h.connectLink().then((base) => send(noteShareLink(base, forward(n, to, h.me, Date.now(), perm.value as NotePerm)), h))
+        const note = forward(n, chosen.length ? chosen.map(label).join(', ') : p.name, h.me, Date.now(), perm.value as NotePerm)
+        void shareOut(note, chosen)
       } }, [S.noteMakeLink]),
     ])
   }

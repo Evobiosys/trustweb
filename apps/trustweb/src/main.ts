@@ -101,6 +101,8 @@ import { mergeContact } from './contact_share'
 import { parsePersonShare, personShareLink } from './person_share_link'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
+import { pollRelay, postNote, readRelayOn, type RelayDeps } from './notes_relay'
+import { deserializeIdentity } from '../../demo/src/did'
 import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
 import { zoneLinksSettings } from './zone_share_link_view'
@@ -2174,7 +2176,7 @@ function screenStart(): Node[] {
     else offerApkHint(offerDemoContent)
     offerNotifications()
     setTimeout(() => void offerApkUpdate(), 4000)
-    void net.start().then(announceLink).then(() => refreshPush())
+    void net.start().then(announceLink).then(() => refreshPush()).then(pollNotesRelay)
     if (invite && !solo && !demo) offerPendingConnect()
     else void completePendingConnect()
     maybeOpenPendingShare()
@@ -3123,7 +3125,35 @@ function notesHooks(): Parameters<typeof sharedNotesSection>[1] {
     connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
     save,
     toast,
+    relay: canRegister(SERVER_ORIGIN) && st().identity ? { on: readRelayOn, send: sendViaRelay } : undefined,
   }
+}
+
+// Wave 32 (notes_relay.ts): shared notes above ~100 items travel sealed through the backup server.
+const relayDeps = (): RelayDeps => ({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() })
+/** The relay DID this person is reached by: the paired peer's, else the one an event link told me. */
+const relayDidOf = (p: Person): string | undefined => st().peers.find((x) => x.id === p.peerId)?.did ?? p.did
+
+/** Seals `note` for each of these people and leaves it on the relay; how many it reached. */
+async function sendViaRelay(note: Parameters<typeof postNote>[1], personIds: string[]): Promise<number> {
+  const identity = st().identity
+  if (!identity) return 0
+  const me = deserializeIdentity(identity)
+  const dids = st().people.filter((p) => personIds.includes(p.id)).flatMap((p) => relayDidOf(p) ?? [])
+  const done = await Promise.all(dids.map((did) => postNote(relayDeps(), note, me, did)))
+  return done.filter(Boolean).length
+}
+
+/** On open and on Sync now: fetch what was left for me, keep each note on the sender's card, and ask the relay to forget it. */
+async function pollNotesRelay(): Promise<void> {
+  if (!state?.identity || !readRelayOn() || !canRegister(SERVER_ORIGIN)) return
+  const bySender = (did: string): Person | undefined => st().people.find((p) => relayDidOf(p) === did)
+  const got = await pollRelay(relayDeps(), deserializeIdentity(state.identity), (did) => bySender(did) !== undefined)
+  for (const { from, note } of got) addReceivedNote(bySender(from)!, note)
+  if (!got.length) return
+  save()
+  toast(S.noteRelayArrived(got.length))
+  render()
 }
 
 /** Wave 30: the one link made for a person, kept while the card is open so the WhatsApp message can carry it. */
@@ -4393,6 +4423,7 @@ const devices = createSyncView({
     : null),
   connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
   editLink: () => openLinkChange(linkHooks),
+  afterSyncNow: () => void pollNotesRelay(),
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */

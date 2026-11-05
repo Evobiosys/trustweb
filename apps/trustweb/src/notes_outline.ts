@@ -51,7 +51,8 @@ export function serializeOutline(blocks: readonly NoteBlock[], depth = 0): strin
   return blocks.map((b) => [`${'  '.repeat(depth)}- ${b.text}`, ...(b.children.length ? [serializeOutline(b.children, depth + 1)] : [])].join('\n')).join('\n')
 }
 
-const countBlocks = (bs: readonly NoteBlock[]): number => bs.reduce((n, b) => n + 1 + countBlocks(b.children), 0)
+/** Every block of the tree, nested ones included. */
+export const countBlocks = (bs: readonly NoteBlock[]): number => bs.reduce((n, b) => n + 1 + countBlocks(b.children), 0)
 
 export function newNote(o: { title: string; text: string; by: NoteBy; at: number }): SharedNote {
   return { id: `n${o.at.toString(36)}${o.by.did.slice(-4)}`, title: clean(o.title, TITLE_MAX), blocks: parseOutline(o.text, o.by, o.at), origin: { by: o.by, at: o.at }, chain: [], perms: 'annotate' }
@@ -250,22 +251,26 @@ function cleanBlocks(raw: unknown, depth: number, budget: { n: number }): NoteBl
   return out
 }
 
-/** The note a link carries, cleaned field by field; null when it carries none or is damaged. Never throws. */
+/** A note read from JSON, cleaned field by field; null when it is damaged. */
+export function cleanNote(raw: unknown): SharedNote | null {
+  const o = (raw ?? {}) as Record<string, unknown>
+  const origin = (o.origin ?? {}) as Record<string, unknown>
+  const by = cleanBy(origin.by)
+  const blocks = cleanBlocks(o.blocks, 0, { n: 0 })
+  const id = clean(o.id, 40)
+  if (!by || !id || !blocks.length) return null
+  const chain = (Array.isArray(o.chain) ? o.chain : []).slice(0, 20).flatMap((h: Record<string, unknown>) => {
+    const hb = cleanBy(h?.by)
+    return hb ? [{ by: hb, at: cleanAt(h.at), to: clean(h.to, TITLE_MAX) }] : []
+  })
+  return { id, title: clean(o.title, TITLE_MAX), blocks, origin: { by, at: cleanAt(origin.at) }, chain, perms: o.perms === 'annotate' ? 'annotate' : 'read' }
+}
+
+/** The note a link carries; null when it carries none or is damaged. Never throws. */
 export function parseNoteShare(hash: string): SharedNote | null {
   try {
     const raw = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash).get(SN_KEY)
-    if (!raw) return null
-    const o = JSON.parse(fromB64(raw)) as Record<string, unknown>
-    const origin = (o.origin ?? {}) as Record<string, unknown>
-    const by = cleanBy(origin.by)
-    const blocks = cleanBlocks(o.blocks, 0, { n: 0 })
-    const id = clean(o.id, 40)
-    if (!by || !id || !blocks.length) return null
-    const chain = (Array.isArray(o.chain) ? o.chain : []).slice(0, 20).flatMap((h: Record<string, unknown>) => {
-      const hb = cleanBy(h?.by)
-      return hb ? [{ by: hb, at: cleanAt(h.at), to: clean(h.to, TITLE_MAX) }] : []
-    })
-    return { id, title: clean(o.title, TITLE_MAX), blocks, origin: { by, at: cleanAt(origin.at) }, chain, perms: o.perms === 'annotate' ? 'annotate' : 'read' }
+    return raw ? cleanNote(JSON.parse(fromB64(raw))) : null
   } catch {
     return null
   }
