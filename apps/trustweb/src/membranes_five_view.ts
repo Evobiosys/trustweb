@@ -68,8 +68,8 @@ function inlineEdit(aria: string, value: string, attr: string, done: (typed: str
   const finish = (how: 'save' | 'cancel'): void => { if (finished) return; finished = true; done(how === 'save' ? input.value : null) }
   input.addEventListener('keydown', (e) => { const a = editKey(e.key); if (a) { e.stopPropagation(); finish(a) } })
   const row = el('span', { class: 'card-res-edit' }, [input,
-    el('button', { class: 'card-res-btn', 'aria-label': S.cardResourceSave, onclick: () => finish('save') }, ['✓']),
-    el('button', { class: 'card-res-btn', 'aria-label': S.cardResourceCancel, onclick: () => finish('cancel') }, ['✕'])])
+    el('button', { class: 'card-res-btn ok-mark', 'aria-label': S.cardResourceSave, onclick: () => finish('save') }, ['✓']),
+    el('button', { class: 'card-res-btn cancel-mark', 'aria-label': S.cardResourceCancel, onclick: () => finish('cancel') }, ['✕'])])
   queueMicrotask(() => { input.focus(); input.select() })
   return row
 }
@@ -259,8 +259,8 @@ export function ringCard(zone: string, people: readonly Person[], d: RingCardDep
       box.innerHTML = ARCHIVE_BOX
       host.replaceChildren(
         input,
-        btn('ring-card-ok', 'data-ring-card-accept', S.ringCardAccept, ['✓'], accept),
-        btn('ring-card-no', 'data-ring-card-cancel', S.ringCardCancel, ['✕'], () => end({ type: 'cancel' })),
+        btn('ring-card-ok ok-mark', 'data-ring-card-accept', S.ringCardAccept, ['✓'], accept),
+        btn('ring-card-no cancel-mark', 'data-ring-card-cancel', S.ringCardCancel, ['✕'], () => end({ type: 'cancel' })),
         box,
       )
       input.focus(); input.select()

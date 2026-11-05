@@ -34,6 +34,8 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
+import { aliasUrl, ensureOwnAlias, registerAlias } from './short_alias'
+import { createAliasLine } from './short_alias_view'
 import { canRegister, createConnectKeeper, readConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
 import { sendCapRequest } from './name_cap_request'
@@ -97,9 +99,12 @@ import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './chan
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { parsePersonShare, personShareLink } from './person_share_link'
+import { parseNoteShare } from './notes_outline'
+import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
+import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
 import { zoneLinksSettings } from './zone_share_link_view'
-import { seenBy } from './share_page'
+import { candidates, seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
@@ -292,6 +297,8 @@ enum Screen {
   Chat = 'chat',
   /** Wave 25: the people list page (search, trust zones), opened from the Web screen with Back. */
   People = 'people',
+  /** Wave 32: the Notes outliner (eye menu), a page like People. */
+  Notes = 'notes',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -407,6 +414,8 @@ const viaCard = createViaCard()
 const personShare = pendingConnect ? parsePersonShare(location.hash) : null
 // Wave 31 (zone_share_link.ts): the same link made for a whole zone; the box names the zone and says there is more to ask for.
 const zoneShare = pendingConnect ? parseZoneShare(location.hash, Date.now()) : null
+// Wave 31 (notes_outline.ts): a link may carry an outline note with its provenance; kept on the sender's card after their tap.
+const noteShare = pendingConnect ? parseNoteShare(location.hash) : null
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
@@ -1129,6 +1138,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.Events:
     case Screen.Chat:
     case Screen.People:
+    case Screen.Notes:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1192,6 +1202,19 @@ function openPeople(query = ''): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
+/** Wave 32: the Notes outliner opens as a page the same way. */
+function openNotes(): void {
+  peoplePage = true
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Notes)
+}
+function screenNotes(): Node[] {
+  const s = st()
+  return [
+    header(S.viewNames.notes, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [notesOutlineView({ people: () => st().people, me: { did: s.me.id, name: s.me.displayName }, save })]),
+  ]
+}
 /** Wave 30: what a People / Map row may do to the record (inline name edit, archive, drag to another zone); a tap on the toast undoes. */
 const rowEdit: RowEdit = { save, place: (id, ring) => placePerson(id, ring, true), toast: (msg, undo) => toast(msg, { onClick: undo }),
   tagZones: (rings, name) => {
@@ -1234,9 +1257,10 @@ function zoomGlyph(tab: ZoomTab): HTMLElement {
 }
 
 function go(s: Screen): void {
-  if (s !== Screen.People && peoplePage) { peoplePage = false; history.back() }
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes
+  if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
-  if (s !== screen && zoomedIn() && s !== Screen.People && !(screen === Screen.People && s === Screen.Web)) { zoom = zoomBack(); history.back() }
+  if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
   // Coming to Record from Inventory means "what", from Web "who" (owner
   // 2026-10-06), whichever of Record or Meeting the tap opens; only while
   // nothing has been named or recorded yet.
@@ -1349,6 +1373,7 @@ function mountHeaderControls(): void {
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls('people')
+    : screen === Screen.Notes ? viewControls('notes')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1359,7 +1384,7 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : screen === Screen.Notes ? viewDrop('notes') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -1482,7 +1507,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Notes))
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -1513,6 +1538,7 @@ function render(): void {
       case Screen.Events: { const b = cal && eventsView.atList() ? cal.body() : eventsView.body(); return [...b.slice(0, 1), ...reminderRows(), ...b.slice(1)] }
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
+      case Screen.Notes: return screenNotes()
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
@@ -1941,6 +1967,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   if (treeLink?.family) applyFamily(person)
   if (personShare?.contact) mergeContact(person, personShare.contact, Date.now())
+  if (noteShare) addReceivedNote(person, noteShare)
   // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
   autoShareToPerson(person)
   if (admitted.legacy) person.connectedVia = 'legacy-code'
@@ -2168,6 +2195,7 @@ function screenStart(): Node[] {
             el('b', {}, solo ? [S.connectInvite(inviter)] : [S.reachOutStartBefore, el('span', { class: 'invite-name' }, [inviter]), S.reachOutStartAfter]),
             solo ? null : el('p', { class: 'meta', 'data-reach-out-note': '' }, [S.reachOutStartNote]),
             sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
+            noteShare ? el('p', { class: 'meta', 'data-note-share-in': '' }, [S.noteShareIn(inviter, noteShare.title)]) : null,
             zoneShare || personShare ? personShareBox(inviter, (zoneShare ?? personShare) as NonNullable<typeof personShare>, zoneShare) : null,
           ])
         : el('p', { class: 'lead' }, [S.startLead]),
@@ -2466,7 +2494,7 @@ let invQuery = ''
 /** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
 let invOnly: { label: string; ids: Set<string> } | null = null
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', notes: 'list', map: 'map', dex: 'curator', compact: 'list' }
 
 /** The web-view-row: the heading of the chosen view or the search field (the magnifier sits in the header, wave 28; expand all sits in the TrustZones sidebar, wave 28b). */
 function webViewRow(view: WebView): HTMLElement {
@@ -2553,6 +2581,7 @@ function toggleExpand(expanded: boolean): void {
 function chooseView(view: ViewKey): void {
   eyeOpen = false
   if (view === 'people') { if (screen === Screen.People) render(); else openPeople(); return }
+  if (view === 'notes') { if (screen === Screen.Notes) render(); else openNotes(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
@@ -3072,7 +3101,7 @@ function cardMore(p: Person): Node[] {
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
-    notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
+    notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
     timeline: () => [timelineSection(p)],
     curate: () => [
       el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
@@ -3081,6 +3110,18 @@ function cardMore(p: Person): Node[] {
   const connected = Boolean(p.peerId)
   const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
   return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
+}
+
+/** Wave 31 (shared_notes_view.ts): what the Notes section of a card needs from the app. */
+function notesHooks(): Parameters<typeof sharedNotesSection>[1] {
+  const s = st()
+  return {
+    me: { did: s.me.id, name: s.me.displayName },
+    candidates: candidates({ people: activePeople(), tags: loadColourTags() }),
+    connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
+    save,
+    toast,
+  }
 }
 
 /** Wave 30: the one link made for a person, kept while the card is open so the WhatsApp message can carry it. */
@@ -4430,7 +4471,7 @@ const curator = createCurator({
 })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
-  curatorPerson, dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, solo,
+  curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, solo,
 })
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void): void =>
@@ -5225,6 +5266,31 @@ function namesSync(): NamesSync {
   return namesSyncer
 }
 
+/** The "Short link" line of Meet (short_alias.ts): the alias is made once per identity, kept in the record, and told to the host (once per visit) with the connect code's secret. */
+function ownAliasLine(): HTMLElement {
+  const line = createAliasLine(copyLink)
+  const did = st().identity?.did
+  if (!did || !connectEligible()) return line.el
+  const made = ensureOwnAlias(st().aliases ?? {}, did, Date.now())
+  if (made.created) { st().aliases = made.aliases; save() }
+  const show = (): void => line.set(aliasUrl(new URL(SERVER_ORIGIN).host, made.token), !!st().aliases?.[made.token]?.registeredAt)
+  show()
+  const record = readConnectRecord(st().connectCode)
+  const entry = st().aliases?.[made.token]
+  if (record && entry && !aliasAsked.has(made.token)) {
+    aliasAsked.add(made.token)
+    void registerAlias({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() }, record, made.token, entry).then((ok) => {
+      if (!ok) { aliasAsked.delete(made.token); return }
+      entry.registeredAt = Date.now()
+      save()
+      show()
+    })
+  }
+  return line.el
+}
+/** Tokens already told to the host this visit. */
+const aliasAsked = new Set<string>()
+
 /** Only this phone's own personal account asks for a code: not a demo phone, a demo account's tab, or an embedded frame. */
 function connectEligible(): boolean {
   return !!state && !state.testOf && deviceSyncEligible()
@@ -5391,6 +5457,7 @@ function meetTrustWebPage(): HTMLElement {
     inviteBtn,
     inviteCount,
     view.el,
+    ownAliasLine(),
     advanced.el,
     el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),
     el('p', { class: 'meta', 'data-ways': 'now' }, [S.meetWaysNow]),

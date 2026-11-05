@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 25: the Web screen's view chooser (the eye): Web (default), Network, People, Map, then Dex and Contacts compact; Expand (top left of the rings) shows everyone. Pure, no DOM. */
+/** Wave 25: the Web screen's view chooser (the eye): Web (default), Network, People, Notes, Map, then Dex and Contacts compact; Expand (top left of the rings) shows everyone. Pure, no DOM. */
 export type WebView = 'rings' | 'network' | 'map'
 
 /** Everything the eye menu can open, in menu order; the last two sit under "Other views". Map shows only when a map page exists. */
-export type ViewKey = WebView | 'people' | 'map' | 'dex' | 'compact'
-const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'map', 'dex', 'compact']
+export type ViewKey = WebView | 'people' | 'notes' | 'map' | 'dex' | 'compact'
+const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'notes', 'map', 'dex', 'compact']
 const OTHER: readonly ViewKey[] = ['dex', 'compact']
 /** Wave 28: Dex is the one view that sits in the "Alternative UI (beta)" part of Other views; new unique views join Other views. */
 const ALT: readonly ViewKey[] = ['dex']
