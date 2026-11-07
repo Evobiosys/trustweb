@@ -18,18 +18,23 @@ try {
     await page.evaluate((r) => { localStorage.setItem('trustweb.v1.me', r); localStorage.setItem('trustweb.ui.webView', 'rings') }, record)
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
 
-    check(`${name}: exactly one bottom row`, (await page.locator('[data-expand-row]').count()) === 1)
-    check(`${name}: no ⛶ control outside the row`, (await page.locator('.ring-more:not([data-expand-row] *), [data-expanse-drop]:not([data-expand-row] *), [data-zone-side] [data-expand]').count()) === 0)
-    check(`${name}: row holds expand all, expanse control, one ⛶ per ring with a rest (2)`, (await page.locator('[data-expand-row] [data-expand]').count()) === 1 && (await page.locator('[data-expand-row] [data-expanse-drop]').count()) === 1 && (await page.locator('[data-expand-row] .ring-more').count()) === 2)
-    const hscroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
-    check(`${name}: no horizontal scrolling`, hscroll)
-    const inside = await page.evaluate(() => [...document.querySelectorAll('[data-expand-row] button')].every((b) => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth })) 
-    check(`${name}: every control inside the viewport`, inside)
+    const col = await page.evaluate(() => {
+      const w = document.querySelector('.rings-wrap').getBoundingClientRect(), z = 352 / w.width // the view may be zoomed: measure in the wrap's own px
+      return [...document.querySelectorAll('.rings-wrap [data-expanse-drop], .rings-wrap .ring-more')].map((e) => { const r = e.getBoundingClientRect(); return { x: (r.x + r.width / 2 - w.x) * z, y: (r.y + r.height / 2 - w.y) * z, w: Math.round(r.width * z), h: 352 } })
+    })
+    check(`${name}: 3 controls (expanse + 2 rings with a rest), all in the rings`, col.length === 3)
+    check(`${name}: ONE column: same x`, col.every((c) => Math.abs(c.x - col[0].x) < 1))
+    const ys = col.map((c) => c.y).sort((p, q) => q - p)
+    check(`${name}: bottom-anchored, expanse lowest, within 20 px of the bottom edge`, Math.abs(col[0].y - ys[0]) < 1 && col[0].h - ys[0] < 20)
+    check(`${name}: evenly stacked upward (20 px pitch)`, ys.slice(1).every((y, i) => Math.abs(ys[i] - y - 20) < 1.5))
+    check(`${name}: controls are 16 px`, col.every((c) => c.w === 16))
+    check(`${name}: expand all back in the sidebar`, (await page.locator('[data-zone-side] [data-expand]').count()) === 1)
+    check(`${name}: no horizontal scrolling`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     check(`${name}: no count badge`, (await page.locator('.expanse-count').count()) === 0)
-    const px = await page.evaluate(() => Math.max(...[...document.querySelectorAll('.rings-wrap .node:not(.you)')].map((n) => parseFloat(n.style.getPropertyValue('--d')))))
-    check(`${name}: dots at most 42 px, a lone-ish ring at 42`, px <= 42 && px >= 40)
+    const scaled = await page.evaluate(() => [...document.querySelectorAll('.rings-wrap .node:not(.you)')].every((n) => parseFloat(n.style.getPropertyValue('--d')) > 0))
+    check(`${name}: dots sized by the view (dot*k)`, scaled)
 
-    const targets = ['[data-expand-row] [data-expanse-drop]', '[data-expand-row] .ring-more >> nth=0', '[data-expand-row] .ring-more >> nth=1']
+    const targets = ['.rings-wrap [data-expanse-drop]', '.rings-wrap .ring-more >> nth=0', '.rings-wrap .ring-more >> nth=1']
     for (const [i, sel] of targets.entries()) {
       const node = page.locator('.rings-wrap .node:not(.you)').first()
       const nb = await node.boundingBox()
