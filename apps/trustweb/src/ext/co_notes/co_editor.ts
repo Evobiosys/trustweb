@@ -206,7 +206,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
 
   function draw(): void {
     const d = doc()
-    const title = el('input', { class: 'field co-title', value: d.title, maxlength: '120', placeholder: S_.titlePh, 'aria-label': S_.titlePh, 'data-co-title': '', onchange: (e: Event) => c.put(setTitle(doc(), (e.target as HTMLInputElement).value, c.me())) })
+    const title = el('input', { class: 'field co-title', value: d.title, maxlength: '120', placeholder: S_.titlePh, 'aria-label': S_.titlePh, 'data-co-title': '', onchange: (e: Event) => { c.put(setTitle(doc(), (e.target as HTMLInputElement).value, c.me())); const h2 = root.closest('.page-layer')?.querySelector('h2'); if (h2) h2.textContent = doc().title } })
     root.replaceChildren(
       title,
       el('p', { class: 'meta', 'data-co-honest': '' }, [S_.honest]), presence(d) ?? '',
@@ -214,7 +214,9 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
       d.mode === 'text' ? plain(d) : outline(d),
       el('button', { class: 'btn btn-ghost btn-sm co-more', 'data-co-more': '', 'aria-label': S_.more, onclick: morePage }, ['…']),
     )
-    if (editing) root.querySelector<HTMLInputElement>(`[data-co-input="${CSS.escape(editing)}"]`)?.focus()
+    const live = editing ? root.querySelector<HTMLInputElement>(`[data-co-input="${CSS.escape(editing)}"]`) : null
+    live?.focus()
+    live?.setSelectionRange(live.value.length, live.value.length)
   }
 
   // Others' changes arrive by the relay: while this page is on screen, look every 10 s and show what merged without losing the cursor.
