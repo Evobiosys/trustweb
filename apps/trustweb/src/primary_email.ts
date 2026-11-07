@@ -16,17 +16,17 @@ interface Provider {
   label: string
   /** Domain patterns for guessing; a leading "*." is not used, a trailing ".*" matches any TLD. */
   domains: readonly string[]
-  /** Public web compose page, address appended URL-encoded; none = plain mailto:. */
+  /** Documented web compose page, recipient appended URL-encoded; none = plain mailto:. Only Gmail and Outlook document one. */
   compose?: string
 }
 
 /** The owner's priority order. */
 export const PROVIDERS: readonly Provider[] = [
-  { id: 'proton', label: 'Proton', domains: ['proton.me', 'protonmail.com', 'pm.me'], compose: 'https://mail.proton.me/compose?to=' },
+  { id: 'proton', label: 'Proton', domains: ['proton.me', 'protonmail.com', 'pm.me'] },
   { id: 'gmail', label: 'Gmail', domains: ['gmail.com', 'googlemail.com'], compose: 'https://mail.google.com/mail/?view=cm&to=' },
   { id: 'hotmail-outlook', label: 'Hotmail/Outlook', domains: ['hotmail.*', 'outlook.*', 'live.*'], compose: 'https://outlook.live.com/mail/0/deeplink/compose?to=' },
-  { id: 'ik-me', label: 'ik.me (Infomaniak)', domains: ['ik.me'], compose: 'https://mail.infomaniak.com/?to=' },
-  { id: 'apple-icloud', label: 'Apple Mail (iCloud)', domains: ['icloud.com', 'me.com', 'mac.com'], compose: 'https://www.icloud.com/mail/?to=' },
+  { id: 'ik-me', label: 'ik.me (Infomaniak)', domains: ['ik.me'] },
+  { id: 'apple-icloud', label: 'Apple Mail (iCloud)', domains: ['icloud.com', 'me.com', 'mac.com'] },
   { id: 'thunderbird', label: 'Thunderbird', domains: [] },
   { id: 'other', label: 'Other', domains: [] },
 ]
@@ -48,10 +48,10 @@ export function validateEmail(input: string): string | null {
 
 export const providerLabel = (id: string): string => PROVIDERS.find((p) => p.id === id)?.label ?? 'Other'
 
-/** Where a compose button for this address goes: the provider's web compose page, else mailto:. */
-export function composeHref(e: PrimaryEmail): string {
+/** Where "write a mail with <provider>" goes: the provider's web compose page, else mailto:. `to` stays empty on the own card. */
+export function composeHref(e: PrimaryEmail, to = ''): string {
   const c = PROVIDERS.find((p) => p.id === e.provider)?.compose
-  return c ? c + encodeURIComponent(e.address) : `mailto:${e.address}`
+  return c ? c + encodeURIComponent(to) : `mailto:${to}`
 }
 
 export const senderHint = (e: PrimaryEmail): string => `Sent from ${e.address} (${providerLabel(e.provider)})`

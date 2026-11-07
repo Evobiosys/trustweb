@@ -2965,7 +2965,7 @@ export const S = {
   setPrimaryEmailSaved: 'Email address saved',
   setPrimaryEmailCleared: 'Email address removed',
   setPrimaryEmailSenderNote: 'Your mail program picks the sender; this app cannot set it.',
-  primaryEmailOpenIn: (provider: string) => `open in ${provider}`,
+  primaryEmailOpenIn: (provider: string) => `write a mail with ${provider}`,
   // Wave 33 contacts-sync
   onbImportContacts: 'Import a contacts file (Google, phone, Dex, spreadsheet)',
   googleTitle: 'Google contacts',

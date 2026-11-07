@@ -28,13 +28,14 @@ describe('primary email (primary_email.ts)', () => {
   })
   it('builds a web compose link where the provider has one, else mailto', () => {
     const to = 'a@x.org'
-    expect(composeHref({ provider: 'gmail', address: to })).toBe('https://mail.google.com/mail/?view=cm&to=a%40x.org')
-    expect(composeHref({ provider: 'proton', address: to })).toBe('https://mail.proton.me/compose?to=a%40x.org')
-    expect(composeHref({ provider: 'hotmail-outlook', address: to })).toBe('https://outlook.live.com/mail/0/deeplink/compose?to=a%40x.org')
-    expect(composeHref({ provider: 'apple-icloud', address: to })).toMatch(/^https:\/\/www\.icloud\.com\/mail/)
-    expect(composeHref({ provider: 'ik-me', address: to })).toMatch(/^https:\/\/mail\.infomaniak\.com\//)
-    expect(composeHref({ provider: 'thunderbird', address: to })).toBe('mailto:a@x.org')
-    expect(composeHref({ provider: 'other', address: to })).toBe('mailto:a@x.org')
+    // own card: no recipient prefilled
+    expect(composeHref({ provider: 'gmail', address: to })).toBe('https://mail.google.com/mail/?view=cm&to=')
+    expect(composeHref({ provider: 'hotmail-outlook', address: to })).toBe('https://outlook.live.com/mail/0/deeplink/compose?to=')
+    expect(composeHref({ provider: 'gmail', address: to }, 'b&c@y.org')).toBe('https://mail.google.com/mail/?view=cm&to=b%26c%40y.org')
+    for (const p of ['proton', 'apple-icloud', 'ik-me']) expect(composeHref({ provider: p, address: to })).toBe('mailto:')
+    expect(composeHref({ provider: 'proton', address: to }, 'b@y.org')).toBe('mailto:b@y.org')
+    expect(composeHref({ provider: 'thunderbird', address: to })).toBe('mailto:')
+    expect(composeHref({ provider: 'other', address: to })).toBe('mailto:')
   })
   it('words the sender hint', () => {
     expect(senderHint({ provider: 'proton', address: 'a@x.org' })).toBe('Sent from a@x.org (Proton)')
