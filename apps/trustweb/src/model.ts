@@ -29,6 +29,8 @@ import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
 import type { NameReveal } from './events'
+import type { ZoneLink } from './zone_share_link'
+import type { PeerItem } from './peer_items'
 import type { SupportAsk, SupportIn } from './support_ask'
 
 export enum Ring {
@@ -979,7 +981,7 @@ export interface AppState {
   /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
   shares?: import('./share_sink/share_lines').ShareLine[]
   /** Wave 31 (zone_share_link.ts): the named links per zone, revoked ones kept. This phone only. Absent: none. */
-  zoneLinks?: import('./zone_share_link').ZoneLink[]
+  zoneLinks?: ZoneLink[]
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
   /** Wave 29 (zone_tags.ts): tag ids per zone (ring value) with a stamp. Absent: none. */
@@ -995,7 +997,7 @@ export interface AppState {
   /** Wave 27: an agent may propose shares. Absent: off. */
   agentsMayPropose?: true
   /** Wave 31 (peer_items.ts): what we know of a person's resources, one line each. Absent: none. This phone only. */
-  peerItems?: import('./peer_items').PeerItem[]
+  peerItems?: PeerItem[]
   peers: Peer[]
   inventory: InventoryItem[]
   log: LogEntry[]
