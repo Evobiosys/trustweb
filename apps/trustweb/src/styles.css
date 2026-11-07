@@ -1433,3 +1433,8 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .note-share .chips{margin:0}
 .note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
 .shared-notes .field{width:100%; box-sizing:border-box}
+
+/* wave 33 contacts-sync */
+[data-google-sync] .field, [data-svc-columns] select{max-width:100%; box-sizing:border-box}
+[data-google-connect][aria-disabled="true"]{opacity:.45}
+[data-svc-columns]{overflow-wrap:anywhere}
