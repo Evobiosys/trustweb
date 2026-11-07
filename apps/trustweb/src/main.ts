@@ -1048,8 +1048,7 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', complete: 'table', map: 'map', dex: 'curator', compact: 'list' }
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
