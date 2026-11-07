@@ -4699,7 +4699,7 @@ const eventsView = createEventsView({
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
   showQr: (ev) => eventQr(ev),
-  extra: (ev) => cal?.eventSection?.(ev) ?? [],
+  extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),
 })
 const extHooks: ExtHooks = {

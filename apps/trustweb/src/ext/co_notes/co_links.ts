@@ -10,6 +10,19 @@ const EDIT_RE = /@\[([^\]\n]{1,60})\]/g
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const PROPERTY_RE = /^\s*(?:[-*]\s+)?([A-Za-z][\w-]*)::\s*(.*)$/
 
+/** 53-bit string hash (cyrb53) in base 36: the same on every device, different for different dids. */
+function hash53(s: string): string {
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677) }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
+}
+
+/** The id of a person's name block in a Desires or Memories note, from the whole did (a did:peer:2 ends with the relay address everyone shares). */
+export const headId = (did: string): string => `h-${hash53(did)}`
+
 export const chipToken = (name: string, ref: string): string => `@[${name.replace(/[[\]()]/g, ' ').replace(/\s+/g, ' ').trim()}](${ref})`
 export const isLocalRef = (ref: string): boolean => ref.startsWith('tw:')
 

@@ -3,6 +3,7 @@
 import { audit, parseDoc, pollDocs, receive, recipients, sendDoc, wrapDoc } from '../../src/ext/co_notes/co_sync.ts'
 import { editText, insertAfter, newDoc, setShare, toText, tree } from '../../src/ext/co_notes/co_doc.ts'
 import { pollRelay, postNote } from '../../src/notes_relay.ts'
+import { headId } from '../../src/ext/co_notes/co_links.ts'
 import { newNote } from '../../src/notes_outline.ts'
 import { createIdentity } from '../../../demo/src/did.ts'
 
@@ -176,5 +177,15 @@ describe('review fixes (wave36b): what a received copy may not change', () => {
     expect(text(mineId)).toBe('pack @[Cara](tw:p7)')
     expect(text(r2.id)).toBe('Cara wish')
     expect(text(r1.id)).toBe('Ben wish edited')
+  })
+})
+
+describe('review fixes (wave36b event-desires)', () => {
+  it('in a Desires note nobody can take the id of my name block before I make it', () => {
+    const d = { ...newDoc({ id: 'desires-ev1', title: 'Desires', me: b, at: NOW }), kind: 'desires', people: [a, b] }
+    const squat = insertAfter(d, null, 'Anna (fake)', b, NOW, { id: headId(ANNA.did), share: 'event' }).doc
+    const ok = insertAfter(squat, null, 'Ben', b, NOW, { id: headId(BEN.did), share: 'event' }).doc
+    const got = receive([], BEN.did, ok, known(BEN.did), ANNA.did).docs[0]
+    expect(got.blocks.map((x) => x.id)).toEqual([headId(BEN.did)])
   })
 })

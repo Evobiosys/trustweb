@@ -1578,3 +1578,11 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .co-more{align-self:flex-start}
 .co-more-page{display:flex; flex-direction:column; gap:var(--s-3); min-width:0; padding-top:var(--s-3)}
 .co-list .btn{text-decoration:underline}
+
+/* wave 36 event-desires */
+.co-event{display:flex; flex-direction:column; gap:var(--s-2); min-width:0}
+.co-row{flex-wrap:wrap}
+.co-share{background:none; border:0; padding:0 4px; font:inherit; font-size:var(--fs-1); color:var(--trust-strong); text-decoration:underline; cursor:pointer; margin-left:auto; text-align:right}
+.co-share-plain{margin-left:auto; font-size:var(--fs-1)}
+.co-ai{font-size:var(--fs-1); color:var(--ink-2); border:1px solid var(--line); border-radius:var(--r-chip); padding:0 6px}
+.co-head{font-weight:600}
