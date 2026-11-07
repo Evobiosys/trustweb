@@ -3072,6 +3072,10 @@ export const S = {
   binRemoveAria: 'Drop here to remove',
   panelChangedSince: (old: string, now: string) => `changed since your approval (${old} → ${now})`,
   panelApproveChanges: 'Approve changes',
+  themeLabel: 'Appearance',
+  themeSystem: 'Follow the system',
+  themeLight: 'Light',
+  themeDark: 'Dark',
   barHighlightNone: 'None',
   barMoreViews: 'More views',
   // Wave 35 (web_default_view.ts): pin a view as the default of Web.

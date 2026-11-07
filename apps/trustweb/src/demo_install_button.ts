@@ -17,19 +17,13 @@ import { S } from './strings'
 /** The website's button CSS (scripts/tw-front-door/chrome.css, .tw-btn and .tw-btn-install), verbatim, plus this page's placement. */
 const CSS = `
 .tw-btn{box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center;
-  height:38px; padding:0 18px; border-radius:999px; border:1.5px solid #33456b;
+  height:38px; padding:0 18px; border-radius:999px; border:1.5px solid var(--trust);
   font:600 14px/1 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   text-decoration:none; white-space:nowrap; cursor:pointer;
   transition:background-color .15s, color .15s, border-color .15s}
-.tw-btn-install{background:#33456b; color:#f4f6fa}
-.tw-btn-install:hover{background:#27365a; border-color:#27365a}
-.tw-btn:focus-visible{outline:2px solid #33456b; outline-offset:3px}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]) .tw-btn{border-color:#8fa7d8}
-  :root:not([data-theme="light"]) .tw-btn-install{background:#8fa7d8; color:#111726}
-  :root:not([data-theme="light"]) .tw-btn-install:hover{background:#a6b9e3; border-color:#a6b9e3}
-  :root:not([data-theme="light"]) .tw-btn:focus-visible{outline-color:#8fa7d8}
-}
+.tw-btn-install{background:var(--trust); color:var(--on-trust)}
+.tw-btn-install:hover{background:var(--trust-strong); border-color:var(--trust-strong)}
+.tw-btn:focus-visible{outline:2px solid var(--focus); outline-offset:3px}
 .demo-topbar{max-width:1100px; margin:0 auto 6px; display:flex; justify-content:flex-end; align-items:flex-start; gap:10px}
 .demo-install{display:flex; flex-direction:column; align-items:center; gap:4px}
 /* "for yourself": smaller, lighter weight and colour than the button it sits under (owner 2026-10-07) */

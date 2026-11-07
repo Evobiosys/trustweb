@@ -15,6 +15,7 @@
  * a camera would open a scanned code, so pairing, asks and consent all go
  * over the live relay.
  */
+import './design/tokens.css'
 import { DemoContext, PERSONA_NAMES, Persona, isDemoContext } from './seed'
 import { storageKey } from './store'
 import { mountWalkthrough } from './walkthrough'
@@ -46,8 +47,7 @@ const ORDER: readonly Persona[] = [Persona.Holder, Persona.Seeker, Persona.Third
 
 const style = document.createElement('style')
 style.textContent = `
-:root{--bg:#F4EFF7;--ink:#241B2E;--soft:#6b5d7a;--violet:#9A37F0;--card:#fff}
-@media (prefers-color-scheme: dark){:root{--bg:#120C1A;--ink:#EDE6F2;--soft:#BBAACD;--card:#2B2139}}
+:root{--bg:var(--surface-1);--soft:var(--ink-2);--violet:#9A37F0;--card:var(--raised)}
 *{box-sizing:border-box;margin:0}
 body{background:var(--bg);color:var(--ink);font-family:"Inter","Seravek","Avenir Next","Segoe UI",system-ui,sans-serif;padding:24px 16px 120px}
 .head{max-width:900px;margin:0 auto 18px;text-align:center}

@@ -340,22 +340,22 @@ const CSS = `
 .wt-dev{display:flex;flex-direction:column;gap:16px;align-items:stretch;min-width:0}
 .wt-dev h4{margin:0;font-size:13.5px;text-align:center}
 .wt-dev h4 small{display:block;color:var(--soft);font-weight:400;font-size:11.5px}
-.wt-screen{position:relative;min-height:240px;border-radius:22px;background:#F2EBDC;color:#241B2E;padding:28px 12px 14px;overflow:hidden;
+.wt-screen{position:relative;min-height:240px;border-radius:22px;background:var(--surface-1);color:var(--ink);padding:28px 12px 14px;overflow:hidden;
   box-shadow:0 0 0 6px #17111e,0 0 0 7px #3a2f47;font-size:12.5px;line-height:1.45;transition:box-shadow .3s,opacity .3s}
-.wt-screen.changed{box-shadow:0 0 0 6px #17111e,0 0 0 7px #3a2f47,0 0 0 9px rgba(154,55,240,.6)}
+.wt-screen.changed{box-shadow:0 0 0 6px #17111e,0 0 0 7px #3a2f47,0 0 0 9px color-mix(in srgb,var(--focus) 70%,transparent)}
 .wt-screen.idle{opacity:.7}
 .wt-tag{position:absolute;right:8px;top:8px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:#9A37F0;color:#fff;border-radius:999px;padding:2px 7px;z-index:2}
 .wt-h{font-family:"Inter","Seravek","Avenir Next","Segoe UI",system-ui,sans-serif;font-weight:600;font-size:15px;margin-bottom:8px}
 .wt-rings{display:flex;flex-wrap:wrap;gap:6px}
-.wt-rings span{background:#fff;border-radius:999px;padding:3px 9px;font-weight:600}
-.wt-card{background:#fff;border-radius:10px;padding:8px 10px;margin:6px 0}
-.wt-card.ok{background:#EAF7F1;border-left:3px solid #4FD7A0}
+.wt-rings span{background:var(--raised);border-radius:999px;padding:3px 9px;font-weight:600}
+.wt-card{background:var(--raised);color:var(--ink);border-radius:10px;padding:8px 10px;margin:6px 0}
+.wt-card.ok{background:var(--shared-tint);border-left:3px solid var(--shared)}
 .wt-card.q{font-weight:600}
-.wt-quiet{height:100%;display:grid;place-items:center;text-align:center;color:#5C4F6B;font-style:italic;padding:0 8px}
-.wt-noapp{height:100%;display:grid;place-content:center;text-align:center;gap:6px;color:#5C4F6B;border:2px dashed #b9aec4;border-radius:16px;padding:10px}
+.wt-quiet{height:100%;display:grid;place-items:center;text-align:center;color:var(--ink-2);font-style:italic;padding:0 8px}
+.wt-noapp{height:100%;display:grid;place-content:center;text-align:center;gap:6px;color:var(--ink-2);border:2px dashed var(--line-strong);border-radius:16px;padding:10px}
 /* in the flow (not absolute), so a long prompt grows the screen instead of clipping its buttons */
 .wt-cosmic{margin:-28px -12px -14px;padding:28px 12px 16px;min-height:240px;border-radius:22px;background:linear-gradient(160deg,#2A0E4E,#3B1163 45%,#0E3A55);color:#EDE6F2}
-.wt-cosmic .wt-card{color:#241B2E}
+.wt-cosmic .wt-card{color:var(--ink)}
 .wt-btn{display:inline-block;margin:6px 6px 0 0;border-radius:999px;padding:5px 10px;background:#4FD7A0;color:#0d3527;font-weight:700;font-size:11.5px}
 .wt-btn.ghost{background:transparent;color:#BFE6F7;padding-left:0}
 .wt-qr{width:110px;height:110px;margin:6px auto;border-radius:8px;background:repeating-conic-gradient(#241B2E 0 25%,#fff 0 50%) 0 0/22px 22px;box-shadow:inset 0 0 0 8px #fff}
@@ -376,14 +376,6 @@ const CSS = `
 .wt-count{font-size:12.5px;color:var(--soft);min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
 @media (max-width:760px){.wt-devices{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}
 @media (prefers-reduced-motion: reduce){.wt-screen{transition:none}}
-@media (prefers-color-scheme: dark){
-  .wt-screen{background:#1F1729;color:#F4EDF9;box-shadow:0 0 0 6px #0B0710,0 0 0 7px #3A2D4C}
-  .wt-screen.changed{box-shadow:0 0 0 6px #0B0710,0 0 0 7px #3A2D4C,0 0 0 9px rgba(190,130,255,.85)}
-  .wt-rings span,.wt-card,.wt-cosmic .wt-card{background:#2B2139;color:#F4EDF9}
-  .wt-card.ok{background:#173A2C}
-  .wt-quiet,.wt-noapp{color:#BBAACD}
-  .wt-noapp{border-color:#5d4f70}
-}
 `
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {

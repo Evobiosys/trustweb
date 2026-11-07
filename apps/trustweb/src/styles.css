@@ -1,33 +1,13 @@
-/* TrustWeb. Tokens, phone frame, tab bar, rings, sheet and cosmic register
-   ported from apps/mobile-ui/src/styles.css; the notes-flow pieces follow the
-   owner's note-taking mockup (teal call-to-action, tag pills). */
+@import './design/tokens.css';
+@import './components/rings.css';
+/* TrustWeb. Tokens now come from src/design/tokens.css (generated from tokens.json); the
+   phone frame, tab bar, rings, sheet and cosmic register were ported from apps/mobile-ui/src/styles.css;
+   the notes-flow pieces follow the owner's note-taking mockup (teal call-to-action, tag pills). */
 :root{
   --font-pinned:ui-monospace,Menlo,monospace;
-  --violet:#2F6F74; --electric:#1A9AA6; --coral:#C2573A; --mint:#3FBFA0; --teal:#13867E;
-  --mist:#ECE7DC; --linen:#F5F0E8; --ink:#1F2A28; --ink-soft:#5A6B66;
-  --page-bg:#FAFAF7; --page-ink:#1F2A28; --panel:#fff;
-  --violet-deep:#174A4F; --electric-deep:#0E5A63; --warm-deep:#B58A2E;
-  /* surface tokens: --linen is the screen, --card the raised panels */
-  --card:#fff; --line:rgba(31,42,40,.14); --tab-bg:rgba(255,255,255,.94);
-  --tint-teal:#E3F4F1; --tint-ok:#DDF3EA; --tint-warn:#FBE6DD; --tint-violet:#E1EFEF;
   /* Wave 28 (trustzones.ts TONE_ORDER): the orange of a rung, strongest inside, the outermost grey. */
   --ring-0:#A63A00; --ring-1:#D2570A; --ring-2:#EE7A1C; --ring-3:#F6A24F; --ring-4:#FAC98F; --ring-5:#9E9E9E;
   --pin-edge:#F2A0A0;
-  --tint-blue:#E0F2F4; --tint-sand:#F5EEDC; --ok-ink:#0E6B55; --warn-ink:#9C3B2E;
-}
-/* Dark is the default (light only with data-theme="light" on <html>). A deep teal night instead of a darkened beige, with the same accents.
-   Real tokens, so the app never depends on a browser's forced dark mode. */
-@media all{
-  :root:not([data-theme="light"]){
-    --page-bg:#1C1B17; --page-ink:#F1EEE6;
-    --linen:#26241F; --card:#312E28; --mist:#3D3932; --ink:#F1EEE6; --ink-soft:#BDB6A8;
-    --line:rgba(241,238,230,.13); --tab-bg:rgba(38,36,31,.94);
-    --tint-teal:#12383A; --tint-ok:#153A30; --tint-warn:#3F2A1E; --tint-violet:#1A3A3F;
-    --tint-blue:#143A44; --tint-sand:#33301F; --ok-ink:#7BE0B0; --warn-ink:#FFB38F;
-    --electric-deep:#7ED9CF; --violet-deep:#8FD0D0; --warm-deep:#FFB36B;
-    --start-end:#1E3A3C;
-    color-scheme:dark;
-  }
 }
 *{box-sizing:border-box; margin:0}
 html,body{height:100%}
@@ -41,7 +21,7 @@ button{font-family:inherit}
 
 .phone{
   width:390px; height:812px; max-height:calc(100dvh - 48px); background:var(--linen); border-radius:46px;
-  box-shadow:0 24px 80px rgba(36,27,46,.35), 0 0 0 10px #101a19, 0 0 0 12px #2f4543;
+  box-shadow:var(--shadow-float), 0 0 0 10px var(--phone-edge), 0 0 0 12px var(--phone-rim);
   overflow:hidden; overflow:clip; position:relative; flex-shrink:0; color:var(--ink);
 }
 /* overflow:clip, not only hidden: the closed sheet (bottom:-100%) overflows the phone, and a focus or a tap scrolling an overflow:hidden box moved the whole phone up, so the bars and the page misaligned (wave 5, item e) */
@@ -70,7 +50,7 @@ body:has(.phone.fluid) .page-dock{display:none}
 .back{border:0; background:none; font-size:30px; line-height:1; color:var(--teal); cursor:pointer; padding:0 6px 4px 0}
 .status-pill{font:inherit; font-size:11px; font-weight:700; border:0; border-radius:999px; padding:3px 9px; background:var(--mist); color:var(--ink-soft); flex-shrink:0}
 /* idle: a quiet relay dot, no "Online" text (owner, 2026-10-05) */
-.status-pill.rec{background:#FBE6DD; color:var(--warn-ink); cursor:pointer; display:flex; align-items:center; gap:6px}
+.status-pill.rec{background:var(--attention-tint); color:var(--attention-ink); cursor:pointer; display:flex; align-items:center; gap:6px}
 .status-pill.rec::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--coral); animation:blink 1.2s ease-in-out infinite}
 @keyframes blink{50%{opacity:.25}}
 .hdr-btn{border:0; background:var(--card); color:var(--teal); border-radius:999px; padding:6px 11px 6px 9px; font-size:12.5px; font-weight:700; cursor:pointer;
@@ -123,29 +103,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .center{text-align:center}
 
 /* web */
-.rings-wrap{position:relative; width:352px; height:352px; margin:6px auto 0; max-width:100%}
-.rings-wrap svg{position:absolute; inset:0}
-.rings-zoom{position:relative; transform-origin:0 0; will-change:transform}   /* in flow: the layer must keep its place below the header (absolute + inset:0 put the rings over it) */
 .scroll.zoomed{touch-action:none; overflow:hidden}
-.node{position:absolute; display:flex; flex-direction:column-reverse; align-items:center; gap:2px; cursor:pointer; transform:translate(-50%,-50%); background:none; border:0; padding:0}
-.ava{width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px; box-shadow:0 2px 10px rgba(36,27,46,.2); flex-shrink:0}
-.node.nonresp{opacity:.55}
-.node span{font-size:11.5px; font-weight:600; color:var(--ink)}
-/* names sit ABOVE the dot, over edges and other dots, with a halo in the screen colour */
-.node:not(.you) span{position:relative; z-index:3; text-shadow:-1px 0 var(--linen),1px 0 var(--linen),0 -1px var(--linen),0 1px var(--linen),0 0 4px var(--linen)}
-.rings-zoom .node:not(.you) span{font-size:calc(11.5px*var(--rz,1))}
-.rings-zoom .node:not(.you) .lvl{font-size:calc(9.5px*var(--rz,1))}
-.node .lvl{font-size:9.5px; color:var(--ink-soft); font-weight:500; font-style:normal}
-.node:not(.you) .ava{width:var(--d,42px); height:var(--d,42px); font-size:calc(var(--d,42px)*.42)}
-.rings-wrap.compact .node:not(.you) span,.rings-wrap.compact .node:not(.you) .lvl,.rings-wrap.compact .node:not(.you) .dummy-chip{display:none}
-.rings-wrap .node.lbl-off:not(:hover):not(:focus-visible) span{display:none}
-.rings-wrap.compact .node:not(.you):hover,.rings-wrap.compact .node:not(.you):focus-visible{z-index:2}
-.rings-wrap.compact .node:not(.you):hover span,.rings-wrap.compact .node:not(.you):focus-visible span{display:block; position:absolute; bottom:100%; white-space:nowrap; background:var(--card); padding:1px 6px; border-radius:8px; box-shadow:0 2px 8px rgba(36,27,46,.2)}
-.node.nl .ava{font-size:0}
-.node:not(.you) .ava{position:relative}
-.node.tagged .ava::after{content:''; position:absolute; inset:-4px; border-radius:50%; background:var(--arcs); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px)); mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px))}
-.node.lifted{z-index:5; cursor:grabbing; touch-action:none}
-.node.lifted .ava{transform:scale(1.25)}
 .ring-toggle{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:0; background:none; color:#fff; font-size:9px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .ring-toggle::before{content:''; position:absolute; box-sizing:border-box; width:8.5px; height:8.5px; background:var(--muted-grey,#8a8f94); border:1.5px solid var(--muted-grey,#8a8f94); transform:rotate(45deg); z-index:-1; transition:box-shadow .15s}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
@@ -190,8 +148,6 @@ textarea.field{resize:vertical; line-height:1.5}
 .membrane-rest{display:flex; flex-direction:column; padding:8px; min-height:60vh}
 .rest-add{border:1px dashed var(--line,currentColor); background:transparent; text-decoration:underline}
 .tag-filter{padding:6px 10px}
-.rings-wrap.hide-zone{outline:2px dashed #c62828; outline-offset:4px; border-radius:50%}
-.rings-wrap svg circle.drop{stroke-opacity:1; stroke-width:3}
 .ctx-menu{position:absolute; z-index:7; display:flex; flex-direction:column; gap:2px; background:var(--card); border-radius:12px; padding:6px; box-shadow:0 4px 20px rgba(36,27,46,.3)}
 .sheet-line{border:0; border-top:1px solid var(--ink-soft); opacity:.3; margin:18px 0 0}
 .desire{position:absolute; left:50%; bottom:6px; transform:translateX(-50%); z-index:6; width:min(340px,96%); background:var(--card); border-radius:16px; padding:10px 12px; box-shadow:0 4px 20px rgba(36,27,46,.3); text-align:center}
@@ -215,11 +171,6 @@ textarea.field{resize:vertical; line-height:1.5}
 .field-row small{flex-basis:100%; padding-left:18px; font-size:12px; color:var(--ink-soft,inherit)}
 .field-lean{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0}
 .desire-go{display:flex; gap:8px; justify-content:center}
-.node.you .ava{width:40px; height:40px; box-shadow:0 0 0 2px #fff, 0 0 0 3px rgba(23,143,134,.5)}
-.node.you span{position:absolute; bottom:100%; margin-bottom:4px; white-space:nowrap; z-index:3; text-shadow:-1px 0 var(--linen),1px 0 var(--linen),0 -1px var(--linen),0 1px var(--linen),0 0 4px var(--linen)}   /* the label sits above the dot: the avatar centre is the node (and rings) centre */
-.node.asked .ava{animation:asked 1.6s ease-in-out infinite}
-@keyframes asked{50%{box-shadow:0 0 0 7px rgba(18,168,227,.28), 0 2px 10px rgba(36,27,46,.2)}}
-.node.shared .ava{box-shadow:0 0 0 3px #fff, 0 0 0 6px var(--mint), 0 0 18px rgba(79,215,160,.8)}
 .screen.querying .rings-wrap{transform-origin:top center}
 .net{padding:0 12px; position:relative}
 .net-bar{display:flex; gap:8px; align-items:center; margin:6px 0}
@@ -295,7 +246,7 @@ button.view-drop-sep{border:0; background:none; color:inherit; font-family:inher
 .ring-close{background:var(--tint-violet); color:var(--violet-deep)}
 .ring-friend{background:var(--tint-blue); color:var(--electric-deep)}
 .ring-acquaintance{background:var(--tint-sand); color:var(--ink-soft)}
-.ring-intending{background:#FBF1DD; color:#8A6A2F; border:1px dashed #D8B978}
+.ring-intending{background:var(--intending-tint); color:var(--intending-ink); border:1px dashed color-mix(in srgb, var(--intending) 70%, transparent)}
 .verse{background:var(--card); border-radius:16px; padding:16px; margin:18px 16px 0; box-shadow:0 2px 12px rgba(36,27,46,.06)}
 .verse h3{font-size:15px; margin-bottom:6px}
 .verse p{font-size:12.5px; color:var(--ink-soft); line-height:1.55}
@@ -347,8 +298,7 @@ button.view-drop-sep{border:0; background:none; color:inherit; font-family:inher
 .sheet.on{bottom:0; visibility:visible; transition:bottom .3s cubic-bezier(.2,.8,.2,1)}
 .grab{width:44px; height:5px; border-radius:3px; background:rgba(36,27,46,.18); margin:0 auto 14px}
 .sheet h3{font-size:20px; margin-bottom:4px}
-.reached-out{color:#5C4300}
-:root:not([data-theme="light"]) .reached-out{color:#F2C200}
+.reached-out{color:var(--reached-ink)}
 .sheet .meta{font-size:13px; color:var(--ink-soft); line-height:1.55}
 .sheet .path{margin:12px 0; padding:10px 14px; background:var(--card); border-radius:14px; font-size:13px; border-left:3px solid var(--mint)}
 .sheet .btn{width:100%; margin-top:8px}
@@ -399,7 +349,7 @@ button.share-chip-label{text-decoration:underline}
 .username-row{display:flex; flex-direction:column; gap:6px; margin-top:10px}
 .username-row .row-actions{display:flex; gap:8px}
 .long-link{display:block; width:100%; box-sizing:border-box; background:var(--card); border-radius:10px; padding:8px 10px; font-size:11.5px; line-height:1.45; word-break:break-all; max-height:9em; overflow:auto; user-select:all}
-.toast{position:absolute; left:16px; right:16px; bottom:100px; z-index:60; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
+.toast{position:absolute; left:16px; right:16px; bottom:100px; z-index:60; background:var(--ink); color:var(--surface-0); font-size:13.5px; border-radius:14px; padding:12px 14px;
   opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .toast.on{opacity:1; transform:none}
 /* Wave 28: the x on every toast/notice bar (closes at once) and the 400 ms fade after 5 s */
@@ -448,7 +398,7 @@ button.share-chip-label{text-decoration:underline}
 .stack-actions .notice-dismiss{font-size:11.5px; font-weight:500; color:var(--warm-deep)}
 .stack-open:focus-visible,.stack-actions .notice-dismiss:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
 /* Wave 6i: "New message from <name>" away from the Web screen: tappable (a toast never is), "open" on its right */
-.msg-notice{position:absolute; left:16px; right:16px; bottom:100px; z-index:61; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
+.msg-notice{position:absolute; left:16px; right:16px; bottom:100px; z-index:61; background:var(--ink); color:var(--surface-0); font-size:13.5px; border-radius:14px; padding:12px 14px;
   display:flex; align-items:center; justify-content:space-between; gap:10px; opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .msg-notice.on{opacity:1; transform:none; pointer-events:auto}
 /* Review 6i: over an open sheet the notice sits in the top strip (over the veil, which the sheet never reaches), never over its controls */
@@ -492,7 +442,7 @@ button.share-chip-label{text-decoration:underline}
 @keyframes tw-pop{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
 /* tap ripple on the web: questhub.eco's gold ground ripple, as a circle */
 .ripple{position:absolute; z-index:45; width:0; height:0; pointer-events:none}
-.ripple{--ripple:hsl(40,82%,46%)}
+.ripple{--ripple:var(--intending)}
 .ripple::before,.ripple::after{content:""; position:absolute; left:0; top:0; width:132px; height:132px; margin:-66px 0 0 -66px; border-radius:50%;
   border:3px solid var(--ripple); box-shadow:0 0 16px hsla(46,68%,55%,.5); opacity:0; animation:tw-ripple .9s ease-out forwards}
 .ripple::after{animation-name:tw-ripple-2; animation-delay:.16s}
@@ -501,10 +451,10 @@ button.share-chip-label{text-decoration:underline}
 
 /* tags and audiences */
 .tagpill{display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; border-radius:6px; padding:3px 7px}
-.tag-looking{background:#E6E8FB; color:#3440a8}
-.tag-offer{background:#DDF3EC; color:var(--ok-ink)}
-.tag-meet{background:#FCEFD3; color:#94620b}
-.tag-opportunity{background:#FBE6DD; color:var(--warn-ink)}
+.tag-looking{background:var(--looking-tint); color:var(--looking-ink)}
+.tag-offer{background:var(--shared-tint); color:var(--shared-ink)}
+.tag-meet{background:var(--intending-tint); color:var(--intending-ink)}
+.tag-opportunity{background:var(--attention-tint); color:var(--attention-ink)}
 .tag-talent{background:var(--tint-violet); color:var(--violet-deep)}
 /* demo content next to real people (2026-10-06): a small "dummy" chip wherever an imaginary person or thing shows */
 .dummy-chip,.demo-chip{background:var(--tint-sand); color:var(--ink-soft); margin-left:6px; vertical-align:middle; letter-spacing:.06em}
@@ -521,7 +471,7 @@ button.share-chip-label{text-decoration:underline}
 .pm-row i{font-style:normal; font-size:12px; color:var(--ink-soft)}
 .back-link{border:0; background:none; color:var(--ink-soft); font:inherit; font-size:13px; cursor:pointer; padding:0; margin:0 0 4px; text-align:left}
 .tr-static{max-height:40vh; overflow:auto; margin:6px 0 12px}
-.tag-resource{background:#E0F1F8; color:var(--electric-deep)}
+.tag-resource{background:var(--resource-tint); color:var(--resource-ink)}
 .tag-note,.tag-custom{background:var(--tint-sand); color:var(--ink-soft)}
 .aud{border:1.5px solid var(--teal); background:var(--tint-teal); color:var(--teal); border-radius:999px; padding:4px 11px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0}
 .aud-me{border-color:rgba(36,27,46,.2); background:var(--card); color:var(--ink-soft)}
@@ -546,12 +496,12 @@ button.share-chip-label{text-decoration:underline}
 .screen.record .scroll.memo{padding-bottom:20px}
 .memo-hero{display:flex; align-items:center; justify-content:center; gap:34px; margin:46px 0 14px}
 .rec-circle{width:132px; height:132px; border-radius:50%; border:0; cursor:pointer; flex-shrink:0;
-  background:radial-gradient(circle at 35% 30%, #CDEEE9, #7ED9CF 70%); box-shadow:0 10px 30px rgba(23,143,134,.25);
+  background:radial-gradient(circle at 35% 30%, var(--rec-a), var(--rec-b) 70%); box-shadow:0 10px 30px rgba(23,143,134,.25);
   display:grid; place-items:center; transition:transform .15s}
 .rec-circle:active,.rec-circle.pressed{transform:scale(.97)}
 .rec-circle.requesting{opacity:.7}
 .rec-circle.live{background:radial-gradient(circle at 35% 30%, #FFB3A6, var(--coral) 75%); box-shadow:0 0 0 var(--pulse-px,4px) rgba(255,113,91,.25)}
-.rec-circle.paused{background:radial-gradient(circle at 35% 30%, #E3E8E6, #B4C0BC 75%)}
+.rec-circle.paused{background:radial-gradient(circle at 35% 30%, var(--rec-paused-a), var(--rec-paused-b) 75%)}
 .rec-circle.small{width:62px; height:62px; box-shadow:0 6px 18px rgba(23,143,134,.25)}
 .rec-circle svg{width:26px; height:26px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round}
 .rec-circle:focus-visible,.round:focus-visible,.tr-toggle:focus-visible,.memo-row:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
@@ -799,26 +749,6 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 
 @media (prefers-reduced-motion: reduce){ .tab-record.pulse svg{animation:none} .tab-record.pulse{box-shadow:0 8px 24px rgba(23,143,134,.4), 0 0 0 5px var(--linen), 0 0 0 8px rgba(255,255,255,.55)} .ripple{display:none} .demo-friends,.stack-card{animation:none} .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
 
-/* dark: the pale pills and tints that are not tokens get night versions */
-@media all{
-  :root:not([data-theme="light"]) .tag-looking{background:#262A55; color:#B9C0FF}
-  :root:not([data-theme="light"]) .tag-offer{background:#173A2C; color:#7BE0B0}
-  :root:not([data-theme="light"]) .tag-meet{background:#3D3015; color:#F2C66B}
-  :root:not([data-theme="light"]) .tag-opportunity,
-  :root:not([data-theme="light"]) .status-pill.rec{background:#3F2A1E; color:#FF9C8A}
-  :root:not([data-theme="light"]) .tag-resource{background:#15344A; color:#8FD3F2}
-  :root:not([data-theme="light"]) .ring-intending{background:#35301F; color:#E8CB8A; border-color:#8A6A2F}
-  :root:not([data-theme="light"]) .node.you .ava{box-shadow:0 0 0 2px var(--linen), 0 0 0 3px rgba(23,143,134,.6)}
-  :root:not([data-theme="light"]) .node.shared .ava{box-shadow:0 0 0 3px var(--linen), 0 0 22px rgba(23,143,134,.6)}
-  :root:not([data-theme="light"]) .node.shared .ava{box-shadow:0 0 0 3px var(--linen), 0 0 0 6px var(--mint), 0 0 18px rgba(79,215,160,.8)}
-  :root:not([data-theme="light"]) .phone{box-shadow:0 24px 80px rgba(0,0,0,.55), 0 0 0 10px #070D0C, 0 0 0 12px #27383A}
-  :root:not([data-theme="light"]) .rec-circle{background:radial-gradient(circle at 35% 30%, #7ED9CF, #2F8F8A 72%)}
-  :root:not([data-theme="light"]) .rec-circle.paused{background:radial-gradient(circle at 35% 30%, #4A5E5B, #34443F 75%)}
-  :root:not([data-theme="light"]) .toast{background:#EAF2EF; color:#15201F}
-  :root:not([data-theme="light"]) .msg-notice{background:#EAF2EF; color:#15201F}
-  :root:not([data-theme="light"]) .ripple{--ripple:hsl(46,68%,58%)}
-  :root:not([data-theme="light"]) .rings-wrap svg circle{stroke:rgba(201,174,232,.28)}
-}
 
 /* solo transcript under the memo: quiet, one speaker, so no speaker label */
 .memo-tr{margin-top:14px; max-height:240px; overflow-y:auto}
@@ -921,14 +851,10 @@ a.web-engine{text-decoration:none; color:var(--ink)}
   padding:6px 14px 6px 22px; cursor:pointer; border-left:3px solid var(--mist); margin-left:8px}
 .ms-hit small{font-size:11.5px; color:var(--ink-soft)}
 .ms-hit span{font-size:13.5px; line-height:1.45}
-.ms-hit mark,.pm-hit mark{background:var(--tint-sand, #F6E7B8); color:inherit; border-radius:3px; padding:0 2px}
+.ms-hit mark,.pm-hit mark{background:var(--hit-mark); color:inherit; border-radius:3px; padding:0 2px}
 .ms-hit:hover{border-left-color:var(--violet)}
 .ms-hit:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
-.pm-hit{background:#FFF1C2; border-radius:12px; box-shadow:0 0 0 2px #F2B544}
-@media all{
-  :root:not([data-theme="light"]) .pm-hit{background:#4A3B12; box-shadow:0 0 0 2px #C99A2E}
-  :root:not([data-theme="light"]) .ms-hit mark{background:#5A4A1A}
-}
+.pm-hit{background:var(--hit-tint); border-radius:12px; box-shadow:0 0 0 2px var(--hit-edge)}
 
 /* The chain of proof (wave 1733, item 4a): an item's source and the link to the meeting line. */
 button.inv-text{border:0; background:transparent; padding:0; text-align:left; font:inherit; font-size:14.5px; color:var(--ink); cursor:pointer}
@@ -953,10 +879,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tr-static .tr-row.playable{cursor:pointer; border-radius:12px}
 .tr-static .tr-row.playable:hover{background:var(--mist)}
 .tr-static .tr-row.playable:focus-visible{outline:3px solid var(--electric); outline-offset:-3px}
-.tr-static .tr-row.tr-now{background:var(--tint-blue, #DCEFFB); box-shadow:inset 3px 0 0 var(--electric)}
-@media all{
-  :root:not([data-theme="light"]) .tr-static .tr-row.tr-now{background:#15344A}
-}
+.tr-static .tr-row.tr-now{background:var(--resource-tint); box-shadow:inset 3px 0 0 var(--electric)}
 
 /* Hosted on the Swiss server (wave 1733 round B, item 4): hours used of the free allowance. */
 .usage{margin:8px 0}
@@ -1326,7 +1249,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .knows-peek .ava{width:64px; height:64px; font-size:24px}
 .knows-note{font-size:12px; color:var(--ink-soft); white-space:normal; max-width:220px}
 /* Wave 28 (trustzones.ts): TrustZones. Dots take the rung's orange; pinned = light red edge; the zone panel; zzz; the outliner triangle. */
-.rings-wrap .node[data-tone="3"] .ava,.rings-wrap .node[data-tone="4"] .ava{color:#3a1d00}
 .rings-wrap .node.pinned .ava,.zone-row.pinned{border-color:var(--pin-edge); box-shadow:0 0 0 2px var(--pin-edge)}
 .zone-row.pinned{box-shadow:none; border:1.5px solid var(--pin-edge)}
 .outliner-toggle{font-size:11px; line-height:1}
