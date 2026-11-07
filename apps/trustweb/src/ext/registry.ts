@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Extension modules (wave 24): everything beyond contacts and what we share. Deleting a module's folder and its line here removes it. */
+import type { Identity } from '../../../demo/src/did'
 import type { AppState, InventoryItem, TwEvent } from '../model'
+import type { RelayDeps } from '../notes_relay'
 import { calendarModule } from './calendar'
 import { signalLinkModule } from './signal-link'
 import { matrixModule } from './matrix'
 import { gebModule } from './geb'
 import { whatsappModule } from './whatsapp'
+import { coNotesModule } from './co_notes'
 
 /** What the host app hands a module; modules never import main.ts. */
 export interface ExtHooks {
@@ -47,6 +50,12 @@ export interface ExtHooks {
   page: (title: string, body: Node[], mark: string) => void
   /** Wave 27: the existing encrypted TrustWeb backup, run now with the key this device already has (backup_view.ts). False: no backup set up, no server, or it failed. Needed so setup pages can ask for a backup first. */
   backupNow: () => Promise<boolean>
+  /** Wave 36: opens that person's card. */
+  openPerson: (personId: string) => void
+  /** Wave 36: the DID a person is reached by on the notes relay (paired peer, else from an event link). */
+  didOf: (personId: string) => string | undefined
+  /** Wave 36: the relay and my key, or null when there is no relay, no identity or the relay is switched off. */
+  relay: () => { deps: RelayDeps; identity: Identity } | null
 }
 
 /** Wave 27: one conversation in an extended messenger, as the Chat screen lists it. */
@@ -98,6 +107,12 @@ export interface ExtModule {
     openLink?: (hash: string) => boolean
     /** Called once the record is loaded: starts the module's timers. */
     start?: () => void
+    /** Wave 36: rows for Settings > Extensions (empty when the module has none). */
+    settingsRows?: () => Node[]
+    /** Wave 36: below the Notes page under Resources. */
+    notesSection?: () => Node[]
+    /** Wave 36: fetch what others left for me on the relay; true when something changed. */
+    poll?: () => Promise<boolean>
   }
   /** Wave 28: a link the host is about to open in a new tab; true = the module opened it itself (WhatsApp Web beside TrustWeb). */
   openExternal?: (url: string) => boolean
@@ -105,4 +120,4 @@ export interface ExtModule {
   messenger?: (h: ExtHooks) => MessengerSource
 }
 
-export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule, matrixModule, signalLinkModule, whatsappModule]
+export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule, matrixModule, signalLinkModule, whatsappModule, coNotesModule]

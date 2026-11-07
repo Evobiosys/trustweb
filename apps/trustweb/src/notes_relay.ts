@@ -42,22 +42,29 @@ function concat(parts: readonly Uint8Array[]): Uint8Array {
 
 const pairKey = (me: Identity, theirDid: string): Promise<CryptoKey> => deriveEcdhPairKey(ecdhSharedSecret(me, theirDid), KEY_INFO)
 
-/** [12-byte IV][AES-GCM of the note as JSON], under the pair key of `me` and `toDid`. */
-export async function sealNote(note: SharedNote, me: Identity, toDid: string): Promise<Uint8Array> {
+/** [12-byte IV][AES-GCM of `value` as JSON], under the pair key of `me` and `toDid`. */
+export async function sealJson(value: unknown, me: Identity, toDid: string): Promise<Uint8Array> {
   const iv = randomBytes(IV_BYTES)
-  const cipher = await seal(await pairKey(me, toDid), iv, new TextEncoder().encode(JSON.stringify(note)))
+  const cipher = await seal(await pairKey(me, toDid), iv, new TextEncoder().encode(JSON.stringify(value)))
   return concat([iv, cipher])
 }
 
-/** The note `fromDid` sealed for `me`; null when it does not open or is damaged. Never throws. */
-export async function openNote(bytes: Uint8Array, me: Identity, fromDid: string): Promise<SharedNote | null> {
+/** The JSON `fromDid` sealed for `me`; null when it does not open or is no JSON. Never throws. */
+export async function openJson(bytes: Uint8Array, me: Identity, fromDid: string): Promise<unknown> {
   try {
     if (bytes.length <= IV_BYTES) return null
     const plain = await open(await pairKey(me, fromDid), bytes.slice(0, IV_BYTES), bytes.slice(IV_BYTES))
-    return plain ? cleanNote(JSON.parse(new TextDecoder().decode(plain))) : null
+    return plain ? JSON.parse(new TextDecoder().decode(plain)) : null
   } catch {
     return null
   }
+}
+
+export const sealNote = (note: SharedNote, me: Identity, toDid: string): Promise<Uint8Array> => sealJson(note, me, toDid)
+
+/** The note `fromDid` sealed for `me`; null when it does not open or is damaged. Never throws. */
+export async function openNote(bytes: Uint8Array, me: Identity, fromDid: string): Promise<SharedNote | null> {
+  return cleanNote(await openJson(bytes, me, fromDid))
 }
 
 export function splitBytes(bytes: Uint8Array, max: number): Uint8Array[] {
@@ -123,11 +130,11 @@ export interface RelayDeps {
 const route = (d: RelayDeps, query = ''): string => `${d.origin}/notes/relay${query}`
 const forWho = (did: string, id?: string): string => `?for=${encodeURIComponent(did)}${id ? `&id=${id}` : ''}`
 
-/** Seals `note` for `toDid` and leaves it on the relay. True when every piece went up; false (never a throw) otherwise. */
-export async function postNote(d: RelayDeps, note: SharedNote, me: Identity, toDid: string): Promise<boolean> {
+/** Seals `value` for `toDid` and leaves it on the relay. True when every piece went up; false (never a throw) otherwise. */
+export async function postPayload(d: RelayDeps, value: unknown, me: Identity, toDid: string): Promise<boolean> {
   try {
     const headers = { 'Content-Type': 'application/json', 'X-Relay-Token': await relayToken(me, 'send') }
-    for (const frame of frameChunks(await sealNote(note, me, toDid), RELAY_BLOB_MAX - HEADER_BYTES)) {
+    for (const frame of frameChunks(await sealJson(value, me, toDid), RELAY_BLOB_MAX - HEADER_BYTES)) {
       const res = await d.fetch(route(d), { method: 'POST', headers, body: JSON.stringify(relayEnvelope(toDid, me.did, frame, d.now())) })
       if (!res.ok) return false
     }
@@ -137,10 +144,16 @@ export async function postNote(d: RelayDeps, note: SharedNote, me: Identity, toD
   }
 }
 
+/** Seals `note` for `toDid` and leaves it on the relay. */
+export const postNote = (d: RelayDeps, note: SharedNote, me: Identity, toDid: string): Promise<boolean> => postPayload(d, note, me, toDid)
+
 const jsonOf = async (res: Answer): Promise<Record<string, unknown> | null> => (res.ok && res.json ? ((await res.json()) as Record<string, unknown>) : null)
 
-/** What is waiting for `me` from senders `knownFrom` accepts: each note that opens is deleted from the relay; one that does not open (or is not complete yet) stays. Never throws. */
-export async function pollRelay(d: RelayDeps, me: Identity, knownFrom: (did: string) => boolean = () => true): Promise<{ from: string; note: SharedNote }[]> {
+/**
+ * What is waiting for `me` from senders `knownFrom` accepts, as far as `parse` takes it (null = not mine to read): each item that opens and parses is
+ * deleted from the relay; one that does not open, does not parse (a payload of another kind) or is not complete yet stays. Never throws.
+ */
+export async function pollPayloads<T>(d: RelayDeps, me: Identity, knownFrom: (did: string) => boolean, parse: (raw: unknown) => T | null): Promise<{ from: string; item: T }[]> {
   try {
     const headers = { 'X-Relay-Token': await relayToken(me, 'read') }
     const listed = await jsonOf(await d.fetch(route(d, forWho(me.did)), { headers }))
@@ -157,16 +170,21 @@ export async function pollRelay(d: RelayDeps, me: Identity, knownFrom: (did: str
       set.frames.push(frame)
       sets.set(key, set)
     }
-    const got: { from: string; note: SharedNote }[] = []
+    const got: { from: string; item: T }[] = []
     for (const set of sets.values()) {
       const bytes = joinFrames(set.frames)
-      const note = bytes && await openNote(bytes, me, set.from)
-      if (!note) continue
-      got.push({ from: set.from, note })
+      const item = bytes ? parse(await openJson(bytes, me, set.from)) : null
+      if (item === null) continue
+      got.push({ from: set.from, item })
       for (const id of set.ids) await d.fetch(route(d, forWho(me.did, id)), { method: 'DELETE', headers })
     }
     return got
   } catch {
     return []
   }
+}
+
+/** The notes waiting for `me`; a payload of another kind (a co-created note) stays for its own reader. */
+export async function pollRelay(d: RelayDeps, me: Identity, knownFrom: (did: string) => boolean = () => true): Promise<{ from: string; note: SharedNote }[]> {
+  return (await pollPayloads(d, me, knownFrom, cleanNote)).map(({ from, item }) => ({ from, note: item }))
 }

@@ -1502,3 +1502,25 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 
 /* wave 36 drag-overlays */
 .zone-title{position:absolute; transform:translate(-50%,-50%); z-index:4; pointer-events:none; max-width:90%; padding:2px var(--s-2); border:1.5px solid var(--line-strong); border-radius:var(--r-chip); background:var(--surface-0); color:var(--ink); font-size:var(--fs-1); line-height:var(--lh-tight); text-align:center}
+
+/* wave 36 co-notes-core */
+.co-list{display:flex; flex-direction:column; align-items:flex-start; gap:var(--s-2); margin-top:var(--s-4); min-width:0; max-width:100%}
+.co-open{background:none; border:0; padding:var(--s-1) 0; font:inherit; color:var(--trust-strong); text-decoration:underline; cursor:pointer; text-align:left; overflow-wrap:anywhere}
+.co-editor{display:flex; flex-direction:column; gap:var(--s-3); min-width:0; max-width:100%; padding-top:var(--s-3)}
+.co-editor button,.co-editor a{text-decoration:underline}
+.co-editor .co-title{font-size:var(--fs-4); font-weight:600}
+.co-editor .meta{margin:0}
+.co-people,.co-modes,.co-sheet-row{display:flex; flex-wrap:wrap; align-items:center; gap:var(--s-2); min-width:0}
+.co-modes .btn.on{border-color:var(--trust); color:var(--trust-strong); background:var(--trust-tint)}
+.co-blocks{display:flex; flex-direction:column; gap:2px; min-width:0}
+.co-row{display:flex; align-items:baseline; gap:6px; min-width:0}
+.co-text,.co-input{flex:1 1 8em; min-width:0; box-sizing:border-box; overflow-wrap:anywhere; padding:4px 0; font:inherit; color:inherit}
+.co-text{cursor:text; min-height:1.4em}
+.co-input{padding:4px 8px}
+.co-chip,.co-link{background:none; border:0; padding:0; font:inherit; color:var(--trust-strong); cursor:pointer}
+.co-chip-plain{color:var(--ink-2)}
+.co-under{display:flex; flex-direction:column; gap:var(--s-2); min-width:0}
+.co-toolbar{display:flex; flex-wrap:wrap; gap:var(--s-2)}
+.co-plain{width:100%; box-sizing:border-box; font-family:var(--font-mono); font-size:var(--fs-2)}
+.co-more{align-self:flex-start}
+.co-more-page{display:flex; flex-direction:column; gap:var(--s-3); min-width:0; padding-top:var(--s-3)}

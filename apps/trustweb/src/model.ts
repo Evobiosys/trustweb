@@ -19,6 +19,7 @@ import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { SharedNote } from './notes_outline'
+import type { CoDoc } from './ext/co_notes/co_doc'
 import type { ConnectRecord } from './connect_code'
 import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
@@ -1314,6 +1315,12 @@ export interface AppState {
   askEngineUrl?: string
   /** Wave 31, Ask your web: the engine id picked last (search_engines.ts). Absent: Ecosia. */
   askEngine?: string
+  /** Wave 36, Settings > Extensions: the co-created notes extension is on. Absent: off, no co-notes UI anywhere. Syncs with own devices. */
+  coNotesOn?: boolean
+  /** Wave 36 (ext/co_notes): co-created notes, merged by their own CRDT, also between own devices. Absent: none. */
+  coNotes?: CoDoc[]
+  /** Wave 36 (ext/co_notes): the last 100 sends and merges of co-created notes, one readable line each (I6). Absent: none. */
+  coNotesLog?: string[]
 }
 
 /** A named list of people (and tags) an ask can be narrowed to. */

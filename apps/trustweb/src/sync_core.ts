@@ -71,6 +71,9 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'groups',
 ])
 
+/** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */
+export const SETTING_MERGERS = new Map<string, (mine: unknown, theirs: unknown) => unknown>()
+
 /** The settings of a record: every field not in SYNC_EXCLUDED. */
 export function settingsOf(s: object): Record<string, unknown> {
   return Object.fromEntries(Object.entries(s).filter(([k, v]) => v !== undefined && !SYNC_EXCLUDED.has(k)))
@@ -451,6 +454,12 @@ function mergeSettings(mine: AppState, theirs: SyncBundle, c: Ctx): void {
   for (const [k, t] of Object.entries(theirs.settings ?? {})) {
     const m = has(own, k) ? own[k] : undefined
     if (m !== undefined && hashOf(m) === hashOf(t)) continue
+    const rule = SETTING_MERGERS.get(k)
+    if (rule) {
+      const joined = rule(m, t)
+      if (JSON.stringify(joined) !== JSON.stringify(m)) { own[k] = joined; if (m === undefined) c.res.added++; else c.res.updated++ }
+      continue
+    }
     if (m === undefined) c.res.added++
     else if ((theirs.at[SETTING_PREFIX + k] ?? 0) > (c.myAt[SETTING_PREFIX + k]?.at ?? 0)) c.res.updated++
     else continue
