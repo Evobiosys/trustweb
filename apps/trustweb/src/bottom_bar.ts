@@ -125,7 +125,8 @@ export const PROFILES: readonly { id: string; order: readonly BarId[]; primary: 
   { id: 'connector', order: ['web', 'record', 'chat', 'events', 'inventory'], primary: 'chat' },
   { id: 'up_to_date', order: ['web', 'chat', 'feed', 'events', 'inventory'], primary: 'feed' },
   { id: 'note_taker', order: DEFAULT_ORDER, primary: 'record' },
-  { id: 'communicator', order: ['web', 'feed', 'chat', 'events', 'inventory'], primary: 'chat' },
+  // Retired in wave 34 (archived here; a stored 'communicator' counts as 'custom'):
+  // { id: 'communicator', order: ['web', 'feed', 'chat', 'events', 'inventory'], primary: 'chat' },
 ]
 
 /** Sets order, primary, marker and profile from a preset; hidden is cleared. Unknown id changes nothing. */
@@ -133,6 +134,11 @@ export function applyProfile(bar: UiBar | undefined, id: string): UiBar | undefi
   const p = PROFILES.find((x) => x.id === id)
   if (!p) return bar
   return { ...bar, order: [...p.order], hidden: [], primary: p.primary, orderVersion: BAR_ORDER_VERSION, profile: p.id }
+}
+
+/** Wave 34: starts a custom bar from the bar as it is now (the shown ids, in order, and the current primary). */
+export function customFrom(bar: UiBar | undefined, ids: readonly BarId[], primary: BarId): UiBar {
+  return { ...bar, order: [...ids], hidden: [], primary, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
 
 /** The stored profile; without one, the preset the bar happens to match, else 'custom'. */

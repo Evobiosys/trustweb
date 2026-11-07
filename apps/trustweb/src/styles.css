@@ -1477,3 +1477,14 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .drag-bin.drop{transform:scale(1.15)}
 .drag-bin.drop b{background:#fdecea; border-style:solid}
 @keyframes bins-in{from{opacity:0}to{opacity:1}}
+
+/* wave 34 bar-profiles */
+.bar-glyph{opacity:1; width:18px; height:18px; color:var(--ink)}
+.bar-glyph svg{stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+.bar-glyph-primary{width:26px; height:26px; color:#fff}
+.bar-profiles{min-width:0}
+.bar-profile{min-width:0}
+.bar-profile-custom{border:1.5px dashed var(--line,#ccc)}
+.bar-profile-custom.on{border:1.5px solid var(--violet)}
+.bar-profile-plus{justify-content:center; width:100%; font-size:20px; line-height:1; color:var(--ink-soft)}
+.bar-glyph-primary svg{stroke:#fff}
