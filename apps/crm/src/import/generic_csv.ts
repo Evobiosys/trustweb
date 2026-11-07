@@ -11,19 +11,28 @@ export type CsvMapping = (CsvField | null)[]
 export const CSV_FIELDS: readonly Exclude<CsvField, 'birthyear'>[] = ['name', 'given', 'family', 'email', 'phone', 'org', 'title', 'birthday', 'note', 'labels']
 
 const RULES: [CsvField, RegExp][] = [
-  ['given', /^(first|given) ?name$|^forename$/],
-  ['family', /^(last|family) ?name$|^surname$/],
+  ['given', /^(first|given) ?name$|^forename$|^vorname$/],
+  ['family', /^(last|family) ?name$|^surname$|^nachname$|^familienname$/],
   ['name', /^(full |display |contact )?name$|^contact$/],
-  ['email', /^(dex )?e ?mail( address(es)?)?s?( \d+)?( value)?$|^mail$/],
-  ['phone', /^(dex )?(phone|mobile|cell|tel|telephone)( number)?s?( \d+)?( value)?$/],
-  ['org', /^(company|organi[sz]ation|org|employer)( name)?$/],
-  ['title', /^(job |organi[sz]ation )?title$|^position$|^role$/],
+  ['email', /^(dex )?e ?mail( adress(e|en)| address(es)?)?s?( \d+)?( value)?$|^mail$/],
+  ['phone', /^(dex )?(phone|mobile|cell|tel|telephone|telefon|mobiltelefon|handy|mobil|mobilnummer|telefonnummer)( number)?s?( \d+)?( value)?$/],
+  ['org', /^(company|organi[sz]ation|org|employer|firma|unternehmen|organisation)( name)?$/],
+  ['title', /^(job |organi[sz]ation )?title$|^position$|^role$|^berufsbezeichnung$|^funktion$/],
   ['birthyear', /^birthday year$|^birth year$/],
-  ['birthday', /^(birthday|birth ?date|date of birth|dob)$/],
-  ['note', /^(notes?|description|comments?)$/],
-  ['labels', /^(dex )?(labels?|groups?|tags?|categories|group membership)$/],
+  ['birthday', /^(birthday|birth ?date|date of birth|dob|geburtstag|geburtsdatum)$/],
+  ['note', /^(notes?|description|comments?|notizen?|bemerkung(en)?|kommentar(e)?)$/],
+  ['labels', /^(dex )?(labels?|groups?|tags?|categories|group membership|gruppen?|kategorien)$/],
 ]
 const BIRTHDAY = /^(\d{4}-\d{2}-\d{2}|--\d{2}-\d{2})$/
+
+/** The separator of the header line: ';' or TAB when it outnumbers ',' outside quotes (Excel in de-AT saves ';'). */
+export function sniffDelimiter(text: string): string {
+  const line = text.replace(/^﻿/, '').split(/\r?\n/, 1)[0] ?? ''
+  const n: Record<string, number> = { ',': 0, ';': 0, '\t': 0 }
+  let quoted = false
+  for (const c of line) { if (c === '"') quoted = !quoted; else if (!quoted && c in n) n[c]++ }
+  return n[';'] > n[','] && n[';'] >= n['\t'] ? ';' : n['\t'] > n[','] ? '\t' : ','
+}
 
 const clean = (h: string): string => h.replace(/^﻿/, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
@@ -32,8 +41,11 @@ export function autoMap(headers: readonly string[]): CsvMapping {
 }
 
 export function csvHeaders(text: string): string[] {
-  try { return (parseCsv(text)[0] ?? []).map((h) => h.replace(/^﻿/, '').trim()) } catch { return [] }
+  try { return (parseCsv(text, sniffDelimiter(text))[0] ?? []).map((h) => h.replace(/^﻿/, '').trim()) } catch { return [] }
 }
+
+/** Our own CSV export prefixes a formula-looking cell with an apostrophe (OWASP); reading it back drops that guard. */
+const unguard = (v: string): string => v.replace(/^'(?=[=+\-@])/, '')
 
 const first = (text: string): string => text.replace(/^﻿/, '').split(/\r?\n/, 1)[0] ?? ''
 
@@ -54,13 +66,13 @@ const unique = (xs: string[]): string[] => [...new Set(xs)]
 
 export function parseGenericCsv(text: string, file: string, mapping?: CsvMapping, source: ContactSource = ContactSource.GenericCsv): ParseResult {
   try {
-    const [head, ...rows] = parseCsv(text)
+    const [head, ...rows] = parseCsv(text, sniffDelimiter(text))
     if (!head) return { contacts: [], skipped: 0 }
     const map = mapping ?? autoMap(head)
     const contacts: ImportedContact[] = []
     let skipped = 0
     rows.forEach((row, i) => {
-      const get = (f: CsvField): string[] => map.flatMap((m, c) => (m === f && (row[c] ?? '').trim() ? [(row[c] ?? '').trim()] : []))
+      const get = (f: CsvField): string[] => map.flatMap((m, c) => (m === f && (row[c] ?? '').trim() ? [unguard((row[c] ?? '').trim())] : []))
       const one = (f: CsvField): string | undefined => get(f)[0]
       const many = (f: CsvField): string[] => get(f).flatMap(split)
       const emails = unique(many('email').map((e) => e.toLowerCase()))

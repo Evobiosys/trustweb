@@ -120,11 +120,10 @@ export function toVCard(people: readonly Person[], o: ExportOpts): string {
 // --- CSV (RFC 4180) ---
 
 const HEADERS = ['full_name', 'first_name', 'last_name', 'email', 'emails', 'phone', 'phones', 'company', 'job_title', 'birthday', 'notes', 'labels', 'ring', 'last_contact', 'channels']
-const PHONE_COLUMNS = new Set(['phone', 'phones'])
 
-/** CSV formula injection: a cell a spreadsheet would read as a formula gets a leading apostrophe; phone numbers keep their +. */
-function cell(v: string, column: string): string {
-  const safe = /^[=+\-@]/.test(v) && !(PHONE_COLUMNS.has(column) && v.startsWith('+')) ? `'${v}` : v
+/** CSV formula injection (OWASP): a cell a spreadsheet would read as a formula, phone numbers included, gets a leading apostrophe. */
+function cell(v: string): string {
+  const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
@@ -136,7 +135,7 @@ export function toCsv(people: readonly Person[], o: ExportOpts): string {
       r.org ?? '', r.title ?? '', r.birthday ?? '', r.note ?? '', r.labels.join(MULTI), r.ring, r.lastContact ?? '',
       Object.entries(r.channels).map(([k, v]) => `${k}=${v}`).join(';'),
     ]
-    return values.map((v, i) => cell(v, HEADERS[i])).join(',')
+    return values.map(cell).join(',')
   })
   return '\ufeff' + [HEADERS.join(','), ...lines].join('\r\n') + '\r\n'
 }

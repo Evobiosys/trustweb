@@ -5,7 +5,7 @@
  */
 import { createHash } from 'node:crypto'
 import {
-  buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadToken,
+  buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadClientSecret, saveClientSecret, loadToken,
   makePkce, mapPerson, parseRedirect, revokeToken, saveClientId, saveToken,
 } from '../../src/google_contacts.ts'
 
@@ -88,6 +88,14 @@ describe('exchangeCode', () => {
     expect(body.get('code')).toBe('abc')
     expect(body.get('code_verifier')).toBe('ver')
     expect(body.get('client_id')).toBe('cid')
+    expect(body.get('client_secret')).toBeNull()
+  })
+  it('P4: sends client_secret only when one is set', async () => {
+    let body
+    const f = async (_u, init) => { body = new URLSearchParams(String(init.body)); return res(200, { access_token: 'tok' }) }
+    await exchangeCode(f, { ...args, clientSecret: 'sec' })
+    expect(body.get('client_secret')).toBe('sec')
+    await exchangeCode(f, { ...args, clientSecret: '' })
     expect(body.get('client_secret')).toBeNull()
   })
   it('throws a plain Error on failure', async () => {
@@ -199,5 +207,15 @@ describe('storage helpers', () => {
     saveClientId(s, 'cid')
     expect(s.m.get('tw_google_client_id')).toBe('cid')
     expect(loadClientId(s)).toBe('cid')
+  })
+})
+
+describe('P4: client secret store', () => {
+  it('lives in the session store next to the token, not with the client id', () => {
+    const mem = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) } }
+    const s = mem()
+    saveClientSecret(s, 'sec')
+    expect(loadClientSecret(s)).toBe('sec')
+    expect(loadClientSecret(mem())).toBeNull()
   })
 })

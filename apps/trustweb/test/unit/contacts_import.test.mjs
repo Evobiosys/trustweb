@@ -70,25 +70,24 @@ describe('services pipeline keeps e-mail and phone', () => {
     const p = s.people.find((x) => x.name === 'Eva Muster')
     expect(p.fields[EMAIL_FIELD]).toBe('eva@example.at')
     expect(p.fields['email 2']).toBe('eva.m@example.com')
-    expect(p.fields.phone).toBe('+43 660 5550201')
-    expect(p.fields['phone 2']).toBe('+43 660 5550202')
-    expect(p.channels).toEqual({ whatsapp: '+436605550201', signal: '+436605550201' })
+    expect(p.fields.phone).toBe('+436605550201')
+    expect(p.fields['phone 2']).toBe('+436605550202')
+    expect(p.channels).toBeUndefined()
     expect(p.fields.organization).toBe('Muster Bau')
     expect(p.fields['job title']).toBe('Architect')
     expect(p.fields.birthday).toBe('1984-05-17')
     expect(p.fields.labels).toBe('Friends, Work, a, b')
     expect(p.sources[0].source).toBe('dex-csv')
   })
-  it('an existing person (same name) keeps typed e-mail and channels; empty slots get filled', () => {
+  it('an existing person (same name, confirmed) keeps typed e-mail and channels; empty slots get filled', () => {
     const typed = { id: 'p1', name: 'Eva Muster', ring: Ring.Friend, lines: [], fields: { [EMAIL_FIELD]: 'mine@example.at' }, channels: { whatsapp: '+431111111' } }
     const s = { people: [typed], serviceImports: [] }
     commitPlan(s, planServices(s, [{ name: 'dex.csv', text: DEX }], opts), 'b1', NOW)
     const a = pendingProposals(s, NOW).find((p) => p.row.name === 'Eva Muster')
-    decide(s, 'b1', a.row.key, { do: 'accept' }, NOW, newId)
+    decide(s, 'b1', a.row.key, { do: 'accept', confirm: true }, NOW, newId)
     expect(typed.fields[EMAIL_FIELD]).toBe('mine@example.at')
     expect(typed.fields['email 2']).toBe('eva@example.at')
-    expect(typed.channels.whatsapp).toBe('+431111111')
-    expect(typed.channels.signal).toBe('+436605550201')
+    expect(typed.channels).toEqual({ whatsapp: '+431111111' })
     expect(typed.ring).toBe(Ring.Friend)
   })
   it('matches an existing person by phone or e-mail, not only by name', () => {
