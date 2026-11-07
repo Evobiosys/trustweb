@@ -161,3 +161,30 @@ export function placeOnRing(p: Person, ring: Ring, now: number, desire = DESIRE_
   else delete p.intending
 }
 
+
+/** A drawn disc (centre x, y and radius r, in rings px). */
+export interface Spot { x: number; y: number; r: number }
+/** Wave 33: free space kept between a dot and a control. */
+export const CONTROL_GAP = 2
+
+/**
+ * Wave 33: the angle each dot is DRAWN at: the given one, or the nearest (1° steps, alternating sides) where it clears every dot placed before it
+ * (centre distance >= both radii, i.e. the dot size) and every control in `obstacles`. Display only: stored angles stay.
+ */
+export function nudgeAngles(dots: readonly { id: string; angle: number; radius: number; r: number }[], obstacles: readonly Spot[], centre: number): Map<string, number> {
+  const out = new Map<string, number>()
+  const placed: Spot[] = []
+  const at = (angle: number, radius: number): { x: number; y: number } => { const a = (angle * Math.PI) / 180; return { x: centre + radius * Math.sin(a), y: centre - radius * Math.cos(a) } }
+  const clear = (s: Spot): boolean => placed.every((o) => Math.hypot(s.x - o.x, s.y - o.y) >= s.r + o.r) && obstacles.every((o) => Math.hypot(s.x - o.x, s.y - o.y) >= s.r + o.r + CONTROL_GAP)
+  for (const d of dots) {
+    let best = d.angle
+    for (let i = 0; i <= 360; i++) {
+      const a = d.angle + (i % 2 ? 1 : -1) * Math.ceil(i / 2)
+      if (clear({ ...at(a, d.radius), r: d.r })) { best = a; break }
+    }
+    const angle = ((best % 360) + 360) % 360
+    out.set(d.id, angle)
+    placed.push({ ...at(angle, d.radius), r: d.r })
+  }
+  return out
+}
