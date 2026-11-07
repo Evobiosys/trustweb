@@ -9,10 +9,10 @@
 import { el } from '../../demo/src/ui/dom'
 import { arcsGradient, loadColourTags, tagColours } from './colour_tags'
 import { isBlocked, isNonResponsive } from './non_responsive'
-import { DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
-import type { RingsGeometry } from './rings_layout'
+import { DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
+import type { RingsGeometry, Spot } from './rings_layout'
 import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, visiblePeople } from './rings_hide'
-import { placeHandles, HANDLE, type Disc } from './ring_handles'
+import { chainPoints, EXPAND_DX, HANDLE } from './ring_handles'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { isConnected } from './card_view'
 import { HintId, isDemoPerson, Ring, RINGS, REACH_OUT_INK, ringColor } from './model'
@@ -20,7 +20,7 @@ import type { AppState, Person } from './model'
 import { S } from './strings'
 import type { Curator, LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { bringAllBack, bringBack, expanseList, hideInExpanse, inExpanse, overControl } from './expanse'
+import { bringAllBack, bringBack, expanseList, hideInExpanse, hitControls, visibleIn } from './expanse'
 import { shortLabel } from './short_label'
 import { limitOf, pickFive, withTag } from './membranes_five'
 import { communityOf, filledRings, isArchived, inZones, toggleRing, toneVar, zoneFor } from './trustzones'
@@ -126,8 +126,10 @@ export interface WebViewDeps {
   solo: boolean
 }
 
+export interface RingsOpts { complete?: boolean }
+
 export interface WebView {
-  ringsView(s: AppState, marks?: Map<string, 'asked' | 'shared'>, desk?: LentRings, opts?: { complete?: boolean }): HTMLElement
+  ringsView(s: AppState, marks?: Map<string, 'asked' | 'shared'>, desk?: LentRings, opts?: RingsOpts): HTMLElement
   zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void
   /** Leaving the Web screen: the next visit starts at home zoom. */
   resetZoom(): void
@@ -144,14 +146,14 @@ export function createWebView(deps: WebViewDeps): WebView {
   let ringsK = 1
 
   /** `desk`: the rings lent to the Desk's Web page (curator.ts LentRings): a tap picks the person there, no phone sheets, no add-someone tap or space-out menu. */
-  function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings, opts: { complete?: boolean } = {}): HTMLElement {
+  function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings, opts: RingsOpts = {}): HTMLElement {
     const C = 176
     const counts = {} as Record<Ring, number>
     const everyone: Partial<Record<Ring, Person[]>> = {}
     // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
     const community = communityOf(s)
     // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
-    for (const p of (desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [])).filter((x) => !inExpanse(s, x.id))) (everyone[zoneFor(p, community)] ??= []).push(p)
+    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? []))) (everyone[zoneFor(p, community)] ??= []).push(p)
     // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
     const complete = opts.complete === true || desk !== undefined
     const members: Partial<Record<Ring, Person[]>> = {}
@@ -177,7 +179,6 @@ export function createWebView(deps: WebViewDeps): WebView {
     const colourTags = loadColourTags()
     const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
     const at = new Map<string, { x: number; y: number }>()
-    const discs: Disc[] = [] // every drawn dot; the ring handles keep clear of them (ring_handles.ts)
     let dragged = false
     if (!desk) {
       wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
@@ -208,12 +209,23 @@ export function createWebView(deps: WebViewDeps): WebView {
       svg.appendChild(t)
     }
     wrap.appendChild(svg)
+    // Wave 33: the control column at the bottom edge, growing upward at the centre: one row per ring, outermost first: its diamond (hide) and, right beside it, its ⛶ (expand the rest).
+    const rows = [...ringsGeo.rings].reverse().map((r, i) => ({
+      ring: r, at: chainPoints(ringsGeo.rings.length, C, RINGS_SIZE)[i],
+      more: !desk && !hidden.has(r) && !complete && Boolean(rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s),
+    }))
+    const controls: Spot[] = rows.flatMap((w) => [{ x: w.at.left, y: w.at.top, r: HANDLE / 2 }, ...(w.more ? [{ x: w.at.left + EXPAND_DX, y: w.at.top, r: HANDLE / 2 }] : [])])
+    // Dots never overlap each other or a control: each is drawn at the nearest free angle on its lap (stored angles stay).
+    const drawAngle = nudgeAngles(ringsGeo.rings.flatMap((ring) => {
+      const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
+      return visiblePeople(members[ring] ?? [], hidden).map((p) => ({ id: p.id, angle: angleOfP(p), radius: lapRadius(ringsGeo, ring, laps.get(p)!) * k, r: (ringsGeo.dot[ring] * k) / 2 }))
+    }), controls, C)
     for (const ring of ringsGeo.rings) {
       const dot = ringsGeo.dot[ring]
       const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
       visiblePeople(members[ring] ?? [], hidden).forEach((p) => {
         const lap = laps.get(p)!
-        const a = ((angleOfP(p) - 90) * Math.PI) / 180
+        const a = ((drawAngle.get(p.id)! - 90) * Math.PI) / 180
         const radius = lapRadius(ringsGeo, ring, lap) * k
         const x = C + radius * Math.cos(a)
         const y = C + radius * Math.sin(a)
@@ -250,7 +262,6 @@ export function createWebView(deps: WebViewDeps): WebView {
         ])
         if (!desk) contextPress(b, () => curatorPerson(p.id))
         at.set(p.id, { x, y })
-        discs.push({ x, y, r: (dot * k) / 2 })
         b.style.left = x + 'px'
         b.style.top = y + 'px'
         if (arcs) b.style.setProperty('--arcs', arcs)
@@ -278,10 +289,10 @@ export function createWebView(deps: WebViewDeps): WebView {
       }
     }
     const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), deps.ownPictureUrl()), el('span', {}, [shortLabel(s.me.displayName)])])
+    if (!desk) contextPress(you, () => { if (expanseList(st()).length) expanseSheet() }) // Wave 33: the list of the hidden opens from a long press on you (the orange control is gone)
     you.style.left = C + 'px'
     you.style.top = C + 'px'
     wrap.appendChild(you)
-    if (!desk) wrap.appendChild(expanseControl(s))
     dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
     // Re-render IN PLACE: the Desk slots this very element (slot name, styles, its fit() transform) and the phone's zoom layer wraps it,
     // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
@@ -344,31 +355,23 @@ export function createWebView(deps: WebViewDeps): WebView {
       })
       wrap.addEventListener('pointerleave', () => { if (onBand) { onBand = null; step({ type: 'leave' }) } })
     }
-    ringsGeo.rings.forEach((r) => {
-      const showMore = !hidden.has(r) && !complete && Boolean(rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s)
-      // Wave 30: the handles sit at 12 o'clock when it is free, else on the nearest free arc, else on a tab outside the rings; never over a dot.
-      const h = placeHandles({ centre: C, radius: ringsGeo.radius[r] * k, dots: discs, outer: Math.min(C, ringsGeo.extent * k), size: RINGS_SIZE, more: showMore })
-      discs.push({ x: h.toggle.left, y: h.toggle.top, r: HANDLE / 2 }); if (h.more) discs.push({ x: h.more.left, y: h.more.top, r: HANDLE / 2 })
-      const diamond = ringToggle(r, hidden.has(r), h.toggle.top, h.toggle.left, h.kind === 'tab', (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap))
+    for (const w of rows) {
+      const diamond = ringToggle(w.ring, hidden.has(w.ring), w.at.top, w.at.left, false, (btn) => toggle(toggleHidden(hidden, w.ring), btn.parentElement ?? wrap))
       wrap.appendChild(diamond)
       if (!desk) {
-        diamond.addEventListener('pointerenter', (e) => { if (mouse(e)) step({ type: 'enter-handle', ring: r }, e) })
+        diamond.addEventListener('pointerenter', (e) => { if (mouse(e)) step({ type: 'enter-handle', ring: w.ring }, e) })
         diamond.addEventListener('pointerleave', (e) => { if (mouse(e)) step({ type: 'leave' }) })
-        contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: r, grace: false }; showAll(r, { clientX: b.right, clientY: b.bottom }) })
+        contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: w.ring, grace: false }; showAll(w.ring, { clientX: b.right, clientY: b.bottom }) })
       }
-      if (showMore && h.more) ringMore(r, filled.includes(r), h.more.top, h.more.left, h.kind === 'tab', (btn) => { toggleRing(st(), 'filled', r); s.uiRings = st().uiRings; save(); toggle(hidden, btn.parentElement ?? wrap) }).forEach((n) => wrap.appendChild(n))
-    })
+      if (w.more) {
+        const more = ringMore(w.ring, filled.includes(w.ring), () => { toggleRing(st(), 'filled', w.ring); s.uiRings = st().uiRings; save(); toggle(hidden, wrap) })
+        more.style.left = w.at.left + EXPAND_DX + 'px'; more.style.top = w.at.top + 'px'
+        wrap.appendChild(more)
+      }
+    }
     wrap.addEventListener('pointerdown', hideAll)
     // Wave 28b: the floating "+" moved into the TrustZones sidebar (zoneColumn), next to expand all.
     return wrap
-  }
-
-  /** Wave 32: the orange round ⛶ control in the rings' corner. A dot dropped on it goes into the expanse; a tap opens the list of the hidden. */
-  function expanseControl(s: AppState): HTMLElement {
-    const n = s.expanse?.length ?? 0
-    return el('button', { type: 'button', class: 'expanse-drop', 'data-expanse-drop': '', 'aria-label': n ? S.expanseCount(n) : S.expanseDrop, title: n ? S.expanseOpen : S.expanseDrop,
-      onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); if (expanseList(st()).length) expanseSheet() } },
-      ['⛶', ...(n ? [el('span', { class: 'expanse-count', 'data-expanse-count': String(n) }, [String(n)])] : [])])
   }
 
   /** The sheet "In the expanse": the hidden people, each with Bring back, and Bring all back. */
@@ -378,6 +381,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     const back = (fn: () => void): void => { fn(); save(); render(); expanseSheet() }
     openSheet([
       el('h3', {}, [S.expanseTitle]),
+      el('p', { class: 'meta', 'data-expanse-count': String(people.length) }, [S.expanseCount(people.length)]),
       el('p', { class: 'meta' }, [S.expanseHint]),
       ...people.map((p) => el('div', { class: 'expanse-row' }, [
         el('span', {}, [displayName(p.name).text]),
@@ -388,11 +392,11 @@ export function createWebView(deps: WebViewDeps): WebView {
   }
 
   /** Wave 28 (was the "+" that opened the list): beside a membrane's diamond an outliner triangle. The first press fills the ring with everyone in it (a list button appears to its right, the triangle stays in place), the second folds it back to the closest few. */
-  function ringMore(ring: Ring, filled: boolean, top: number, left: number, tab: boolean, onFill: (btn: HTMLElement) => void): HTMLElement[] {
+  function ringMore(ring: Ring, filled: boolean, onFill: (btn: HTMLElement) => void): HTMLElement {
     // Wave 28b (Jakob): the fill control is the expand glyph, not the outliner triangle (that looks like "play").
-    const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : '') + (tab ? ' ring-tab' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'aria-label': filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle, title: filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle,
-      style: `--rc:${toneVar(ring)}; left:${left}px; top:${top}px`, onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onFill(fill) } }, ['⛶'])
-    return [fill]
+    const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'aria-label': filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle, title: filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle,
+      style: `--rc:${toneVar(ring)}`, onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onFill(fill) } }, ['⛶'])
+    return fill
   }
 
   /** Wave 28: the zzz tap(s): these people move one ring outward (their suggestion), nobody else. */
@@ -530,7 +534,6 @@ export function createWebView(deps: WebViewDeps): WebView {
       let out = false
       let angle = angleOf(p)
       let intoExpanse = false
-      const control = wrap.querySelector<HTMLElement>('[data-expanse-drop]')
       // While a person is held, every ring guide shows in full so the drop target is visible.
       const hiddenNow = loadHiddenRings()
       const guides = (dragging: boolean): void => wrap.querySelectorAll<SVGCircleElement>('circle[data-ring]').forEach((c) => { c.style.opacity = guideDimmed(hiddenNow.has(c.getAttribute('data-ring') as Ring), dragging) ? HIDDEN_GUIDE_OPACITY : '' })
@@ -547,9 +550,12 @@ export function createWebView(deps: WebViewDeps): WebView {
         angle = angleFromCentre(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2)
         out = beyondRings(dist, ringsGeo)
         ring = ringAt(dist, ringsGeo.radius, ringsGeo.rings)
-        const b = control?.getBoundingClientRect()
-        intoExpanse = Boolean(b && overControl(b, e.clientX, e.clientY))
-        control?.classList.toggle('drop', intoExpanse)
+        // Wave 33: every control in the column takes the drop (each ring's diamond and ⛶).
+        const targets = [...wrap.querySelectorAll<HTMLElement>('.ring-toggle, .ring-more')]
+        const boxes = targets.map((t) => { const { left, top, right, bottom } = t.getBoundingClientRect(); return { left, top, right, bottom, t } })
+        const hit = hitControls(boxes, e.clientX, e.clientY)
+        intoExpanse = hit !== null
+        for (const t of targets) t.classList.toggle('drop', t === hit?.t)
         wrap.classList.toggle('hide-zone', out && !intoExpanse)
         wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
       }
@@ -594,7 +600,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         guides(false)
         wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
         wrap.classList.remove('hide-zone')
-        control?.classList.remove('drop')
+        wrap.querySelectorAll('.ring-toggle.drop, .ring-more.drop').forEach((c) => c.classList.remove('drop'))
       }
       // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
       const done = (): void => settled?.(p.id, p.ring)
