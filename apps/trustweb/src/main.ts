@@ -2718,7 +2718,6 @@ function screenWeb(): Node[] {
   const expanded = expandedOf(expandStored, view)
   webViewNow = view
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
-  const expandSlot = el('span', { class: 'expand-slot' }) // wave 33: filled by ringsView with the expanse control and each ring's ⛶
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
@@ -2728,7 +2727,7 @@ function screenWeb(): Node[] {
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
-      : web.ringsView(s, askMarks(), undefined, { complete: expanded, controls: expandSlot }),
+      : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
     supportLine(supportIo),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -2746,25 +2745,20 @@ function screenWeb(): Node[] {
     ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
-      ? el('div', { class: 'zones-split' }, [zoneColumn(s), el('div', { class: 'zones-main' }, [clip, expandRow(expanded, expandSlot), ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
+      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
       : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
 
-/** Wave 33: ONE row under the rings: expand all, the expanse control, one ⛶ per ring with a rest (the slot, filled by ringsView). */
-function expandRow(expanded: boolean, slot: HTMLElement): HTMLElement {
+/** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: expand all, add, tag filters. (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
+function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
+  const live = (): void => { save(); render() }
   const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
-  return el('div', { class: 'expand-row', 'data-expand-row': '' }, [expand, slot])
-}
-
-/** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: add, tag filters (expand all sits in the bottom row). (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
-function zoneColumn(s: AppState): HTMLElement {
-  const live = (): void => { save(); render() }
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, add })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
