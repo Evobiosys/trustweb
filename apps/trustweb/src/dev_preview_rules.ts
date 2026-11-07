@@ -568,3 +568,6 @@ export function typedValue(text: string): string | null {
   const m = /\b(?:paste|type)\s+(.+)$/i.exec(text)
   return m ? m[1].trim().replace(/^["'“‘]|["'”’]$/g, '') : null
 }
+
+/** The "Personal preview / Approve wave" box (bottom right) shows only while the left panel is expanded with all rows: a pill or a single focused row hides it (Jakob 2026-11-07). */
+export const approveBoxVisible = (panel: { collapsed: boolean; focused: boolean }): boolean => !panel.collapsed && !panel.focused

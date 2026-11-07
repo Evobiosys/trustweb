@@ -11,6 +11,7 @@ import { archivePerson, restorePerson } from './archived_people'
 import { BULK_RINGS, clearSelection, restoreSnapshot, selectGroup, snapshot, toggle } from './multi_select'
 import type { Selection } from './multi_select'
 import { webSlot } from './rings_layout'
+import { ICONS } from './icons'
 
 /** What the list needs from main.ts to edit a row: persist, move a person to a ring (the placePerson path), and a toast whose tap undoes. */
 export interface RowEdit {
@@ -101,7 +102,7 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
     ])
   }))
   }
-  // The bottom tool bar: "Select" while the mode is off; then Move to ring, Add tag, Archive, Done. It wraps, never scrolls sideways.
+  // Wave 36b: the select tool sits in the top strip (data-top-tools); the bottom tool bar shows only while it is on: then Move to ring, Add tag, Archive, Done. It wraps, never scrolls sideways.
   const bar = el('div', { class: 'select-bar', 'data-select-bar': '' })
   const act = (run: (ids: Selection) => void): void => {
     const ids = selected
@@ -117,9 +118,18 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
     edit?.save()
     edit?.toast(S.selectArchived(ids.size), () => { restoreSnapshot(people, snaps); edit?.save(); changed() })
   }
+  // Wave 36b: the top-centred tool strip: the select tool (the list's checkboxes). The ring filter is not here: it shows on Network and Map only.
+  const top = el('div', { class: 'top-tools', 'data-top-tools': '', role: 'toolbar', 'aria-label': S.peopleTools })
+  const drawTop = (): void => {
+    const b = el('button', { type: 'button', class: 'hdr-btn icon-only select-tool' + (selecting ? ' on' : ''), 'data-tool': 'select', 'aria-pressed': String(selecting), 'aria-label': S.selectToolAria, title: S.selectToolAria,
+      onclick: () => { selecting = !selecting; if (!selecting) selected = clearSelection(); draw() } })
+    b.innerHTML = ICONS.select
+    top.replaceChildren(b)
+  }
   const drawBar = (): void => {
     if (!edit) return
-    if (!selecting) { bar.replaceChildren(el('button', { class: 'row-tool', 'data-select-start': '', onclick: () => { selecting = true; draw() } }, [S.selectStart])); return }
+    drawTop()
+    if (!selecting) { bar.replaceChildren(); return }
     const n = selected.size
     const moveTo = el('select', { class: 'field select-move', 'data-select-move': '', 'aria-label': S.selectMove, disabled: n === 0, onchange: (e: Event) => {
       const ring = (e.target as HTMLSelectElement).value as Ring
@@ -152,5 +162,5 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
   }
   redraw = draw
   draw()
-  return el('div', { class: 'people-list' }, [groups, bar])
+  return el('div', { class: 'people-list' }, [...(edit ? [top] : []), groups, bar])
 }
