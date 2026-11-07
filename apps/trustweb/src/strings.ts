@@ -3095,4 +3095,6 @@ export const S = {
   daysLeft: (n: number) => (n === 1 ? '1 day left' : `${n} days left`),
   spaceOutEvenly: 'Space out bubbles evenly',
   multiCount: (n: number) => `${n} selected`,
+  mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
+  keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
 } as const

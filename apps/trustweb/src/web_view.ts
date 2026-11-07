@@ -34,12 +34,14 @@ import { daysLeft, deletePersonSoft, putBack, recentlyDeleted } from './deleted_
 import { applyAll, clearSelection, toggle as toggleSel } from './multi_select'
 import type { BinKind } from './drag_bins'
 import { GRACE_MS, HOVER_IDLE, hoverStep } from './ring_hover'
+import { OVERLAY_DWELL_MS, overlayAllowed, restedAt } from './overlay_gate'
 import type { HoverEvent } from './ring_hover'
 import { singleOrDouble } from './press'
 import { contextPress } from './context_press'
 import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
+import { createCountdown } from './merge_countdown'
 import { HOLD_MS, type HoldEvent, hitDot, holdStart, holdStep } from './dot_merge'
 
 /** The rings' own layout size (px): the viewBox, and the box a pointer is read against. */
@@ -116,6 +118,8 @@ export interface WebViewDeps {
   curatorPerson(personId: string): void
   /** Opens the "Same person" sheet for two persons (the first is kept first, so Enter keeps it); null on a demo phone, where merging is off. */
   mergeSheet: ((aId: string, bId: string) => void) | null
+  /** Wave 36: merges `dropId` into `keepId` (snapshot first); null where mergeSheet is. */
+  mergeNow: ((keepId: string, dropId: string) => void) | null
   dummyChip(): HTMLElement
   avatar(name: string, id: string, cls?: string): HTMLElement
   pictured(face: HTMLElement, url: string | undefined): HTMLElement
@@ -310,7 +314,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     you.style.left = C + 'px'
     you.style.top = C + 'px'
     wrap.appendChild(you)
-    dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing, desk === undefined)
+    dragOnRings(wrap, s, (v) => { dragged = v; if (v) hideAll() }, desk?.onRing, desk === undefined) // Wave 36: a lifted dot closes any open card
     // Re-render IN PLACE: the Desk slots this very element (slot name, styles, its fit() transform) and the phone's zoom layer wraps it,
     // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
     const toggle = (next: ReadonlySet<Ring>, live: HTMLElement): void => {
@@ -381,6 +385,15 @@ export function createWebView(deps: WebViewDeps): WebView {
       if (hover.open && e && (ev.type === 'enter-handle' || ev.type === 'enter-ring') && (before !== hover.open || !wrap.querySelector('[data-ring-card]'))) showAll(hover.open, e)
     }
     const mouse = (e: Event): boolean => (e as PointerEvent).pointerType === 'mouse'
+    // Wave 36: a card opens only after the pointer rested OVERLAY_DWELL_MS on the line (moves of 6 px restart it) and never while a dot is lifted.
+    let dwellTimer: ReturnType<typeof setTimeout> | undefined
+    let dwellAt = { x: 0, y: 0 }
+    const dwell = (ring: Ring, e: PointerEvent): void => {
+      clearTimeout(dwellTimer)
+      dwellAt = { x: e.clientX, y: e.clientY }
+      const since = performance.now()
+      dwellTimer = setTimeout(() => { if (overlayAllowed({ dragging: dragged, dwellMs: performance.now() - since })) step({ type: 'enter-ring', ring }, { clientX: dwellAt.x, clientY: dwellAt.y }) }, OVERLAY_DWELL_MS)
+    }
     if (!desk) { // the band: the pointer within RING_LINE_HIT of a ring's line (nodes, handles and the card keep their own hover)
       let onBand: Ring | null = null
       wrap.addEventListener('pointermove', (e) => {
@@ -388,19 +401,20 @@ export function createWebView(deps: WebViewDeps): WebView {
         if (!mouse(e) || over.closest('[data-ring-card], .ring-toggle')) return
         const t = menuTarget(localPoint(e, wrap.getBoundingClientRect()), ringsGeo, k)
         const band = t.onLine && !over.closest('.node, .ring-more') ? t.near : null
-        if (band === onBand) return
-        if (band) step({ type: 'enter-ring', ring: band }, e); else if (onBand) step({ type: 'leave' })
+        if (band === onBand) { if (band && !restedAt(dwellAt, { x: e.clientX, y: e.clientY }) && hover.open !== band) dwell(band, e); return }
+        clearTimeout(dwellTimer)
+        if (band) dwell(band, e); else if (onBand) step({ type: 'leave' })
         onBand = band
       })
-      wrap.addEventListener('pointerleave', () => { if (onBand) { onBand = null; step({ type: 'leave' }) } })
+      wrap.addEventListener('pointerleave', () => { clearTimeout(dwellTimer); if (onBand) { onBand = null; step({ type: 'leave' }) } })
     }
     for (const w of rows) {
       const diamond = ringToggle(w.ring, hidden.has(w.ring), w.at.top, w.at.left, false, (btn) => toggle(toggleHidden(hidden, w.ring), btn.parentElement ?? wrap))
       wrap.appendChild(diamond)
       if (!desk) {
-        diamond.addEventListener('pointerenter', (e) => { if (mouse(e)) step({ type: 'enter-handle', ring: w.ring }, e) })
-        diamond.addEventListener('pointerleave', (e) => { if (mouse(e)) step({ type: 'leave' }) })
-        contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: w.ring, grace: false }; showAll(w.ring, { clientX: b.right, clientY: b.bottom }) })
+        diamond.addEventListener('pointerenter', (e) => { if (mouse(e) && !dragged) { clearTimeout(dwellTimer); dwellAt = { x: e.clientX, y: e.clientY }; const since = performance.now(); dwellTimer = setTimeout(() => { if (overlayAllowed({ dragging: dragged, dwellMs: performance.now() - since })) step({ type: 'enter-handle', ring: w.ring }, { clientX: dwellAt.x, clientY: dwellAt.y }) }, OVERLAY_DWELL_MS) } })
+        diamond.addEventListener('pointerleave', (e) => { if (mouse(e)) { clearTimeout(dwellTimer); step({ type: 'leave' }) } })
+        contextPress(diamond, () => { if (dragged) return; const b = diamond.getBoundingClientRect(); hover = { open: w.ring, grace: false }; showAll(w.ring, { clientX: b.right, clientY: b.bottom }) })
       }
       if (w.more) {
         const more = ringMore(w.ring, filled.includes(w.ring), () => { { const cur = st().uiRings?.filled ?? []; setUi(st(), 'filled', cur.includes(w.ring) ? cur.filter((x) => x !== w.ring) : [...cur, w.ring]) } s.uiRings = st().uiRings; save(); toggle(hidden, wrap) })
@@ -615,22 +629,60 @@ export function createWebView(deps: WebViewDeps): WebView {
         for (const t of targets) t.classList.toggle('drop', t === hit?.t)
         wrap.classList.toggle('hide-zone', out && !intoExpanse && bin === null)
         wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
+        zoneTitle(!out && !intoExpanse && bin === null ? ring : null)
+      }
+      // Wave 36: while a dot is held over a ring band, that ring's name sits at 12 o'clock on its line (the diamonds are at 6).
+      let title: HTMLElement | undefined
+      const zoneTitle = (r: Ring | null): void => {
+        if (!r) { title?.remove(); title = undefined; return }
+        if (title?.dataset.zoneTitle === r) return
+        title?.remove()
+        title = el('span', { class: 'zone-title', 'data-zone-title': r }, [S.ringLabel[r]])
+        title.style.left = RINGS_SIZE / 2 + 'px'; title.style.top = RINGS_SIZE / 2 - ringsGeo.radius[r] * ringsK + 'px'
+        wrap.appendChild(title)
       }
       // Hold on another dot: after HOLD_MS a bubble offers to merge the two (dot_merge.ts); only a tap on Merge goes on.
       let hold = holdStart()
       let holdTimer: number | undefined
+      // Wave 36: the offer counts 3-2-1 and merges by itself; leaving the dot, releasing or Escape cancels.
+      const countdown = createCountdown()
+      let countTimer: number | undefined
+      let cancelled = false
+      const stopCount = (): void => { clearInterval(countTimer); countTimer = undefined; countdown.cancel() }
       const holdApply = (ev: HoldEvent): void => {
         const was = hold.phase
         hold = holdStep(hold, ev)
-        if (hold.phase === 'offer' && was !== 'offer') offerMerge(p, hold.over)
-        else if (hold.phase !== 'offer' && was === 'offer') hideNotice()
+        if (hold.phase === 'offer' && was !== 'offer') {
+          const over = hold.over
+          let shown = 0
+          countdown.start(performance.now())
+          const step = (): void => {
+            const t = countdown.tick(performance.now())
+            if (t.fire) { stopCount(); mergeDrop(over); return }
+            if (t.secondsLeft !== shown) { shown = t.secondsLeft; offerMerge(p, over, shown) }
+          }
+          step()
+          countTimer = window.setInterval(step, 200)
+        } else if (hold.phase !== 'offer' && was === 'offer') { stopCount(); hideNotice() }
       }
+      const mergeDrop = (otherId: string): void => {
+        // The finger is still down: the dot stays "dragged" until it lifts, so the release is no tap that opens the merged-away card.
+        hideNotice(); end(); lifted = false
+        const release = (): void => { window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release); setTimeout(() => setDragged(false), 0) }
+        window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release)
+        deps.mergeNow?.(otherId, p.id)
+        done()
+      }
+      const onEscape = (e: KeyboardEvent): void => { if (e.key === 'Escape' && hold.phase !== 'none') { cancelled = true; holdApply({ type: 'leave' }) } }
+      window.addEventListener('keydown', onEscape)
       const holdMove = (e: PointerEvent): void => {
         if (!mergeSheet) return
         const dots = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')].map((n) => { const r = n.getBoundingClientRect(); return { id: n.dataset.pid ?? '', left: r.left, top: r.top, right: r.right, bottom: r.bottom } })
         const now = performance.now()
         clearTimeout(holdTimer)
-        holdApply({ type: 'move', over: hitDot(dots, p.id, e.clientX, e.clientY), at: now })
+        const over = hitDot(dots, p.id, e.clientX, e.clientY)
+        if (over === null) cancelled = false
+        holdApply({ type: 'move', over: cancelled ? null : over, at: now })
         if (hold.phase === 'pending') holdTimer = window.setTimeout(() => holdApply({ type: 'elapsed', at: performance.now() }), Math.max(0, hold.since + HOLD_MS - now))
       }
       const lift = (): void => {
@@ -657,6 +709,8 @@ export function createWebView(deps: WebViewDeps): WebView {
       const end = (): void => {
         clearTimeout(timer)
         clearTimeout(holdTimer)
+        stopCount()
+        window.removeEventListener('keydown', onEscape)
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', cancel)
@@ -666,6 +720,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         wrap.classList.remove('hide-zone')
         wrap.querySelectorAll('.ring-toggle.drop, .ring-more.drop').forEach((c) => c.classList.remove('drop'))
         bins?.remove()
+        zoneTitle(null)
       }
       // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
       const done = (): void => settled?.(p.id, p.ring)
@@ -715,16 +770,12 @@ export function createWebView(deps: WebViewDeps): WebView {
     ], 30000)
   }
 
-  /** The bubble "Merge A into B?"; Merge opens the Same person sheet, which asks again before anything merges. */
-  function offerMerge(p: Person, otherId: string): void {
+  /** The bubble "Merging A into B … n" (wave 36): nobody presses Yes; staying put merges at 0, the major dot B keeps its name. */
+  function offerMerge(p: Person, otherId: string, n: number): void {
     const other = st().people.find((x) => x.id === otherId)
     if (!other || !mergeSheet) return
-    const close = (): void => hideNotice()
-    showNotice(S.dmOffer(displayName(p.name).text, displayName(other.name).text), '', [
-      el('span', { 'data-merge-offer': '1' }, [
-        el('button', { class: 'btn btn-electric btn-sm', onclick: () => { close(); mergeSheet(other.id, p.id) } }, [S.dmMerge]),
-        el('button', { class: 'btn btn-ghost btn-sm', onclick: close }, [S.dvCancel]),
-      ]),
+    showNotice(S.mergeCountdown(displayName(p.name).text, displayName(other.name).text, n), '', [
+      el('span', { 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
     ], 20000)
   }
 
