@@ -256,7 +256,8 @@ export function subtreeKeys(features: PreviewFeature[], key: string): string[] {
   return out
 }
 
-/** "Approve wave": warn (and light green) while a loaded row was not approved on its own press (`individual` = the keys the owner pressed); dark green when every one was. */
+/** "Approve wave": light green (the bulk nudge) while a loaded row was not approved on its own press (`individual` = the keys the owner pressed); dark green when every one was.
+ *  `implicit` = "approved in bulk" at most; it is NOT the unapproved count (that is by verdict: `unapproved`, wave 33), so cleared storage or another browser never shows rows as unapproved. */
 export function waveState(features: PreviewFeature[], individual: string[]): { warn: boolean; light: boolean; implicit: string[] } {
   const implicit = visible(features).filter((f) => f.checked && !individual.includes(f.key)).map((f) => f.key)
   return { warn: implicit.length > 0, light: implicit.length > 0, implicit }
@@ -321,8 +322,9 @@ export function pendingCount(p: { features: PreviewFeature[]; assembled?: { set?
 export const pendingText = (n: number): string => `${n} change${n === 1 ? '' : 's'} not applied`
 
 /** No manual reload (Jakob 2026-10-24): the panel starts `apply` itself whenever the registry says pending and nothing stands in the way: no apply going
- *  (a stuck one waits for the owner's Retry). A local test run no longer blocks it (wave 32: an uncheck during a run was never assembled). */
-export const autoApply = (p: { pending?: boolean; tested?: Tested | null }, applying: { stuck: boolean } | null): boolean => !!p.pending && applying === null
+ *  (a stuck one waits for the owner's Retry). A local test run no longer blocks it (wave 32: an uncheck during a run was never assembled).
+ *  `held` (wave 33): an approve on an unticked row loaded it without assembling: the page stays as it is until a box or "Assemble now" asks. */
+export const autoApply = (p: { pending?: boolean; tested?: Tested | null }, applying: { stuck: boolean } | null, held = false): boolean => !!p.pending && applying === null && !held
 
 /** When the debounced apply fires: 'now' = start it; 'later' = an apply or a write is still going, ask again; 'no' = nothing to do or a stuck apply (the owner's Retry).
  *  `wanted` = the owner unchecked or pressed needs work, which assembles whatever the registry's pending flag says at that moment. */
@@ -365,12 +367,44 @@ export const foldStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: str
 export const remindOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-remind-' + id, false, (v): v is boolean => typeof v === 'boolean')
 /** Focus mode (wave 32): the key of the row whose title was tapped, per preview in the tab. */
 export const focusStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string | null>(storage, 'twp-focus-' + id, null, (v): v is string | null => v === null || typeof v === 'string')
+/** Wave 33: the last row focused, so the toggle can return to it from the full list; and the hold on the assembly after an approve on an unticked row. */
+export const lastFocusStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string | null>(storage, 'twp-lastfocus-' + id, null, (v): v is string | null => v === null || typeof v === 'string')
+export const holdStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-hold-' + id, false, (v): v is boolean => typeof v === 'boolean')
 export const loadOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-load-' + id, false, (v): v is boolean => typeof v === 'boolean')
 
 /** Focus mode: the wave name (branch prefix before the slash), the focused row and the other rows; null when nothing is focused or the row is gone/merged. */
 export function focusSplit(features: PreviewFeature[], key: string | null): { wave: string; row: PreviewFeature; rest: PreviewFeature[] } | null {
   const rows = visible(features), row = rows.find((f) => f.key === key)
   return row ? { wave: row.branch.split('/')[0], row, rest: rows.filter((f) => f !== row) } : null
+}
+
+/** The focus toggle (wave 33): in focus mode it leaves for the full list and remembers the row; in the full list it returns to the last focused row. null = nothing to toggle. */
+export function focusToggle(features: PreviewFeature[], focus: string | null, last: string | null): { to: 'full' | 'focus'; focus: string | null; last: string | null; row: PreviewFeature } | null {
+  const rows = visible(features), now = rows.find((f) => f.key === focus), before = rows.find((f) => f.key === last)
+  if (now) return { to: 'full', focus: null, last: now.key, row: now }
+  return before ? { to: 'focus', focus: before.key, last: before.key, row: before } : null
+}
+
+/** What a verdict press does (wave 33): approve on an unticked row loads it first and never assembles (the reload to /__tw/wait hid the preview); needs work unloads, which assembles. */
+export function pressPlan(features: PreviewFeature[], key: string, v: 'merge' | 'needs-work'): { loadFirst: boolean; assemble: boolean } {
+  return { loadFirst: v === 'merge' && !features.find((f) => f.key === key)?.checked, assemble: v === 'needs-work' }
+}
+
+/** A panel call gives up after this long (wave 33: a hung request kept every button disabled). */
+export const CALL_TIMEOUT_MS = 8000
+/** Verdict/toggle/approve calls wait for a CLI run behind the queue (a verdict takes ~6-8 s): 45 s. A timed-out call keeps running server-side. */
+export const WRITE_TIMEOUT_MS = 45000
+export const callError = (e: { name?: string; message?: string }, ms = CALL_TIMEOUT_MS): string => e.name === 'TimeoutError' || e.name === 'AbortError' ? `no answer after ${ms / 1000} s` : e.message || 'not saved'
+/** The panel shows "working…" with the elapsed seconds once a call takes longer than this. */
+export const WORKING_AFTER_S = 2
+/** Why the pills and boxes are disabled right now (their title). */
+export const loadingWhy = (busy: string | null, prText: string): string => busy !== null ? 'saving, one moment' : prText ? 'the PR is being created' : ''
+
+/** A PR flow whose status file has not moved for this long counts as stopped. */
+export const PR_STALE_MS = 30 * 60e3
+export function prStatusView<T extends { step: string; text?: string; updated?: string }>(j: T, now: number): T {
+  const age = now - Date.parse(j.updated ?? '')
+  return prRunning(j.step) && j.updated && age > PR_STALE_MS ? { ...j, step: 'failed', text: `The PR flow stopped answering (${Math.round(age / 60e3)} min without news). Press Approve again.` } : j
 }
 
 /** What moves while an apply runs; unchanged for 90 s = stuck. */
@@ -394,15 +428,16 @@ export const mergeHead = (step: string): { text: string; ok: boolean } => {
 /** After a reload: what the box does with the status file of the last Approve wave run (Jakob 2026-11-03: the result vanished into the default buttons
  *  because the page was built from another commit than the run started on; the assembly and the tests move HEAD and restart vite).
  *  'result' = an ended run within a day: its success or failure button shows, whatever commit; 'poll' = a run still going (touched within the hour); 'none' = nothing, or too old. */
-export const mergeResume = (j: { step: string; updated?: string }, now: number): 'poll' | 'result' | 'none' => {
+export const mergeResume = (j: { step: string; updated?: string }, now: number, wave?: { created?: string }): 'poll' | 'result' | 'none' => {
   if (!j.step || j.step === 'none') return 'none'
+  if (wave?.created && Date.parse(j.updated ?? '') < Date.parse(wave.created)) return 'none'   // a run of an earlier wave: not this preview's answer
   const age = now - Date.parse(j.updated ?? '')
   if (MERGE_DONE.includes(j.step)) return age < 86_400e3 ? 'result' : 'none'
   return age < 3_600e3 ? 'poll' : 'none'
 }
 
-/** The left panel greys out and stops reacting once Approve wave has been pressed and the run did not end in failure or cancel. */
-export const panelDone = (step: string): boolean => !['', 'none', 'cancelled', 'failed', 'checks-failed'].includes(step)
+/** The left panel dims while an Approve wave run is going. It stays clickable and is free again after any ended run, released too (wave 33: a released status left it dead). */
+export const panelDone = (step: string): boolean => !['', 'none', ...MERGE_DONE].includes(step)
 
 /** Dev panel button labels (dev_feature.ts): the release button and the personal one that also moves on to dev.trustweb.one. */
 export const APPROVE_WAVE_LABEL = 'Approve wave'

@@ -64,3 +64,19 @@ describe('approveEach (the per-row loop of Approve wave and Approve all)', () =>
     expect(seen).toEqual(['a', 'b'])
   })
 })
+
+import { unapprovedNote } from '../../src/dev_wave_press.ts'
+import { waveState } from '../../src/dev_preview_rules.ts'
+
+describe('wave 33: the unapproved count is by verdict (item 12)', () => {
+  const r = (key, over = {}) => ({ key, branch: 'w/' + key, title: key, requires: [], checked: true, ...over })
+  it('every visible loaded row approved by verdict, empty localStorage: no line', () => {
+    const rows = [r('a', { verdict: 'merge' }), r('b', { verdict: 'merge' })]
+    expect(unapprovedNote(rows)).toBe('')
+    expect(waveState(rows, []).implicit).toEqual(['a', 'b'])   // the bulk nudge (light green) stays, but it is not the count
+  })
+  it('two loaded rows without a merge verdict: "2 unapproved items open"; merged and unloaded rows do not count', () => {
+    const rows = [r('a'), r('b', { verdict: 'needs-work' }), r('c', { verdict: 'merge' }), r('d', { checked: false }), r('e', { merged: true })]
+    expect(unapprovedNote(rows)).toBe('2 unapproved items open')
+  })
+})

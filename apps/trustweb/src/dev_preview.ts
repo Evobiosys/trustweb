@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel, remindItems } from './dev_preview_rules'
+import { APPLY_DELAY_MS, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -24,6 +24,7 @@ interface Preview {
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
   assembled: { sha: string; at: string; error: string | null; restart?: boolean; set?: string[] } | null
   pending?: boolean
+  queued?: number
   compat?: Compat
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean; head?: string; mergeCommit?: string } | null
   next?: { id: string; port: number }
@@ -57,7 +58,7 @@ const CSS = `
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
 .twp-pre{position:fixed;left:50%;top:10vh;transform:translateX(-50%);z-index:100001;width:min(560px,92vw);padding:8px;border-radius:10px;background:#241b2e;color:#fff;font:11px system-ui;display:grid;gap:6px}.twp-pre pre{margin:0;max-height:50vh;overflow:auto;white-space:pre-wrap;user-select:all}
-.twp-done .twp{pointer-events:none;opacity:.45}
+.twp-done .twp{opacity:.45}
 .twp-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100001;padding:6px 12px;border-radius:8px;background:#241b2e;color:#fff;font:12px system-ui}
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twp button.alt{background:none;color:#4fd7a0;border:1px solid #4fd7a0}.twp .x{background:none;color:#fff;font-size:14px;padding:0 4px}
@@ -72,6 +73,9 @@ const CSS = `
 .twp .sec{font:700 10px system-ui;letter-spacing:.04em;opacity:.7;margin:4px 0 2px}
 .see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}
+/* wave 33 panel */
+.twp header{position:sticky;top:0;z-index:2;background:#241b2e}
+.twp .toggle{display:block;width:calc(100% - 20px);margin:2px 10px;text-align:left;background:none;color:#fff;text-decoration:underline;padding:3px 0}
 ${DEVICE2_CSS}`
 
 const POS = 'twp-pos'
@@ -94,9 +98,14 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEle
 
 class ApiError extends Error {}
 
+// Re-reads the state once a timed-out write has finished server-side (the queue empties); set by initDevPreview.
+let settle: () => void = () => {}
+
 async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Preview> {
-  const r = await fetch('/__tw/preview' + path, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) })
-  const j = (await r.json()) as Preview & { error?: string }
+  // A hung request never leaves the panel waiting for good (wave 33): it ends in a readable error after CALL_TIMEOUT_MS (45 s for writes, which wait for a CLI run); the server keeps running it.
+  const ms = method === 'GET' ? CALL_TIMEOUT_MS : WRITE_TIMEOUT_MS
+  const r = await fetch('/__tw/preview' + path, { method, signal: AbortSignal.timeout(ms), ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) }).catch((e: Error) => { if (method === 'POST') settle(); throw new ApiError(callError(e, ms)) })
+  const j = (await r.json().catch(() => { throw new ApiError('HTTP ' + r.status) })) as Preview & { error?: string }
   if (!r.ok) throw new ApiError(j.error ?? 'HTTP ' + r.status)
   return j
 }
@@ -133,10 +142,12 @@ export function initDevPreview(): void {
   let glim: string | null = null
   let query = '', searching = false   // the row search under the header line (Esc / empty clears)
   let retried = false
-  const individual = individualStore(localStorage, p.id), loadOpen = loadOpenStore(sessionStorage, p.id), remindOpen = remindOpenStore(sessionStorage, p.id)
+  const individual = individualStore(localStorage, p.id), loadOpen = loadOpenStore(sessionStorage, p.id)
   // An uncheck or needs work (`wanted`) always assembles, whatever the registry's pending flag says at that moment; a busy apply or write asks again.
   let wanted = false
-  const focus = focusStore(sessionStorage, p.id)
+  const focus = focusStore(sessionStorage, p.id), lastFocus = lastFocusStore(sessionStorage, p.id)
+  // An approve on an unticked row loads it without assembling: the page stays until a box or "Assemble now" asks (wave 33, item 2d).
+  const hold = holdStore(sessionStorage, p.id)
   const applyLater: ReturnType<typeof debounce> = debounce(() => {
     if (!p) return
     const due = applyDue(p, applying, wanted, inflight)
@@ -158,7 +169,20 @@ export function initDevPreview(): void {
   const loading = (): boolean => busy !== null || (prText !== '' && prStep !== 'ready' && prStep !== 'failed')
   const elapsed = (): number => Math.floor((Date.now() - since) / 1000)
   const begin = (): void => { since = Date.now() }
-  setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; const e = root.querySelector('.eta'); if (e && prEta) e.textContent = ciLine(prEta, prStarted, Date.now()); if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
+  let settling = false
+  settle = () => {
+    if (settling) return
+    settling = true
+    void (async () => {
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 3000))
+        const q = await call('GET', '').catch(() => null)
+        if (q && !q.queued) { if (busy === null && inflight === 0) { p = q; error = ''; render() } break }
+      }
+      settling = false
+    })()
+  }
+  setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; const e = root.querySelector('.eta'); if (e && prEta) e.textContent = ciLine(prEta, prStarted, Date.now()); if ((busy !== null || inflight > 0) && elapsed() === WORKING_AFTER_S) render(); if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
   const sync = (): void => {
     const { left, top } = root.getBoundingClientRect(), style = document.documentElement.style
     if (root.hidden) { for (const v of ['--twp-h', '--twp-l', '--twp-t']) style.removeProperty(v); return }
@@ -190,9 +214,8 @@ export function initDevPreview(): void {
 
   async function act(key: string | null, run: () => Promise<Preview>): Promise<void> {
     busy = key ?? 'x'; error = ''; begin(); render()
-    try { p = await run() } catch (e) { error = (e as Error).message }
-    busy = null; render()
-    if (p && autoApply(p, applying)) applyLater()
+    try { p = await run() } catch (e) { error = callError(e as Error) } finally { busy = null; render() }
+    if (p && autoApply(p, applying, hold.get())) applyLater()
   }
 
   const toast = (text: string): void => {
@@ -212,7 +235,7 @@ export function initDevPreview(): void {
     seen = tapSeen(seen, f.key, f.ref ?? '')
     store.set(seenKey(p!.id), JSON.stringify(seen))
     lit = tapped(lit, f.key)
-    if (lit) focus.set(f.key)
+    if (lit) { focus.set(f.key); lastFocus.set(f.key) }
     steps.close()
     // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
     if (lit) {
@@ -226,28 +249,24 @@ export function initDevPreview(): void {
   }
 
   function write(next: PreviewFeature[], send: () => Promise<Preview>): void {
-    p = { ...p!, features: next }; inflight++; error = ''; render()
+    p = { ...p!, features: next }; if (inflight++ === 0) begin(); error = ''; render()
     chain = chain.then(send).then((q) => { if (inflight === 1) p = q }, async (e: Error) => { error = e.message || 'not saved'; p = await call('GET', '').catch(() => p!) }).finally(() => {
       inflight--; render()
-      if (autoApply(p!, applying)) applyLater()
+      if (autoApply(p!, applying, hold.get())) applyLater()
     })
   }
   // A box or pill writes the registry (the CLI cascades requires/dependants). Approve and needs work only mark what gets pushed; the boxes assemble.
   const press = (key: string, v: 'merge' | 'needs-work'): void => {
     focus.set(null)
-    const loadFirst = v === 'merge' && !p!.features.find((x) => x.key === key)!.checked   // approve on an unticked row ticks it for the owner
+    const plan = pressPlan(p!.features, key, v)   // approve on an unticked row ticks it for the owner, but never assembles (the reload hid the preview)
+    const { loadFirst } = plan
     const base = v === 'merge' ? ensureLoaded(p!.features, key) : p!.features
     const next = pillPress(base, key, v)
     const keys = [key]   // one row's press touches only that row, never its children or dependants
     individual.set(next === 'merge' ? [...new Set([...individual.get(), ...keys])] : individual.get().filter((k) => !keys.includes(k)))
     write(applyVerdicts(base, keys, next), async () => { if (loadFirst) await call('POST', '', { feature: key, checked: true }); let q: Preview | undefined; for (const k of keys) q = await call('POST', '/verdict', { feature: k, verdict: next }); return q! })
-    if (loadFirst || v === 'needs-work') { wanted = true; applyLater() }
-  }
-  const remindLink = (r: { key: string; title: string }): HTMLElement => {
-    const b = h('button', { className: 'remindbtn', textContent: r.title, title: 'Uncheck this row' })
-    b.dataset.remindKey = r.key
-    b.addEventListener('click', () => load(r.key, false))
-    return b
+    if (loadFirst) hold.set(true)
+    if (plan.assemble) { wanted = true; applyLater() }
   }
   const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allLoaded(p!.features)) }))
   const approveAll = (): Promise<void> => act(null, async () => {
@@ -255,12 +274,13 @@ export function initDevPreview(): void {
     await approveEach(unapproved(p!.features), async (feature) => { q = await call('POST', '/verdict', { feature, verdict: 'merge' }); return true })
     return q
   })
-  const load = (feature: string, checked: boolean): void => { wanted = true; if (!checked) focus.set(null); write(withBox(p!.features, feature, checked), () => call('POST', '', { feature, checked })); applyLater() }
+  const load = (feature: string, checked: boolean): void => { wanted = true; hold.set(false); if (!checked) focus.set(null); write(withBox(p!.features, feature, checked), () => call('POST', '', { feature, checked })); applyLater() }
 
   // Assemble the approved set on the server (the vite config only restarts the server when its content changed), poll the registry
   // (pending / assembled.at) and reload when it is done; no registry change for 90 s = stuck, "Retry" asks again.
   async function apply(): Promise<void> {
     if (applying && !applying.stuck) return
+    hold.set(false)
     const start = Date.now()
     applying = { stamp: applyStamp(p!), moved: start, stuck: false }; error = ''; render()
     try { await call('POST', '/apply', {}) } catch (e) { error = (e as Error).message; applying = null; render(); return }
@@ -315,7 +335,7 @@ export function initDevPreview(): void {
     known ??= q.assembled?.sha ?? null
     const stamp = JSON.stringify(q)
     if (stamp !== last) { last = stamp; p = q; render() }
-    if (autoApply(q, applying) && !applyLater.waiting()) void apply()
+    if (autoApply(q, applying, hold.get()) && !applyLater.waiting()) void apply()
   }
 
   let related = new Set<string>()
@@ -323,7 +343,7 @@ export function initDevPreview(): void {
     const f = n.feature, d = shown.find((x) => x.key === f.key)!
     const hint = needsHint(shown, f.key)
     const off = loading() || hint !== null
-    const box = h('input', { type: 'checkbox', checked: d.checked, disabled: off })
+    const box = h('input', { type: 'checkbox', checked: d.checked, disabled: off, title: loading() ? loadingWhy(busy, prText) : hint ?? '' })
     box.addEventListener('change', () => { load(f.key, box.checked) })
     const mark = seenState(seen, f.key, fresh ? f.ref ?? '' : seen[f.key]?.ref ?? '')
     if (mark.next !== seen) { seen = mark.next; store.set(seenKey(p!.id), JSON.stringify(seen)) }
@@ -338,7 +358,7 @@ export function initDevPreview(): void {
       if (walking) { lit = null; render() } else { if (!d.checked) load(f.key, true); walk(f); foldFor(f) }
     })
     const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
-      const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading() })
+      const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading(), title: loading() ? loadingWhy(busy, prText) : '' })
       b.addEventListener('click', (e) => {
         e.stopPropagation()
         if (v === 'needs-work' && shownVerdict(f) !== v) { void copy(needsWorkNote(new Date().toISOString(), p!.id, f), 'needs-work line copied'); glim = f.key; setTimeout(() => { glim = null; render() }, 900) }
@@ -347,7 +367,7 @@ export function initDevPreview(): void {
       return b
     }
     // 📝: the reference to this feature to the clipboard (white glimmer, like the autocopy), and the approve.
-    const note = h('button', { className: 'pill note', textContent: '📝', title: 'Approve, and copy the reference to this feature to paste into the pi session', disabled: loading() })
+    const note = h('button', { className: 'pill note', textContent: '📝', title: loading() ? loadingWhy(busy, prText) : 'Approve, and copy the reference to this feature to paste into the pi session', disabled: loading() })
     note.addEventListener('click', (e) => {
       e.stopPropagation()
       focus.set(null)
@@ -370,7 +390,8 @@ export function initDevPreview(): void {
   }
 
   // The status file's answer as panel state. On the ready step the tab opens dev after 3 s (once per PR: a reload only shows the links).
-  function applyStatus(j: ApprovalStatus, live: boolean): void {
+  function applyStatus(status: ApprovalStatus, live: boolean): void {
+    const j = prStatusView(status, Date.now())   // a flow that stopped answering ends as a visible failure, not a spinner for good
     prStep = j.step; prText = stepText(j.step, j.text, p!.short, j.pr); prUrl = j.url ?? ''; prNum = j.pr ?? null
     prEta = j.etaSeconds ?? 0; prStarted = j.started ?? ''
     if (j.step === 'ready') void call('GET', '').then((q) => { p = q; render() }).catch(() => { /* links come from the status */ })
@@ -528,7 +549,7 @@ export function initDevPreview(): void {
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
       const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
-      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : busy ? 'saving...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), x, close)
       const hs = drag(root.appendChild(header))
       // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
@@ -544,20 +565,23 @@ export function initDevPreview(): void {
       })
       // The load box (every row with its box) starts collapsed, in personal and stock; the lines above it keep what still waits for an approve and what needs work.
       const open = loadOpen.get()
-      const rejected = visible(shown).filter((f) => shownVerdict(f) === 'needs-work' || (f.verdict === 'needs-work' && !f.checked))
       const loadHead = h('button', { className: 'loadhead', textContent: `${open ? '▾' : '▸'} Load (${visible(shown).filter((f) => f.checked).length} of ${visible(shown).length} loaded)`, title: open ? 'Collapse' : 'Expand' })
       loadHead.addEventListener('click', () => { loadOpen.set(!open); render() })
-      const assembleNow = h('button', { className: 'alt', textContent: S.panelAssembleNow, title: S.panelAssembleNowTip, disabled: !!applying && !applying.stuck })
+      const waitingChanges = pendingCount(q)
+      const assembleNow = h('button', { className: 'alt', textContent: waitingChanges ? `${S.panelAssembleNow} (${waitingChanges})` : S.panelAssembleNow, title: S.panelAssembleNowTip, disabled: !!applying && !applying.stuck })
       assembleNow.dataset.assembleNow = ''
       assembleNow.addEventListener('click', () => { void apply() })
       const fs = focusSplit(shown, focus.get())
-      const showAll = h('button', { className: 'loadhead', textContent: S.panelShowAll })
-      showAll.dataset.focusOff = ''
-      showAll.addEventListener('click', () => { focus.set(null); loadOpen.set(true); render() })
+      // One toggle with arrows both ways: focus -> the full list; full list -> back to the last focused row (wave 33).
+      const ft = focusToggle(shown, focus.get(), lastFocus.get())
+      const toggle = ft ? h('button', { className: 'toggle', textContent: '⇅ ' + (ft.to === 'full' ? S.panelShowAll : S.panelBackToRow(ft.row.title)) }) : null
+      if (toggle) {
+        toggle.dataset.twpExpandAgain = ''
+        if (ft!.to === 'full') toggle.dataset.focusOff = ''
+        toggle.addEventListener('click', () => { lastFocus.set(ft!.last); focus.set(ft!.focus); if (ft!.to === 'full') loadOpen.set(true); render() })
+      }
       const waiting = unapproved(q.features)
       const flagged = visible(shown).filter((f) => f.flag && f.checked)
-      const remindHead = h('button', { className: 'remindhead', textContent: `${waiting.length} loaded, not yet approved ${remindOpen.get() ? '▾' : '▸'}`, title: remindOpen.get() ? 'Collapse' : 'Expand' })
-      remindHead.addEventListener('click', () => { remindOpen.set(!remindOpen.get()); render() })
       const searchBtn = h('button', { className: 'srchbtn', textContent: '🔍', title: 'Search the rows' })
       searchBtn.addEventListener('click', () => { searching = !searching; if (!searching) query = ''; render() })
       const searchBox = h('input', { className: 'srch', type: 'search', placeholder: 'Search rows (title, key, steps)', value: query })
@@ -569,20 +593,22 @@ export function initDevPreview(): void {
       all.addEventListener('click', () => { void pressAll() })
       const approveAllBtn = h('button', { textContent: 'Approve all', disabled: loading() || waiting.length === 0 })
       approveAllBtn.addEventListener('click', () => { void approveAll() })
-      root.append(
-        ...(fs ? [h('div', { className: 'row focus' }, h('b', { textContent: fs.wave }), h('div', { textContent: fs.row.title + (fs.row.where ? ' · ' + fs.row.where : '') }), row({ feature: fs.row, depth: 0, children: [] }, shown), showAll)] : []),
+      const tail = [
+        ...(busy !== null && elapsed() > 90 ? [slow()] : []),
+        ...(q.assembled?.error ? [h('div', { className: 'row warn' }, hintParts('Fix the conflict first: ' + q.assembled.error).head, h('details', {}, h('summary', { textContent: 'details' }), h('div', {}, ...conflictNodes(q.assembled.error))))] : []),
+        ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
+      ]
+      // Focus mode: the focused row, the toggle and the compat line; everything beneath the toggle stays hidden. Each row shows once, in the list.
+      if (fs) { root.append(h('div', { className: 'row focus' }, h('b', { textContent: fs.wave }), row({ feature: fs.row, depth: 0, children: [] }, shown), ...(toggle ? [toggle] : [])), ...(compat ? [compat] : []), ...tail, ...(prStatusEl ? [prStatusEl] : []), ...(bar ? [bar] : [])) } else root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` }), searchBtn),
         ...(searching ? [searchBox] : []),
         ...(compat ? [compat] : []),
         ...(flagged.length ? [h('div', { className: 'row flags' }, ...flagged.map(flagSwitch))] : []),
         ...(open ? [h('div', { className: 'btns hdr' }, approveAllBtn, all)] : []),
-        ...(waiting.length ? [h('div', { className: 'row remind' }, remindHead, ...(remindOpen.get() ? [h('div', { textContent: waiting.map((f) => f.title).join(', ') })] : []))] : []),
-        ...(rejected.length ? [h('div', { className: 'row remind rej' }, 'needs work: ', ...remindItems(rejected).flatMap((r, i) => [...(i ? [', '] : []), remindLink(r)]))] : []),
+        ...(toggle ? [toggle] : []),
         h('div', { className: 'loadrow' }, loadHead, assembleNow),
-        ...((open || query) && !fs ? allRows(sections(tree(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
-        ...(busy !== null && elapsed() > 90 ? [slow()] : []),
-        ...(q.assembled?.error ? [h('div', { className: 'row warn' }, hintParts('Fix the conflict first: ' + q.assembled.error).head, h('details', {}, h('summary', { textContent: 'details' }), h('div', {}, ...conflictNodes(q.assembled.error))))] : []),
-        ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
+        ...((open || query) ? allRows(sections(tree(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
+        ...tail,
         ...(prStatusEl ? [prStatusEl] : []), h('div', { className: 'btns' }, sw, h('details', { className: 'adv' }, h('summary', { textContent: 'advanced' }), gate())), ...(bar ? [bar] : []),
       )
     }
@@ -613,7 +639,7 @@ export function initDevPreview(): void {
     fresh = true
     known = q.assembled?.sha ?? null
     render()
-    if (autoApply(q, applying)) void apply()
+    if (autoApply(q, applying, hold.get())) void apply()
     setInterval(() => { void watch() }, 2000)
     const resume = sessionStorage.getItem(RESUME)
     sessionStorage.removeItem(RESUME)
