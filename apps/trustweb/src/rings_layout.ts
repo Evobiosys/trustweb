@@ -146,6 +146,9 @@ export function lapRadius(g: RingsGeometry, ring: Ring, lap: number): number {
   return g.radius[ring] - BAND_HALF + (2 * BAND_HALF * (lap % lanes)) / (lanes - 1)
 }
 
+/** Drawn size of a ring's dots (px): the view scale `k` shrinks the radii, never the dots (wave 33, back to pre-#80). */
+export const dotSize = (g: RingsGeometry, ring: Ring): number => Math.min(FULL_DOT, g.dot[ring])
+
 /** The person-field id of Tana's "family" checkbox: a purple accent on the avatar, no ring of its own. */
 export const FAMILY_FIELD = 'LNlpliq4GdNI'
 export const isFamily = (p: Pick<Person, 'ring' | 'fields'>): boolean => p.ring === Ring.Family || String(p.fields?.[FAMILY_FIELD]) === 'true'
