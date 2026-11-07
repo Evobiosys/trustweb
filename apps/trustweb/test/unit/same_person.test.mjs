@@ -73,3 +73,15 @@ describe('R2: merging keeps timeline, agreements and the newer profile', () => {
     expect(s.people[0].theirProfile).toEqual({ norms: [], intro: 'new', favourite: 'call', at: 9 })
   })
 })
+
+describe('merge a into b (wave 36)', () => {
+  it('b keeps its name; a\'s fields and lines are united into b', () => {
+    const s = state([person('a', 'Ann minor', { lines: [line('l1')], channels: { signal: 'S' } }), person('b', 'Ann Major')])
+    expect(mergePersons(s, 'b', 'a')).toBe(true)
+    expect(s.people).toHaveLength(1)
+    expect(s.people[0].name).toBe('Ann Major')
+    expect(s.people[0].id).toBe('b')
+    expect(s.people[0].channels).toEqual({ signal: 'S' })
+    expect(s.people[0].lines.map((l) => l.id)).toEqual(['l1'])
+  })
+})

@@ -1428,6 +1428,18 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .web-default-select{font:inherit; text-decoration:underline; background:none; color:inherit; border:0; max-width:100%}
 .view-in-bar{display:flex; align-items:center; gap:8px; cursor:pointer}
 .view-in-bar b{font-weight:600; text-decoration:underline}
+/* wave 36 groups-to-join */
+.grp-card{background:var(--card); border:1.5px solid var(--line); border-radius:var(--r-card,14px); padding:12px 14px; margin:10px 0}
+.grp-head{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
+.grp-name{font-size:16px; overflow-wrap:anywhere}
+.grp-status{font-size:12.5px; border:1.5px solid var(--line); border-radius:999px; padding:2px 10px; color:var(--ink-soft)}
+.grp-about{margin:6px 0 0; font-size:14px; overflow-wrap:anywhere}
+.grp-reasons{margin:8px 0 0; padding-left:18px; font-size:13.5px; color:var(--ink-soft)}
+.grp-warm{margin:8px 0 0; font-size:13.5px; overflow-wrap:anywhere}
+.grp-acts{display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-top:10px}
+.grp-form{background:var(--card); border:1.5px solid var(--line); border-radius:var(--r-card,14px); padding:12px 14px; margin:10px 0}
+.grp-field{display:block; margin:0 0 10px}
+.grp .chip{text-decoration:underline}
 
 /* wave 36 delete-reversible */
 .node.multi-sel{outline:3px solid var(--electric,#12a8e3); outline-offset:2px; border-radius:50%}
@@ -1484,3 +1496,9 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 /* wave 36 keep-in-touch */
 .keep-row{display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-width:0; max-width:100%}
 .keep-row .linkbtn{text-decoration:underline; background:none; border:0; padding:2px 0; color:inherit; font:inherit; cursor:pointer; text-align:left}
+/* wave 36 merge-countdown */
+[data-merge-countdown]{display:inline-block; min-width:1.5em; text-align:center; font-weight:700; font-size:1.25em; color:var(--ink); font-variant-numeric:tabular-nums}
+.keep-countdown{font-weight:600; color:var(--ink)}
+
+/* wave 36 drag-overlays */
+.zone-title{position:absolute; transform:translate(-50%,-50%); z-index:4; pointer-events:none; max-width:90%; padding:2px var(--s-2); border:1.5px solid var(--line-strong); border-radius:var(--r-chip); background:var(--surface-0); color:var(--ink); font-size:var(--fs-1); line-height:var(--lh-tight); text-align:center}

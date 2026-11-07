@@ -29,7 +29,7 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
-import { introForm } from './intro_ask_view'
+import { introForm, setIntroTarget } from './intro_ask_view'
 import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
 import type { IntroLink } from './intro_link'
@@ -128,6 +128,7 @@ import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, b
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
+import { groupsView } from './groups_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
@@ -323,6 +324,8 @@ enum Screen {
   People = 'people',
   /** Wave 32: the Notes outliner (eye menu), a page like People. */
   Notes = 'notes',
+  /** Wave 36: Groups I could join or help (eye menu > Other views), a page like People. */
+  Groups = 'groups',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -1046,6 +1049,7 @@ function recordButton(): HTMLElement {
 }
 
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', complete: 'table', map: 'map', dex: 'curator', compact: 'list' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
@@ -1240,6 +1244,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.Chat:
     case Screen.People:
     case Screen.Notes:
+    case Screen.Groups:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1323,6 +1328,19 @@ function openNotes(): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Notes)
 }
+/** Wave 36: Groups I could join or help opens as a page like People, Back returns to the Web. */
+function openGroups(): void {
+  peoplePage = true
+  pageBack = Screen.Web
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Groups)
+}
+function screenGroups(): Node[] {
+  return [
+    header(S.groups.heading, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [groupsView({ st, save, askIntro: (target) => { setIntroTarget(target); askMode = AskMode.Intros; queryOpen = true; go(Screen.Web) } })]),
+  ]
+}
 function screenNotes(): Node[] {
   const s = st()
   return [
@@ -1374,7 +1392,7 @@ function zoomGlyph(tab: ZoomTab): HTMLElement {
 }
 
 function go(s: Screen): void {
-  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups
   if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
   if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
@@ -1623,7 +1641,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups))
       || (target === Screen.Inventory && screen === Screen.Notes)
     b.classList.toggle('on', on)
   })
@@ -1656,6 +1674,7 @@ function render(): void {
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
       case Screen.Notes: return screenNotes()
+      case Screen.Groups: return screenGroups()
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
@@ -2728,6 +2747,7 @@ function chooseView(view: ViewKey): void {
   if (view === 'complete') { if (screen === Screen.People && completeMode) render(); else openComplete(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
+  if (view === 'groups') { if (screen === Screen.Groups) render(); else openGroups(); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -4645,7 +4665,7 @@ const curator = createCurator({
 })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
-  curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
+  curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void): void =>
