@@ -210,6 +210,8 @@ export interface ChatViewDeps extends ChatIo {
   copy(text: string): void
   /** Wave 21: opens a link outside the app. */
   open(url: string): void
+  /** Wave 37: the person started typing a draft ("thought of you today"). */
+  onDraft?(): void
 }
 
 function rowNode(deps: ChatViewDeps, r: ChatRowModel): HTMLElement {
@@ -278,7 +280,7 @@ function composer(deps: ChatViewDeps, vm: ChatViewModel, redraw: () => void, dra
     if (ok) { draft.text = ''; draft.re = null }
     redraw()
   }
-  area.addEventListener('input', updateLeft)
+  area.addEventListener('input', () => { updateLeft(); deps.onDraft?.() })
   area.addEventListener('keydown', (e) => {
     const k = e as KeyboardEvent
     if (k.key === 'Enter' && (k.ctrlKey || k.metaKey)) { k.preventDefault(); void submit() }

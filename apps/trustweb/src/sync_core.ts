@@ -61,7 +61,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
-  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
+  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'browserOnlyDismissed', 'birthdayNoticeDay', 'engagementSince', 'awayAsks', 'sentAsks',
   'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
