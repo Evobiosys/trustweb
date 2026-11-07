@@ -55,7 +55,7 @@ try {
     await grab('f3'); await toBin('remove'); await page.mouse.up(); await page.waitForTimeout(400)
     const rows = await page.evaluate(() => [...document.querySelectorAll('[data-zone-side] .zone-check')].map((r) => r.querySelector('[data-closest150],[data-per-ring],[data-space-out-tools],[data-expand-buttons],[data-hidden-people],[data-recently-deleted],[data-zone-connections]')?.getAttributeNames().find((a) => a.startsWith('data-'))))
     check(`${name}: Tools: space-out is the third row (${rows.join(',')})`, rows.indexOf('data-space-out-tools') === 3 && rows[1] === 'data-per-ring' && rows[2] === 'data-closest150' && rows[4] === 'data-expand-buttons' && rows.at(-1) === 'data-recently-deleted')
-    check(`${name}: "Recently deleted (1)"`, (await page.locator('[data-recently-deleted]').innerText()) === 'Recently deleted (1)')
+    check(`${name}: "Recently deleted (1)"`, (await page.locator('[data-recently-deleted] u').innerText()) === 'Recently deleted (1)') // wave 36b: the label sits beside the ↺ glyph
     await page.locator('[data-recently-deleted]').click(); await page.waitForTimeout(300)
     check(`${name}: sheet lists the person with days left`, (await page.locator('[data-deleted-row="f3"]').innerText()).includes('30 days left'))
     await page.screenshot({ path: `${SHOTS}/delete-reversible-${name}-recently-deleted.png` })
