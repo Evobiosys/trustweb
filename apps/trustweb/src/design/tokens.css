@@ -71,6 +71,8 @@
   --rec-b:#7ED9CF;
   --rec-paused-a:#E3E8E6;
   --rec-paused-b:#B4C0BC;
+  --on-person:#FFFFFF;
+  --ring-ink:#3A1D00;
   color-scheme:light;
 }
 :root[data-theme="dark"]{
@@ -115,6 +117,8 @@
   --rec-b:#2F8F8A;
   --rec-paused-a:#4A5E5B;
   --rec-paused-b:#34443F;
+  --on-person:#FFFFFF;
+  --ring-ink:#3A1D00;
   color-scheme:dark;
 }
 @media (prefers-color-scheme:dark){
@@ -160,6 +164,8 @@
     --rec-b:#2F8F8A;
     --rec-paused-a:#4A5E5B;
     --rec-paused-b:#34443F;
+    --on-person:#FFFFFF;
+    --ring-ink:#3A1D00;
     color-scheme:dark;
   }
 }

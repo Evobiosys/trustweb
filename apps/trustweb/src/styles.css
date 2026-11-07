@@ -1,4 +1,5 @@
 @import './design/tokens.css';
+@import './components/rings.css';
 /* TrustWeb. Tokens now come from src/design/tokens.css (generated from tokens.json); the
    phone frame, tab bar, rings, sheet and cosmic register were ported from apps/mobile-ui/src/styles.css;
    the notes-flow pieces follow the owner's note-taking mockup (teal call-to-action, tag pills). */
@@ -102,29 +103,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .center{text-align:center}
 
 /* web */
-.rings-wrap{position:relative; width:352px; height:352px; margin:6px auto 0; max-width:100%}
-.rings-wrap svg{position:absolute; inset:0}
-.rings-zoom{position:relative; transform-origin:0 0; will-change:transform}   /* in flow: the layer must keep its place below the header (absolute + inset:0 put the rings over it) */
 .scroll.zoomed{touch-action:none; overflow:hidden}
-.node{position:absolute; display:flex; flex-direction:column-reverse; align-items:center; gap:2px; cursor:pointer; transform:translate(-50%,-50%); background:none; border:0; padding:0}
-.ava{width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px; box-shadow:0 2px 10px rgba(36,27,46,.2); flex-shrink:0}
-.node.nonresp{opacity:.55}
-.node span{font-size:11.5px; font-weight:600; color:var(--ink)}
-/* names sit ABOVE the dot, over edges and other dots, with a halo in the screen colour */
-.node:not(.you) span{position:relative; z-index:3; text-shadow:-1px 0 var(--linen),1px 0 var(--linen),0 -1px var(--linen),0 1px var(--linen),0 0 4px var(--linen)}
-.rings-zoom .node:not(.you) span{font-size:calc(11.5px*var(--rz,1))}
-.rings-zoom .node:not(.you) .lvl{font-size:calc(9.5px*var(--rz,1))}
-.node .lvl{font-size:9.5px; color:var(--ink-soft); font-weight:500; font-style:normal}
-.node:not(.you) .ava{width:var(--d,42px); height:var(--d,42px); font-size:calc(var(--d,42px)*.42)}
-.rings-wrap.compact .node:not(.you) span,.rings-wrap.compact .node:not(.you) .lvl,.rings-wrap.compact .node:not(.you) .dummy-chip{display:none}
-.rings-wrap .node.lbl-off:not(:hover):not(:focus-visible) span{display:none}
-.rings-wrap.compact .node:not(.you):hover,.rings-wrap.compact .node:not(.you):focus-visible{z-index:2}
-.rings-wrap.compact .node:not(.you):hover span,.rings-wrap.compact .node:not(.you):focus-visible span{display:block; position:absolute; bottom:100%; white-space:nowrap; background:var(--card); padding:1px 6px; border-radius:8px; box-shadow:0 2px 8px rgba(36,27,46,.2)}
-.node.nl .ava{font-size:0}
-.node:not(.you) .ava{position:relative}
-.node.tagged .ava::after{content:''; position:absolute; inset:-4px; border-radius:50%; background:var(--arcs); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px)); mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px))}
-.node.lifted{z-index:5; cursor:grabbing; touch-action:none}
-.node.lifted .ava{transform:scale(1.25)}
 .ring-toggle{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:0; background:none; color:#fff; font-size:9px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .ring-toggle::before{content:''; position:absolute; box-sizing:border-box; width:8.5px; height:8.5px; background:var(--muted-grey,#8a8f94); border:1.5px solid var(--muted-grey,#8a8f94); transform:rotate(45deg); z-index:-1; transition:box-shadow .15s}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
@@ -169,8 +148,6 @@ textarea.field{resize:vertical; line-height:1.5}
 .membrane-rest{display:flex; flex-direction:column; padding:8px; min-height:60vh}
 .rest-add{border:1px dashed var(--line,currentColor); background:transparent; text-decoration:underline}
 .tag-filter{padding:6px 10px}
-.rings-wrap.hide-zone{outline:2px dashed #c62828; outline-offset:4px; border-radius:50%}
-.rings-wrap svg circle.drop{stroke-opacity:1; stroke-width:3}
 .ctx-menu{position:absolute; z-index:7; display:flex; flex-direction:column; gap:2px; background:var(--card); border-radius:12px; padding:6px; box-shadow:0 4px 20px rgba(36,27,46,.3)}
 .sheet-line{border:0; border-top:1px solid var(--ink-soft); opacity:.3; margin:18px 0 0}
 .desire{position:absolute; left:50%; bottom:6px; transform:translateX(-50%); z-index:6; width:min(340px,96%); background:var(--card); border-radius:16px; padding:10px 12px; box-shadow:0 4px 20px rgba(36,27,46,.3); text-align:center}
@@ -194,11 +171,6 @@ textarea.field{resize:vertical; line-height:1.5}
 .field-row small{flex-basis:100%; padding-left:18px; font-size:12px; color:var(--ink-soft,inherit)}
 .field-lean{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0}
 .desire-go{display:flex; gap:8px; justify-content:center}
-.node.you .ava{width:40px; height:40px; box-shadow:0 0 0 2px var(--raised), 0 0 0 3px color-mix(in srgb, var(--trust) 55%, transparent)}
-.node.you span{position:absolute; bottom:100%; margin-bottom:4px; white-space:nowrap; z-index:3; text-shadow:-1px 0 var(--linen),1px 0 var(--linen),0 -1px var(--linen),0 1px var(--linen),0 0 4px var(--linen)}   /* the label sits above the dot: the avatar centre is the node (and rings) centre */
-.node.asked .ava{animation:asked 1.6s ease-in-out infinite}
-@keyframes asked{50%{box-shadow:0 0 0 7px rgba(18,168,227,.28), 0 2px 10px rgba(36,27,46,.2)}}
-.node.shared .ava{box-shadow:0 0 0 3px var(--raised), 0 0 0 6px var(--shared), 0 0 18px color-mix(in srgb, var(--shared) 80%, transparent)}
 .screen.querying .rings-wrap{transform-origin:top center}
 .net{padding:0 12px; position:relative}
 .net-bar{display:flex; gap:8px; align-items:center; margin:6px 0}
@@ -1277,7 +1249,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .knows-peek .ava{width:64px; height:64px; font-size:24px}
 .knows-note{font-size:12px; color:var(--ink-soft); white-space:normal; max-width:220px}
 /* Wave 28 (trustzones.ts): TrustZones. Dots take the rung's orange; pinned = light red edge; the zone panel; zzz; the outliner triangle. */
-.rings-wrap .node[data-tone="3"] .ava,.rings-wrap .node[data-tone="4"] .ava{color:#3a1d00}
 .rings-wrap .node.pinned .ava,.zone-row.pinned{border-color:var(--pin-edge); box-shadow:0 0 0 2px var(--pin-edge)}
 .zone-row.pinned{box-shadow:none; border:1.5px solid var(--pin-edge)}
 .outliner-toggle{font-size:11px; line-height:1}
