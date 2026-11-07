@@ -157,3 +157,7 @@
   --ok-ink:var(--shared-ink);
   --warn-ink:var(--attention-ink);
 }
+/* motion gate: reduced motion, or data-motion="off" set by motion_gate.ts / the boot block */
+@media (prefers-reduced-motion:reduce){:root{--dur-1:0ms;--dur-2:0ms}}
+:root[data-motion="off"]{--dur-1:0ms;--dur-2:0ms}
+:root[data-motion="off"] *{animation:none !important}

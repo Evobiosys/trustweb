@@ -23,6 +23,7 @@ import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
 import { applyTheme, readTheme, type Theme } from './theme'
+import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
@@ -926,6 +927,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 // shell
 // ---------------------------------------------------------------------------
 
+installMotionGate(window)
 const root = document.getElementById('app') as HTMLElement
 const phone = el('div', { class: 'phone' + (solo ? ' embedded' : '') })
 const host = el('div', { class: 'screen on' })

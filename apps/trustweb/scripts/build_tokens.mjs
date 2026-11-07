@@ -16,6 +16,10 @@ export function renderTokensCss({ core, one, aliases }) {
     block('@media (prefers-color-scheme:dark)', block(':root:not([data-theme="light"]):not([data-theme="dark"])', dark).replace(/^/gm, '  ')),
     '/* legacy aliases (old name -> token): may be retired from 2026-12-07 */',
     block(':root', decls(refs)),
+    '/* motion gate: reduced motion, or data-motion="off" set by motion_gate.ts / the boot block */',
+    '@media (prefers-reduced-motion:reduce){:root{--dur-1:0ms;--dur-2:0ms}}',
+    ':root[data-motion="off"]{--dur-1:0ms;--dur-2:0ms}',
+    ':root[data-motion="off"] *{animation:none !important}',
   ].join('\n') + '\n'
 }
 
