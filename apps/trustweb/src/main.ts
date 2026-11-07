@@ -22,6 +22,8 @@ import { createViaCard } from './via_card'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
+import { applyTheme, readTheme, type Theme } from './theme'
+import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
@@ -122,13 +124,14 @@ import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, remov
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, moveBar, overflowChoices, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
+import { isAdvanced, setWebDefault, webDefaultOf, webTabLabel } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
@@ -281,6 +284,7 @@ import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { createWebView, RINGS_SIZE } from './web_view'
+import { expanseList } from './expanse'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import { route as notifyHome, type NotifyHome } from './notify_route'
@@ -925,6 +929,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 // shell
 // ---------------------------------------------------------------------------
 
+installMotionGate(window)
 const root = document.getElementById('app') as HTMLElement
 const phone = el('div', { class: 'phone' + (solo ? ' embedded' : '') })
 const host = el('div', { class: 'screen on' })
@@ -1026,14 +1031,24 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const TAB_ICON: Record<Exclude<BarId, 'record' | 'ask'>, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
+const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
 const askIconVariant = ((typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) || import.meta.env.DEV) && params.get('askicon') === 'plain' ? 'plain' : 'rings'
 
+/** Wave 35: a bar entry's name; a `view:<id>` entry takes its view's name. */
+function barName(id: BarId): string {
+  const view = viewOfBar(id)
+  return view ? S.viewNames[view] ?? view : S.barNames[id] ?? S.navRecord
+}
+
 /** What a bottom-bar view does when tapped. */
 function barOpen(id: BarId): void {
+  const view = viewOfBar(id) // wave 35: a view pinned into the row
+  if (view) { chooseView(view as ViewKey); return }
   switch (id) {
+    case 'web': if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
     case 'events': openEvents(); break
     case 'ask': openQuery(); break
     case 'network': case 'people': case 'map': chooseView(id); break
@@ -1045,8 +1060,9 @@ function barOpen(id: BarId): void {
 /** Wave 31: one bottom-bar button. The primary view is the raised round one; a long press or right click takes a view out (with Undo). */
 function barButton(id: BarId, primary: boolean): HTMLElement {
   if (id === 'record' && primary) return recordButton()
-  const name = S.barNames[id] ?? S.navRecord
-  const b = tabButton(id, S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : TAB_ICON[id], () => barOpen(id))
+  const view = viewOfBar(id)
+  const name = id === 'web' && state ? webTabLabel(state, S.viewNames) : barName(id) // wave 35: the Web tab carries the pinned default view's name
+  const b = tabButton(id, id === 'web' ? name : view ? barName(id) : S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : view ? viewGlyph[view] ?? 'web' : TAB_ICON[id], () => barOpen(id))
   b.setAttribute('aria-label', name)
   if (id === 'ask') b.querySelector('svg')!.outerHTML = askWebIcon(askIconVariant)
   if (primary) b.classList.add('tab-primary')
@@ -1056,7 +1072,7 @@ function barButton(id: BarId, primary: boolean): HTMLElement {
 
 function barFlags(): BarFlags {
   // HAS_MAP_VIEW is declared further down (this runs at load), so the Map is simply on.
-  return { ...tabFlags(), people: !state || state.people.length > 0, map: true }
+  return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state) }
 }
 
 function removeFromBar(id: BarId, name: string): void {
@@ -1082,7 +1098,7 @@ function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
   const { ids, primary } = resolveBar(state?.uiBar, barFlags())
   const { shown } = barLayout(ids, primary, barMax())
-  const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barSheet }, ['⋮'])
+  const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), more)
   tabs.classList.toggle('four', shown.length > 3)
   tabs.classList.toggle('many', shown.length > 5)
@@ -1091,7 +1107,30 @@ function renderTabs(): void {
 }
 renderTabs()
 
-/** The ⋮ sheet: a checkbox per view, order arrows, "highlight one"; views the phone bar has no room for are marked and open from here. */
+/** Wave 35: ⋮ lists the views that are not in the bar as direct buttons; with none to list it opens the sheet at once. */
+function barMoreTap(): void {
+  const s = st()
+  const { ids, primary } = resolveBar(s.uiBar, barFlags())
+  const rest = [...barLayout(ids, primary, barMax()).overflow, ...overflowChoices(ids, s.uiBar?.hidden ?? [], barFlags())]
+  if (!rest.length) { barSheet(); return }
+  openSheet([
+    el('h3', {}, [S.barMoreViews]),
+    ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view', 'data-bar-view': id, onclick: () => { closeSheet(); barOpen(id) } }, [barName(id)])),
+    el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
+  ])
+}
+
+/** Wave 35: "Default view: <name>" under the Web row of the bottom-row sheet; the select changes the view the Web tab opens. */
+function webDefaultLine(s: AppState, changed: () => void): HTMLElement {
+  const now = webDefaultOf(s)
+  const select = el('select', {
+    class: 'web-default-select', 'data-web-default': '', 'aria-label': S.webDefaultLabel,
+    onchange: (e: Event) => { const v = setWebDefault(s.uiViews, (e.target as HTMLSelectElement).value); if (v) s.uiViews = v; else delete s.uiViews; changed() },
+  }, viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: undefined }).map((i) => el('option', { value: i.view, ...(i.view === now ? { selected: '' } : {}) }, [S.viewNames[i.view]])))
+  return el('div', { class: 'web-default-line' }, [el('span', { class: 'meta' }, [S.webDefaultLabel + ':']), select])
+}
+
+/** The ⋮ sheet: the bubble at the left of each view turns it on or off per view, order arrows, "highlight one"; views the phone bar has no room for are marked and open from here. */
 function barSheet(): void {
   const s = st()
   const flags = barFlags()
@@ -1100,16 +1139,16 @@ function barSheet(): void {
   const { overflow } = barLayout(ids, primary, barMax())
   // "Add" turns into a place picker: left or right of each button now in the bar. Feed is switched on first when it was off.
   const addPicker = (id: BarId): HTMLElement => el('select', {
-    class: 'bar-add-pos', 'data-bar-add-pos': id, 'aria-label': S.barAddPick(S.barNames[id]),
+    class: 'bar-add-pos', 'data-bar-add-pos': id, 'aria-label': S.barAddPick(barName(id)),
     onchange: (e: Event) => {
       const [side, ref] = (e.target as HTMLSelectElement).value.split(':') as ['left' | 'right', string]
       const f = id === 'feed' ? { ...flags, feed: true } : flags
       if (id === 'feed' && !flags.feed) s.feed = { ...s.feed, on: true }
       redraw(addBar(s.uiBar, id, ref, side, f))
     },
-  }, [el('option', { value: '' }, [S.barAddPlace]), ...ids.flatMap((ref) => (['left', 'right'] as const).map((side) => el('option', { value: `${side}:${ref}` }, [(side === 'left' ? S.barLeftOf : S.barRightOf)(S.barNames[ref] ?? S.navRecord)])))])
+  }, [el('option', { value: '' }, [S.barAddPlace]), ...ids.flatMap((ref) => (['left', 'right'] as const).map((side) => el('option', { value: `${side}:${ref}` }, [(side === 'left' ? S.barLeftOf : S.barRightOf)(barName(ref))])))])
   const arrow = (id: BarId, dir: -1 | 1): HTMLElement => el('button', {
-    class: 'btn btn-ghost btn-sm', 'data-bar-move': `${id}:${dir}`, 'aria-label': dir < 0 ? S.barUp(S.barNames[id]) : S.barDown(S.barNames[id]),
+    class: 'btn btn-ghost btn-sm', 'data-bar-move': `${id}:${dir}`, 'aria-label': dir < 0 ? S.barUp(barName(id)) : S.barDown(barName(id)),
     onclick: () => redraw(moveBar(s.uiBar, id, dir, flags)),
   }, [dir < 0 ? '←' : '→'])
   openSheet([
@@ -1143,24 +1182,24 @@ function barSheet(): void {
       }, [el('span', { class: 'bar-profile-prev bar-profile-plus' }, ['+']), el('b', {}, [S.barProfileNames.custom])])
     })()]),
     // The Feed is an opt-in feature: it is always offered here, and ticking it switches the feature on.
-    ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).map(({ id, on }) => el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
-      el('label', { class: 'radio', 'data-bar-opt': id }, [
-        el('input', { type: 'checkbox', ...(on ? { checked: '' } : {}), onchange: () => {
+    ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).flatMap(({ id, on }) => [el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
+      el('label', { class: 'radio bar-bubble' + (on ? ' on' : ''), 'data-bar-opt': id }, [
+        el('input', { type: 'checkbox', class: 'bar-hide-input', 'aria-label': barName(id), ...(on ? { checked: '' } : {}), onchange: () => {
           if (id === 'feed' && !flags.feed) { s.feed = { ...s.feed, on: true }; redraw(resolveBar(s.uiBar, { ...flags, feed: true }).ids.includes('feed') ? s.uiBar : toggleBar(s.uiBar, id, { ...flags, feed: true })); return }
           redraw(toggleBar(s.uiBar, id, flags))
         } }),
-        el('b', {}, [S.barNames[id]]),
+        el('b', {}, [barName(id)]),
       ]),
       on ? el('span', { class: 'bar-opt-acts' }, [arrow(id, -1), arrow(id, 1)]) : el('button', { class: 'linkbtn', 'data-bar-add': id, onclick: (e: Event) => (e.currentTarget as HTMLElement).replaceWith(addPicker(id)) }, [S.barAdd]),
       overflow.includes(id) ? el('button', { class: 'linkbtn', 'data-bar-open': id, onclick: () => { closeSheet(); barOpen(id) } }, [S.barOpen]) : null,
-    ])),
+    ]), ...(id === 'web' ? [webDefaultLine(s, () => { save(); renderTabs(); render(); barSheet() })] : [])]),
     el('h4', { class: 'eyebrow' }, [S.barHighlight]),
     el('p', { class: 'meta' }, [S.barHighlightHint]),
-    ...ids.map((id) => el('label', { class: 'radio', 'data-bar-primary': id }, [
-      el('input', { type: 'radio', name: 'bar-primary', ...(id === primary ? { checked: '' } : {}), 'aria-label': S.barHighlightPick(S.barNames[id] ?? S.navRecord), onchange: () => redraw(setPrimary(s.uiBar, id, flags)) }),
-      el('b', {}, [S.barNames[id] ?? S.navRecord]),
+    ...(['none', ...ids] as (BarId | 'none')[]).map((id) => el('label', { class: 'radio bar-bubble' + ((id === 'none' ? primary === null : id === primary) ? ' on' : ''), 'data-bar-primary': id }, [
+      el('input', { type: 'radio', class: 'bar-hide-input', name: 'bar-primary', ...((id === 'none' ? primary === null : id === primary) ? { checked: '' } : {}), 'aria-label': S.barHighlightPick(id === 'none' ? S.barHighlightNone : barName(id)), onchange: () => redraw(setPrimary(s.uiBar, id, flags)) }),
+      el('b', {}, [id === 'none' ? S.barHighlightNone : barName(id)]),
     ])),
-    overflow.length ? el('p', { class: 'meta' }, [S.barOverflow + ': ' + overflow.map((id) => S.barNames[id]).join(', ')]) : null,
+    overflow.length ? el('p', { class: 'meta' }, [S.barOverflow + ': ' + overflow.map((id) => barName(id)).join(', ')]) : null,
   ])
 }
 
@@ -2547,7 +2586,6 @@ let invQuery = ''
 /** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
 let invOnly: { label: string; ids: Set<string> } | null = null
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
 /** The web-view-row: the heading of the chosen view or the search field (the magnifier sits in the header, wave 28; expand all sits in the TrustZones sidebar, wave 28b). */
 function webViewRow(view: WebView): HTMLElement {
@@ -2582,6 +2620,31 @@ function viewControls(current: ViewKey): Node {
   return frag
 }
 
+/** Wave 35: the view whose ⋮ menu is open in the eye's dropdown. */
+let viewMoreOpen: string | null = null
+
+/** Wave 35: a view's row in the eye menu with its ⋮ button; the menu pins it as the default view of Web and, in advanced mode, also puts it in the bottom row. */
+function viewRowMore(view: ViewKey, row: HTMLElement): HTMLElement {
+  const s = st()
+  const open = viewMoreOpen === view
+  const more = el('button', { class: 'view-more-btn', 'data-view-more': view, 'aria-haspopup': 'menu', 'aria-expanded': String(open), 'aria-label': S.viewMoreAria(S.viewNames[view]), onclick: () => { viewMoreOpen = open ? null : view; render() } }, ['⋮'])
+  const pinned = webDefaultOf(s) === view
+  const menu = open ? el('div', { class: 'view-more-menu', role: 'menu' }, [
+    el('button', { class: 'linkbtn', role: 'menuitem', 'data-view-pin': view, ...(pinned ? { disabled: '' } : {}), onclick: () => {
+      const v = setWebDefault(s.uiViews, view)
+      if (v) s.uiViews = v; else delete s.uiViews
+      viewMoreOpen = null; eyeOpen = false; save(); renderTabs(); render()
+    } }, [pinned ? S.viewPinned : S.viewPinDefault]),
+    isAdvanced(s) && view !== 'rings' ? el('label', { class: 'view-in-bar', 'data-view-in-bar': view }, [
+      el('input', { type: 'checkbox', ...(resolveBar(s.uiBar, barFlags()).ids.includes(`view:${view}` as BarId) ? { checked: '' } : {}), onchange: (e: Event) => {
+        s.uiBar = showViewInBar(s.uiBar, view, (e.target as HTMLInputElement).checked); save(); renderTabs(); render()
+      } }),
+      el('b', {}, [S.viewInBar]),
+    ]) : null,
+  ]) : null
+  return el('div', { class: 'view-opt-wrap' }, [el('div', { class: 'view-opt-line' }, [row, more]), menu])
+}
+
 /** The eye's dropdown under the header: Web, Network, People, Map; then "Other views": Dex, Contacts compact. */
 function viewDrop(current: ViewKey): HTMLElement | null {
   if (!eyeOpen) return null
@@ -2590,7 +2653,7 @@ function viewDrop(current: ViewKey): HTMLElement | null {
     const b = el('button', { class: 'view-opt' + (i.on ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(i.on), 'data-view': i.view, onclick: () => chooseView(i.view) })
     b.innerHTML = icon(viewGlyph[i.view])
     b.append(el('b', {}, [S.viewNames[i.view]]))
-    return b
+    return viewRowMore(i.view, b)
   }
   const other = items.filter((i) => i.group === 'other')
   const alt = items.filter((i) => i.group === 'alt')
@@ -2805,7 +2868,7 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse() })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -6520,6 +6583,13 @@ function settingsSheet(): void {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),
       onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
+    el('div', { class: 'radio', 'data-theme-setting': '' }, [
+      el('b', {}, [S.themeLabel]),
+      ...([['system', S.themeSystem], ['light', S.themeLight], ['dark', S.themeDark]] as const).map(([v, label]) => el('button', {
+        class: 'btn btn-ghost btn-sm' + (readTheme(localStorage) === v ? ' on' : ''), 'aria-pressed': String(readTheme(localStorage) === v), 'data-theme-choice': v,
+        onclick: () => { applyTheme(v as Theme, document.documentElement, localStorage); settingsSheet() },
+      }, [label])),
+    ]),
     el('button', {
       class: 'radio' + (s.showRingNames ? ' on' : ''),
       'aria-pressed': String(s.showRingNames === true),

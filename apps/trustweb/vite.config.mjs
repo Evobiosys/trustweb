@@ -410,6 +410,7 @@ export default ({ command }) => ({
         main: path.resolve(here, 'index.html'),
         solo: path.resolve(here, 'solo.html'),
         organizer: path.resolve(here, 'organizer.html'),
+        styleguide: path.resolve(here, 'styleguide.html'),
         // Three demo-context entries, one build, context chosen by path
         // (solo.ts detectContext() reads location.pathname at runtime; all
         // three load the same compiled src/solo.ts, deduped by Rollup).
