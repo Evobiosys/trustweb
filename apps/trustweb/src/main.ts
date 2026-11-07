@@ -242,6 +242,7 @@ import { addResourceIn, renameResource } from './resource_edit'
 import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
 import { communityOf, isArchived, zoneFor } from './trustzones'
 import { archivedPeopleView } from './archived_people_view'
+import { purgeDue, recentlyDeleted } from './deleted_people'
 import { zoneSidebar } from './trustzones_view'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
@@ -2868,7 +2869,7 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse() })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -3448,6 +3449,15 @@ function archiveRow(p: Person): HTMLElement {
   )
   draw()
   return row
+}
+
+/** Wave 36: people deleted more than 30 days ago go for good (deleted_people.ts); the Recently deleted list was their only way back. */
+function purgeDeleted(): void {
+  if (!state) return
+  const due = new Set(purgeDue(state, Date.now()))
+  if (!due.size) return
+  state.people = state.people.filter((x) => !due.has(x.id))
+  save()
 }
 
 function deletePerson(personId: string): void {
@@ -7425,6 +7435,8 @@ if (state && !state.testOf?.handedOverAt) {
   cal?.start?.()
   checkEngagement()
   setInterval(checkEngagement, 15 * 60_000)
+  purgeDeleted()
+  setInterval(purgeDeleted, 24 * 3600_000)
   setTimeout(() => void offerApkUpdate(), 4000)
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)

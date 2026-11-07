@@ -40,6 +40,7 @@ import type { CodeMerge } from './sync_code'
 import type { ConnectRecord } from './connect_code'
 import { pinnedFrom } from './membranes_five'
 import { SCHEMA_VERSION } from './schema_version'
+import { alive } from './deleted_people'
 
 /** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const SYNC_VERSION = 3
@@ -169,7 +170,7 @@ type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 't
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
     ...Object.entries(settings).map(([k, x]): [string, unknown] => [SETTING_PREFIX + k, x]),
-    ...s.people.map((x): [string, unknown] => [KEY_PREFIX.person + x.id, withoutPersonImage(x)]),
+    ...alive(s.people).map((x): [string, unknown] => [KEY_PREFIX.person + x.id, withoutPersonImage(x)]),
     ...s.inventory.map((x): [string, unknown] => [KEY_PREFIX.resource + x.id, withoutImage(x)]),
     ...(s.meetings ?? []).map((x): [string, unknown] => [KEY_PREFIX.meeting + x.id, x]),
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
@@ -198,7 +199,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
   return {
     v: SYNC_VERSION,
     schemaVersion: SCHEMA_VERSION,
-    people: s.people.map(withoutPersonImage),
+    people: alive(s.people).map(withoutPersonImage),
     inventory: s.inventory.map(withoutImage),
     meetings: s.meetings ?? [],
     at: Object.fromEntries(entries.map(([k, x]) => [k, x.at])),

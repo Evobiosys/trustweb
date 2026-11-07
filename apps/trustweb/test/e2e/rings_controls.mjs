@@ -99,9 +99,9 @@ try {
     pid = await grab()
     await toBin('remove')
     await page.mouse.up(); await page.waitForTimeout(400)
-    check(`${name}: drop on remove asks, nothing deleted`, (await page.locator(`[data-delete-yes="${pid}"]`).count()) === 1 && (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 1)
-    await page.locator('[data-delete-no]').click(); await page.waitForTimeout(400)
-    check(`${name}: No keeps the dot`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 1)
+    check(`${name}: drop on remove deletes at once, no question, Undo offered`, (await page.locator('[data-delete-yes]').count()) === 0 && (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 0 && (await page.locator('[data-undo-delete]').count()) === 1)
+    await page.locator('[data-undo-delete]').click(); await page.waitForTimeout(400)
+    check(`${name}: Undo keeps the dot`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 1)
     await page.locator('.rings-wrap .node.you').dispatchEvent('contextmenu'); await page.waitForTimeout(300)
     check(`${name}: sheet (context press on you) lists 3 hidden`, (await page.locator('[data-expanse-restore-one]').count()) === 3 && (await page.locator('[data-expanse-count="3"]').count()) === 1)
     // Wave 35 rings-filters-2: 300 acquaintances -> 5 dots; toggle; hidden row.

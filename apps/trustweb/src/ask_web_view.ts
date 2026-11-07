@@ -9,6 +9,7 @@ import { ENGINES, engineById, engineUrl, isAdvanced, type OnlineEngine } from '.
 import { askEndpointText, configured } from './llm_endpoint'
 import type { AppState } from './model'
 import { S } from './strings'
+import { alive } from './deleted_people'
 
 export interface AskWebHooks { state: () => AppState; save: () => void }
 
@@ -105,7 +106,7 @@ export function askWebSettings(h: AskWebHooks): HTMLElement[] {
         tags.addEventListener('change', () => { set.tags = tags.value.split(',').map((t) => t.trim()).filter(Boolean); h.save() })
         return el('div', { class: 'ask-set', 'data-ask-set': set.id }, [
           name, tags,
-          el('div', { class: 'chips' }, s.people.map((p) => el('button', {
+          el('div', { class: 'chips' }, alive(s.people).map((p) => el('button', {
             class: 'chip' + (set.personIds.includes(p.id) ? ' on' : ''), type: 'button', 'aria-pressed': String(set.personIds.includes(p.id)),
             onclick: () => { set.personIds = set.personIds.includes(p.id) ? set.personIds.filter((x) => x !== p.id) : [...set.personIds, p.id]; h.save(); draw() },
           }, [p.name]))),

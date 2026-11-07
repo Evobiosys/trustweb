@@ -1428,3 +1428,7 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .web-default-select{font:inherit; text-decoration:underline; background:none; color:inherit; border:0; max-width:100%}
 .view-in-bar{display:flex; align-items:center; gap:8px; cursor:pointer}
 .view-in-bar b{font-weight:600; text-decoration:underline}
+
+/* wave 36 delete-reversible */
+.node.multi-sel{outline:3px solid var(--electric,#12a8e3); outline-offset:2px; border-radius:50%}
+.multi-count{display:inline-block; margin-left:6px; padding:0 8px; border-radius:999px; background:var(--electric,#12a8e3); color:#fff; font-size:11px; line-height:18px}

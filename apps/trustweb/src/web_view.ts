@@ -30,6 +30,8 @@ import { dueMoves, releaseTies } from './engagement'
 import { ringCard } from './membranes_five_view'
 import { archivePerson, restorePerson } from './archived_people'
 import { binAt, binDrop } from './drag_bins'
+import { daysLeft, deletePersonSoft, putBack, recentlyDeleted } from './deleted_people'
+import { applyAll, clearSelection, toggle as toggleSel } from './multi_select'
 import type { BinKind } from './drag_bins'
 import { GRACE_MS, HOVER_IDLE, hoverStep } from './ring_hover'
 import type { HoverEvent } from './ring_hover'
@@ -126,7 +128,7 @@ export interface WebViewDeps {
   openSheet(children: (Node | null)[]): void
   closeSheet(): void
   solo: boolean
-  /** Delete for good (main.ts deletePerson); the Remove bin asks first. */
+  /** Delete for good (main.ts deletePerson); since wave 36 only the 30-day purge uses it. */
   removePerson(personId: string): void
 }
 
@@ -143,10 +145,12 @@ export interface WebView {
   spaceOutWeb(ring?: Ring): void
   /** Wave 35: the sheet of the hidden people (the same one a long press on you opens). */
   openExpanse(): void
+  /** Wave 36: the sheet of the deleted people (Put back, days left). */
+  openDeleted(): void
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
-  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo, removePerson } = deps
+  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo } = deps
   /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
   let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
   let ringsK = 1
@@ -320,6 +324,24 @@ export function createWebView(deps: WebViewDeps): WebView {
     let hover = HOVER_IDLE
     let graceTimer: ReturnType<typeof setTimeout> | undefined
     let renamed = false
+    // Wave 36: while a name is being edited in the card (✓ ✕ archive), a tap on other dots selects them too; ✕ then deletes and archive archives all selected, once.
+    let picked = clearSelection()
+    const editing = (): boolean => wrap.querySelector('[data-ring-card-input]') !== null
+    const markPicked = (): void => {
+      wrap.querySelectorAll<HTMLElement>('.node:not(.you)').forEach((n) => n.classList.toggle('multi-sel', picked.has(n.dataset.pid ?? '')))
+      const card = wrap.querySelector('[data-ring-card]')
+      card?.querySelector('[data-multi-count]')?.remove()
+      if (card && picked.size > 1) card.querySelector('b')?.after(el('span', { class: 'multi-count', 'data-multi-count': String(picked.size) }, [S.multiCount(picked.size)]))
+    }
+    const bulk = (kind: 'delete' | 'archive'): boolean => {
+      if (picked.size < 2) return false
+      const ids = picked
+      const group = st().people.filter((x) => ids.has(x.id))
+      hideAll()
+      if (kind === 'delete') removeNow(group)
+      else { applyAll(group, ids, archivePerson); save(); render(); archivedUndo(group) }
+      return true
+    }
     // The grey "Tap empty space…" hint (native title, touch "i") stays away while a card is open.
     const hintTitle = wrap.title
     const cardShown = (on: boolean): void => { wrap.classList.toggle('card-open', on); wrap.title = on ? '' : hintTitle }
@@ -328,6 +350,8 @@ export function createWebView(deps: WebViewDeps): WebView {
       wrap.querySelector('[data-ring-card]')?.remove()
       cardShown(false)
       document.removeEventListener('keydown', onEsc)
+      picked = clearSelection()
+      wrap.querySelectorAll('.multi-sel').forEach((n) => n.classList.remove('multi-sel'))
       if (renamed) { renamed = false; render() }
     }
     const onEsc = (e: KeyboardEvent): void => { if (e.key === 'Escape') hideAll() }
@@ -337,7 +361,9 @@ export function createWebView(deps: WebViewDeps): WebView {
       const box = ringCard(S.ringLabel[r], everyone[r] ?? [], {
         onOpen: (id) => { hideAll(); openWebPage({ kind: 'card', id }) },
         onRename: (p, next) => { p.name = next; renamed = true; save() },
-        onArchive: (p) => { archivePerson(p); save(); hideAll(); render(); toast(S.archivedInSettings) },
+        onArchive: (p) => { if (!bulk('archive')) { archivePerson(p); save(); hideAll(); render(); toast(S.archivedInSettings) } },
+        onDelete: () => bulk('delete'),
+        onEdit: (p) => { picked = p ? toggleSel(clearSelection(), p.id) : clearSelection(); markPicked() },
       })
       box.style.left = Math.min(at.x + 12, RINGS_SIZE - 90) + 'px'
       box.style.top = Math.min(at.y + 12, RINGS_SIZE - 40) + 'px'
@@ -351,7 +377,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       const before = hover.open
       hover = hoverStep(hover, ev)
       clearTimeout(graceTimer)
-      if (hover.grace) graceTimer = setTimeout(() => { hover = hoverStep(hover, { type: 'grace-end' }); if (!hover.open) hideAll() }, GRACE_MS)
+      if (hover.grace) graceTimer = setTimeout(() => { hover = hoverStep(hover, { type: 'grace-end' }); if (!hover.open && !editing()) hideAll() }, GRACE_MS)
       if (hover.open && e && (ev.type === 'enter-handle' || ev.type === 'enter-ring') && (before !== hover.open || !wrap.querySelector('[data-ring-card]'))) showAll(hover.open, e)
     }
     const mouse = (e: Event): boolean => (e as PointerEvent).pointerType === 'mouse'
@@ -382,7 +408,20 @@ export function createWebView(deps: WebViewDeps): WebView {
         wrap.appendChild(more)
       }
     }
-    wrap.addEventListener('pointerdown', hideAll)
+    // A name being edited keeps the card open: a tap on another dot selects it, a tap on empty space clears the selection first.
+    wrap.addEventListener('pointerdown', (e) => {
+      if (!editing()) { hideAll(); return }
+      const hit = (e.target as HTMLElement).closest<HTMLElement>('.node:not(.you)')
+      if (hit) return
+      if (picked.size > 1) { picked = toggleSel(clearSelection(), [...picked][0]); markPicked() } else hideAll()
+    })
+    wrap.addEventListener('click', (e) => {
+      const hit = editing() ? (e.target as HTMLElement).closest<HTMLElement>('.node:not(.you)') : null
+      if (!hit || !hit.dataset.pid) return
+      e.stopPropagation(); e.preventDefault()
+      picked = toggleSel(picked, hit.dataset.pid)
+      markPicked()
+    }, true)
     // Wave 28b: the floating "+" moved into the TrustZones sidebar (zoneColumn), next to expand all.
     return wrap
   }
@@ -638,7 +677,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         setTimeout(() => setDragged(false), 0)
         if (!was) return
         if (bin !== null) {
-          if (binDrop(bin, p).do === 'archive') { archivePerson(p); save(); render(); archivedUndo(p) } else { render(); askRemove(p) }
+          if (binDrop(bin, p).do === 'archive') { archivePerson(p); save(); render(); archivedUndo([p]) } else removeNow([p])
           done()
           return
         }
@@ -660,21 +699,35 @@ export function createWebView(deps: WebViewDeps): WebView {
     })
   }
 
-  /** Dropped on the archive box: the toast says where they went; Undo for 30 s puts them back on the ring they had. */
-  function archivedUndo(p: Person): void {
+  /** Dropped on the archive box (or archive with several selected): the toast says where they went; Undo for 30 s puts them back on the ring they had. */
+  function archivedUndo(ps: readonly Person[]): void {
     showNotice(S.archivedToast, '', [
-      el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-archive': p.id, onclick: () => { hideNotice(); restorePerson(p); save(); render() } }, [S.ringsHiddenUndo]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-archive': ps.map((p) => p.id).join(','), onclick: () => { hideNotice(); for (const p of ps) restorePerson(p); save(); render() } }, [S.ringsHiddenUndo]),
     ], 30000)
   }
 
-  /** Dropped on the dustbin: nothing is deleted before Yes; No leaves the dot where it was. */
-  function askRemove(p: Person): void {
-    showNotice(displayName(p.name).text, S.personDeleteAsk, [
-      el('span', {}, [
-        el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-yes': p.id, onclick: () => { hideNotice(); removePerson(p.id) } }, [S.personDeleteYes]),
-        el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-no': '', onclick: hideNotice }, [S.personDeleteNo]),
-      ]),
+  /** Dropped on the dustbin or ✕ with a selection: deleted at once (a tombstone, deleted_people.ts); Undo for 30 s, and Settings keeps them 30 days. Nobody else moves. */
+  function removeNow(ps: readonly Person[]): void {
+    for (const p of ps) deletePersonSoft(p, Date.now())
+    save(); render()
+    showNotice(ps.length === 1 ? S.deletedToast(displayName(ps[0].name).text) : S.deletedToastMany(ps.length), '', [
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-delete': ps.map((p) => p.id).join(','), onclick: () => { hideNotice(); for (const p of ps) putBack(p); save(); render() } }, [S.undo]),
     ], 30000)
+  }
+
+  /** "Recently deleted": the deleted people of the last 30 days, each with Put back and the days left. */
+  function deletedSheet(): void {
+    const now = Date.now()
+    const people = recentlyDeleted(st().people, now)
+    const back = (p: Person): void => { putBack(p); save(); render(); deletedSheet() }
+    openSheet([
+      el('h3', {}, [S.recentlyDeletedTitle]),
+      el('p', { class: 'meta' }, [S.recentlyDeletedHint]),
+      ...people.map((p) => el('div', { class: 'expanse-row', 'data-deleted-row': p.id }, [
+        el('span', {}, [displayName(p.name).text, ' ', el('small', { class: 'meta' }, [S.daysLeft(daysLeft(p, now))])]),
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-put-back': p.id, onclick: () => back(p) }, [S.putBack]),
+      ])),
+    ])
   }
 
   /** The bubble "Merge A into B?"; Merge opens the Same person sheet, which asks again before anything merges. */
@@ -829,5 +882,6 @@ export function createWebView(deps: WebViewDeps): WebView {
     ringToTana,
     spaceOutWeb,
     openExpanse: expanseSheet,
+    openDeleted: deletedSheet,
   }
 }

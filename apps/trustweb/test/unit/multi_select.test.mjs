@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { toggle, selectGroup, clearSelection, snapshot, restoreSnapshot, BULK_RINGS } from '../../src/multi_select.ts'
+import { toggle, selectGroup, clearSelection, snapshot, restoreSnapshot, applyAll, BULK_RINGS } from '../../src/multi_select.ts'
 
 describe('selection model (multi_select.ts)', () => {
   it('toggle adds and removes one id without touching the old set', () => {
@@ -35,4 +35,16 @@ describe('bulk undo (multi_select.ts)', () => {
 
 describe('rings offered by Move to ring', () => {
   it('the five rings and Not yet sorted', () => expect(BULK_RINGS).toEqual(['closest', 'close', 'friend', 'acquaintance', 'intending', 'unsorted']))
+})
+
+describe('applyAll (wave 36: the held dot plus the tapped ones)', () => {
+  const people = ['a', 'b', 'c', 'd'].map((id) => ({ id }))
+  it('runs on the selected people in list order, not tap order', () => {
+    const seen = []
+    const ids = applyAll(people, toggle(toggle(clearSelection(), 'c'), 'a'), (p) => seen.push(p.id))
+    expect(seen).toEqual(['a', 'c'])
+    expect(ids).toEqual(['a', 'c'])
+  })
+  it('an empty selection touches nobody', () => expect(applyAll(people, clearSelection(), () => { throw new Error('no') })).toEqual([]))
+  it('toggle twice clears one dot again', () => expect(toggle(toggle(clearSelection(), 'a'), 'a').size).toBe(0))
 })

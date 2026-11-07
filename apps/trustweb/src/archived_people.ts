@@ -3,6 +3,7 @@
 import { Ring } from './model'
 import type { Person } from './model'
 import { isArchived } from './trustzones'
+import { isDeleted } from './deleted_people'
 
 export function archivePerson(p: Pick<Person, 'ring' | 'prevRing'>): void {
   if (isArchived(p)) return
@@ -16,4 +17,5 @@ export function restorePerson(p: Pick<Person, 'ring' | 'prevRing'>): void {
   delete p.prevRing
 }
 
-export const archivedPeople = <P extends Pick<Person, 'ring'>>(people: readonly P[]): P[] => people.filter(isArchived)
+/** Archived, not deleted: a deleted person waits in Recently deleted (deleted_people.ts), not here. */
+export const archivedPeople = <P extends Pick<Person, 'ring' | 'deleted_at'>>(people: readonly P[]): P[] => people.filter((p) => isArchived(p) && !isDeleted(p))
