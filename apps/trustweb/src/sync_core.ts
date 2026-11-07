@@ -57,7 +57,7 @@ export const REVIEW_MAX = 50
  */
 export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // carried by their own bundle parts, or the record's identity
-  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview',
+  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview', 'channelReaders',
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone

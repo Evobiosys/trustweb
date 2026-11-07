@@ -4,6 +4,7 @@
  * SDK. The key goes to the configured endpoint and nowhere else; it is never logged.
  */
 import type { AiEndpoint } from './model'
+import { type OwnChannel, scrubFor } from './channel_readers'
 import { TOGETHER_DRAFT_SHAPE } from './together_request'
 
 export const AI_TIMEOUT_MS = 30_000
@@ -21,7 +22,7 @@ export type FetchLike = (url: string, init: { method: string; headers: Record<st
 /** Drafting is on only with a base URL and a model. */
 export const configured = (ai: AiEndpoint | undefined): ai is AiEndpoint => Boolean(ai?.baseUrl.trim() && ai.model.trim())
 
-export function buildRequest(ai: AiEndpoint, text: string, system: string = TOGETHER_DRAFT_SHAPE, maxTokens = 300): { url: string; init: { method: string; headers: Record<string, string>; body: string } } {
+export function buildRequest(ai: AiEndpoint, text: string, system: string = TOGETHER_DRAFT_SHAPE, maxTokens = 300, own: readonly OwnChannel[] = []): { url: string; init: { method: string; headers: Record<string, string>; body: string } } {
   return {
     url: `${ai.baseUrl.trim().replace(/\/+$/, '')}/chat/completions`,
     init: {
@@ -29,7 +30,7 @@ export function buildRequest(ai: AiEndpoint, text: string, system: string = TOGE
       headers: { 'Content-Type': 'application/json', ...(ai.apiKey ? { Authorization: `Bearer ${ai.apiKey}` } : {}) },
       body: JSON.stringify({
         model: ai.model, temperature: 0, stream: false, max_tokens: maxTokens,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: text }],
+        messages: [{ role: 'system', content: system }, { role: 'user', content: scrubFor(text, own, ai.preset) }],
       }),
     },
   }
@@ -43,8 +44,8 @@ export function parseReply(body: unknown): unknown {
 }
 
 /** One call; throws with the endpoint's own message on an error, a timeout or a reply that is not JSON. */
-export async function askEndpoint(ai: AiEndpoint, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS): Promise<unknown> {
-  const { url, init } = buildRequest(ai, text)
+export async function askEndpoint(ai: AiEndpoint, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS, own: readonly OwnChannel[] = []): Promise<unknown> {
+  const { url, init } = buildRequest(ai, text, undefined, undefined, own)
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   try {
@@ -58,8 +59,8 @@ export async function askEndpoint(ai: AiEndpoint, text: string, fetchFn: FetchLi
 }
 
 /** One plain-text answer (the Ask your web summary); throws with the endpoint's own message on an error or a timeout. */
-export async function askEndpointText(ai: AiEndpoint, system: string, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS): Promise<string> {
-  const { url, init } = buildRequest(ai, text, system, 400)
+export async function askEndpointText(ai: AiEndpoint, system: string, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS, own: readonly OwnChannel[] = []): Promise<string> {
+  const { url, init } = buildRequest(ai, text, system, 400, own)
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   try {

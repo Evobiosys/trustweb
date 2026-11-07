@@ -797,6 +797,8 @@ export interface Me {
   displayName: string
   /** Wave 33: the owner's own mail address; local only, never in the connect link. */
   primaryEmail?: { provider: string; address: string }
+  /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
+  otherEmails?: string[]
 }
 
 /**
@@ -1102,6 +1104,8 @@ export interface AppState {
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
   myChannels?: Partial<Record<Channel, string>>
+  /** Wave 36b (channel_readers.ts): who may read each own channel, keyed 'email:<address>' or the messenger id. Absent: humans only. This device only. */
+  channelReaders?: Record<string, { readers?: 'humans' | 'private-ai' | 'all-ai'; aiAllow?: string[]; aiDeny?: string[] }>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
   /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. Travels to the owner's own linked devices with the other settings (sync_core settingsOf). Absent: none, Chat opens the first linked service. */
