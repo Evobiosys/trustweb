@@ -19,6 +19,7 @@ import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { SharedNote } from './notes_outline'
+import type { CoDoc } from './ext/co_notes/co_doc'
 import type { ConnectRecord } from './connect_code'
 import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
@@ -343,6 +344,8 @@ export interface TwEvent {
   name: string
   from: string
   to?: string
+  /** Wave 36 (event-desires): the days everyone is there, "YYYY-MM-DD" both ends, inside from..to. Travels in the event link. */
+  core?: { from: string; to: string }
   where: string
   /** What was shared with participants: arriving, on what conditions. */
   conditions?: string
@@ -394,6 +397,10 @@ export interface Person {
   peerId?: string
   /** Wave 30: the ring before the person was archived (Ring.None); Restore puts them back. Local only. */
   prevRing?: Ring
+  /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
+  deleted_at?: string
+  /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
+  cadenceDays?: number
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
@@ -793,6 +800,8 @@ export interface Me {
   displayName: string
   /** Wave 33: the owner's own mail address; local only, never in the connect link. */
   primaryEmail?: { provider: string; address: string }
+  /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
+  otherEmails?: string[]
 }
 
 /**
@@ -983,6 +992,21 @@ export interface SignalConv { e164: string; name: string; n365: number; out: num
 /** Wave 27 (signal-link): what the Signal / Molly import left on this device, read-only. Absent: not imported. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
 export interface SignalImport { at: number; conversations: SignalConv[]; /** personId -> the ring before a Change in the placing step (Accept never moves a ring). */ prevRing?: Record<string, Ring> }
 
+/** Wave 36 (group_fit.ts): a group I could join or help. Local only, never sent (I1); `members` are ids of people I know in it. */
+export interface TwGroup {
+  id: string
+  name: string
+  about?: string
+  link?: string
+  tags: string[]
+  members: string[]
+  /** My estimate of the group's resources: none, some, good, strong. */
+  resources?: 0 | 1 | 2 | 3
+  status?: 'watching' | 'talking' | 'joined' | 'contributing'
+  note?: string
+  updatedAt: number
+}
+
 export interface AppState {
   v: typeof RECORD_FORMAT
   /** schema_version.ts: the build's SCHEMA_VERSION that last migrated this record. Absent: version 1. */
@@ -1037,6 +1061,8 @@ export interface AppState {
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
   engagementNoticeDay?: string
+  /** Wave 36 keep-in-touch: the local day (YYYY-MM-DD) the "Time to get in touch" notice last went out. */
+  keepNoticeDay?: string
   /** Wave 24b: when the engagement check first ran here; counts as contact for everybody (engagement.ts). Local only. */
   engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
@@ -1074,13 +1100,15 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent' }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
   myChannels?: Partial<Record<Channel, string>>
+  /** Wave 36b (channel_readers.ts): who may read each own channel, keyed 'email:<address>' or the messenger id. Absent: humans only. This device only. */
+  channelReaders?: Record<string, { readers?: 'humans' | 'private-ai' | 'all-ai'; aiAllow?: string[]; aiDeny?: string[] }>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
   /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. Travels to the owner's own linked devices with the other settings (sync_core settingsOf). Absent: none, Chat opens the first linked service. */
@@ -1091,6 +1119,8 @@ export interface AppState {
   showMessengerLinks?: false
   /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only on the owner's tap "Send my profile" on a card, to that connected peer, in a chat text. */
   profile?: MyProfile
+  /** Wave 36 (group_fit.ts): groups I could join or help. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED), never sent. Absent: none. */
+  groups?: TwGroup[]
   /** Wave 20 (profile.ts autoSendRank): peer id -> the widest zone reach whose profile slice already went to that peer automatically. */
   autoSentRank?: Record<string, number>
   /** Wave 20: Settings "Share my profile when we connect". Absent: on; only true (off) is stored. */
@@ -1285,12 +1315,20 @@ export interface AppState {
   features?: { events?: false; inventory?: false }
   /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
+  /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
+  agent?: AgentLink
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
   askSets?: AskSet[]
   /** Wave 31, Ask your web: your own "also search online" engine, https with {q} for the words. Absent: none (the engine chips only). */
   askEngineUrl?: string
   /** Wave 31, Ask your web: the engine id picked last (search_engines.ts). Absent: Ecosia. */
   askEngine?: string
+  /** Wave 36, Settings > Extensions: the co-created notes extension is on. Absent: off, no co-notes UI anywhere. Syncs with own devices. */
+  coNotesOn?: boolean
+  /** Wave 36 (ext/co_notes): co-created notes, merged by their own CRDT, also between own devices. Absent: none. */
+  coNotes?: CoDoc[]
+  /** Wave 36 (ext/co_notes): the last 100 sends and merges of co-created notes, one readable line each (I6). Absent: none. */
+  coNotesLog?: string[]
 }
 
 /** A named list of people (and tags) an ask can be narrowed to. */
@@ -1301,8 +1339,29 @@ export interface AskSet {
   tags: string[]
 }
 
+/** The pi agent: its loopback address and when /health last answered (ISO). */
+export interface AgentLink {
+  baseUrl: string
+  connectedAt?: string
+}
+
+/** Wave 36 ai-subscription: the TrustInTheWeb.com sign-up. The claim stays on the device (synced with the sealed record like apiKey). */
+export interface AiSubscription {
+  plan: 'ai' | 'light'
+  ref: string
+  email: string
+  claim: string
+  state: 'pending' | 'active' | 'revoked'
+  /** The token once delivered (the server hands it out once): lets the person switch to a key of their own and back. */
+  token?: string
+}
+
 export interface AiEndpoint {
-  preset: 'openai' | 'ollama' | 'pc24' | 'custom'
+  /** 'pc24' is a legacy read value only: ai_subscription.ts migrateAi turns it into custom + name 'pc24'. */
+  preset: 'tw-subscription' | 'openai' | 'claude' | 'ollama' | 'pc24' | 'custom'
+  /** Label of a custom endpoint (Jakob's: 'pc24'). */
+  name?: string
+  sub?: AiSubscription
   /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
   baseUrl: string
   /** Empty: no Authorization header. */

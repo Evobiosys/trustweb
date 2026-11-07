@@ -110,7 +110,7 @@ const FORMATS = [
   { id: 'json', label: () => S.exportJson, mime: 'application/json', file: 'my-web.json', make: toJson },
 ] as const
 
-function download(name: string, mime: string, text: string): void {
+export function download(name: string, mime: string, text: string): void {
   const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: mime })), download: name })
   document.body.append(a)
   a.click()

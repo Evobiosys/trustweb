@@ -35,7 +35,7 @@ FIXTURE = (
 
 class CaddyTransforms(unittest.TestCase):
     def test_all_transforms_apply_once_and_are_idempotent(self) -> None:
-        names = list(caddy.Transform)
+        names = [t for t in caddy.Transform if t is not caddy.Transform.SITE_TRUSTWEB_ONE]
         once = caddy.apply(FIXTURE, names)
         self.assertNotEqual(once, FIXTURE)
         self.assertEqual(caddy.apply(once, names), once)
@@ -59,7 +59,7 @@ class CaddyTransforms(unittest.TestCase):
             "\thandle_path /trustweb/* {\n\t\troot * /srv/questhub-static/app-idea2-trustweb\n\t\tfile_server\n\t}\n}\n"
         )
         fixture = FIXTURE.replace("evobiosys.org, www.evobiosys.org {", app_block + "\nevobiosys.org, www.evobiosys.org {")
-        out = caddy.apply(fixture, list(caddy.Transform))
+        out = caddy.apply(fixture, [t for t in caddy.Transform if t is not caddy.Transform.SITE_TRUSTWEB_ONE])
         start = out.index("\napp.idea2.site {\n")
         end = out.index("\n}\n", start) + 3
         self.assertEqual(out[start + 1:end], app_block)
@@ -421,6 +421,42 @@ class BackupDeployChecksEveryHost(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("FAIL Host app.trustweb.one -> /health 421", r.stderr)
         self.assertIn("trustweb_domains.sh backup-env", r.stderr)
+
+
+# The live trustweb.one block as it stood on 2026-11-07 (with /apk, /slides, the username route and the error pages).
+LIVE_ONE_BLOCK = 'trustweb.one, www.trustweb.one {\n\t# wave 11: the Android app, a short link (before the username rule, so /apk is never a name)\n\tredir /apk https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk 302\n\t# 2026-10-22: the seed pitch decks, static files (before the username rule, so /slides is never a name)\n\tredir /slides /slides/ 301\n\thandle_path /slides* {\n\t\troot * /srv/questhub-static/trustweb-one-slides\n\t\tfile_server\n\t}\n\t# --- a username: trustweb.one/<name> -> the person (wave 8 #one). Root and pages keep the redirect below. ---\n\t@user {\n\t\tpath_regexp user ^/([A-Za-z0-9][A-Za-z0-9_-]{1,39})[.,;:)!?/\\s]*$\n\t\tnot path /slides /slides/*\n\t}\n\tredir @user https://app.trustweb.one/who/{re.user.1} 302\n\t@rest not path /slides /slides/*\n\tredir @rest https://trustintheweb.org{uri} permanent\n\t# --- reach-out-link errors: an error never answers an empty body (wave 14) ---\n\thandle_errors {\n\t\theader Content-Type "text/html; charset=utf-8"\n\t\theader Cache-Control "no-store"\n\t\t@retry path_regexp retry ^/(?:who/)?([A-Za-z0-9][A-Za-z0-9_-]{1,39})[.,;:)!?/\\s]*$\n\t\thandle @retry {\n\t\t\trespond "<!doctype html><meta charset=utf-8><meta name=viewport content=\'width=device-width,initial-scale=1\'><title>TrustWeb</title><p>This link did not open. Try again: <a href=\'https://app.trustweb.one/who/{re.retry.1}\'>https://app.trustweb.one/who/{re.retry.1}</a></p><p>Or go to <a href=\'https://trustintheweb.org\'>trustintheweb.org</a>.</p>" {http.error.status_code}\n\t\t}\n\t\thandle {\n\t\t\trespond "<!doctype html><meta charset=utf-8><meta name=viewport content=\'width=device-width,initial-scale=1\'><title>TrustWeb</title><p>This link did not open. Try again: <a href=\'https://app.trustweb.one/\'>https://app.trustweb.one/</a></p><p>Or go to <a href=\'https://trustintheweb.org\'>trustintheweb.org</a>.</p>" {http.error.status_code}\n\t\t}\n\t}\n}\n'
+
+
+class SiteTrustwebOne(unittest.TestCase):
+    def live(self) -> str:
+        return "questhub.eco {\n\thandle {\n\t}\n}\n\n" + LIVE_ONE_BLOCK + "\napp.trustweb.one {\n\tfile_server\n}\n"
+
+    def test_apex_serves_the_static_site_and_keeps_apk_slides_username_and_errors(self) -> None:
+        out = caddy.apply(self.live(), [caddy.Transform.SITE_TRUSTWEB_ONE])
+        start = out.index("\ntrustweb.one {\n")
+        block = out[start : out.index("\n}\n", start) + 3]
+        self.assertNotIn("redir @rest", block)
+        self.assertNotIn("redir https://trustintheweb.org", block)
+        for kept in ("redir /apk https://github.com/", "handle_path /slides*", "redir @user https://app.trustweb.one/who/{re.user.1} 302", "handle_errors {"):
+            self.assertIn(kept, block)
+        self.assertIn("root * /srv/questhub-static/trustweb-one\n\timport tw_static_site\n", block)
+        self.assertLess(block.index("redir @user"), block.index("import tw_static_site"))
+        self.assertLess(block.index("redir /apk"), block.index("redir @user"))
+        self.assertIn("not file {", block)
+
+    def test_www_redirects_to_the_apex_and_nothing_else_changes(self) -> None:
+        live = self.live()
+        out = caddy.apply(live, [caddy.Transform.SITE_TRUSTWEB_ONE])
+        self.assertIn("\nwww.trustweb.one {\n\tredir https://trustweb.one{uri} permanent\n}\n", out)
+        self.assertNotIn("trustweb.one, www.trustweb.one", out)
+        self.assertTrue(out.startswith(live[: live.index("trustweb.one, www")]))
+        self.assertTrue(out.endswith("\napp.trustweb.one {\n\tfile_server\n}\n"))
+
+    def test_idempotent_and_refused_when_the_block_drifted(self) -> None:
+        once = caddy.apply(self.live(), [caddy.Transform.SITE_TRUSTWEB_ONE])
+        self.assertEqual(caddy.apply(once, [caddy.Transform.SITE_TRUSTWEB_ONE]), once)
+        with self.assertRaises(caddy.TransformError):
+            caddy.apply(self.live().replace("@rest", "@other"), [caddy.Transform.SITE_TRUSTWEB_ONE])
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ import type { CodeMerge } from './sync_code'
 import type { ConnectRecord } from './connect_code'
 import { pinnedFrom } from './membranes_five'
 import { SCHEMA_VERSION } from './schema_version'
+import { alive } from './deleted_people'
 
 /** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const SYNC_VERSION = 3
@@ -56,17 +57,22 @@ export const REVIEW_MAX = 50
  */
 export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // carried by their own bundle parts, or the record's identity
-  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview',
+  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview', 'channelReaders',
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
-  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'engagementSince', 'awayAsks', 'sentAsks',
+  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'engagementSince', 'awayAsks', 'sentAsks',
   'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
   'serverTranscriptionConsent', 'apkVersion', 'apkCheckedAt', 'apkUpdates', 'tabOrder', 'tabRow', 'shareMode', 'demo', 'demoHidden', 'demoOffered',
-  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports',
+  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', 'agent',
+  // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
+  'groups',
 ])
+
+/** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */
+export const SETTING_MERGERS = new Map<string, (mine: unknown, theirs: unknown) => unknown>()
 
 /** The settings of a record: every field not in SYNC_EXCLUDED. */
 export function settingsOf(s: object): Record<string, unknown> {
@@ -169,7 +175,7 @@ type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 't
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
     ...Object.entries(settings).map(([k, x]): [string, unknown] => [SETTING_PREFIX + k, x]),
-    ...s.people.map((x): [string, unknown] => [KEY_PREFIX.person + x.id, withoutPersonImage(x)]),
+    ...alive(s.people).map((x): [string, unknown] => [KEY_PREFIX.person + x.id, withoutPersonImage(x)]),
     ...s.inventory.map((x): [string, unknown] => [KEY_PREFIX.resource + x.id, withoutImage(x)]),
     ...(s.meetings ?? []).map((x): [string, unknown] => [KEY_PREFIX.meeting + x.id, x]),
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
@@ -198,7 +204,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
   return {
     v: SYNC_VERSION,
     schemaVersion: SCHEMA_VERSION,
-    people: s.people.map(withoutPersonImage),
+    people: alive(s.people).map(withoutPersonImage),
     inventory: s.inventory.map(withoutImage),
     meetings: s.meetings ?? [],
     at: Object.fromEntries(entries.map(([k, x]) => [k, x.at])),
@@ -448,6 +454,12 @@ function mergeSettings(mine: AppState, theirs: SyncBundle, c: Ctx): void {
   for (const [k, t] of Object.entries(theirs.settings ?? {})) {
     const m = has(own, k) ? own[k] : undefined
     if (m !== undefined && hashOf(m) === hashOf(t)) continue
+    const rule = SETTING_MERGERS.get(k)
+    if (rule) {
+      const joined = rule(m, t)
+      if (JSON.stringify(joined) !== JSON.stringify(m)) { own[k] = joined; if (m === undefined) c.res.added++; else c.res.updated++ }
+      continue
+    }
     if (m === undefined) c.res.added++
     else if ((theirs.at[SETTING_PREFIX + k] ?? 0) > (c.myAt[SETTING_PREFIX + k]?.at ?? 0)) c.res.updated++
     else continue

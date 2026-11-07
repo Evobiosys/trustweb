@@ -18,12 +18,14 @@ export interface EventFields {
   themes?: string[]
   organizer?: string
   hosts?: string[]
+  /** The days everyone is there; both ends or none (empty ends = none). */
+  core?: { from: string; to: string }
   /** Default true: I add or join it. */
   attended?: boolean
 }
 
 /** The first field that fails, in form order. */
-export type EventError = 'name' | 'from' | 'to'
+export type EventError = 'name' | 'from' | 'to' | 'core'
 
 const DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -50,6 +52,10 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
   if (!name) return 'name'
   if (!validDate(from)) return 'from'
   if (to && (!validDate(to) || stamp(to, true) < stamp(from, false))) return 'to'
+  const cf = f.core?.from.trim() ?? ''
+  const ct = f.core?.to.trim() ?? ''
+  const core = cf || ct ? { from: cf, to: ct } : undefined
+  if (core && !(validDate(cf) && validDate(ct) && cf <= ct && stamp(cf, false) >= stamp(from, false) && (!to || stamp(ct, true) <= stamp(to, true)))) return 'core'
   const conditions = f.conditions?.trim()
   const organizer = f.organizer?.trim()
   const hosts = f.hosts?.map((t) => t.trim()).filter(Boolean)
@@ -57,6 +63,7 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
   return {
     id, name, from, where, createdAt: now, attended: f.attended ?? true,
     ...(to ? { to } : {}),
+    ...(core ? { core } : {}),
     ...(conditions ? { conditions } : {}),
     ...(themes?.length ? { themes } : {}),
     ...(organizer ? { organizer } : {}),
@@ -194,6 +201,12 @@ export function dateLabel(v: string): string {
 /** The date span: "12 Oct 2026" or "12 Oct 2026 to 14 Oct 2026". */
 export function whenLabel(ev: Pick<TwEvent, 'from' | 'to'>): string {
   return ev.to && ev.to !== ev.from ? `${dateLabel(ev.from)} to ${dateLabel(ev.to)}` : dateLabel(ev.from)
+}
+
+/** "Core time 30 Dec – 4 Jan" (no year); empty when the event has no core time. The words sit here, not in strings.ts: strings.ts reaches model.ts, which reaches this file (import cycle). */
+export function coreLabel(ev: Pick<TwEvent, 'core'>): string {
+  const day = (v: string): string => `${Number(v.slice(8, 10))} ${MONTHS[Number(v.slice(5, 7)) - 1]}`
+  return ev.core ? `Core time ${day(ev.core.from)} – ${day(ev.core.to)}` : ''
 }
 
 /** "Name · 12 Oct 2026, Vienna" (no place: "Name · 12 Oct 2026") */

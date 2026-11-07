@@ -15,20 +15,23 @@ function setIds(rec: ZoneTagRecord, zone: string, ids: string[], now: number): v
   rec.zoneTags = { ...rec.zoneTags, [zone]: { ids, stamp: now } }
 }
 
-/** Gives the zone the tag the text names (matched by label or id, ignoring case); an unknown name defines a new tag. `tags` is the full list to save when `created`. */
-export function addZoneTag(rec: ZoneTagRecord, tags: readonly ColourTag[], zone: string, name: string, now: number): { tags: readonly ColourTag[]; created: boolean } {
+/** The tag the text names (matched by label or id, ignoring case); an unknown name defines a new one. `tags` is the full list to save when `created`. */
+export function tagNamed(tags: readonly ColourTag[], name: string): { tags: readonly ColourTag[]; tag?: ColourTag; created: boolean } {
   const n = norm(name)
   if (!n) return { tags, created: false }
-  let list = tags
-  let tag = tags.find((t) => norm(nameOf(t)) === n || norm(t.id) === n)
-  const created = !tag
-  if (!tag) {
-    const slug = n.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'tag'
-    let id = slug
-    for (let i = 2; tags.some((t) => t.id === id); i++) id = `${slug}-${i}`
-    tag = { id, colour: PALETTE[tags.length % PALETTE.length], label: name.trim() }
-    list = [...tags, tag]
-  }
+  const known = tags.find((t) => norm(nameOf(t)) === n || norm(t.id) === n)
+  if (known) return { tags, tag: known, created: false }
+  const slug = n.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'tag'
+  let id = slug
+  for (let i = 2; tags.some((t) => t.id === id); i++) id = `${slug}-${i}`
+  const tag = { id, colour: PALETTE[tags.length % PALETTE.length], label: name.trim() }
+  return { tags: [...tags, tag], tag, created: true }
+}
+
+/** Gives the zone the tag the text names; an unknown name defines a new tag. */
+export function addZoneTag(rec: ZoneTagRecord, tags: readonly ColourTag[], zone: string, name: string, now: number): { tags: readonly ColourTag[]; created: boolean } {
+  const { tags: list, tag, created } = tagNamed(tags, name)
+  if (!tag) return { tags, created: false }
   const have = zoneTagIds(rec, zone)
   if (!have.includes(tag.id)) setIds(rec, zone, [...have, tag.id], now)
   return { tags: list, created }

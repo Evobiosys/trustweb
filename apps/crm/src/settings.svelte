@@ -49,8 +49,6 @@
   const offerInto = $state<Record<string, string>>({})
 
   let place = $state('')
-  /** The Archive row asking "Delete for good?" in place. */
-  let deleting = $state<string | null>(null)
 
   function addPlace(): void {
     const p = place.trim()
@@ -171,13 +169,8 @@
     <p class="muted">{S.hiddenHint}</p>
     {#each store.crm.hiddenPeople as h (h.id)}
       <p class="line" data-part="hidden">{h.name.trim() || h.id}
-        {#if deleting === h.id}
-          {S.archiveDeleteAsk} <button class="quiet" data-action="archive-delete-yes" onclick={(): void => { deleteHidden(h.id); deleting = null }}>{S.archiveYes}</button>
-          <button class="quiet" data-action="archive-delete-no" onclick={(): void => { deleting = null }}>{S.archiveNo}</button>
-        {:else}
-          <button class="quiet" data-action="unhide" onclick={(): void => unhideInTrustweb(h.id)}>{S.unhide}</button>
-          <button class="quiet" data-action="archive-delete" onclick={(): void => { deleting = h.id }}>{S.archiveDelete}</button>
-        {/if}
+        <button class="quiet" data-action="unhide" onclick={(): void => unhideInTrustweb(h.id)}>{S.unhide}</button>
+        <button class="quiet" data-action="archive-delete" onclick={(): void => deleteHidden(h.id)}>{S.archiveDelete}</button>
       </p>
     {/each}
     </details>

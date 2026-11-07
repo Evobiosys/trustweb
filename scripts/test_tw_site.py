@@ -6,14 +6,22 @@ python3 -I -m unittest discover -s scripts -p 'test_tw_site.py'
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 FRAG = Path(__file__).resolve().parent / "tw-front-door"
+SITES = Path(__file__).resolve().parent / "tw-sites"
 sys.path.insert(0, str(FRAG))
+sys.path.insert(0, str(SITES))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import build_sites
 import tw_site as site
+import tw_site_rehost
 
 OLD_PHRASES = re.compile(
     r"the app and (its |the )?web ?site|app and website", re.IGNORECASE
@@ -144,7 +152,7 @@ class Subpages(unittest.TestCase):
     def test_the_faq_section_comes_from_the_one_faq_fragment(self) -> None:
         f = flags(site.Site.ORG)
         section = site.faq_section(FRAG, f)
-        self.assertEqual(section.count('<details class="q"'), 12)  # wave 6e added q-is-this-safe
+        self.assertEqual(section.count('<details class="q"'), 13)  # 12 + q-is-this-safe + the reach-out entry (b30f47f72)
         self.assertIn('<a href="faq.html">All questions', section)
         self.assertNotIn("<!--", section.replace("<!-- ===", "").replace("=== -->", ""))
 
@@ -245,6 +253,128 @@ class InPersonFlags(unittest.TestCase):
         for path in (FRAG / "how-it-works.html", FRAG / "pages" / "faq.body.html"):
             used = set(re.findall(r"<!--IF:(inperson[\w-]*)-->", path.read_text()))
             self.assertTrue(used <= names, (path.name, used - names))
+
+
+LINK_RE = re.compile(r'(?:href|src)="([^"]*)"')
+SCRIPT_RE = re.compile(r"<script.*?</script>", re.DOTALL)
+SITE_DIRS = ("trustintheweb-org", "trustintheweb-com", "trustweb-one")
+
+
+class ThreeSites(unittest.TestCase):
+    """Wave 36 sites-three: one generator, three static sites (scripts/tw-sites/build_sites.py)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.tmp = Path(tempfile.mkdtemp(prefix="tw-sites-test."))
+        build_sites.build_all(cls.tmp)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.tmp, ignore_errors=True)  # scratch under /tmp only
+
+    def pages(self):
+        for d in SITE_DIRS:
+            for p in sorted((self.tmp / d).glob("*.html")):
+                yield d, p, p.read_text(encoding="utf-8")
+
+    def test_each_site_has_a_front_page_brand_and_manifest(self) -> None:
+        for d in SITE_DIRS:
+            for name in ("index.html", "favicon.svg", "site.css", "site.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"):
+                with self.subTest(site=d, file=name):
+                    self.assertTrue((self.tmp / d / name).is_file())
+
+    def test_every_page_has_the_wordmark_theme_boot_and_no_external_asset(self) -> None:
+        for d, p, html in self.pages():
+            with self.subTest(site=d, page=p.name):
+                self.assertIn('class="wordmark"', html)
+                self.assertIn("tw-theme", html)
+                self.assertIn('data-site="', html)
+                self.assertNotIn("fonts.googleapis", html)
+                self.assertNotIn("fonts.gstatic", html)
+                self.assertIsNone(re.search(r'<(?:link|script|img)[^>]+(?:href|src)="https?://', html))
+
+    def test_relative_links_and_anchors_resolve_inside_the_out_dir(self) -> None:
+        for d, p, html in self.pages():
+            for href in LINK_RE.findall(SCRIPT_RE.sub("", html)):
+                if re.match(r"(?:[a-z][a-z0-9+.-]*:|//)", href) or href == "":
+                    continue
+                path, _, frag = href.partition("#")
+                path = path.partition("?")[0] or p.name
+                target = self.tmp / d / (path if path != "./" else "index.html")
+                if path.endswith("/"):
+                    target = self.tmp / d / path / "index.html"
+                with self.subTest(site=d, page=p.name, href=href):
+                    self.assertTrue(target.is_file())
+                    if frag and target.suffix == ".html":
+                        self.assertIn(f'id="{frag}"', target.read_text(encoding="utf-8"))
+
+    def test_the_old_idea2_homes_are_gone_from_all_three(self) -> None:
+        for d in SITE_DIRS:
+            for page in (self.tmp / d).glob("*.html"):
+                with self.subTest(site=d, page=page.name):
+                    self.assertIsNone(tw_site_rehost.LEFTOVER.search(page.read_text(encoding="utf-8")))
+        host = {"trustintheweb-org": "trustintheweb.org", "trustintheweb-com": "trustintheweb.com", "trustweb-one": "trustweb.one"}
+        for d, h in host.items():
+            tw_site_rehost.rehost_dir(self.tmp / d, h, "https://app.trustweb.one")
+
+    def test_each_footer_links_the_other_two_sites(self) -> None:
+        urls = {"trustintheweb-org": "https://trustintheweb.org/", "trustintheweb-com": "https://trustintheweb.com/", "trustweb-one": "https://trustweb.one/"}
+        for d, p, html in self.pages():
+            footer = html.split('class="sitefooter"', 1)[1]
+            for other, url in urls.items():
+                with self.subTest(site=d, page=p.name, other=other):
+                    if other != d:
+                        self.assertIn(f'href="{url}"', footer)
+            self.assertEqual(html.count("with love from Vienna"), 1)
+
+    def test_org_keeps_the_ecosystem_and_no_site_has_the_lineage(self) -> None:
+        org = (self.tmp / "trustintheweb-org" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="ecosystem"', org)
+        section = org.split('id="ecosystem"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(section.count('class="ecocard"'), 5)
+        for d, p, html in self.pages():
+            with self.subTest(site=d, page=p.name):
+                self.assertNotIn('id="lineage"', html)
+
+    def test_roles(self) -> None:
+        one = (self.tmp / "trustweb-one" / "index.html").read_text(encoding="utf-8")
+        for needle in ('href="https://app.trustweb.one/"', 'href="https://app.trustweb.one/?install=1"', 'href="https://app.trustweb.one/demo/"'):
+            self.assertIn(needle, one)
+        com = (self.tmp / "trustintheweb-com" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("run it yourself", com.lower())
+        self.assertIn("https://trustintheweb.org/#source-code", com)
+        self.assertTrue((self.tmp / "trustintheweb-com" / "pricing.html").is_file())
+        org = (self.tmp / "trustintheweb-org" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="phases"', org)
+        self.assertIn('id="source-code"', org)
+
+    def test_css_has_theme_motion_and_underlined_links(self) -> None:
+        css = (self.tmp / "trustweb-one" / "site.css").read_text(encoding="utf-8")
+        self.assertIn("prefers-color-scheme", css)
+        self.assertIn('[data-motion="off"]', css)
+        self.assertRegex(css, r"a\{[^}]*text-decoration:underline")
+        self.assertIn('[data-site="org"]', (self.tmp / "trustintheweb-org" / "site.css").read_text(encoding="utf-8"))
+        self.assertIn('[data-site="com"]', (self.tmp / "trustintheweb-com" / "site.css").read_text(encoding="utf-8"))
+
+    def test_deploy_script_prints_in_dry_mode_and_refuses_without_approval(self) -> None:
+        script = str(SITES / "deploy_sites.sh")
+        dry = subprocess.run([script, "--dry"], capture_output=True, text=True)
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertIn("questhub:/srv/questhub-static/trustweb-one", dry.stdout)
+        self.assertNotIn("--delete", dry.stdout)
+        refused = subprocess.run([script], capture_output=True, text=True, env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home())})
+        self.assertEqual(refused.returncode, 3)
+
+    def test_screens_have_no_horizontal_scroll_at_360_and_1280(self) -> None:
+        node = shutil.which("node")
+        script = SITES / "check_screens.mjs"
+        if not node:
+            self.skipTest("node missing")
+        shots = Path(tempfile.mkdtemp(prefix="tw-sites-shots."))
+        done = subprocess.run([node, str(script), str(self.tmp), str(shots)], capture_output=True, text=True)
+        if done.returncode == 3:
+            self.skipTest("playwright or chromium missing: " + done.stderr.strip()[:200])
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
 
 if __name__ == "__main__":

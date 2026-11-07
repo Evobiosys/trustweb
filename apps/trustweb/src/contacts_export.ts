@@ -122,22 +122,23 @@ export function toVCard(people: readonly Person[], o: ExportOpts): string {
 const HEADERS = ['full_name', 'first_name', 'last_name', 'email', 'emails', 'phone', 'phones', 'company', 'job_title', 'birthday', 'notes', 'labels', 'ring', 'last_contact', 'channels']
 
 /** CSV formula injection (OWASP): a cell a spreadsheet would read as a formula, phone numbers included, gets a leading apostrophe. */
-function cell(v: string): string {
+export function cell(v: string): string {
   const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
-export function toCsv(people: readonly Person[], o: ExportOpts): string {
+/** Wave 36 complete-view: `extra` appends columns (headers and one value list per person) to the contacts columns. */
+export function toCsv(people: readonly Person[], o: ExportOpts, extra?: { headers: string[]; values: (p: Person) => string[] }): string {
   const lines = people.map((p) => {
     const r = toRow(p, o)
     const values = [
       r.name, r.given ?? '', r.family ?? '', r.emails[0] ?? '', r.emails.join(MULTI), r.phones[0] ?? '', r.phones.join(MULTI),
       r.org ?? '', r.title ?? '', r.birthday ?? '', r.note ?? '', r.labels.join(MULTI), r.ring, r.lastContact ?? '',
-      Object.entries(r.channels).map(([k, v]) => `${k}=${v}`).join(';'),
+      Object.entries(r.channels).map(([k, v]) => `${k}=${v}`).join(';'), ...(extra?.values(p) ?? []),
     ]
     return values.map(cell).join(',')
   })
-  return '\ufeff' + [HEADERS.join(','), ...lines].join('\r\n') + '\r\n'
+  return '\ufeff' + [[...HEADERS, ...(extra?.headers ?? [])].join(','), ...lines].join('\r\n') + '\r\n'
 }
 
 // --- JSON (the neutral ImportedContact-like shape) ---

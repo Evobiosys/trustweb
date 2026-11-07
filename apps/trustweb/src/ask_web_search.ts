@@ -8,6 +8,7 @@
 import { fold, queryWords } from './search'
 import { tagsOfFields } from './search_rank'
 import type { AppState, AskSet } from './model'
+import { alive } from './deleted_people'
 
 export const ALL_SCOPE = 'all'
 /** The engine when Settings holds none (or an unusable template): {q} stands for the encoded words. */
@@ -43,7 +44,7 @@ export function matchWeb(rec: WebRecord, query: string, scopeId: string = ALL_SC
   if (!words.length) return []
   const set: AskSet | undefined = scopeId === ALL_SCOPE ? undefined : rec.askSets?.find((s) => s.id === scopeId)
   if (scopeId !== ALL_SCOPE && !set) return []
-  const people = (rec.people ?? []).filter((p) => !set || set.personIds.includes(p.id) || tagsOfFields(p.fields).some((t) => set.tags.includes(t)))
+  const people = alive(rec.people ?? []).filter((p) => !set || set.personIds.includes(p.id) || tagsOfFields(p.fields).some((t) => set.tags.includes(t)))
   const peerIds = new Set(people.map((p) => p.peerId).filter(Boolean))
   const out: WebMatch[] = []
   for (const p of people) if (hits(words, p.name, p.context, ...p.lines.map((l) => l.text))) out.push({ kind: 'person', label: p.name, detail: p.context })

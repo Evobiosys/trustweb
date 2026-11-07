@@ -16,7 +16,7 @@ interface Me { name?: string; plan: string; limits: OrgLimits; events: OrgEvent[
 interface Reply { status: number; json: any }
 
 const KEY = 'trustweb.org.v1'
-const FIELD_WORDS = { name: 'Give the event a name.', from: 'Set a valid From date and time.', where: 'Say where it happens.', to: 'To must be a valid date, not before From.' }
+const FIELD_WORDS = { name: 'Give the event a name.', from: 'Set a valid From date and time.', where: 'Say where it happens.', to: 'To must be a valid date, not before From.', core: 'Core days are not valid.' }
 
 const style = document.createElement('style')
 style.textContent = `
