@@ -121,3 +121,16 @@ section.plan{border-left:4px solid var(--trust)}
 .sf-role{display:block;color:var(--ink-2);font-size:var(--fs-1)}
 .sf-fine{color:var(--ink-2);font-size:var(--fs-1);margin:var(--s-5) 0 var(--s-1)}
 .sf-love{color:var(--ink-2);font-size:var(--fs-1);margin:0}
+
+/* wave 37 sites-roles */
+.orghero{text-align:center}
+.orghero .lede{margin-left:auto;margin-right:auto}
+.orghero .btnrow{justify-content:center}
+.orgmark{width:min(230px,60vw);margin:0 auto var(--s-4);color:var(--mark)}
+.orgmark svg{width:100%;height:auto;display:block}
+:root[data-site="one"] .topnav{margin-left:auto}
+@media (max-width:719px){.nav-open{order:1}.topnav{order:2;flex-basis:100%}}
+.nav-open{display:inline-flex;align-items:center;min-height:36px;padding:0 var(--s-4);border-radius:var(--r-control);background:var(--trust);color:var(--on-trust);font-weight:600}
+pre.script{margin:var(--s-3) 0;padding:var(--s-3) var(--s-4);background:var(--surface-2);border-radius:var(--r-control);max-width:100%}
+pre.script code{background:none;padding:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.copy-btn{margin-top:var(--s-2)}

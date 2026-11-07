@@ -50,9 +50,9 @@ class SiteSpec:
 
 SPECS: dict[str, SiteSpec] = {
     "org": SiteSpec("org", "trustintheweb-org", "trustintheweb.org", "TrustInTheWeb.org", "org", "#33456B",
-                    "The project behind TrustWeb: what it is, why it exists, how it works, the source code."),
+                    "Stewards the TrustWeb code: an open commons, decided in the open."),
     "com": SiteSpec("com", "trustintheweb-com", "trustintheweb.com", "TrustInTheWeb.com", "com", "#4A9BD1",
-                    "Hosting and services for TrustWeb, for groups and organisations."),
+                    "Subscription and hosting for TrustWeb users."),
     "one": SiteSpec("one", "trustweb-one", "trustweb.one", "TrustWeb", "org", "#13847C",
                     "Ask the people you have met, and the people they trust. A question travels, the data stays."),
 }
@@ -74,18 +74,19 @@ SKINS = {
 # Pages and who owns them: a link to a page missing on one site goes to the first owner below.
 OWNER_ORDER = ("org", "com", "one")
 SUBPAGES: dict[str, tuple[str, ...]] = {
-    "org": ("why", "feedback", "inspect", "faq", "imprint", "privacy", "data-policy", "history"),
+    "org": ("feedback", "imprint", "privacy", "data-policy"),
     "com": ("pricing", "feedback", "imprint", "privacy", "data-policy"),
-    "one": ("imprint", "privacy"),
+    "one": ("why", "faq", "inspect", "history", "imprint", "privacy"),
 }
 PAGE_BY_NAME = {p.name: p for p in (*ts.ORG_PAGES, *ts.COM_PAGES)}
 FONT_FREE_PAGES = {"privacy", "data-policy"}  # all three sites fetch no font, so these say "your own device"
 
 HOME_FRAGMENTS = {
-    "org": ("sites/org-hero.html", "features.html", "@how-it-works", "game-phases.html", "use-cases.html", "for-ea-groups.html", "sites/ecosystem.html", "source-code.html", "about-us.html"),
+    "org": ("sites/org-home.html", "about-us.html", "sites/org-contact.html"),
+    "one": ("sites/one-index.body.html", "features.html", "sites/one-hosting.html"),
 }
 INDEX_META = {
-    "org": ("Find people and things through people you trust", SPECS["org"].tagline),
+    "org": ("Stewarding the TrustWeb code", SPECS["org"].tagline),
     "com": ("Hosting for TrustWeb", SPECS["com"].tagline),
     "one": ("Ask the people you trust", SPECS["one"].tagline),
 }
@@ -124,6 +125,8 @@ def tokens_for(spec: SiteSpec) -> dict[str, str]:
         BACK='<a class="back" href="./">&larr; Back to the front page</a>',
         SELF_URL=URL[own],
         SITE_NAME=spec.name,
+        ONE=URL["one"],
+        ORG_MARK=org_mark(),
     )
     return values
 
@@ -169,36 +172,41 @@ def site_css(key: str) -> str:
 THEME_JS = """(function(){var b=document.querySelector('.theme-btn');if(!b)return;var order=['system','light','dark'];
 function show(){b.textContent='Theme: '+document.documentElement.dataset.theme;}
 b.addEventListener('click',function(){var t=order[(order.indexOf(document.documentElement.dataset.theme)+1)%3];
-document.documentElement.dataset.theme=t;try{if(t==='system')localStorage.removeItem('tw-theme');else localStorage.setItem('tw-theme',t);}catch(e){}show();});show();})();"""
+document.documentElement.dataset.theme=t;try{if(t==='system')localStorage.removeItem('tw-theme');else localStorage.setItem('tw-theme',t);}catch(e){}show();});show();})();
+document.querySelectorAll('.copy-btn').forEach(function(c){c.addEventListener('click',function(){var t=document.getElementById(c.dataset.copy).textContent;
+if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){c.textContent='Copied';},function(){});});});"""
 
 
 def nav_links(spec: SiteSpec) -> str:
-    app = f'<a href="{APP_ORIGIN}/">Open the app</a>'
     return {
-        "org": f'<a href="./#features">Features</a><a href="why.html">The vision</a><a href="faq.html">FAQ</a>{app}',
-        "com": f'<a href="pricing.html">Pricing</a><a href="feedback.html?kind=pricing">Contact us</a><a href="{URL["org"]}">The project</a>',
-        "one": f'<a href="{APP_ORIGIN}/demo/">Demo</a><a href="{URL["org"]}">The project</a><a href="{URL["com"]}">Hosting</a>',
+        "org": f'<a href="./#stewardship">Stewardship</a><a href="./#source-code">Source code</a><a href="./#contact">Contact</a><a href="{URL["one"]}">The app</a>',
+        "com": f'<a href="./#plans">Plans</a><a href="feedback.html?kind=pricing">Contact us</a><a href="{URL["one"]}">The app</a><a href="{URL["org"]}">Stewardship</a>',
+        "one": '<a href="./#use-cases">Use cases</a><a href="./#features">Features</a><a href="./#hosting">Hosting</a>',
     }[spec.key]
 
 
 def header(spec: SiteSpec) -> str:
+    # "Open" sits top right (Jakob): outside the nav, so on a phone it stays beside the wordmark while the nav wraps below
+    open_btn = f'<a class="nav-open" href="{APP_ORIGIN}/">Open</a>' if spec.key == "one" else ""
     return (f'<div class="topbar"><div class="topbar-in"><a class="wordmark-link" href="./" aria-label="{spec.name}, front page">{wordmark(spec)}</a>'
-            f'<nav class="topnav" aria-label="Site">{nav_links(spec)}<button type="button" class="theme-btn">Theme</button></nav></div></div>')
+            f'<nav class="topnav" aria-label="Site">{nav_links(spec)}<button type="button" class="theme-btn">Theme</button></nav>{open_btn}</div></div>')
 
 
 def footer(spec: SiteSpec) -> str:
-    roles = {"org": "The project and its steward", "com": "Hosting and services", "one": "The app's own home"}
+    roles = {"org": "Stewardship of the code", "com": "Hosting and subscription", "one": "The app"}
     sites = "".join(
         f'<li><a href="{URL[k]}">{SPECS[k].host}</a><span class="sf-role">{roles[k]}</span></li>'
         for k in OWNER_ORDER if k != spec.key
     )
     own = "".join(f'<li><a href="{href}">{label}</a></li>' for href, label in own_links(spec))
+    app_col = (f'<div class="sf-col"><h2 class="sf-h">The app</h2><ul><li><a href="{APP_ORIGIN}/">Open the app</a></li>'
+               f'<li><a href="{APP_ORIGIN}/?install=1">Install</a></li><li><a href="{APP_ORIGIN}/demo/">Demo</a></li></ul></div>'
+               if spec.key == "one" else "")  # .org and .com reach the app only through trustweb.one
     legal = ['<li><a href="privacy.html">Privacy Policy</a></li>', '<li><a href="data-policy.html">Data policy</a></li>', '<li><a href="imprint.html">Imprint</a></li>']
     return (f'<footer class="sitefooter"><div class="sitefooter-in"><nav class="sf-cols" aria-label="Footer">'
             f'<div class="sf-col"><h2 class="sf-h">{spec.name}</h2><ul>{own}</ul></div>'
             f'<div class="sf-col"><h2 class="sf-h">The other two sites</h2><ul>{sites}</ul></div>'
-            f'<div class="sf-col"><h2 class="sf-h">The app</h2><ul><li><a href="{APP_ORIGIN}/">Open the app</a></li>'
-            f'<li><a href="{APP_ORIGIN}/?install=1">Install</a></li><li><a href="{APP_ORIGIN}/demo/">Demo</a></li></ul></div>'
+            f'{app_col}'
             f'<div class="sf-col"><h2 class="sf-h">Legal</h2><ul>{"".join(legal)}</ul></div></nav>'
             '<p class="sf-fine">No analytics, no tracking cookies, no outside fonts. An experimental first version, part of '
             '<a href="https://evobiosys.org">EvoBioSys</a>. <a href="mailto:connect@evobiosys.org">connect@evobiosys.org</a></p>'
@@ -207,11 +215,11 @@ def footer(spec: SiteSpec) -> str:
 
 def own_links(spec: SiteSpec) -> list[tuple[str, str]]:
     return {
-        "org": [("./", "Front page"), ("./#features", "Features"), ("./#how-it-works", "How it works"), ("./#phases", "The game phases"),
-                ("./#source-code", "Source code"), ("why.html", "The vision"), ("faq.html", "FAQ"), ("inspect.html", "Inspect us"),
-                ("history.html", "History"), ("feedback.html", "Feedback")],
-        "com": [("./", "Front page"), ("pricing.html", "Pricing"), ("feedback.html?kind=pricing", "Contact us")],
-        "one": [("./", "Front page")],
+        "org": [("./", "Front page"), ("./#stewardship", "Stewardship"), ("./#source-code", "Source code"), ("./#team", "Who is behind this"),
+                ("./#contact", "Contact"), ("feedback.html", "Feedback")],
+        "com": [("./", "Front page"), ("./#plans", "Plans"), ("pricing.html", "Pricing"), ("feedback.html?kind=pricing", "Contact us")],
+        "one": [("./", "Front page"), ("./#use-cases", "Use cases"), ("./#features", "Features"), ("./#hosting", "Hosted or your own"),
+                ("why.html", "The vision"), ("faq.html", "FAQ"), ("inspect.html", "Inspect us"), ("history.html", "History")],
     }[spec.key]
 
 
@@ -248,31 +256,22 @@ def page_html(spec: SiteSpec, title: str, description: str, body: str, *, main_c
 """
 
 
+def org_mark() -> str:
+    svg = re.sub(r"<!--.*?-->\s*", "", read(HERE / "assets" / "org-mark.svg"), flags=re.DOTALL).strip()
+    return svg.replace("<svg ", '<svg aria-hidden="true" ', 1)
+
+
 def home_body(spec: SiteSpec) -> str:
-    if spec.key != "org":
-        text = read(FRAG / "sites" / f"{spec.key}-index.body.html")
-        if spec.key == "com":
-            text = text.replace("{{EA_GROUPS}}", frag("for-ea-groups.html").replace('<hr class="rule">', ""))
-        return render(text, spec, active_site="com")
-    parts: list[str] = []
-    for name in HOME_FRAGMENTS["org"]:
-        if name == "@how-it-works":
-            parts.append(f'<hr class="rule"><section class="block" id="how-it-works">{frag("how-it-works.html")}</section>')
-            continue
-        text = frag(name)
-        if name == "use-cases.html":
-            old = '<a href="#useful">where it is specifically useful</a>'
-            if old not in text:
-                raise BuildError("use-cases.html: the #useful link moved; update build_sites.py")
-            text = text.replace(old, '<a href="why.html">the vision</a>')
-        parts.append(text)
-    return render("\n".join(parts), spec, active_site="com")
+    if spec.key == "com":
+        return render(read(FRAG / "sites" / "com-index.body.html"), spec, active_site="com")
+    return render("\n".join(frag(name) for name in HOME_FRAGMENTS[spec.key]), spec, active_site="com")
 
 
 def sub_body(spec: SiteSpec, name: str) -> str:
     page = PAGE_BY_NAME[name]
     active_site = "com" if name in FONT_FREE_PAGES else None
-    return render(frag(page.body), spec, active_site=active_site)
+    body = "sites/com-pricing.body.html" if name == "pricing" else page.body  # plans as the app's plan page words them
+    return render(frag(body), spec, active_site=active_site)
 
 
 def fix_links(html: str, spec: SiteSpec, ids: dict[str, dict[str, set[str]]], page: str) -> str:
