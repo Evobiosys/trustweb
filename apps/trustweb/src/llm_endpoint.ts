@@ -10,8 +10,9 @@ export const AI_TIMEOUT_MS = 30_000
 
 export const PRESETS = {
   openai: { baseUrl: 'https://api.openai.com/v1', model: '' },
+  // Anthropic's OpenAI-compatible chat/completions route; unverified without a key (wave 36 report).
+  claude: { baseUrl: 'https://api.anthropic.com/v1', model: '' },
   ollama: { baseUrl: 'http://localhost:11434/v1', model: '' },
-  pc24: { baseUrl: 'http://localhost:11435/v1', model: 'qwen3.6:35b' },
   custom: { baseUrl: '', model: '' },
 } as const
 
@@ -21,12 +22,15 @@ export type FetchLike = (url: string, init: { method: string; headers: Record<st
 /** Drafting is on only with a base URL and a model. */
 export const configured = (ai: AiEndpoint | undefined): ai is AiEndpoint => Boolean(ai?.baseUrl.trim() && ai.model.trim())
 
+/** Browser calls to Anthropic are refused without this header. */
+const isAnthropic = (baseUrl: string): boolean => { try { return new URL(baseUrl.trim()).hostname === 'api.anthropic.com' } catch { return false } }
+
 export function buildRequest(ai: AiEndpoint, text: string, system: string = TOGETHER_DRAFT_SHAPE, maxTokens = 300): { url: string; init: { method: string; headers: Record<string, string>; body: string } } {
   return {
     url: `${ai.baseUrl.trim().replace(/\/+$/, '')}/chat/completions`,
     init: {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(ai.apiKey ? { Authorization: `Bearer ${ai.apiKey}` } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(ai.apiKey ? { Authorization: `Bearer ${ai.apiKey}` } : {}), ...(isAnthropic(ai.baseUrl) ? { 'anthropic-dangerous-direct-browser-access': 'true' } : {}) },
       body: JSON.stringify({
         model: ai.model, temperature: 0, stream: false, max_tokens: maxTokens,
         messages: [{ role: 'system', content: system }, { role: 'user', content: text }],

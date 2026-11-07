@@ -1506,3 +1506,10 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 /* wave 36 llm-button */
 .ai-btn { color: var(--accent, currentColor); }
 .ai-btn svg { fill: currentColor; }
+
+/* wave 36 ai-subscription */
+.ai-group { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); min-width: 0; }
+.ai-group .field, .ai-group .btn { max-width: 100%; }
+.ai-error { font-weight: 600; }
+.ai-error:empty { display: none; }
+[data-ai-signup], [data-ai-check-now], [data-ai-use-sub], [data-ai-sent] { text-decoration: underline; align-self: flex-start; }

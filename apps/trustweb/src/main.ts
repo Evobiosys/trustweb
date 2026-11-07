@@ -284,7 +284,7 @@ import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
-import { aiSettings } from './llm_endpoint_view'
+import { aiSettings, bootAi } from './llm_endpoint_view'
 import { aiButtonVisible, piConnected } from './ai_button'
 import { agentSettings } from './agent_view'
 import { askWebPanel, askWebSettings } from './ask_web_view'
@@ -535,6 +535,8 @@ try {
 } catch {
   state = loadState(persona, storeCtx)
 }
+// Wave 36 ai-subscription: legacy pc24 -> Custom, Jakob's dev record seeds pc24 as Custom, a pending sign-up is polled once.
+if (state && !solo) bootAi({ state: st, save, dev: Boolean(devRecordFile()) })
 // The field repairs of waves 6b to 7 (connect code, share modes, general notes, profile, agreements) run in the migrate() chain above (schema_version.ts).
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
 // A real phone's own record only (not the side-by-side demo, not a demo account's view). Never throws; a failure changes nothing.
@@ -6798,7 +6800,7 @@ function settingsSheet(): void {
       el('input', { type: 'checkbox', ...(s.qrProfileOption ? { checked: '' } : {}), onchange: () => { s.qrProfileOption = !s.qrProfileOption; save() } }),
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
-    ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
+    ...aiSettings({ state: st, save, toast, openSheet, backToSettings: () => { sheet.dataset.kind = 'settings'; settingsSheet() } }),
     ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),

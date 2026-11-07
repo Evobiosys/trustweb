@@ -1332,8 +1332,23 @@ export interface AgentLink {
   connectedAt?: string
 }
 
+/** Wave 36 ai-subscription: the TrustInTheWeb.com sign-up. The claim stays on the device (synced with the sealed record like apiKey). */
+export interface AiSubscription {
+  plan: 'ai' | 'light'
+  ref: string
+  email: string
+  claim: string
+  state: 'pending' | 'active' | 'revoked'
+  /** The token once delivered (the server hands it out once): lets the person switch to a key of their own and back. */
+  token?: string
+}
+
 export interface AiEndpoint {
-  preset: 'openai' | 'ollama' | 'pc24' | 'custom'
+  /** 'pc24' is a legacy read value only: ai_subscription.ts migrateAi turns it into custom + name 'pc24'. */
+  preset: 'tw-subscription' | 'openai' | 'claude' | 'ollama' | 'pc24' | 'custom'
+  /** Label of a custom endpoint (Jakob's: 'pc24'). */
+  name?: string
+  sub?: AiSubscription
   /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
   baseUrl: string
   /** Empty: no Authorization header. */
