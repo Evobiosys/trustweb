@@ -3159,7 +3159,6 @@ export const S = {
   ringFilterTitle: 'Trust zones',
   ownProfileTitle: 'My profile',
   ownProfileLead: 'This is the page others see. Each trust zone sees only what you share with it.',
-  ownProfileZone: (zone: string) => `What ${zone} sees`,
   ownProfileNothing: 'Nothing yet',
   ownProfileEdit: 'Edit what I share',
   ownProfileName: 'Change my name',
