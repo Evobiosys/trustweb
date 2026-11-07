@@ -4,7 +4,7 @@
  */
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
-import { DEFAULT_NAME_REVEAL, NAME_REVEALS, attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, nameRevealOf, newEvent, restoreEvent, revealedBy, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
+import { DEFAULT_NAME_REVEAL, NAME_REVEALS, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, nameRevealOf, newEvent, restoreEvent, revealedBy, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import type { EventError, EventFields } from './events'
 import { dragEvent, dragPerson } from './drag_payload'
@@ -60,7 +60,7 @@ export interface EventsView {
 
 type View = { kind: 'list' } | { kind: 'page'; id: string } | { kind: 'form'; id?: string; from?: string }
 
-const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo }
+const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo, core: S.eventsErrCore }
 
 export function createEventsView(h: EventsViewHooks): EventsView {
   let view: View = { kind: 'list' }
@@ -143,6 +143,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       from.addEventListener('input', () => from.classList.remove('default'))
     }
     const to = date(existing?.to)
+    const coreFrom = date(existing?.core?.from)
+    const coreTo = date(existing?.core?.to)
     const where = text(existing?.where)
     where.placeholder = S.eventWherePlaceholder
     const conditions = el('textarea', { class: 'field', rows: 3 }, [existing?.conditions ?? ''])
@@ -155,7 +157,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const error = el('p', { class: 'warn', 'data-event-error': '', hidden: true })
     const save = (): void => {
       const fields: EventFields = {
-        name: name.value, from: from.value, to: to.value, where: where.value, conditions: conditions.value,
+        name: name.value, from: from.value, to: to.value, core: { from: coreFrom.value, to: coreTo.value }, where: where.value, conditions: conditions.value,
         themes: splitThemes(themes.value), organizer: organizer.value, attended: existing?.attended,
         hosts: [...hosts.querySelectorAll('input')].map((i) => i.value),
       }
@@ -171,7 +173,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     }
     const cancel = (): void => show(existing ? { kind: 'page', id: existing.id } : { kind: 'list' })
     return [h.header(existing ? S.eventsEdit : S.eventsNew, { back: cancel }), el('div', { class: 'scroll' }, [
-      ...field(S.eventsName, name), ...field(S.eventsTagNameField, tag), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsWhere, where),
+      ...field(S.eventsName, name), ...field(S.eventsTagNameField, tag), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsCoreFrom, coreFrom), ...field(S.eventsCoreTo, coreTo), ...field(S.eventsWhere, where),
       ...field(S.eventsConditions, conditions), ...field(S.eventsThemes, themes), ...field(S.eventsOrganizer, organizer),
       ...field(S.eventsHost, hosts), el('button', { class: 'btn btn-ghost btn-sm', 'data-event-cohost': '', onclick: () => addHost() }, [S.eventsCoHost]),
       error,
@@ -315,6 +317,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
     return [title, el('div', { class: 'scroll events-page' }, [
       el('p', {}, [el('b', {}, [whenLabel(ev)])]),
+      ev.core ? el('p', { 'data-event-core': '' }, [coreLabel(ev)]) : null,
       ev.where ? el('p', {}, [ev.where]) : null,
       ev.organizer ? el('p', { class: 'meta' }, [S.eventsOrganizedBy(ev.organizer)]) : null,
       ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,

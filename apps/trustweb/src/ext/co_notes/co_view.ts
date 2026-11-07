@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 36 (co-notes): the extension's screen parts (settings switch, list under Resources > Notes), the store and the relay timers. */
 import { el } from '../../../../demo/src/ui/dom'
+import type { TwEvent } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
+import { isPast } from '../../events'
+import { desiresDoc, ensureMine, type EventKind } from './co_desires'
 import { newDoc, type CoDoc, type CoPerson } from './co_doc'
 import { openCoNote, type CoCtx } from './co_editor'
 import { audit, pollDocs, receive, sendDoc } from './co_sync'
@@ -53,12 +56,29 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
     return changed > 0
   }
 
-  const ctx: CoCtx = { h, me, get: (id) => docs().find((d) => d.id === id), put, poll }
+  const ctx: CoCtx = { h, me, get: (id) => docs().find((d) => d.id === id), put, poll, log }
 
   const create = (): void => {
     const d = newDoc({ id: h.newId() + Date.now().toString(36), title: S_.untitled, me: me(), at: Date.now() })
     put(d, true)
     openCoNote(ctx, d.id)
+  }
+
+  /** The event's Desires or Memories note: made on the first tap with me and the event's people who have a did, my own block made on every open. */
+  const openForEvent = (kind: EventKind, ev: TwEvent): void => {
+    const others = (ev.people ?? []).flatMap((pid) => { const did = h.didOf(pid); const p = st().people.find((x) => x.id === pid); return did && p ? [{ did, name: p.name }] : [] })
+    const doc = docs().find((d) => d.id === `${kind}-${ev.id}`.slice(0, 40)) ?? desiresDoc({ kind, ev, me: me(), others, at: Date.now() })
+    const mine = ensureMine(doc, me(), Date.now())
+    if (mine.doc !== doc || !docs().includes(doc)) put(mine.doc, mine.doc === doc)
+    openCoNote(ctx, mine.doc.id)
+  }
+
+  const eventSection = (ev: TwEvent): Node[] => {
+    if (!on()) return []
+    const kinds: EventKind[] = isPast(ev, Date.now()) ? ['desires', 'memories'] : ['desires']
+    return [el('div', { class: 'co-event', 'data-co-event': ev.id }, kinds.map((k) => el('button', {
+      class: 'btn btn-ghost wide', [k === 'desires' ? 'data-co-desires' : 'data-co-memories']: '', onclick: () => openForEvent(k, ev),
+    }, [S.coDesires[k]])))]
   }
 
   const list = (): HTMLElement => el('div', { class: 'co-list', 'data-co-list': '' }, [
@@ -71,6 +91,7 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
 
   return {
     body: () => [],
+    eventSection,
     notesSection: () => (on() ? [list()] : []),
     settingsRows: () => [
       el('button', {

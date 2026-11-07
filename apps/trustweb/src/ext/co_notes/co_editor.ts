@@ -3,10 +3,12 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { chipInput } from '../../chip_input'
 import { matchPeople } from '../../events'
+import { configured } from '../../llm_endpoint'
 import type { Person } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks } from '../registry'
-import { editText, fromText, indent, insertAfter, moveDown, moveUp, outdent, remove, setLogseq, setTitle, textOver, toText, tree, type CoDoc, type CoPerson } from './co_doc'
+import { canEdit, combine, cycleShare, isEventDoc, mineId, SHARE_LABELS } from './co_desires'
+import { editText, fromText, indent, insertAfter, moveDown, moveUp, outdent, remove, setLogseq, setShare, setTitle, textOver, toText, tree, type CoDoc, type CoPerson } from './co_doc'
 import { chipToken, fromEdit, fromLogseq, logseqUrl, parseChips, parseLogseqRef, refsOf, toEdit, toLogseq } from './co_links'
 
 export interface CoCtx {
@@ -17,11 +19,14 @@ export interface CoCtx {
   put: (doc: CoDoc, quiet?: boolean) => void
   /** Fetches what others left; true when a document changed. */
   poll: () => Promise<boolean>
+  /** One line for the local log (I6). */
+  log: (line: string) => void
 }
 
 const POLL_MS = 10_000
 const AT = /@([^\s@[\]]{0,30})$/
 const S_ = S.coNotes
+const D_ = S.coDesires
 
 export function openCoNote(c: CoCtx, id: string): void {
   const d = c.get(id)
@@ -62,6 +67,10 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     if (next !== d) c.put(next)
     draw()
   }
+  /** Desires and memories: the top level is each person's chip, and only the author edits a line. New lines start at 'me' (I9). */
+  const evDoc = (): boolean => isEventDoc(doc())
+  const editable = (bid: string, depth: number): boolean => canEdit(doc(), bid, c.me()) && !(evDoc() && depth === 0)
+  const newOpts = (): { share?: 'me' } => (evDoc() ? { share: 'me' } : {})
   const start = (bid: string): void => { commit(); editing = bid; draw() }
 
   const chipEl = (name: string, ref: string): HTMLElement => {
@@ -100,7 +109,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     const f = e.target as HTMLInputElement
     const me = c.me()
     const i = rows.findIndex((r) => r.id === bid)
-    if (e.key === 'Enter') { e.preventDefault(); act((d) => { const r = insertAfter(d, bid, '', me, Date.now()); editing = r.id; return r.doc }) }
+    if (e.key === 'Enter') { e.preventDefault(); act((d) => { const r = insertAfter(d, bid, '', me, Date.now(), newOpts()); editing = r.id; return r.doc }) }
     else if (e.key === 'Tab') { e.preventDefault(); act((d) => (e.shiftKey ? outdent : indent)(d, bid, me)) }
     else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); act((d) => (e.key === 'ArrowUp' ? moveUp : moveDown)(d, bid, me)) }
     else if (e.key === 'ArrowUp' && rows[i - 1]) { e.preventDefault(); start(rows[i - 1].id) }
@@ -112,24 +121,37 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     const me = c.me()
     const b = (key: string, label: string, fn: (d: CoDoc, id: string, me: CoPerson) => CoDoc): HTMLElement =>
       el('button', { class: 'btn btn-ghost btn-sm', 'data-co-tool': key, onmousedown: (e: Event) => e.preventDefault(), onclick: () => act((d) => fn(d, bid, me)) }, [label])
-    return el('div', { class: 'co-toolbar', 'data-co-toolbar': '' }, [b('indent', S_.indent, indent), b('outdent', S_.outdent, outdent), b('up', S_.up, moveUp), b('down', S_.down, moveDown)])
+    return el('div', { class: 'co-toolbar', 'data-co-toolbar': '' }, [...(evDoc() ? [] : [b('indent', S_.indent, indent), b('outdent', S_.outdent, outdent)]), b('up', S_.up, moveUp), b('down', S_.down, moveDown)])
+  }
+
+  /** One tap moves a line me -> event -> zones; other people's lines only show theirs. */
+  const shareChip = (bid: string, level: 'me' | 'event' | 'zones' | undefined, mine: boolean): HTMLElement => {
+    const label = SHARE_LABELS[level ?? 'me']
+    return mine
+      ? el('button', { class: 'co-share', 'data-co-share': level ?? 'me', 'aria-label': `${D_.shareTap}: ${label}`, onclick: () => act((d) => setShare(d, bid, cycleShare(level), c.me())) }, [label])
+      : el('span', { class: 'co-share-plain meta', 'data-co-share-plain': level ?? 'me' }, [label])
   }
 
   const outline = (d: CoDoc): HTMLElement => {
     const rows = tree(d, folded)
     const list = el('div', { class: 'co-blocks', role: 'tree' })
     for (const r of rows) {
-      const isEditing = r.id === editing
+      const isEditing = r.id === editing && editable(r.id, r.depth)
       const toggle = r.hasKids
         ? el('button', { class: 'outline-toggle', 'aria-label': S_.fold, 'aria-expanded': String(!folded.has(r.id)), 'data-co-fold': r.id, onclick: () => { commit(); if (folded.has(r.id)) folded.delete(r.id); else folded.add(r.id); draw() } }, [folded.has(r.id) ? '▸' : '▾'])
         : el('span', { class: 'outline-toggle' }, ['•'])
       const text = isEditing
         ? el('input', { class: 'field co-input', value: toEdit(r.text), maxlength: '500', placeholder: S_.blockPh, 'aria-label': S_.blockPh, 'data-co-input': r.id, autocomplete: 'off', onkeydown: (e: Event) => keys(r.id, rows)(e as KeyboardEvent), onblur: commit }) as HTMLInputElement
-        : el('div', { class: 'co-text', tabindex: '0', 'data-co-text': r.id, onfocus: () => start(r.id), onclick: (e: Event) => { if (!(e.target as HTMLElement).closest('.co-chip')) start(r.id) } }, r.text ? shown(r.text) : [el('span', { class: 'meta' }, [S_.blockPh])])
-      list.append(el('div', { class: 'co-row', role: 'treeitem', 'aria-level': String(r.depth + 1), 'data-co-block': r.id, style: `padding-left:${r.depth * 16}px` }, [toggle, text]))
+        : editable(r.id, r.depth)
+          ? el('div', { class: 'co-text', tabindex: '0', 'data-co-text': r.id, onfocus: () => start(r.id), onclick: (e: Event) => { if (!(e.target as HTMLElement).closest('.co-chip')) start(r.id) } }, r.text ? shown(r.text) : [el('span', { class: 'meta' }, [S_.blockPh])])
+          : el('div', { class: 'co-text co-readonly' + (evDoc() && r.depth === 0 ? ' co-head' : ''), 'data-co-text': r.id }, shown(r.text))
+      const share = evDoc() && r.depth > 0 && !r.ai ? shareChip(r.id, r.share, editable(r.id, r.depth)) : null
+      const mark = r.ai ? el('span', { class: 'co-ai', 'data-co-ai': '' }, [D_.aiMade]) : null
+      list.append(el('div', { class: 'co-row', role: 'treeitem', 'aria-level': String(r.depth + 1), 'data-co-block': r.id, style: `padding-left:${r.depth * 16}px` }, [toggle, text, mark, share]))
+      if (evDoc() && r.id === mineId(c.me()) && !r.hasKids) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-add-wish': '', onclick: () => act((x) => { const n = insertAfter(x, r.id, '', c.me(), Date.now(), newOpts()); editing = n.id; return indent(n.doc, n.id, c.me()) }) }, [D_.addWish]))
       if (isEditing) list.append(el('div', { class: 'co-under', style: `padding-left:${r.depth * 16 + 22}px` }, [mention(text as HTMLInputElement), tools(r.id)]))
     }
-    if (!rows.length) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-first': '', onclick: () => act((x) => { const r = insertAfter(x, null, '', c.me(), Date.now()); editing = r.id; return r.doc }) }, [S_.firstLine]))
+    if (!rows.length && !evDoc()) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-first': '', onclick: () => act((x) => { const r = insertAfter(x, null, '', c.me(), Date.now()); editing = r.id; return r.doc }) }, [S_.firstLine]))
     return list
   }
 
@@ -166,6 +188,22 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
       picker ? el('div', {}, [picker.input, picker.hits]) : null,
       adding && !free.length ? el('p', { class: 'meta' }, [S_.addPeopleNone]) : null,
     ])
+  }
+
+  /** "Combine with my AI": only the shared lines go to the owner's own endpoint; the answer lands as one AI-made block. */
+  const combineRow = (): HTMLElement => {
+    const btn = el('button', { class: 'btn btn-ghost btn-sm', 'data-co-combine': '', onclick: async () => {
+      const ai = c.h.state().advanced?.ai
+      if (!configured(ai)) { c.h.toast(D_.noAi); return }
+      commit()
+      btn.textContent = D_.combining
+      try {
+        const out = await combine(doc(), c.me(), ai, undefined, Date.now())
+        if (out) { c.put(out); c.log(`Combined "${doc().title}" with my AI (${ai.model})`) } else c.h.toast(D_.nothingShared)
+      } catch (e) { c.h.toast(D_.combineFailed(e instanceof Error ? e.message : String(e))) }
+      draw()
+    } }, [D_.combine])
+    return el('div', {}, [btn, el('p', { class: 'meta' }, [D_.combineHint])])
   }
 
   const presence = (d: CoDoc): HTMLElement | null => {
@@ -216,8 +254,9 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     root.replaceChildren(
       title,
       el('p', { class: 'meta', 'data-co-honest': '' }, [S_.honest]), presence(d) ?? '',
-      participants(d), modeButtons(d),
-      d.mode === 'text' ? plain(d) : outline(d),
+      participants(d), evDoc() ? '' : modeButtons(d),
+      d.mode === 'text' && !evDoc() ? plain(d) : outline(d),
+      d.kind === 'desires' ? combineRow() : '',
       el('button', { class: 'btn btn-ghost btn-sm co-more', 'data-co-more': '', 'aria-label': S_.more, onclick: morePage }, ['…']),
     )
     const live = editing ? root.querySelector<HTMLInputElement>(`[data-co-input="${CSS.escape(editing)}"]`) : null

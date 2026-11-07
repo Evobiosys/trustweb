@@ -34,8 +34,8 @@ export function linkOrigin(pageOrigin: string): string {
 }
 
 export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?: EventBy): string {
-  const { id, name, from, to, where, conditions, themes, organizer, hosts, hostNamesTags, tagName } = ev
-  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
+  const { id, name, from, to, core, where, conditions, themes, organizer, hosts, hostNamesTags, tagName } = ev
+  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
 }
 
@@ -57,7 +57,9 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     const from = text(f.from)
     const where = text(f.where)
     if (!id || !name || !from || where === undefined) return null
-    const ev = newEvent({ name, from, where, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes: strings(f.themes), hosts: strings(f.hosts) }, id, 0)
+    const c = typeof f.core === 'object' && f.core !== null ? (f.core as Record<string, unknown>) : undefined
+    const core = f.core === undefined ? undefined : { from: text(c?.from) ?? '', to: text(c?.to) ?? '' }
+    const ev = newEvent({ name, from, where, core, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes: strings(f.themes), hosts: strings(f.hosts) }, id, 0)
     if (typeof ev === 'string') return null
     const tagName = text(f.tagName)?.trim()
     const b = typeof f.by === 'object' && f.by !== null ? (f.by as Record<string, unknown>) : undefined

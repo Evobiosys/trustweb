@@ -344,6 +344,8 @@ export interface TwEvent {
   name: string
   from: string
   to?: string
+  /** Wave 36 (event-desires): the days everyone is there, "YYYY-MM-DD" both ends, inside from..to. Travels in the event link. */
+  core?: { from: string; to: string }
   where: string
   /** What was shared with participants: arriving, on what conditions. */
   conditions?: string
