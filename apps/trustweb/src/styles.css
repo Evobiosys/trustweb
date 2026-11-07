@@ -1491,3 +1491,7 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 
 /* wave 34 rings-filters-2 */
 .num-edit:disabled{color:var(--muted,#888); cursor:default; text-decoration-style:dotted}
+/* wave 34 bar-sheet-2: the bubble is the control (filled like the skin picker's .radio.on); the real input stays for keyboards and screen readers */
+.bar-bubble .bar-hide-input{position:absolute; opacity:0; width:1px; height:1px; margin:0; pointer-events:none}
+.bar-bubble:focus-within{outline:3px solid var(--electric); outline-offset:2px}
+.bar-more-view{display:block; width:100%; margin-top:8px; text-align:left}

@@ -1507,7 +1507,7 @@ export const S = {
   // Wave 31: the configurable bottom row (bottom_bar.ts): the ⋮ button, its sheet, the remove-by-long-press toast.
   barMore: 'Change the bottom row',
   barSheetTitle: 'Bottom row',
-  barSheetHint: 'Tick what the bottom row shows, or tap Add to choose its place. Hold a button there to take it away. Record stays in the row.',
+  barSheetHint: 'Tap the bubble to show or hide a view, or tap Add to choose its place. Hold a button there to take it away. Record stays in the row.',
   barNames: { web: 'Web', feed: 'Feed', chat: 'Chat', events: 'Events', inventory: 'Resources', ask: 'Ask your web', network: 'Network', people: 'People', map: 'Map' } as Record<string, string>,
   barProfilesTitle: 'Profiles',
   barProfileNames: { connector: 'Connector', up_to_date: 'Reader', note_taker: 'Note taker', custom: 'Custom' } as Record<string, string>,
@@ -1515,7 +1515,7 @@ export const S = {
   barUp: (name: string) => `Move ${name} left`,
   barDown: (name: string) => `Move ${name} right`,
   barHighlight: 'Highlight one',
-  barHighlightHint: 'The highlighted view is the raised round button in the middle. Record, unless you pick another.',
+  barHighlightHint: 'The highlighted view is the raised round button in the middle. With an odd number of buttons that is Record, unless you pick another or None.',
   barHighlightPick: (name: string) => `Highlight ${name}`,
   barOverflow: 'In the ⋮ list only (the bar holds six)',
   barOpen: 'Open',
@@ -3072,4 +3072,6 @@ export const S = {
   binRemoveAria: 'Drop here to remove',
   panelChangedSince: (old: string, now: string) => `changed since your approval (${old} → ${now})`,
   panelApproveChanges: 'Approve changes',
+  barHighlightNone: 'None',
+  barMoreViews: 'More views',
 } as const
