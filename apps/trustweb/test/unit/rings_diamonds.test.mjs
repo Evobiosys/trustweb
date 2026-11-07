@@ -78,6 +78,6 @@ describe('wording', () => {
     expect(S.ringCardAria('Closest few', 'Anna, Ben')).toBe('Closest few, everyone: Anna, Ben')
   })
   it('filter sentence parts', () => {
-    expect(S.closestBefore + S.closestAfter).toContain('closest to you')
+    expect(S.closestBefore + S.closestAfter).toContain('closest to me')
   })
 })
