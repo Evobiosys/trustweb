@@ -3153,4 +3153,14 @@ export const S = {
   mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
   keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
   closestMootHint: (n: number) => `(max ${n} anyway)`,
+  // Wave 36b (select_tool.ts): the select tool, the People top strip, the ring filter, the own profile page.
+  selectToolAria: 'Select several people',
+  selectInExpanse: (n: number) => (n === 1 ? 'Moved to the expanse. Tap to undo.' : `${n} moved to the expanse. Tap to undo.`),
+  peopleTools: 'Tools for this list',
+  ringFilterTitle: 'Trust zones',
+  ownProfileTitle: 'My profile',
+  ownProfileLead: 'This is the page others see. Each trust zone sees only what you share with it.',
+  ownProfileNothing: 'Nothing yet',
+  ownProfileEdit: 'Edit what I share',
+  ownProfileName: 'Change my name',
 } as const

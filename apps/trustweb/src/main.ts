@@ -247,7 +247,10 @@ import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_t
 import { communityOf, isArchived, zoneFor } from './trustzones'
 import { archivedPeopleView } from './archived_people_view'
 import { purgeDue, recentlyDeleted } from './deleted_people'
-import { zoneSidebar } from './trustzones_view'
+import { trustZonesGroup, zoneSidebar } from './trustzones_view'
+import { ringShown } from './rings_filter'
+import { ownProfilePage } from './own_profile_view'
+import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
@@ -2432,7 +2435,7 @@ const activePeople = (): Person[] => shown(st(), curatorHiddenIds()).people
 let tagFilter: string | null = null
 
 /** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
-type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView }
+type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView } | { kind: 'me' }
 let webPage: WebPage | null = null
 /** Wave 27: the small card page is expanded in place (card_sections.ts order); Back collapses it first, a second Back leaves. */
 let cardExpanded = false
@@ -2482,6 +2485,12 @@ function webPageScreen(page: WebPage): Node[] {
   const s = shown(st(), curatorHiddenIds())
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
+  if (page.kind === 'me') {
+    return [header(S.ownProfileTitle, { back }), ownProfilePage({
+      profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl), name: () => st().me.displayName,
+      editProfile: profileSheet, editName: () => editNameSheet(true),
+    })]
+  }
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && !isArchived(p) && zoneFor(p, communityOf(s)) === page.ring)
     const zone = S.ringLabel[page.ring]
@@ -2891,13 +2900,14 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people.filter((p) => ringShown(st(), webSlot(p))), openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
     : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
     header(S.webTitle),
     webViewRow(view),
+    ...(ringFilterShown(view) ? [trustZonesGroup({ s: st(), onChange: () => { save(); render() } })] : []),
     ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
@@ -2914,7 +2924,10 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
+  const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, 'expand-btn select-tool')
+  select.setAttribute('data-tool', 'select')
+  select.setAttribute('aria-pressed', String(web.selectOn()))
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */

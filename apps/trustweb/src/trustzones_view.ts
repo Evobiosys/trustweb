@@ -13,7 +13,6 @@ import { S } from './strings'
 import { FILTER_RINGS, ringShown, setRingShown } from './rings_filter'
 import { communityOf, communityTags, filterOpen, setUi } from './trustzones'
 import { connectionsShown } from './zone_connections'
-import { groupOpen, setGroupOpen } from './filter_groups'
 import { activeCountLabel, activeFilters } from './filter_active'
 import { closestLimit, closestMoot, limitOf, parseLimit, setPerRingLimit } from './membranes_five'
 import { webSlot } from './rings_layout'
@@ -79,17 +78,18 @@ export function filterSection(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>)
   ])
 }
 
-/** Wave 32: the five ring checkboxes (plus Not yet sorted) under a collapsible "TrustZones" heading, open by default. */
-function trustZonesGroup(d: Pick<ZonePanelDeps, 's' | 'onChange'>): HTMLElement {
+/** Wave 36b: the trust-zone (ring) filter, collapsed under "Trust zones ▸"; main.ts mounts it on the Network and Map views only (select_tool.ts ringFilterShown). */
+let ringFilterOpen = false
+export function trustZonesGroup(d: Pick<ZonePanelDeps, 's' | 'onChange'>): HTMLElement {
   const check = (ring: Ring): HTMLElement => el('label', { class: 'zone-check' }, [
     el('input', { type: 'checkbox', 'data-zone-filter': ring, ...(ringShown(d.s, ring) ? { checked: '' } : {}), onchange: (e: Event) => { setRingShown(d.s, ring, (e.target as HTMLInputElement).checked); d.onChange() } }),
     ' ', S.ringLabel[ring],
   ])
-  const box = el('details', { class: 'filter-group', 'data-filter-group': 'trustzones', ...(groupOpen(d.s, 'trustzones') ? { open: '' } : {}) }, [
-    el('summary', {}, [S.filterGroupTrustZones]),
+  const box = el('details', { class: 'filter-group ring-filter', 'data-filter-group': 'trustzones', ...(ringFilterOpen ? { open: '' } : {}) }, [
+    el('summary', {}, [S.ringFilterTitle]),
     ...FILTER_RINGS.map(check),
   ])
-  box.addEventListener('toggle', () => { const o = (box as HTMLDetailsElement).open; if (o !== groupOpen(d.s, 'trustzones')) { setGroupOpen(d.s, 'trustzones', o); d.onChange() } })
+  box.addEventListener('toggle', () => { ringFilterOpen = (box as HTMLDetailsElement).open })
   return box
 }
 
@@ -164,7 +164,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
   const open = d.s.uiRings?.showOpen === true
   return el('section', { class: 'zone-filter', 'data-zone-tag-filters': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'showOpen', !open); d.onChange() }, { 'data-zone-tags-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length))])]),
-    ...(open ? [...activeRows(d), trustZonesGroup(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null) : []),
+    ...(open ? [...activeRows(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null) : []),
   ])
 }
 
@@ -172,7 +172,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
 const addingTo: { tag?: string; added: string[] } = { added: [] }
 
 /** Wave 28b: the TrustZones view's only side control (left on desktop, above the rings on the phone, unfolded by default): expand all, add, tag filters. */
-export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void }): HTMLElement {
+export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; select: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void }): HTMLElement {
   const open = d.s.uiRings?.sidebarOpen !== false
   const m = limitOf(d.s)
   const rings = new Set(d.people.map((p) => webSlot(p))).size
@@ -197,7 +197,7 @@ export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'on
   ])
   return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneSidebarTitle, () => { setUi(d.s, 'sidebarOpen', !open); d.onChange() }, { 'data-zone-side-toggle': '' }), el('b', {}, [S.zoneSidebarTitle])]),
-    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add]), connections, perRing, closest, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
+    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add, d.select]), connections, perRing, closest, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
     ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted), tagFilters(d)] : []),
