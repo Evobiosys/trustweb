@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 31: the configurable bottom bar. Stored as AppState.uiBar {order, hidden, primary}; absent = the default
- * (Ask your web, Resources, Web, Record, Chat, Events; the Feed is opt-in from the ⋮ sheet). Record cannot be hidden and is the primary (raised)
+ * (Web, Chat, Record, Events, Resources; Ask your web and the Feed are opt-in from the ⋮ sheet). Record cannot be hidden and is the primary (raised)
  * button unless another shown view is chosen. A view this build does not know, or whose feature is off, is skipped.
  * On a phone at most PHONE_MAX buttons show; the rest live in the ⋮ sheet. Pure, no DOM.
  */
@@ -21,7 +21,7 @@ export interface BarFlags {
   map: boolean
 }
 
-export const DEFAULT_ORDER: readonly BarId[] = ['ask', 'inventory', 'web', 'record', 'chat', 'events']
+export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
 export const PHONE_MAX = 6
 
 /** The sheet's checklist, in its order (Record is always on and not listed). */
@@ -98,4 +98,13 @@ export function barLayout(ids: readonly BarId[], primary: BarId, max: number): {
   const keep = new Set(ids.slice(0, max))
   if (!keep.has(primary)) { keep.delete(ids[max - 1]); keep.add(primary) }
   return { shown: ids.filter((id) => keep.has(id)), overflow: ids.filter((id) => !keep.has(id)) }
+}
+
+/** Wave 33 (schema 3): a record saved before the new default keeps its flags but gets the new order; views it added itself (not Ask, which left the default) stay at the end. */
+export function resetBarOrder(s: { uiBar?: UiBar }): boolean {
+  const old = s.uiBar?.order
+  if (!s.uiBar || !Array.isArray(old)) return false
+  const extras = [...new Set(old)].filter((id) => typeof id === 'string' && id !== 'ask' && !DEFAULT_ORDER.includes(id as BarId))
+  s.uiBar.order = [...DEFAULT_ORDER, ...extras]
+  return true
 }

@@ -5,12 +5,17 @@ import { DEFAULT_ORDER, PHONE_MAX, addBar, barChoices, barLayout, moveBar, resol
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 
 describe('bottom_bar', () => {
-  it('defaults to Ask, Resources, Web, Record, Chat, Events (no Feed)', () => {
-    expect(DEFAULT_ORDER).toEqual(['ask', 'inventory', 'web', 'record', 'chat', 'events'])
+  it('defaults to Web, Chat, Record, Events, Resources (no Ask, no Feed)', () => {
+    expect(DEFAULT_ORDER).toEqual(['web', 'chat', 'record', 'events', 'inventory'])
     expect(resolveBar(undefined, all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(undefined, all).primary).toBe('record')
+  })
+  it('Ask is optional: offered in the sheet, off by default, joins at the end', () => {
+    expect(barChoices(undefined, all).find((x) => x.id === 'ask').on).toBe(false)
+    expect(resolveBar(toggleBar(undefined, 'ask', all), all).ids.at(-1)).toBe('ask')
   })
   it('leaves out views whose feature is off', () => {
-    expect(resolveBar(undefined, { ...all, feed: false, events: false }).ids).toEqual(['ask', 'inventory', 'web', 'record', 'chat'])
+    expect(resolveBar(undefined, { ...all, feed: false, events: false }).ids).toEqual(['web', 'chat', 'record', 'inventory'])
   })
   it('hidden views drop out, Record cannot be hidden, unknown ids are skipped', () => {
     const r = resolveBar({ order: ['web', 'zzz', 'web', 'chat'], hidden: ['chat', 'record'] }, all)
@@ -44,9 +49,9 @@ describe('bottom_bar', () => {
     expect(resolveBar(b, all).primary).toBe('record')
   })
   it('move swaps with the neighbour and stops at the ends', () => {
-    expect(resolveBar(moveBar(undefined, 'web', -1, all), all).ids.slice(0, 3)).toEqual(['ask', 'web', 'inventory'])
-    expect(resolveBar(moveBar(undefined, 'ask', -1, all), all).ids).toEqual(DEFAULT_ORDER)
-    expect(resolveBar(moveBar(undefined, 'events', 1, all), all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(moveBar(undefined, 'chat', -1, all), all).ids.slice(0, 3)).toEqual(['chat', 'web', 'record'])
+    expect(resolveBar(moveBar(undefined, 'web', -1, all), all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(moveBar(undefined, 'inventory', 1, all), all).ids).toEqual(DEFAULT_ORDER)
   })
   it('setPrimary refuses a view that is not shown', () => {
     expect(setPrimary(undefined, 'map', all)).toEqual(undefined)
@@ -55,12 +60,12 @@ describe('bottom_bar', () => {
   it('layout: at most PHONE_MAX shown, the rest in the sheet', () => {
     expect(PHONE_MAX).toBe(6)
     const l = barLayout(resolveBar(undefined, all).ids, 'record', PHONE_MAX)
-    expect(l.shown).toHaveLength(6)
+    expect(l.shown).toHaveLength(5)
     expect(l.overflow).toEqual([])
-    const seven = barLayout(resolveBar(addBar(undefined, 'feed', 'web', 'right', all), all).ids, 'record', PHONE_MAX)
+    const seven = barLayout(resolveBar(addBar(addBar(undefined, 'feed', 'web', 'right', all), 'ask', 'web', 'left', all), all).ids, 'record', PHONE_MAX)
     expect(seven.shown).toHaveLength(6)
     expect(seven.shown).toContain('record')
-    expect(seven.overflow).toEqual(['events'])
+    expect(seven.overflow).toEqual(['inventory'])
     expect(barLayout(['web', 'chat'], 'record', 6)).toEqual({ shown: ['web', 'chat'], overflow: [] })
   })
   it('choices list every available view with its state', () => {
@@ -72,16 +77,16 @@ describe('bottom_bar', () => {
   })
   it('addBar puts a view left or right of a shown view and persists it in order', () => {
     const r = addBar(undefined, 'feed', 'web', 'right', all)
-    expect(resolveBar(r, all).ids).toEqual(['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events'])
-    expect(r.order).toEqual(['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events'])
-    expect(resolveBar(addBar(undefined, 'feed', 'ask', 'left', all), all).ids[0]).toBe('feed')
+    expect(resolveBar(r, all).ids).toEqual(['web', 'feed', 'chat', 'record', 'events', 'inventory'])
+    expect(r.order).toEqual(['web', 'feed', 'chat', 'record', 'events', 'inventory'])
+    expect(resolveBar(addBar(undefined, 'feed', 'web', 'left', all), all).ids[0]).toBe('feed')
   })
   it('addBar moves an already shown view, un-hides a hidden one, keeps primary, ignores bad input', () => {
-    expect(resolveBar(addBar(undefined, 'events', 'ask', 'left', all), all).ids[0]).toBe('events')
+    expect(resolveBar(addBar(undefined, 'events', 'web', 'left', all), all).ids[0]).toBe('events')
     const hid = toggleBar(undefined, 'chat', all)
-    expect(resolveBar(addBar(hid, 'chat', 'ask', 'left', all), all).ids[0]).toBe('chat')
-    expect(addBar({ primary: 'web' }, 'feed', 'ask', 'left', all).primary).toBe('web')
-    expect(addBar(undefined, 'zzz', 'ask', 'left', all)).toEqual(undefined)
+    expect(resolveBar(addBar(hid, 'chat', 'web', 'left', all), all).ids[0]).toBe('chat')
+    expect(addBar({ primary: 'web' }, 'feed', 'web', 'left', all).primary).toBe('web')
+    expect(addBar(undefined, 'zzz', 'web', 'left', all)).toEqual(undefined)
     expect(addBar(undefined, 'feed', 'map', 'left', all)).toEqual(undefined)
     expect(addBar(undefined, 'feed', 'feed', 'left', all)).toEqual(undefined)
   })

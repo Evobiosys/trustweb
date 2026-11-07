@@ -73,3 +73,35 @@ describe('favourite -> pinned', () => {
     expect(b.people[0].favourite).toBeUndefined()
   })
 })
+
+describe('bottom bar order reset (wave 33)', () => {
+  const NEW = ['web', 'chat', 'record', 'events', 'inventory']
+  it('an older record with the old default order gets the new default, once', () => {
+    const s = base({ schemaVersion: 2, uiBar: { order: ['ask', 'inventory', 'web', 'record', 'chat', 'events'], primary: 'web' } })
+    expect(migrate(s)).toBe(true)
+    expect(s.uiBar.order).toEqual(NEW)
+    expect(s.uiBar.primary).toBe('web')
+    s.uiBar.order = ['chat', 'record', 'web']
+    expect(migrate(s)).toBe(false)
+    expect(s.uiBar.order).toEqual(['chat', 'record', 'web'])
+  })
+  it('a custom order is reset too; opt-in views (feed) and hidden flags survive, ask does not', () => {
+    const s = base({ uiBar: { order: ['events', 'feed', 'ask', 'record'], hidden: ['chat'] } })
+    migrate(s)
+    expect(s.uiBar.order).toEqual([...NEW, 'feed'])
+    expect(s.uiBar.hidden).toEqual(['chat'])
+  })
+  it('an absent uiBar stays absent', () => {
+    const s = base({ schemaVersion: 2 })
+    migrate(s)
+    expect('uiBar' in s).toBe(false)
+  })
+  it('a uiBar without an order is left alone', () => {
+    const s = base({ schemaVersion: 2, uiBar: { primary: 'web' } })
+    migrate(s)
+    expect(s.uiBar).toEqual({ primary: 'web' })
+  })
+  it('the version is 3', () => {
+    expect(SCHEMA_VERSION).toBe(3)
+  })
+})
