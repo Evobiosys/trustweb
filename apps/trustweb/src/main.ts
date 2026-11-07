@@ -151,6 +151,7 @@ import { S } from './strings'
 import { createNetworkView } from './network_view'
 import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList, peopleQuery, setPeopleQuery } from './people_list_view'
+import { completeQuery, completeView, resetComplete, setCompleteQuery } from './complete_view'
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { personImageOk } from './person_image'
@@ -1032,7 +1033,7 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', complete: 'table', map: 'map', dex: 'curator', compact: 'list' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
@@ -1285,7 +1286,9 @@ let peoplePage = false
 let pageBack = Screen.Web
 /** Wave 30: the header magnifier's filter field under the People header; it filters the list as you type, Escape clears and closes it. */
 let peopleSearchOpen = false
-function openPeople(query = ''): void {
+function openPeople(query = '', complete = false): void {
+  completeMode = complete
+  if (complete) resetComplete()
   resetPeopleList(query)
   peopleSearchOpen = query !== ''
   peoplePage = true
@@ -1293,6 +1296,14 @@ function openPeople(query = ''): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
+/** Wave 36 complete-view: the People page showing everyone as a table (the 'complete' view). */
+let completeMode = false
+function openComplete(): void {
+  openPeople('', true)
+}
+/** The header search field feeds whichever list the People page shows. */
+const peopleSearchQuery = (): string => (completeMode ? completeQuery() : peopleQuery())
+const setPeopleSearch = (q: string): void => (completeMode ? setCompleteQuery(q) : setPeopleQuery(q))
 /** Wave 32: the Notes outliner opens as a page the same way; wave 33: it hangs under Resources, so Back returns there. */
 function openNotes(): void {
   peoplePage = true
@@ -1322,19 +1333,21 @@ const rowEdit: RowEdit = { save, place: (id, ring) => placePerson(id, ring, true
 
 function peopleSearchField(): HTMLElement {
   const input = el('input', {
-    class: 'field people-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-people-search': '', value: peopleQuery(),
-    oninput: (e: Event) => setPeopleQuery((e.target as HTMLInputElement).value),
-    onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === 'Escape') { peopleSearchOpen = false; setPeopleQuery(''); render() } },
+    class: 'field people-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-people-search': '', value: peopleSearchQuery(),
+    oninput: (e: Event) => setPeopleSearch((e.target as HTMLInputElement).value),
+    onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === 'Escape') { peopleSearchOpen = false; setPeopleSearch(''); render() } },
   })
   setTimeout(() => input.focus(), 0)
   return input
 }
 function screenPeople(): Node[] {
   return [
-    header(S.peopleTitle, { back: () => history.back() }),
+    header(completeMode ? S.viewNames.complete : S.peopleTitle, { back: () => history.back() }),
     ...(peopleSearchOpen ? [peopleSearchField()] : []),
     el('div', { class: 'scroll pad' }, [
-      peopleListBody(st, openCardPage, addPersonSheet, undefined, rowEdit),
+      completeMode
+        ? completeView({ state: st, save, open: openCardPage, place: (id, ring) => placePerson(id, ring, true), toast: (msg, undo) => toast(msg, { onClick: undo }), tags: loadColourTags, saveTags: (t) => saveColourTags([...t]), focusSearch: () => { peopleSearchOpen = true; render() } })
+        : peopleListBody(st, openCardPage, addPersonSheet, undefined, rowEdit),
     ]),
   ]
 }
@@ -1427,7 +1440,7 @@ function tagQr(tag: string, plain = false): void {
 function headerSearch(): void {
   if (screen === Screen.Web) { webSearchOpen = !webSearchOpen; render() }
   else if (screen === Screen.Chat) document.querySelector<HTMLInputElement>('[data-chat-search]')?.focus()
-  else if (screen === Screen.People) { peopleSearchOpen = !peopleSearchOpen; if (!peopleSearchOpen) setPeopleQuery(''); render() }
+  else if (screen === Screen.People) { peopleSearchOpen = !peopleSearchOpen; if (!peopleSearchOpen) setPeopleSearch(''); render() }
   else if (screen === Screen.Events) { eventsView.showList(); window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-event-filter]')?.focus(), 0) }
   else { invSearchOpen = !invSearchOpen; if (!invSearchOpen) invQuery = ''; render() }
 }
@@ -1464,7 +1477,7 @@ function mountHeaderControls(): void {
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
-    : screen === Screen.People ? viewControls('people')
+    : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1475,7 +1488,7 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -2603,7 +2616,7 @@ function webViewRow(view: WebView): HTMLElement {
     })
     : el('span', { class: 'web-view' }, [heading ? S.viewNames[heading] : ''])
   if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
-  return el('div', { class: 'web-view-row' }, [mid])
+  return el('div', { class: 'web-view-row' }, [mid, view === 'rings' && !webSearchOpen ? el('button', { class: 'cv-open', 'data-view': 'complete', onclick: () => chooseView('complete') }, [S.completeOpen]) : null])
 }
 
 /** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
@@ -2699,7 +2712,8 @@ function toggleExpand(expanded: boolean): void {
 /** Web and Network are remembered (WEB_VIEW_KEY); People, Dex and Contacts compact open as pages with Back. */
 function chooseView(view: ViewKey): void {
   eyeOpen = false
-  if (view === 'people') { if (screen === Screen.People) render(); else openPeople(); return }
+  if (view === 'people') { if (screen === Screen.People && !completeMode) render(); else openPeople(); return }
+  if (view === 'complete') { if (screen === Screen.People && completeMode) render(); else openComplete(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }

@@ -396,6 +396,8 @@ export interface Person {
   prevRing?: Ring
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
+  /** wave 36 complete-view: keep-in-touch every N days; absent = off; local only. */
+  cadenceDays?: number
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
