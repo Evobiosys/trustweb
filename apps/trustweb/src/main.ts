@@ -108,6 +108,7 @@ import { candidates, seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
+import { skinsFor, skinOf, chooseSkin } from './skins'
 import { PHONE_MAX, addBar, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
@@ -6362,6 +6363,16 @@ function settingsSheet(): void {
         el('b', {}, [S.viewNames[i.view]]),
       ])),
     ]),
+    settingsSection('skins', S.setSkins, [
+      el('div', { 'data-settings-skins': '' }, [
+        el('p', { class: 'meta' }, [S.setSkinsHint]),
+        ...skinsFor('network').map((k) => el('button', {
+          class: 'radio' + (skinOf(s).id === k.id ? ' on' : ''), role: 'radio', 'aria-checked': String(skinOf(s).id === k.id), 'data-skin': k.id,
+          onclick: () => { chooseSkin(s, k.id); save(); render(); settingsSheet() },
+        }, [el('b', {}, [k.name]), el('small', {}, [k.description])])),
+        el('p', { class: 'meta skins-store', 'data-skins-store': '', 'aria-disabled': 'true', title: S.setSkinsStoreHint }, [S.setSkinsStore, el('small', {}, [S.setSkinsStoreHint])]),
+      ]),
+    ], true),
     settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) })]),
     settingsSection('advanced-web', S.setAdvanced, [
     // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
