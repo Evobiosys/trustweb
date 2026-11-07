@@ -6,13 +6,14 @@ import { S } from './strings'
 
 export interface ActiveFilter { chip: string; label: string }
 
-export function activeFilters(ui: { show?: string[]; hide?: string[] } | undefined, tags: readonly ColourTag[], people: readonly Pick<Person, 'id' | 'name'>[]): ActiveFilter[] {
+export function activeFilters(ui: { show?: string[]; hide?: string[]; closest150?: boolean } | undefined, tags: readonly ColourTag[], people: readonly Pick<Person, 'id' | 'name'>[]): ActiveFilter[] {
   const name = (chip: string): string => chip.startsWith('person:')
     ? '@' + (people.find((p) => p.id === chip.slice(7))?.name ?? chip.slice(7))
     : '#' + (tags.find((t) => t.id === chip.slice(4))?.label ?? chip.slice(4))
   return [
     ...(ui?.show ?? []).map((chip) => ({ chip, label: S.tagFilterOn(name(chip)) })),
     ...(ui?.hide ?? []).map((chip) => ({ chip, label: S.filterHidden(name(chip)) })),
+    ...(ui?.closest150 ? [{ chip: 'closest150', label: S.closest150Active }] : []),
   ]
 }
 

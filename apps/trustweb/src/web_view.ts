@@ -22,7 +22,7 @@ import type { Curator, LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { bringAllBack, bringBack, expanseList, hideInExpanse, hitControls, visibleIn } from './expanse'
 import { shortLabel } from './short_label'
-import { limitOf, pickFive, withTag } from './membranes_five'
+import { closest150, limitOf, pickFive, withTag } from './membranes_five'
 import { communityOf, filledRings, isArchived, inZones, toggleRing, toneVar, zoneFor } from './trustzones'
 import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
@@ -154,8 +154,14 @@ export function createWebView(deps: WebViewDeps): WebView {
     const community = communityOf(s)
     // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
     for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? []))) (everyone[zoneFor(p, community)] ??= []).push(p)
+    // Wave 33: "closest 150" keeps the 150 closest across all rings (ring membership unchanged) and draws them all.
+    const only150 = !desk && s.uiRings?.closest150 === true
+    if (only150) {
+      const keep = new Set(closest150(Object.values(everyone).flat(), s, Date.now()).map((p) => p.id))
+      for (const r of Object.keys(everyone) as Ring[]) everyone[r] = everyone[r]!.filter((p) => keep.has(p.id))
+    }
     // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
-    const complete = opts.complete === true || desk !== undefined
+    const complete = opts.complete === true || desk !== undefined || only150
     const members: Partial<Record<Ring, Person[]>> = {}
     const rest: Partial<Record<Ring, Person[]>> = {}
     const filled = filledRings(s)
