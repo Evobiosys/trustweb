@@ -151,6 +151,8 @@ import { S } from './strings'
 import { createNetworkView } from './network_view'
 import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList, peopleQuery, setPeopleQuery } from './people_list_view'
+import { keepNoticeDue, noticeText, overduePeople } from './keep_in_touch'
+import { keepInTouchRow } from './keep_in_touch_view'
 import { completeQuery, completeView, resetComplete, setCompleteQuery } from './complete_view'
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
@@ -856,6 +858,7 @@ function checkEngagement(): void {
   const now = Date.now()
   if (state.engagementSince === undefined) { ensureBaseline(state, now); save() }
   // Wave 28 (Jakob 2026-11-01): nothing moves by itself any more; a quiet tie gets a zzz marker on the TrustZones and moves on a tap (zzzAccept).
+  checkKeepInTouch(now)
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
   const { names, more } = soonNames(soon)
@@ -863,6 +866,15 @@ function checkEngagement(): void {
   const stamp = (): void => { if (state) { state.engagementNoticeDay = localDay(new Date(now)); save() } }
   if (soon.length === 0) stamp()
   else notifyKind('reminder', S.engagementSoonTitle(names, more), S.engagementSoonOpen, () => personSheet(soon[0].id), stamp)
+}
+
+/** Wave 36 keep-in-touch: once a day one grouped notice for everyone past their cadence; its button opens the complete view filtered to Overdue. */
+function checkKeepInTouch(now: number): void {
+  if (!state || !keepNoticeDue(state, new Date(now))) return
+  const late = overduePeople(state, now)
+  const stamp = (): void => { if (state) { state.keepNoticeDay = localDay(new Date(now)); save() } }
+  if (late.length === 0) stamp()
+  else notifyKind('reminder', noticeText(late.map((p) => p.name)), S.keepNoticeOpen, () => openComplete(true), stamp)
 }
 
 function dismissCard(card: StackCard): void {
@@ -1286,9 +1298,9 @@ let peoplePage = false
 let pageBack = Screen.Web
 /** Wave 30: the header magnifier's filter field under the People header; it filters the list as you type, Escape clears and closes it. */
 let peopleSearchOpen = false
-function openPeople(query = '', complete = false): void {
+function openPeople(query = '', complete = false, overdue = false): void {
   completeMode = complete
-  if (complete) resetComplete()
+  if (complete) resetComplete('', overdue)
   resetPeopleList(query)
   peopleSearchOpen = query !== ''
   peoplePage = true
@@ -1298,8 +1310,8 @@ function openPeople(query = '', complete = false): void {
 }
 /** Wave 36 complete-view: the People page showing everyone as a table (the 'complete' view). */
 let completeMode = false
-function openComplete(): void {
-  openPeople('', true)
+function openComplete(overdue = false): void {
+  openPeople('', true, overdue)
 }
 /** The header search field feeds whichever list the People page shows. */
 const peopleSearchQuery = (): string => (completeMode ? completeQuery() : peopleQuery())
@@ -3226,6 +3238,7 @@ function cardMore(p: Person): Node[] {
     invitations: () => [cardInvitationsRow(invitationIo(), p)],
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
+      keepInTouchRow({ state: st, save, redraw: render, toast: (msg, undo) => toast(msg, { onClick: undo }) }, p),
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
