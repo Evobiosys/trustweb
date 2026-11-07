@@ -96,3 +96,11 @@ describe('warmPath', () => {
     expect(warmPath(group('g', { members: many.map((p) => p.id) }), { people: many })).toHaveLength(5)
   })
 })
+
+describe('groups stay on this phone', () => {
+  it('the device sync leaves them out (the page says "Only on this phone")', async () => {
+    const { SYNC_EXCLUDED, settingsOf } = await import('../../src/sync_core.ts')
+    expect(SYNC_EXCLUDED.has('groups')).toBe(true)
+    expect(settingsOf({ groups: [group('g')] })).toEqual({})
+  })
+})

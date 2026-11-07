@@ -1106,7 +1106,7 @@ export interface AppState {
   showMessengerLinks?: false
   /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only on the owner's tap "Send my profile" on a card, to that connected peer, in a chat text. */
   profile?: MyProfile
-  /** Wave 36 (group_fit.ts): groups I could join or help. Local only. Absent: none. */
+  /** Wave 36 (group_fit.ts): groups I could join or help. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED), never sent. Absent: none. */
   groups?: TwGroup[]
   /** Wave 20 (profile.ts autoSendRank): peer id -> the widest zone reach whose profile slice already went to that peer automatically. */
   autoSentRank?: Record<string, number>
