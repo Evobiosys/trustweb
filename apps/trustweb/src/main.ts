@@ -114,7 +114,7 @@ import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, remov
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, addBar, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
@@ -1101,6 +1101,24 @@ function barSheet(): void {
   openSheet([
     el('h3', {}, [S.barSheetTitle]),
     el('p', { class: 'hint' }, [S.barSheetHint]),
+    el('h4', { class: 'eyebrow' }, [S.barProfilesTitle]),
+    el('div', { class: 'bar-profiles' }, [...PROFILES.map((p) => p.id), 'custom'].map((pid) => {
+      const prof = PROFILES.find((p) => p.id === pid)
+      const name = S.barProfileNames[pid]
+      // The mini preview: the preset's five glyphs (Custom shows the bar as it is now), the centre one enlarged.
+      const preview = prof ? { order: prof.order, primary: prof.primary } : { order: ids, primary }
+      return el('button', {
+        class: 'bar-profile' + (pid === activeProfile(s.uiBar, flags) ? ' on' : ''), 'data-bar-profile': pid, 'aria-label': S.barProfilePick(name), 'aria-pressed': String(pid === activeProfile(s.uiBar, flags)),
+        ...(prof ? { onclick: () => { if (prof.order.includes('feed') && !flags.feed) s.feed = { ...s.feed, on: true }; redraw(applyProfile(s.uiBar, pid)) } } : { disabled: '' }),
+      }, [
+        el('span', { class: 'bar-profile-prev' }, preview.order.map((id) => {
+          const g = el('span', { class: 'bar-glyph' + (id === preview.primary ? ' bar-glyph-primary' : '') })
+          g.innerHTML = icon(id === 'record' ? 'mic' : id === 'ask' ? 'query' : TAB_ICON[id])
+          return g
+        })),
+        el('b', {}, [name]),
+      ])
+    })),
     // The Feed is an opt-in feature: it is always offered here, and ticking it switches the feature on.
     ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).map(({ id, on }) => el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
       el('label', { class: 'radio', 'data-bar-opt': id }, [

@@ -1394,6 +1394,15 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tab.tab-primary.on{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen), 0 0 0 8px rgba(23,143,134,.35)}
 .tab.tab-primary svg{stroke:#fff}
 .phone.ask-in-bar [data-open-query]{display:none}
+.bar-profiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:12px}
+.bar-profile{display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px; border:1px solid var(--line,#ccc); border-radius:12px; background:none; font:inherit; color:inherit; cursor:pointer}
+.bar-profile.on{border-color:var(--violet); box-shadow:0 0 0 2px var(--violet) inset}
+.bar-profile[disabled]{cursor:default}
+.bar-profile-prev{display:flex; align-items:center; gap:3px; height:30px}
+.bar-glyph{display:inline-flex; width:16px; height:16px; opacity:.6}
+.bar-glyph svg{width:100%; height:100%}
+.bar-glyph-primary{width:26px; height:26px; opacity:1; color:#fff; border-radius:50%; padding:4px; box-sizing:border-box; background:linear-gradient(135deg,var(--coral),var(--violet))}
+.bar-glyph-primary svg{stroke:#fff}
 .bar-opt-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .bar-opt-row .radio{flex:1 1 140px}
 .bar-opt-acts{display:flex; gap:2px}

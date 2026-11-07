@@ -91,3 +91,36 @@ describe('bottom_bar', () => {
     expect(addBar(undefined, 'feed', 'feed', 'left', all)).toEqual(undefined)
   })
 })
+
+describe('bottom_bar profiles (wave 33)', () => {
+  it('has four presets of five slots, centre = primary', async () => {
+    const { PROFILES } = await import('../../src/bottom_bar.ts')
+    expect(PROFILES.map((p) => p.id)).toEqual(['connector', 'up_to_date', 'note_taker', 'communicator'])
+    for (const p of PROFILES) { expect(p.order).toHaveLength(5); expect(p.order[2]).toBe(p.primary) }
+    expect(PROFILES.find((p) => p.id === 'note_taker').order).toEqual(DEFAULT_ORDER)
+    expect(new Set(PROFILES.map((p) => p.order.join()))).toHaveProperty('size', 4)
+  })
+  it('applyProfile sets order, primary, marker, profile and clears hidden', async () => {
+    const { applyProfile, BAR_ORDER_VERSION } = await import('../../src/bottom_bar.ts')
+    const r = applyProfile({ order: ['web'], hidden: ['chat'], primary: 'web' }, 'communicator')
+    expect(r).toEqual({ order: ['web', 'feed', 'chat', 'events', 'inventory'], hidden: [], primary: 'chat', orderVersion: BAR_ORDER_VERSION, profile: 'communicator' })
+    expect(applyProfile(undefined, 'nope')).toBeUndefined()
+    // Record cannot leave the row: presets without it get it mid-row (six buttons).
+    expect(resolveBar(r, all).ids).toEqual(['web', 'feed', 'chat', 'record', 'events', 'inventory'])
+    expect(resolveBar(applyProfile(undefined, 'connector'), all).ids).toEqual(['web', 'record', 'chat', 'events', 'inventory'])
+  })
+  it('manual edits set profile custom', async () => {
+    const { applyProfile } = await import('../../src/bottom_bar.ts')
+    const p = applyProfile(undefined, 'connector')
+    expect(toggleBar(p, 'events', all).profile).toBe('custom')
+    expect(moveBar(p, 'web', 1, all).profile).toBe('custom')
+    expect(addBar(p, 'ask', 'web', 'left', all).profile).toBe('custom')
+    expect(setPrimary(p, 'web', all).profile).toBe('custom')
+  })
+  it('activeProfile: stored id, else the matching preset, else custom', async () => {
+    const { activeProfile, applyProfile } = await import('../../src/bottom_bar.ts')
+    expect(activeProfile(applyProfile(undefined, 'up_to_date'), all)).toBe('up_to_date')
+    expect(activeProfile(undefined, all)).toBe('note_taker')
+    expect(activeProfile({ order: ['chat', 'record', 'web'] }, all)).toBe('custom')
+  })
+})

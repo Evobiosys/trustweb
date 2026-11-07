@@ -13,6 +13,8 @@ export interface UiBar {
   primary?: string
   /** BAR_ORDER_VERSION once the wave-33 default order has been applied (or the user set the order since). */
   orderVersion?: number
+  /** Wave 33: the preset last chosen (PROFILES id), or 'custom' once the bar was edited by hand. Optional, no schema bump. */
+  profile?: string
 }
 
 export const BAR_ORDER_VERSION = 2
@@ -66,7 +68,7 @@ export function toggleBar(bar: UiBar | undefined, id: string, f: BarFlags): UiBa
   const order = baseOrder(bar)
   const hidden = (bar?.hidden ?? []).filter((h) => h !== id)
   if (!on && !order.includes(id as BarId)) order.push(id as BarId)
-  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden, orderVersion: BAR_ORDER_VERSION }
+  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
   if (bar?.primary && !(on && bar.primary === id)) next.primary = bar.primary
   return next
 }
@@ -76,7 +78,7 @@ export function addBar(bar: UiBar | undefined, id: string, ref: string, side: 'l
   if (!offered(f).includes(id as BarId) || id === 'record' || id === ref || !resolveBar(bar, f).ids.includes(ref as BarId)) return bar
   const order = baseOrder(bar).filter((x) => x !== id)
   order.splice(order.indexOf(ref as BarId) + (side === 'right' ? 1 : 0), 0, id as BarId)
-  return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION }
+  return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
 
 /** One step left (-1) or right (+1) among the shown views; at the end it stays. */
@@ -87,13 +89,13 @@ export function moveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: BarF
   const order = baseOrder(bar)
   const [a, b] = [order.indexOf(id as BarId), order.indexOf(other)]
   ;[order[a], order[b]] = [order[b], order[a]]
-  return { ...bar, order, orderVersion: BAR_ORDER_VERSION }
+  return { ...bar, order, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
 
 /** Marks a shown view as the raised centre button. */
 export function setPrimary(bar: UiBar | undefined, id: string, f: BarFlags): UiBar | undefined {
   if (!resolveBar(bar, f).ids.includes(id as BarId)) return bar
-  return { ...bar, primary: id }
+  return { ...bar, primary: id, profile: 'custom' }
 }
 
 /** At most `max` buttons show (the primary always among them); the rest go into the sheet. */
@@ -113,4 +115,29 @@ export function resetBarOrder(s: { uiBar?: UiBar }): boolean {
   const extras = [...new Set(old)].filter((id) => typeof id === 'string' && id !== 'ask' && !DEFAULT_ORDER.includes(id as BarId))
   s.uiBar.order = [...DEFAULT_ORDER, ...extras]
   return true
+}
+
+/**
+ * Wave 33: the default profiles. Five slots, the centre one is the raised primary button. Note taker is the old default;
+ * Connector differs from it (Record second, Chat in the centre) so that the two names stay distinct. Names are suggestions.
+ */
+export const PROFILES: readonly { id: string; order: readonly BarId[]; primary: BarId }[] = [
+  { id: 'connector', order: ['web', 'record', 'chat', 'events', 'inventory'], primary: 'chat' },
+  { id: 'up_to_date', order: ['web', 'chat', 'feed', 'events', 'inventory'], primary: 'feed' },
+  { id: 'note_taker', order: DEFAULT_ORDER, primary: 'record' },
+  { id: 'communicator', order: ['web', 'feed', 'chat', 'events', 'inventory'], primary: 'chat' },
+]
+
+/** Sets order, primary, marker and profile from a preset; hidden is cleared. Unknown id changes nothing. */
+export function applyProfile(bar: UiBar | undefined, id: string): UiBar | undefined {
+  const p = PROFILES.find((x) => x.id === id)
+  if (!p) return bar
+  return { ...bar, order: [...p.order], hidden: [], primary: p.primary, orderVersion: BAR_ORDER_VERSION, profile: p.id }
+}
+
+/** The stored profile; without one, the preset the bar happens to match, else 'custom'. */
+export function activeProfile(bar: UiBar | undefined, f: BarFlags): string {
+  if (bar?.profile && (bar.profile === 'custom' || PROFILES.some((p) => p.id === bar.profile))) return bar.profile
+  const { ids, primary } = resolveBar(bar, f)
+  return PROFILES.find((p) => p.primary === primary && p.order.join() === ids.join())?.id ?? 'custom'
 }
