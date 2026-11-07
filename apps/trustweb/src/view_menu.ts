@@ -3,9 +3,9 @@
 export type WebView = 'rings' | 'network' | 'map'
 
 /** Everything the eye menu can open, in menu order; the last two sit under "Other views". Map shows only when a map page exists. */
-export type ViewKey = WebView | 'people' | 'map' | 'dex' | 'compact'
-const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'map', 'dex', 'compact']
-const OTHER: readonly ViewKey[] = ['dex', 'compact']
+export type ViewKey = WebView | 'people' | 'map' | 'dex' | 'compact' | 'groups'
+const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'map', 'dex', 'compact', 'groups']
+const OTHER: readonly ViewKey[] = ['dex', 'compact', 'groups']
 /** Wave 28: Dex is the one view that sits in the "Alternative UI (beta)" part of Other views; new unique views join Other views. */
 const ALT: readonly ViewKey[] = ['dex']
 

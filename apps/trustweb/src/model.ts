@@ -983,6 +983,21 @@ export interface SignalConv { e164: string; name: string; n365: number; out: num
 /** Wave 27 (signal-link): what the Signal / Molly import left on this device, read-only. Absent: not imported. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
 export interface SignalImport { at: number; conversations: SignalConv[]; /** personId -> the ring before a Change in the placing step (Accept never moves a ring). */ prevRing?: Record<string, Ring> }
 
+/** Wave 36 (group_fit.ts): a group I could join or help. Local only, never sent (I1); `members` are ids of people I know in it. */
+export interface TwGroup {
+  id: string
+  name: string
+  about?: string
+  link?: string
+  tags: string[]
+  members: string[]
+  /** My estimate of the group's resources: none, some, good, strong. */
+  resources?: 0 | 1 | 2 | 3
+  status?: 'watching' | 'talking' | 'joined' | 'contributing'
+  note?: string
+  updatedAt: number
+}
+
 export interface AppState {
   v: typeof RECORD_FORMAT
   /** schema_version.ts: the build's SCHEMA_VERSION that last migrated this record. Absent: version 1. */
@@ -1091,6 +1106,8 @@ export interface AppState {
   showMessengerLinks?: false
   /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only on the owner's tap "Send my profile" on a card, to that connected peer, in a chat text. */
   profile?: MyProfile
+  /** Wave 36 (group_fit.ts): groups I could join or help. Local only. Absent: none. */
+  groups?: TwGroup[]
   /** Wave 20 (profile.ts autoSendRank): peer id -> the widest zone reach whose profile slice already went to that peer automatically. */
   autoSentRank?: Record<string, number>
   /** Wave 20: Settings "Share my profile when we connect". Absent: on; only true (off) is stored. */
