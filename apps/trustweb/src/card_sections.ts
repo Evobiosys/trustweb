@@ -9,14 +9,14 @@ import { extraEntries } from './person_days'
 import { timelineOf } from './timeline'
 import type { TimelineEntry } from './timeline'
 
-export type CardSection = 'seen' | 'channels' | 'askLinks' | 'passOn' | 'knows' | 'other' | 'notes' | 'timeline' | 'curate'
+export type CardSection = 'seen' | 'channels' | 'askLinks' | 'passOn' | 'knows' | 'invitations' | 'other' | 'notes' | 'timeline' | 'curate'
 
 export function cardSections(f: { connected: boolean; canAskLinks: boolean }): CardSection[] {
   return [
     'seen', 'channels',
     ...(f.canAskLinks ? ['askLinks' as const] : []),
     ...(f.connected ? ['passOn' as const] : []),
-    'knows', 'other', 'notes', 'timeline', 'curate',
+    'knows', 'invitations', 'other', 'notes', 'timeline', 'curate',
   ]
 }
 

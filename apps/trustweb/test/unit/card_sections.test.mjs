@@ -8,7 +8,7 @@ const state = (o = {}) => ({ people: [], peers: [{ id: 'pe1', connectedAt: 5_000
 
 describe('cardSections', () => {
   it('orders the expanded card as Jakob listed it, Curate last', () => {
-    expect(cardSections({ connected: true, canAskLinks: true })).toEqual(['seen', 'channels', 'askLinks', 'passOn', 'knows', 'other', 'notes', 'timeline', 'curate'])
+    expect(cardSections({ connected: true, canAskLinks: true })).toEqual(['seen', 'channels', 'askLinks', 'passOn', 'knows', 'invitations', 'other', 'notes', 'timeline', 'curate'])
   })
   it('leaves out what a not-connected person cannot do', () => {
     const ids = cardSections({ connected: false, canAskLinks: false })
