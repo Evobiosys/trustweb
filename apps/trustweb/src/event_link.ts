@@ -59,7 +59,10 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     if (!id || !name || !from || where === undefined) return null
     const c = typeof f.core === 'object' && f.core !== null ? (f.core as Record<string, unknown>) : undefined
     const core = f.core === undefined ? undefined : { from: text(c?.from) ?? '', to: text(c?.to) ?? '' }
-    const ev = newEvent({ name, from, where, core, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes: strings(f.themes), hosts: strings(f.hosts) }, id, 0)
+    const fields = { name, from, where, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes: strings(f.themes), hosts: strings(f.hosts) }
+    // A mangled core time costs only the core, never the event.
+    const withCore = newEvent({ ...fields, core }, id, 0)
+    const ev = withCore === 'core' ? newEvent(fields, id, 0) : withCore
     if (typeof ev === 'string') return null
     const tagName = text(f.tagName)?.trim()
     const b = typeof f.by === 'object' && f.by !== null ? (f.by as Record<string, unknown>) : undefined

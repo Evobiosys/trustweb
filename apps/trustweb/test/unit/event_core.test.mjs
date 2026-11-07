@@ -40,9 +40,11 @@ describe('event core time', () => {
     expect(decodeEventLink(link.split('/#')[1]).core).toEqual({ from: '2026-12-30', to: '2027-01-04' })
   })
 
-  it('a mangled core in a link makes the link invalid', () => {
+  it('a mangled core in a link drops only the core, the event still comes through', () => {
     const o = { kind: 'peer', id: 'e', name: 'A', from: '2026-12-27', where: '', core: { from: '2026-12-30' } }
-    expect(decodeEventLink('#ev=' + Buffer.from(JSON.stringify(o)).toString('base64url'))).toBeNull()
+    const ev = decodeEventLink('#ev=' + Buffer.from(JSON.stringify(o)).toString('base64url'))
+    expect(ev?.name).toBe('A')
+    expect(ev && 'core' in ev).toBe(false)
   })
 
   it('rides with the event in the own-device bundle', () => {
