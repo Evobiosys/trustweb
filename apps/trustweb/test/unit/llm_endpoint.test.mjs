@@ -55,9 +55,8 @@ describe('configured / presets', () => {
     expect(configured({ ...cfg, model: '' })).toBe(false)
     expect(configured(cfg)).toBe(true)
   })
-  it('presets: Ollama local, pc24 dev', () => {
+  it('presets: Ollama local', () => {
     expect(PRESETS.ollama.baseUrl).toBe('http://localhost:11434/v1')
-    expect(PRESETS.pc24).toMatchObject({ baseUrl: 'http://localhost:11435/v1', model: 'qwen3.6:35b' })
   })
 })
 
@@ -66,5 +65,18 @@ describe('wired to the together draft', () => {
     const { draftOrPlain } = await import('../../src/together_request.ts')
     const r = await draftOrPlain('who is up for something sporty', NOW, (t) => askEndpoint(cfg, t, async () => reply('{"activity":"padel"}')), true)
     expect(r?.activity).toBe('padel')
+  })
+})
+
+describe('PRESETS (wave 36 ai-subscription)', () => {
+  it('has openai, claude, ollama, custom and no pc24', () => {
+    expect(Object.keys(PRESETS)).toEqual(['openai', 'claude', 'ollama', 'custom'])
+    expect(PRESETS.claude.baseUrl).toBe('https://api.anthropic.com/v1')
+  })
+  it('adds the browser-access header only for api.anthropic.com', () => {
+    const claude = buildRequest({ ...cfg, baseUrl: 'https://api.anthropic.com/v1' }, 'x')
+    expect(claude.init.headers['anthropic-dangerous-direct-browser-access']).toBe('true')
+    expect(buildRequest(cfg, 'x').init.headers['anthropic-dangerous-direct-browser-access']).toBeUndefined()
+    expect(buildRequest({ ...cfg, baseUrl: 'https://api.anthropic.com.evil.org/v1' }, 'x').init.headers['anthropic-dangerous-direct-browser-access']).toBeUndefined()
   })
 })

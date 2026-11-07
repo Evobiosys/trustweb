@@ -288,7 +288,9 @@ import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
-import { aiSettings } from './llm_endpoint_view'
+import { aiSettings, bootAi } from './llm_endpoint_view'
+import { aiButtonVisible, piConnected } from './ai_button'
+import { agentSettings } from './agent_view'
 import { ownChannels } from './channel_readers'
 import { readersBlock } from './channel_readers_view'
 import { askWebPanel, askWebSettings } from './ask_web_view'
@@ -541,6 +543,8 @@ try {
 } catch {
   state = loadState(persona, storeCtx)
 }
+// Wave 36 ai-subscription: legacy pc24 -> Custom, Jakob's dev record seeds pc24 as Custom, a pending sign-up is polled once.
+if (state && !solo) bootAi({ state: st, save, dev: Boolean(devRecordFile()) })
 // The field repairs of waves 6b to 7 (connect code, share modes, general notes, profile, agreements) run in the migrate() chain above (schema_version.ts).
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
 // A real phone's own record only (not the side-by-side demo, not a demo account's view). Never throws; a failure changes nothing.
@@ -1514,6 +1518,9 @@ function mountHeaderControls(): void {
   gear.dataset.settingsGear = '1'
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
+  const ai = screen === Screen.Web && aiButtonVisible({ configured: configured(st().advanced?.ai), piConnected: piConnected(st().agent, Date.now()) })
+    ? iconButton('sparkle', S.aiButton, openQuery, 'ai-btn') : null
+  if (ai) ai.setAttribute('data-ai-button', '')
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
@@ -1524,7 +1531,7 @@ function mountHeaderControls(): void {
   })
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
-  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
+  const parts: Record<string, (Node | null)[]> = { search: [find, ai], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
@@ -6809,7 +6816,8 @@ function settingsSheet(): void {
       el('input', { type: 'checkbox', ...(s.qrProfileOption ? { checked: '' } : {}), onchange: () => { s.qrProfileOption = !s.qrProfileOption; save() } }),
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
-    ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
+    ...aiSettings({ state: st, save, toast, openSheet, backToSettings: () => { sheet.dataset.kind = 'settings'; settingsSheet() } }),
+    ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
     ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),

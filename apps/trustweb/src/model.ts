@@ -1312,6 +1312,8 @@ export interface AppState {
   features?: { events?: false; inventory?: false }
   /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
+  /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
+  agent?: AgentLink
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
   askSets?: AskSet[]
   /** Wave 31, Ask your web: your own "also search online" engine, https with {q} for the words. Absent: none (the engine chips only). */
@@ -1328,8 +1330,29 @@ export interface AskSet {
   tags: string[]
 }
 
+/** The pi agent: its loopback address and when /health last answered (ISO). */
+export interface AgentLink {
+  baseUrl: string
+  connectedAt?: string
+}
+
+/** Wave 36 ai-subscription: the TrustInTheWeb.com sign-up. The claim stays on the device (synced with the sealed record like apiKey). */
+export interface AiSubscription {
+  plan: 'ai' | 'light'
+  ref: string
+  email: string
+  claim: string
+  state: 'pending' | 'active' | 'revoked'
+  /** The token once delivered (the server hands it out once): lets the person switch to a key of their own and back. */
+  token?: string
+}
+
 export interface AiEndpoint {
-  preset: 'openai' | 'ollama' | 'pc24' | 'custom'
+  /** 'pc24' is a legacy read value only: ai_subscription.ts migrateAi turns it into custom + name 'pc24'. */
+  preset: 'tw-subscription' | 'openai' | 'claude' | 'ollama' | 'pc24' | 'custom'
+  /** Label of a custom endpoint (Jakob's: 'pc24'). */
+  name?: string
+  sub?: AiSubscription
   /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
   baseUrl: string
   /** Empty: no Authorization header. */
