@@ -28,6 +28,9 @@ import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './col
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm } from './intro_ask_view'
+import { introCard } from './intro_card_view'
+import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
+import type { IntroLink } from './intro_link'
 import { introAskText } from './intro_ask'
 import { addSupportIn, supportCards, supportForm, supportLine } from './support_ask_view'
 import type { SupportIo } from './support_ask_view'
@@ -438,6 +441,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
+// An intro link (#intro=..., intro_link.ts): the "Intro request" card opens once the app has a record.
+let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
 const qrBody = pendingConnect ? decodeModeLink(location.href) : null
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
@@ -2194,6 +2199,7 @@ function screenStart(): Node[] {
     else void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
+    maybeOpenPendingIntro()
     maybeOpenPendingBook()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
@@ -4798,11 +4804,29 @@ function maybeOpenPendingBook(): void {
 
 /** A pasted event link (the whole URL or just its fragment): opens the join sheet. */
 function joinLink(text: string): boolean {
-  const ev = decodeEventLink(text.slice(Math.max(0, text.indexOf('#'))))
+  const hash = text.slice(Math.max(0, text.indexOf('#')))
+  const intro = decodeIntroLink(hash)
+  if (intro) { pendingIntro = intro; maybeOpenPendingIntro(); return true }
+  const ev = decodeEventLink(hash)
   if (!ev) return false
   pendingEvent = ev
   maybeOpenPendingEvent()
   return true
+}
+
+/** Wave 33: "Introduce" hands the person a message for the target (the asker's connect link inside when the link carried one) and opens their chat when the target is in the web. */
+function introduceHandoff(l: IntroLink): void {
+  copyLink(introDraft(l), S.introDraftCopied)
+  const target = st().people.find((p) => p.name.trim().toLowerCase() === l.target.toLowerCase())
+  if (target) chatSheet(target.id)
+}
+
+/** An intro link opened: the "Intro request" card, whatever this web holds. */
+function maybeOpenPendingIntro(): void {
+  if (!pendingIntro || !state) return
+  const l = pendingIntro
+  pendingIntro = null
+  openSheet([introCard(l, { introduce: () => { closeSheet(); introduceHandoff(l) }, notNow: closeSheet, decline: closeSheet })])
 }
 
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
@@ -7024,6 +7048,8 @@ function queryDock(s: AppState): HTMLElement {
       st, reach, steps: () => askReachOf(st()),
       ask: (peerId, target) => net.askIntro(peerId, target),
       onResult: (target, r) => recordFound(introAskText(target), [r]),
+      link: async (target, why) => encodeIntroLink(linkOrigin(location.origin), { by: st().me.displayName, target, ...(why.trim() ? { why: why.trim() } : {}), connect: await (async () => { await net.start(); return net.connectLink(CONNECT_URL) })() }),
+      copy: (text) => copyLink(text, S.meetCopied),
     }))
   }
   return dock
@@ -7054,7 +7080,13 @@ function renderAsk(): void {
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       fitLine(a),
-      decided === null
+      a.intro && decided === null
+        ? introCard({ by: a.fromName, target: a.intro }, {
+            introduce: () => { decide(true); showNextAsk(); introduceHandoff({ by: a.fromName, target: a.intro! }) },
+            notNow: showNextAsk,
+            decline: () => decide(false),
+          })
+        : decided === null
         ? el('div', {}, [
             el('p', { class: 'ask-lbl' }, [S.askMatches]),
             ...a.matches.map((m) => el('div', { class: 'ask-line' }, [el('span', {}, [m.text, threadIsDemo(st(), m.threadId) ? dummyChip() : null]), el('small', {}, [m.context])])),
@@ -7229,6 +7261,7 @@ if (state && !state.testOf?.handedOverAt) {
   void completePendingConnect()
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
+  maybeOpenPendingIntro()
   maybeOpenPendingBook()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
