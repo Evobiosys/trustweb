@@ -3062,4 +3062,8 @@ export const S = {
   perRingAfter: ' most recent of each ring',
   perRingActive: (m: number) => `${m} per ring`,
   expandButtonsLabel: 'Expand buttons beside the ring diamonds',
+  binArchive: 'Archive',
+  binRemove: 'Remove',
+  binArchiveAria: 'Drop here to archive',
+  binRemoveAria: 'Drop here to remove',
 } as const

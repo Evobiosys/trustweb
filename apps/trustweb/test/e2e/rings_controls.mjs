@@ -74,6 +74,33 @@ try {
       await page.mouse.up(); await page.waitForTimeout(500)
       check(`${name}: drop on control ${i} hides ${pid}`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 0)
     }
+    // Wave 34: two bins while a dot is held.
+    check(`${name}: no bins while nothing is held`, (await page.locator('[data-bin]').count()) === 0)
+    const grab = async () => {
+      const node = page.locator('.rings-wrap .node:not(.you)').first()
+      const nb = await node.boundingBox()
+      const pid = await node.getAttribute('data-pid')
+      await page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2); await page.mouse.down()
+      await page.mouse.move(nb.x + nb.width / 2 + 8, nb.y + nb.height / 2 + 8, { steps: 3 })
+      return pid
+    }
+    const toBin = async (kind) => { const b = await page.locator(`[data-bin=${kind}]`).boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 }) }
+    let pid = await grab()
+    check(`${name}: both bins show while holding, inside the viewport`, (await page.locator('[data-bin]').count()) === 2 && await page.evaluate(() => [...document.querySelectorAll('[data-bin]')].every((b) => b.getBoundingClientRect().bottom <= innerHeight)))
+    await page.screenshot({ path: `/tmp/drag_bins_${name}_held.png` })
+    await toBin('archive')
+    check(`${name}: archive bin shows .drop`, await page.locator('[data-bin=archive]').evaluate((e) => e.classList.contains('drop')))
+    await page.mouse.up(); await page.waitForTimeout(400)
+    check(`${name}: bins vanish on release`, (await page.locator('[data-bin]').count()) === 0)
+    check(`${name}: drop on archive removes the dot and offers Undo`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 0 && (await page.locator('[data-undo-archive]').count()) === 1)
+    await page.locator('[data-undo-archive]').click(); await page.waitForTimeout(400)
+    check(`${name}: Undo brings the dot back`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 1)
+    pid = await grab()
+    await toBin('remove')
+    await page.mouse.up(); await page.waitForTimeout(400)
+    check(`${name}: drop on remove asks, nothing deleted`, (await page.locator(`[data-delete-yes="${pid}"]`).count()) === 1 && (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 1)
+    await page.locator('[data-delete-no]').click(); await page.waitForTimeout(400)
+    check(`${name}: No keeps the dot`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 1)
     await page.locator('.rings-wrap .node.you').dispatchEvent('contextmenu'); await page.waitForTimeout(300)
     check(`${name}: sheet (context press on you) lists 3 hidden`, (await page.locator('[data-expanse-restore-one]').count()) === 3 && (await page.locator('[data-expanse-count="3"]').count()) === 1)
     check(`${name}: no page errors`, errors.length === 0)
