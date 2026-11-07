@@ -605,7 +605,10 @@ export function createWebView(deps: WebViewDeps): WebView {
         } else if (hold.phase !== 'offer' && was === 'offer') { stopCount(); hideNotice() }
       }
       const mergeDrop = (otherId: string): void => {
-        hideNotice(); end(); lifted = false; setDragged(false)
+        // The finger is still down: the dot stays "dragged" until it lifts, so the release is no tap that opens the merged-away card.
+        hideNotice(); end(); lifted = false
+        const release = (): void => { window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release); setTimeout(() => setDragged(false), 0) }
+        window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release)
         mergeNow?.(otherId, p.id)
         done()
       }

@@ -54,6 +54,7 @@ try {
     await page.mouse.up(); await page.waitForTimeout(800)
     const after = await names(page)
     check(`${w}: staying merges, survivor is b`, after.length === 1 && after[0] === 'Anna Major')
+    check(`${w}: the release after the merge opens no card`, (await page.evaluate(() => history.state?.twPage ?? null)) !== 'card')
     await page.screenshot({ path: `${process.env.SHOTS ?? '/tmp'}/merge-countdown-${w}-after.png` })
     check(`${w}: no page errors`, errors.length === 0)
     await page.close()
