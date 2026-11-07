@@ -32,6 +32,7 @@ import { archivePerson, restorePerson } from './archived_people'
 import { binAt, binDrop } from './drag_bins'
 import type { BinKind } from './drag_bins'
 import { GRACE_MS, HOVER_IDLE, hoverStep } from './ring_hover'
+import { OVERLAY_DWELL_MS, overlayAllowed, restedAt } from './overlay_gate'
 import type { HoverEvent } from './ring_hover'
 import { singleOrDouble } from './press'
 import { contextPress } from './context_press'
@@ -309,7 +310,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     you.style.left = C + 'px'
     you.style.top = C + 'px'
     wrap.appendChild(you)
-    dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing, desk === undefined)
+    dragOnRings(wrap, s, (v) => { dragged = v; if (v) hideAll() }, desk?.onRing, desk === undefined) // Wave 36: a lifted dot closes any open card
     // Re-render IN PLACE: the Desk slots this very element (slot name, styles, its fit() transform) and the phone's zoom layer wraps it,
     // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
     const toggle = (next: ReadonlySet<Ring>, live: HTMLElement): void => {
@@ -358,6 +359,15 @@ export function createWebView(deps: WebViewDeps): WebView {
       if (hover.open && e && (ev.type === 'enter-handle' || ev.type === 'enter-ring') && (before !== hover.open || !wrap.querySelector('[data-ring-card]'))) showAll(hover.open, e)
     }
     const mouse = (e: Event): boolean => (e as PointerEvent).pointerType === 'mouse'
+    // Wave 36: a card opens only after the pointer rested OVERLAY_DWELL_MS on the line (moves of 6 px restart it) and never while a dot is lifted.
+    let dwellTimer: ReturnType<typeof setTimeout> | undefined
+    let dwellAt = { x: 0, y: 0 }
+    const dwell = (ring: Ring, e: PointerEvent): void => {
+      clearTimeout(dwellTimer)
+      dwellAt = { x: e.clientX, y: e.clientY }
+      const since = performance.now()
+      dwellTimer = setTimeout(() => { if (overlayAllowed({ dragging: dragged, dwellMs: performance.now() - since })) step({ type: 'enter-ring', ring }, { clientX: dwellAt.x, clientY: dwellAt.y }) }, OVERLAY_DWELL_MS)
+    }
     if (!desk) { // the band: the pointer within RING_LINE_HIT of a ring's line (nodes, handles and the card keep their own hover)
       let onBand: Ring | null = null
       wrap.addEventListener('pointermove', (e) => {
@@ -365,19 +375,20 @@ export function createWebView(deps: WebViewDeps): WebView {
         if (!mouse(e) || over.closest('[data-ring-card], .ring-toggle')) return
         const t = menuTarget(localPoint(e, wrap.getBoundingClientRect()), ringsGeo, k)
         const band = t.onLine && !over.closest('.node, .ring-more') ? t.near : null
-        if (band === onBand) return
-        if (band) step({ type: 'enter-ring', ring: band }, e); else if (onBand) step({ type: 'leave' })
+        if (band === onBand) { if (band && !restedAt(dwellAt, { x: e.clientX, y: e.clientY }) && hover.open !== band) dwell(band, e); return }
+        clearTimeout(dwellTimer)
+        if (band) dwell(band, e); else if (onBand) step({ type: 'leave' })
         onBand = band
       })
-      wrap.addEventListener('pointerleave', () => { if (onBand) { onBand = null; step({ type: 'leave' }) } })
+      wrap.addEventListener('pointerleave', () => { clearTimeout(dwellTimer); if (onBand) { onBand = null; step({ type: 'leave' }) } })
     }
     for (const w of rows) {
       const diamond = ringToggle(w.ring, hidden.has(w.ring), w.at.top, w.at.left, false, (btn) => toggle(toggleHidden(hidden, w.ring), btn.parentElement ?? wrap))
       wrap.appendChild(diamond)
       if (!desk) {
-        diamond.addEventListener('pointerenter', (e) => { if (mouse(e)) step({ type: 'enter-handle', ring: w.ring }, e) })
-        diamond.addEventListener('pointerleave', (e) => { if (mouse(e)) step({ type: 'leave' }) })
-        contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: w.ring, grace: false }; showAll(w.ring, { clientX: b.right, clientY: b.bottom }) })
+        diamond.addEventListener('pointerenter', (e) => { if (mouse(e) && !dragged) { clearTimeout(dwellTimer); dwellAt = { x: e.clientX, y: e.clientY }; const since = performance.now(); dwellTimer = setTimeout(() => { if (overlayAllowed({ dragging: dragged, dwellMs: performance.now() - since })) step({ type: 'enter-handle', ring: w.ring }, { clientX: dwellAt.x, clientY: dwellAt.y }) }, OVERLAY_DWELL_MS) } })
+        diamond.addEventListener('pointerleave', (e) => { if (mouse(e)) { clearTimeout(dwellTimer); step({ type: 'leave' }) } })
+        contextPress(diamond, () => { if (dragged) return; const b = diamond.getBoundingClientRect(); hover = { open: w.ring, grace: false }; showAll(w.ring, { clientX: b.right, clientY: b.bottom }) })
       }
       if (w.more) {
         const more = ringMore(w.ring, filled.includes(w.ring), () => { { const cur = st().uiRings?.filled ?? []; setUi(st(), 'filled', cur.includes(w.ring) ? cur.filter((x) => x !== w.ring) : [...cur, w.ring]) } s.uiRings = st().uiRings; save(); toggle(hidden, wrap) })
@@ -579,6 +590,17 @@ export function createWebView(deps: WebViewDeps): WebView {
         for (const t of targets) t.classList.toggle('drop', t === hit?.t)
         wrap.classList.toggle('hide-zone', out && !intoExpanse && bin === null)
         wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
+        zoneTitle(!out && !intoExpanse && bin === null ? ring : null)
+      }
+      // Wave 36: while a dot is held over a ring band, that ring's name sits at 12 o'clock on its line (the diamonds are at 6).
+      let title: HTMLElement | undefined
+      const zoneTitle = (r: Ring | null): void => {
+        if (!r) { title?.remove(); title = undefined; return }
+        if (title?.dataset.zoneTitle === r) return
+        title?.remove()
+        title = el('span', { class: 'zone-title', 'data-zone-title': r }, [S.ringLabel[r]])
+        title.style.left = RINGS_SIZE / 2 + 'px'; title.style.top = RINGS_SIZE / 2 - ringsGeo.radius[r] * ringsK + 'px'
+        wrap.appendChild(title)
       }
       // Hold on another dot: after HOLD_MS a bubble offers to merge the two (dot_merge.ts); only a tap on Merge goes on.
       let hold = holdStart()
@@ -659,6 +681,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         wrap.classList.remove('hide-zone')
         wrap.querySelectorAll('.ring-toggle.drop, .ring-more.drop').forEach((c) => c.classList.remove('drop'))
         bins?.remove()
+        zoneTitle(null)
       }
       // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
       const done = (): void => settled?.(p.id, p.ring)
