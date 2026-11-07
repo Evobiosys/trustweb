@@ -1428,6 +1428,9 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .web-default-select{font:inherit; text-decoration:underline; background:none; color:inherit; border:0; max-width:100%}
 .view-in-bar{display:flex; align-items:center; gap:8px; cursor:pointer}
 .view-in-bar b{font-weight:600; text-decoration:underline}
+/* wave 36 merge-countdown */
+[data-merge-countdown]{display:inline-block; min-width:1.5em; text-align:center; font-weight:700; font-size:1.25em; color:var(--ink); font-variant-numeric:tabular-nums}
+.keep-countdown{font-weight:600; color:var(--ink)}
 
 /* wave 36 drag-overlays */
 .zone-title{position:absolute; transform:translate(-50%,-50%); z-index:4; pointer-events:none; max-width:90%; padding:2px var(--s-2); border:1.5px solid var(--line-strong); border-radius:var(--r-chip); background:var(--surface-0); color:var(--ink); font-size:var(--fs-1); line-height:var(--lh-tight); text-align:center}
