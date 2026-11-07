@@ -17,8 +17,11 @@ export const CLOSE_DAYS = 100
 
 export interface Placement { ring: Ring; /** Shown with the person; never written as a ring. */ suggested?: Ring; note?: string }
 
-/** The empty-web card: nobody in the record and not dismissed this session. */
-export const showOnboarding = (s: Pick<AppState, 'people'>, dismissed: boolean): boolean => !dismissed && s.people.length === 0
+/** The empty-web card: nobody in the record and not dismissed (this session, or for good by the settings flag). */
+export const showOnboarding = (s: Pick<AppState, 'people' | 'onbDismissed'>, dismissed: boolean): boolean => !dismissed && !s.onbDismissed && s.people.length === 0
+
+/** "Not now": the card stays away on this phone; Settings > Import still offers the import. */
+export const dismissOnboarding = (s: Pick<AppState, 'onbDismissed'>): void => { s.onbDismissed = true }
 
 export function placementFor(r: Pick<ServiceRow, 'n365' | 'out' | 'in' | 'days' | 'group'>): Placement {
   if (r.group !== undefined) return { ring: Ring.Unsorted, note: S.onbSeenInGroup(r.group) }
@@ -27,10 +30,11 @@ export function placementFor(r: Pick<ServiceRow, 'n365' | 'out' | 'in' | 'days' 
   return { ring: Ring.Unsorted }
 }
 
-export interface Result { total: number; both: number; wroteOnly: number; groupOnly: number }
+export interface Result { total: number; both: number; wroteOnly: number; groupOnly: number; chats: number }
 
-export function resultOf(rows: readonly ServiceRow[]): Result {
-  const r: Result = { total: rows.length, both: 0, wroteOnly: 0, groupOnly: 0 }
+/** `chats`: how many chat files the rows come from. */
+export function resultOf(rows: readonly ServiceRow[], chats = 1): Result {
+  const r: Result = { total: rows.length, both: 0, wroteOnly: 0, groupOnly: 0, chats }
   for (const x of rows) {
     if (x.group !== undefined) r.groupOnly++
     else if (x.out > 0 && x.in > 0) r.both++

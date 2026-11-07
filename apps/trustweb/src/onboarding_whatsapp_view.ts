@@ -8,7 +8,9 @@ import { randomId } from '../../demo/src/crypto'
 import type { AppState } from './model'
 import { failRun, finishRun, IDLE_RUN, startRun } from './import_run'
 import type { Run } from './import_run'
-import { exportSteps, isZip, placeAll, resultOf, showOnboarding } from './onboarding_place'
+import { dismissOnboarding, exportSteps, isZip, placeAll, resultOf, showOnboarding } from './onboarding_place'
+import { VERIFIED_SOURCES } from './import_sources'
+import { readZip } from './zip_read'
 import type { Pages } from './page_view'
 import { commitPlan, planServices } from './services_import'
 import type { ServiceFile, ServicePlan } from './services_import'
@@ -21,12 +23,15 @@ export interface OnboardingHooks {
   /** After people were added: the web redraws. */
   changed: () => void
   pages: Pages
+  /** Settings > Import: the page that lists every path we verify. */
+  more: () => void
   /** The element the "Import running" notice sits in (the phone frame). */
   host: HTMLElement
 }
 
 const FILE_MAX_BYTES = 20 * 1024 * 1024
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+const chatsOf = (p: ServicePlan): number => p.files.filter((f) => f.source === 'whatsapp').length
 const lines = (text: string): number => { let n = 0; for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) n++; return n }
 
 let dismissed = false
@@ -47,8 +52,9 @@ export function onboardingCard(h: OnboardingHooks, redraw: () => void): HTMLElem
   if (!showOnboarding(h.state(), dismissed)) return null
   return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:8px;text-align:center;max-width:420px;margin:0 auto', 'data-onboard-card': '' }, [
     el('p', { class: 'empty' }, [S.onbEmpty]),
-    el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-whatsapp': '', onclick: () => openOnboarding(h) }, [S.onbImport]),
-    el('button', { class: 'btn btn-ghost', 'data-onboard-notnow': '', onclick: () => { dismissed = true; redraw() } }, [S.onbNotNow]),
+    ...VERIFIED_SOURCES.map((x) => el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-source': x.id, ...(x.id === 'whatsapp' ? { 'data-onboard-whatsapp': '' } : {}), onclick: () => openOnboarding(h) }, [S.onbImportFrom(x.label)])),
+    el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'data-onboard-more': '', onclick: h.more }, [S.onbMore]),
+    el('button', { class: 'btn btn-ghost', style: 'text-decoration:underline', 'data-onboard-notnow': '', onclick: () => { dismissed = true; dismissOnboarding(h.state()); h.save(); redraw() } }, [S.onbNotNow]),
   ])
 }
 
@@ -58,26 +64,30 @@ async function start(h: OnboardingHooks, list: File[]): Promise<void> {
   messages = 0
   pct = 0
   message = ''
-  const zips = list.filter((f) => isZip(f.name))
-  const texts = list.filter((f) => !isZip(f.name) && f.size <= FILE_MAX_BYTES)
-  if (!texts.length) { run = IDLE_RUN; message = zips.length ? S.onbZip : S.onbNothing; emit(); return }
+  const picked = list.filter((f) => f.size <= FILE_MAX_BYTES)
+  if (!picked.length) { run = IDLE_RUN; message = S.onbNothing; emit(); return }
   run = startRun(Date.now())
-  if (zips.length) message = S.onbZip
   emit()
   try {
     files = []
-    for (const f of texts) {
-      const text = await f.text()
-      files.push({ name: f.name, text })
-      messages += lines(text)
-      pct = Math.round((files.length / (texts.length + 1)) * 100)
+    let done = 0
+    const add = (name: string, text: string): void => { files.push({ name, text }); messages += lines(text) }
+    for (const f of picked) {
+      if (!isZip(f.name)) add(f.name, await f.text())
+      else {
+        try {
+          const dec = new TextDecoder()
+          for (const e of await readZip(new Uint8Array(await f.arrayBuffer()))) if (/\.txt$/i.test(e.name)) add(e.name.split('/').pop() ?? e.name, dec.decode(e.data))
+        } catch { message = S.onbZip }
+      }
+      pct = Math.round((++done / (picked.length + 1)) * 100)
       emit()
       await tick()
     }
     me ||= h.state().me.displayName
     plan = planServices(h.state(), files, { me, now: Date.now() })
     pct = 100
-    if (!plan.counts.whatsapp) { message = S.onbNothing; plan = null; run = IDLE_RUN } else run = finishRun(run)
+    if (!plan.counts.whatsapp) { message = message || S.onbNothing; plan = null; run = IDLE_RUN } else { message = ''; run = finishRun(run) }
   } catch {
     run = failRun(run, S.svcReadFailed)
   }
@@ -107,7 +117,7 @@ export function openOnboarding(h: OnboardingHooks): void {
   const draw = (): void => {
     if (!box.isConnected && box.dataset.drawn) { listeners.delete(draw); return }
     box.dataset.drawn = '1'
-    const r = plan ? resultOf(plan.rows) : null
+    const r = plan ? resultOf(plan.rows, chatsOf(plan)) : null
     const parts: (HTMLElement | null)[] = [
       el('p', { class: 'meta' }, [S.onbIntro]),
       el('ol', { class: 'meta', 'data-onboard-steps': '' }, steps.map((t) => el('li', {}, [t]))),
@@ -118,7 +128,7 @@ export function openOnboarding(h: OnboardingHooks): void {
       run.phase === 'reading' ? el('p', { class: 'meta', role: 'status', 'data-onboard-reading': String(pct) }, [S.onbReading(messages)]) : null,
       run.phase === 'failed' ? el('p', { class: 'warn', 'data-onboard-failed': '' }, [run.error ?? S.svcReadFailed, ' ', el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', onclick: () => input.click() }, [S.svcRetry])]) : null,
       r ? el('div', { 'data-onboard-result': String(r.total) }, [
-        el('p', {}, [S.onbResult(r.total, r.both, r.wroteOnly, r.groupOnly)]),
+        el('p', {}, [S.onbResult(r.total, r.both, r.wroteOnly, r.groupOnly, r.chats)]),
         ...(r.total ? [el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-place': '', onclick: () => place(h) }, [S.onbPlace])] : []),
       ]) : null,
       placed ? el('p', { 'data-onboard-placed': String(placed.placed) }, [S.onbPlaced(placed.placed, placed.close)]) : null,
@@ -137,8 +147,8 @@ export function mountOnboardingNotice(h: OnboardingHooks): void {
   const draw = (): void => {
     const live = run.phase === 'reading' || (run.phase === 'ready' && !!plan)
     note.hidden = !live
-    const r = plan ? resultOf(plan.rows) : null
-    note.textContent = run.phase === 'reading' ? S.onbRunning(pct) : r ? S.onbResult(r.total, r.both, r.wroteOnly, r.groupOnly) : ''
+    const r = plan ? resultOf(plan.rows, chatsOf(plan)) : null
+    note.textContent = run.phase === 'reading' ? S.onbRunning(pct) : r ? S.onbResult(r.total, r.both, r.wroteOnly, r.groupOnly, r.chats) : ''
   }
   listeners.add(draw)
   draw()
