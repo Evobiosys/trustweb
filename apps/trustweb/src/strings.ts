@@ -3054,12 +3054,12 @@ export const S = {
   /** Wave 34 rings-diamonds. */
   ringCardEveryone: (names: string) => `Everyone: ${names}`,
   ringCardAria: (ring: string, names: string) => `${ring}, everyone: ${names}`,
-  closestBefore: 'Show only the ',
-  closestAfter: ' people closest to you',
+  closestBefore: 'Only the ',
+  closestAfter: ' closest to me',
   closestActive: (n: number) => `Only the ${n} closest`,
   numEditAria: 'Change the number',
-  perRingBefore: 'Show only the ',
-  perRingAfter: ' of each ring',
+  perRingBefore: 'Only the ',
+  perRingAfter: ' per ring',
   perRingActive: (m: number) => `${m} per ring`,
   expandButtonsLabel: 'Expand buttons beside the ring diamonds',
   perRingFrequent: 'most frequently connected',
@@ -3152,4 +3152,5 @@ export const S = {
   keepQuiet: 'Gone quiet',
   mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
   keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
+  closestMootHint: (n: number) => `(max ${n} anyway)`,
 } as const

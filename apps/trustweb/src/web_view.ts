@@ -23,7 +23,7 @@ import type { Curator, LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { bringAllBack, bringBack, expanseList, hideInExpanse, hitControls, visibleIn } from './expanse'
 import { shortLabel } from './short_label'
-import { closest150, closestLimit, drawnLimit, effectiveLimit, rankedBy, withTag } from './membranes_five'
+import { closest150, closestLimit, drawnLimit, effectiveLimit, keepPinned, rankedBy, withTag } from './membranes_five'
 import { communityOf, isArchived, inZones, setUi, toneVar, zoneFor } from './trustzones'
 import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
@@ -186,7 +186,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     for (const [r, ps] of Object.entries(everyone) as [Ring, Person[]][]) {
       if (complete) { members[r] = ps; continue }
       // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
-      const f = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), drawnLimit(s, s, r), Date.now())
+      const f = keepPinned(rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), drawnLimit(s, s, r), Date.now()), s.uiRings?.pinnedId) // wave 36b: a dragged dot stays
       members[r] = f.shown; rest[r] = f.rest
     }
     // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
@@ -600,6 +600,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     wrap.addEventListener('pointerdown', (down) => {
       const node = (down.target as HTMLElement).closest<HTMLElement>('.node:not(.you)')
       const p = s.people.find((x) => x.id === node?.dataset.pid)
+      if (s.uiRings?.pinnedId && s.uiRings.pinnedId !== p?.id) s.uiRings = { ...s.uiRings, pinnedId: undefined } // wave 36b: the pin ends at the next press elsewhere
       if (!node || !p) return
       let ring = webSlot(p)
       let out = false
@@ -736,6 +737,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         end(); lifted = false
         setTimeout(() => setDragged(false), 0)
         if (!was) return
+        s.uiRings = { ...s.uiRings, pinnedId: p.id } // wave 36b: the dropped dot stays drawn beside the cut
         if (bin !== null) {
           if (binDrop(bin, p).do === 'archive') { archivePerson(p); save(); render(); archivedUndo([p]) } else removeNow([p])
           done()

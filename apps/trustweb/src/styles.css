@@ -1502,3 +1502,14 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 
 /* wave 36 drag-overlays */
 .zone-title{position:absolute; transform:translate(-50%,-50%); z-index:4; pointer-events:none; max-width:90%; padding:2px var(--s-2); border:1.5px solid var(--line-strong); border-radius:var(--r-chip); background:var(--surface-0); color:var(--ink); font-size:var(--fs-1); line-height:var(--lh-tight); text-align:center}
+
+/* wave 36b tools-rings-3 */
+.zone-row{flex-wrap:nowrap; white-space:nowrap; min-height:32px; padding:0 var(--s-2); overflow:hidden}
+.zone-row input[type=checkbox]{flex:none}
+.zone-row .row-action{display:inline-flex; align-items:center; gap:6px; padding:0; border:0; background:none; color:inherit; font:inherit; cursor:pointer}
+.zone-row .row-action u{text-underline-offset:3px}
+.zone-row .row-action:disabled{color:var(--muted,#888); cursor:default}
+.zone-row .row-glyph{display:inline-block; width:16px; text-align:center; flex:none}
+.zone-row.moot{color:var(--muted,#888)}
+.zone-row .moot-hint{margin-left:4px; color:var(--muted,#888); font-size:11px; overflow:hidden; text-overflow:ellipsis; min-width:0}
+@media (min-width:760px){ .zone-side{width:310px} }
