@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Bottom bar (wave 31): configurable order, hidden views, one primary; pure. */
-import { DEFAULT_ORDER, PHONE_MAX, addBar, defaultPrimary, overflowChoices, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar } from '../../src/bottom_bar.ts'
+import { DEFAULT_ORDER, PHONE_MAX, addBar, defaultPrimary, overflowChoices, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
 
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 
@@ -164,5 +164,32 @@ describe('bottom_bar profiles (wave 33)', () => {
     expect(overflowChoices(ids, ['map'], all)).toEqual(['feed', 'ask', 'network', 'map'])
     expect(overflowChoices(ids, [], { ...all, feed: false })).toEqual(['ask', 'network'])
     expect(overflowChoices(['web', 'chat', 'record', 'events', 'inventory', 'feed', 'ask', 'network'], [], all)).toEqual([])
+  })
+  describe('view: entries (wave 35)', () => {
+    const adv = { ...all, advanced: true }
+    const bar = { order: ['web', 'chat', 'record', 'view:network'] }
+    it('show in advanced mode, stay stored but hidden in simple mode', () => {
+      expect(resolveBar(bar, adv).ids).toEqual(['web', 'chat', 'record', 'view:network'])
+      expect(resolveBar(bar, all).ids).toEqual(['web', 'chat', 'record'])
+      expect(resolveBar(bar, { ...all, advanced: false }).ids).toEqual(['web', 'chat', 'record'])
+      expect(bar.order).toContain('view:network')
+    })
+    it('the sheet offers them only in advanced mode', () => {
+      expect(barChoices(bar, adv).find((c) => c.id === 'view:network')).toEqual({ id: 'view:network', on: true })
+      expect(barChoices(bar, all).some((c) => c.id === 'view:network')).toBe(false)
+    })
+    it('showViewInBar adds or takes out an entry; PHONE_MAX is unchanged', () => {
+      const on = showViewInBar(undefined, 'map', true)
+      expect(resolveBar(on, adv).ids).toContain('view:map')
+      expect(resolveBar(showViewInBar(on, 'map', false), adv).ids).not.toContain('view:map')
+      expect(PHONE_MAX).toBe(6)
+    })
+    it('toggleBar hides a shown view entry', () => {
+      expect(resolveBar(toggleBar(bar, 'view:network', adv), adv).ids).not.toContain('view:network')
+    })
+    it('viewOfBar reads the view id', () => {
+      expect(viewOfBar('view:map')).toBe('map')
+      expect(viewOfBar('web')).toBeNull()
+    })
   })
 })
