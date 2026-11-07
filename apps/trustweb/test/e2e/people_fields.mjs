@@ -25,13 +25,16 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)))
     await page.clock.install({ time: NOW })
     await seed(page)
+    // review: the birthday line no longer covers another notice (the demo offer of a fresh record); answer it, the line follows
+    const offer = page.locator('.demo-friends button', { hasText: 'No thanks' })
+    if (await offer.count()) await offer.first().click()
     const banner = page.locator('[data-birthday-notice]')
     check(`${name}: banner shows today and this week`, (await banner.innerText()).includes('Birthday today: Anna.') && (await banner.innerText()).includes('This week: Ben.'))
     check(`${name}: banner stamped`, (await stored(page)).birthdayNoticeDay === '2026-11-07')
     await page.screenshot({ path: `${SHOTS}/people-fields-${name}-banner.png` })
     // card: Birthday field + thought-of row
     await page.locator('[data-go="web"]').click()
-    await page.locator('button[data-view="complete"]').click(); await page.waitForTimeout(400)
+    await page.locator('.view-menu-btn').click(); await page.waitForTimeout(300); await page.locator('[data-view-drop] [data-view="complete"]').click(); await page.waitForTimeout(400) // review: the Web button is gone (renames); Table via the eye
     await page.locator('[data-cv-birthdays]').click(); await page.waitForTimeout(300)
     check(`${name}: Birthdays chip keeps Anna and Ben`, (await page.locator('[data-cv-row]').count()) === 2)
     await page.locator('[data-cv-birthdays]').click()

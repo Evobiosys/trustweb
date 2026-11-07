@@ -50,6 +50,16 @@ describe('stickyCut', () => {
     expect(r.shown.map((p) => p.id)).toEqual(['a2', 'a4'])
     expect(r.rest.map((p) => p.id)).toEqual(['a1', 'a3'])
   })
+  it('review: someone added after the saved move still shows (the saved set never hides a newcomer)', () => {
+    const ps = [{ id: 'a1', metAt: 100 }, { id: 'a2', metAt: 100 }, { id: 'new', metAt: 900 }]
+    const r = stickyCut(ps, new Set(['a1']), 500)
+    expect(r.shown.map((p) => p.id)).toEqual(['a1', 'new'])
+    expect(r.rest.map((p) => p.id)).toEqual(['a2'])
+  })
+  it('review: without a saved time nobody counts as new', () => {
+    const r = stickyCut([{ id: 'a1', metAt: 900 }, { id: 'a2', metAt: 900 }], new Set(['a1']))
+    expect(r.shown.map((p) => p.id)).toEqual(['a1'])
+  })
 })
 
 describe('shownKey', () => {

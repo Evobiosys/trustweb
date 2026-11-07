@@ -201,6 +201,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     const filled = s.uiRings?.filled ?? [] // wave 35: only a fill the user set; the old default (acquaintances drawn in full) bypassed the per-ring cut
     // Wave 37: a manual move keeps every ring's shown dots (sticky) unless "Rings adjust themselves" is on.
     const sticky = !s.uiRings?.autoAdjust && s.uiRings?.shown?.key === shownKey(limitOf(s), s.uiRings?.rankBy, s.uiRings?.perRingLimitOff, filled) ? new Set(s.uiRings.shown.ids) : null
+    const stickyAt = s.uiRings?.shown?.at // review: people added after the move still show
     const rankedAll: RankedDot[] = []
     const ranks: Partial<Record<Ring, Person[]>> = {}
     shownNow = complete ? null : new Set()
@@ -211,7 +212,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       const lim = drawnLimit(s, s, r)
       const cut = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), lim, Date.now())
       if (Number.isFinite(lim)) { ranks[r] = [...cut.shown, ...cut.rest]; rankedAll.push(...ranks[r]!.map((p) => ({ id: p.id, ring: r }))) }
-      const f = keepPinned(sticky && Number.isFinite(lim) ? stickyCut([...cut.shown, ...cut.rest], sticky) : cut, s.uiRings?.pinnedId) // wave 36b: a dragged dot stays
+      const f = keepPinned(sticky && Number.isFinite(lim) ? stickyCut([...cut.shown, ...cut.rest], sticky, stickyAt) : cut, s.uiRings?.pinnedId) // wave 36b: a dragged dot stays
       members[r] = f.shown; rest[r] = f.rest
     }
     if (fade && !complete && rankedAll.length) { // wave 37: the recent-N rule after a move, shown slowly: appearing dots fade in, leaving dots stay drawn while they fade out
@@ -804,7 +805,7 @@ export function createWebView(deps: WebViewDeps): WebView {
             const settle = (): void => { if (lifted) { fadeTimer = setTimeout(settle, 500); return } fade = null; render() }
             fadeTimer = setTimeout(settle, 1300)
           }
-        } else if (shownNow) s.uiRings = { ...s.uiRings, shown: { key: shownKey(limitOf(s), s.uiRings?.rankBy, s.uiRings?.perRingLimitOff, s.uiRings?.filled ?? []), ids: [...shownNow, p.id] } } // wave 37: nothing else moves
+        } else if (shownNow) s.uiRings = { ...s.uiRings, shown: { key: shownKey(limitOf(s), s.uiRings?.rankBy, s.uiRings?.perRingLimitOff, s.uiRings?.filled ?? []), ids: [...shownNow, p.id], at: Date.now() } } // wave 37: nothing else moves
         if (selectMode && !offered) {
           const ids = new Set(dragIds(chosen, p.id))
           const group: Person[] = []

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 import { completeRows } from '../../src/complete_view_model.ts'
-import { parseBirthday, birthdayOf, upcoming, noticeText, birthdayRemindersOn, birthdayNoticeDue, notifyBirthdays, dismissAction } from '../../src/birthdays.ts'
+import { parseBirthday, birthdayOf, upcoming, noticeText, birthdayRemindersOn, birthdayNoticeDue, notifyBirthdays, dismissAction, turnsAge } from '../../src/birthdays.ts'
 
 const p = (id, birthday, o = {}) => ({ id, name: id, ring: 'friend', metAt: 0, context: '', lines: [], ...(birthday ? { fields: { birthday } } : {}), ...o })
 const TODAY = new Date(2026, 10, 7, 9, 0)
@@ -86,5 +86,18 @@ describe('Birthdays chip of the table', () => {
     const people = [p('A', '--11-20'), p('B', '--03-01'), p('C')]
     const rows = completeRows({ s: { people }, tags: [], now: TODAY.getTime() }, { query: '', overdueOnly: false, birthdayOnly: true })
     expect(rows.map((r) => r.id)).toEqual(['A'])
+  })
+})
+
+describe('turnsAge (review)', () => {
+  it('on the birthday itself: the age they turn today, not next year', () => {
+    expect(turnsAge({ month: 11, day: 7, year: 1990 }, TODAY)).toBe(36)
+  })
+  it('later this year: this year\'s age; already past: next year\'s', () => {
+    expect(turnsAge({ month: 12, day: 1, year: 1990 }, TODAY)).toBe(36)
+    expect(turnsAge({ month: 1, day: 2, year: 1990 }, TODAY)).toBe(37)
+  })
+  it('no year, no age', () => {
+    expect(turnsAge({ month: 1, day: 2 }, TODAY)).toBeUndefined()
   })
 })

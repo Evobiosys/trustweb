@@ -44,6 +44,10 @@ function nextOn(b: Birthday, from: Date): Date {
   return this_ >= from ? this_ : at(from.getFullYear() + 1)
 }
 
+/** The age at the next birthday on or after today (today's birthday counts as today); undefined without a year. */
+export const turnsAge = (b: Birthday, today: Date): number | undefined =>
+  b.year ? nextOn(b, new Date(today.getFullYear(), today.getMonth(), today.getDate())).getFullYear() - b.year : undefined
+
 /** People with a birthday from today up to `horizonDays` days ahead, today first, then by days away and name. */
 export function upcoming(people: readonly Person[], today: Date, horizonDays: number): Upcoming[] {
   const from = new Date(today.getFullYear(), today.getMonth(), today.getDate())

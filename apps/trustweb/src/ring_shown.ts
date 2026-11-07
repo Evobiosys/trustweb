@@ -17,9 +17,10 @@ export function shownAfterMove(prevShown: ReadonlySet<string>, ranked: readonly 
   return { shown, appear: [...shown].filter((id) => !prevShown.has(id)), disappear: [...prevShown].filter((id) => !shown.has(id)) }
 }
 
-/** One ring's people split by the saved ids; order kept. */
-export function stickyCut<T extends { id: string }>(ps: readonly T[], ids: ReadonlySet<string>): { shown: T[]; rest: T[] } {
-  return { shown: ps.filter((p) => ids.has(p.id)), rest: ps.filter((p) => !ids.has(p.id)) }
+/** One ring's people split by the saved ids; order kept. Someone met after `savedAt` (added since the move) is not held back by the saved set. */
+export function stickyCut<T extends { id: string; metAt?: number }>(ps: readonly T[], ids: ReadonlySet<string>, savedAt = Infinity): { shown: T[]; rest: T[] } {
+  const keep = (p: T): boolean => ids.has(p.id) || (p.metAt ?? 0) > savedAt
+  return { shown: ps.filter(keep), rest: ps.filter((p) => !keep(p)) }
 }
 
 /** The settings the saved set belongs to: a new m, rank mode or per-ring switch drops it. */
