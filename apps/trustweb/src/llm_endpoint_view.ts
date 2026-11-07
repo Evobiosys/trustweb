@@ -5,7 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { activeEndpoint, apiBase, checkSubscription, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
-import { askEndpoint, configured, PRESETS } from './llm_endpoint'
+import { askEndpoint, configured, switchPreset } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
 
@@ -130,7 +130,7 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
       el('h5', { class: 'eyebrow' }, [S.aiByokTitle]),
       ...BYOK.map((p) => el('button', {
         class: 'radio' + (cur === p ? ' on' : ''), 'aria-pressed': String(cur === p), 'data-ai-preset': p,
-        onclick: () => { Object.assign(ai(), { preset: p, ...PRESETS[p] }); h.save(); draw() },
+        onclick: () => { h.state().advanced!.ai = switchPreset(ai(), p); h.save(); draw() },
       }, [el('b', {}, [p === 'custom' && cur === 'custom' ? presetLabel(ai()) : S.aiPreset[p]])])),
       ...(cur === 'tw-subscription' ? [] : [
         ...(cur === 'custom' ? [field('name', S.aiName, 'text')] : []),

@@ -22,6 +22,13 @@ export type FetchLike = (url: string, init: { method: string; headers: Record<st
 /** Drafting is on only with a base URL and a model. */
 export const configured = (ai: AiEndpoint | undefined): ai is AiEndpoint => Boolean(ai?.baseUrl.trim() && ai.model.trim())
 
+/** Another provider: its base URL and model, an empty key (a key, or the subscription token, never follows to a different provider), no custom name; the sign-up stays. */
+export function switchPreset(ai: AiEndpoint, p: keyof typeof PRESETS): AiEndpoint {
+  if (ai.preset === p) return ai
+  const { name: _name, ...rest } = ai
+  return { ...rest, preset: p, ...PRESETS[p], apiKey: '' }
+}
+
 /** Browser calls to Anthropic are refused without this header. */
 const isAnthropic = (baseUrl: string): boolean => { try { return new URL(baseUrl.trim()).hostname === 'api.anthropic.com' } catch { return false } }
 

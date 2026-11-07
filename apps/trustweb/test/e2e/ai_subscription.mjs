@@ -112,6 +112,14 @@ try {
     await page.locator('[data-ai]').scrollIntoViewIfNeeded()
     await shot(page, w, 'active')
 
+    // 5b review: the token never follows to another provider; "Use the subscription again" brings it back
+    await page.locator('[data-ai-preset="openai"]').click()
+    const openai = (await record(page)).advanced.ai
+    c.ok(`${w}: picking OpenAI leaves no subscription token as key`, openai.preset === 'openai' && openai.apiKey === '' && openai.sub?.state === 'active', `${openai.preset} key ${openai.apiKey ? 'set' : 'empty'}`)
+    await page.locator('[data-ai-use-sub]').click()
+    const back = (await record(page)).advanced.ai
+    c.ok(`${w}: Use the subscription again restores it`, back.preset === 'tw-subscription' && back.apiKey === ai.apiKey)
+
     // 6 Ask your web -> relay through the fake upstream
     await page.evaluate(() => {
       const r = JSON.parse(localStorage.getItem('trustweb.v1.me'))

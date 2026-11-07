@@ -20,8 +20,9 @@ export function makeClaim(bytes: Uint8Array = crypto.getRandomValues(new Uint8Ar
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-/** The server's rule: trimmed, at most 254 chars, one @ with text on both sides, no white space, CR, LF, <, >, comma or quote. */
-export const validEmail = (email: string): boolean => /^[^\s@<>,"]+@[^\s@<>,"]+$/.test(email.trim()) && email.trim().length <= 254
+/** The server's rule: trimmed, at most 254 chars, one @, a dot in the domain, no white space, control character, <, >, comma or quote. */
+// eslint-disable-next-line no-control-regex
+export const validEmail = (email: string): boolean => /^[^\s@<>,"\x00-\x1f\x7f]+@[^\s@<>,"\x00-\x1f\x7f]+\.[^\s@<>,"\x00-\x1f\x7f]+$/.test(email.trim()) && email.trim().length <= 254
 
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
 

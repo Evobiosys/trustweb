@@ -3166,7 +3166,7 @@ export const S = {
   aiSubPlans: { ai: 'AI 18 € per month incl. tax', light: 'Light 5 € per month incl. tax' } as Record<string, string>,
   aiSubUses: 'Powers the Ask your web summaries and the reading of the requests you type.',
   aiSubQuota: (n: number) => `Up to ${n} asks a month.`,
-  aiSubPrivacy: 'The text of an ask goes to TrustInTheWeb\'s own computer to be answered and is not kept.',
+  aiSubPrivacy: 'What is sent: the request you type, or for a summary your question with the matches shown (names and items from your web). It goes through trustweb.one to a computer run by TrustInTheWeb, is answered there and is not stored.',
   aiSubSignUp: 'Sign up',
   aiSubPending: 'Waiting for confirmation',
   aiSubRef: (ref: string) => `Sign-up number ${ref}`,
