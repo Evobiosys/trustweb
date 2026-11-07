@@ -40,7 +40,7 @@ try {
     // tap opens the complete view filtered to Overdue
     const open = page.locator('[data-reminder-open]')
     if (await open.count()) { await open.first().click(); await page.waitForTimeout(500) }
-    check(`${name}: tap opens the complete view`, (await page.locator('[data-complete]').count()) === 1)
+    check(`${name}: tap opens the complete view`, (await page.locator('[data-complete-view]').count()) === 1)
     check(`${name}: filtered to Overdue (4 rows)`, (await page.locator('[data-cv-row]').count()) === 4 && (await page.locator('[data-cv-overdue]').getAttribute('aria-pressed')) === 'true')
 
     // Gone quiet chip: Closest/Close/Friend, > 2x cadence or > 90 days: Anna(40>28), Ben(20>14), Carl(200), Emil(100>60)... Dora is acquaintance, Fay recent

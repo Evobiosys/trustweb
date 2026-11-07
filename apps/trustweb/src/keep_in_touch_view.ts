@@ -2,7 +2,7 @@
 /** Wave 36 keep-in-touch: the "Keep in touch" row of a person's card (cadence select, next date, "I was in touch today" with Undo). Local only. */
 import { el } from '../../demo/src/ui/dom'
 import type { AppState, Person } from './model'
-import { CADENCE_CHOICES, nextReminder } from './cadence'
+import { CADENCE_CHOICES, nextReminder, setCadence } from './cadence'
 import { lastContact } from './people_list'
 import { S } from './strings'
 
@@ -21,8 +21,7 @@ export function keepInTouchRow(io: KeepIo, p: Person): HTMLElement {
     el('select', {
       class: 'field', 'data-keep-cadence': p.id, 'aria-label': S.completeCadenceAria(p.name),
       onchange: (e: Event) => {
-        const n = Number((e.target as HTMLSelectElement).value)
-        if (n) p.cadenceDays = n; else delete p.cadenceDays
+        setCadence(p, Number((e.target as HTMLSelectElement).value))
         io.save()
         io.redraw()
       },
