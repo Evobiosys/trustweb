@@ -359,7 +359,7 @@ function previewApi() {
         if (sub === '/' && typeof b?.feature === 'string' && typeof b.checked === 'boolean' && readPreview().features.some((f) => f.key === b.feature)) args = ['toggle', b.feature, b.checked ? 'on' : 'off']
         const keys = readPreview().features.map((f) => f.key)
         if (sub === '/' && b?.set && keys.length === Object.keys(b.set).length && keys.every((k) => typeof b.set[k] === 'boolean')) args = ['set', keys.map((k) => `${k}=${b.set[k] ? 'on' : 'off'}`).join(',')]
-        if (sub === '/verdict' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature) && [null, 'merge', 'needs-work'].includes(b.verdict)) args = ['verdict', b.feature, b.verdict ?? 'clear']
+        if (sub === '/verdict' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature) && [null, 'merge', 'needs-work', 'changes'].includes(b.verdict)) args = ['verdict', b.feature, b.verdict ?? 'clear']
         if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
         if (!args) { json(res, { error: 'bad request' }, 400); return }
         const error = await run(args)

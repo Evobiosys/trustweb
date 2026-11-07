@@ -74,12 +74,22 @@ export function pickFive(people: readonly Person[], s: Partial<State>, limit: nu
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
 }
 
-/** Wave 33: how many people "closest 150" keeps. */
+/** Wave 33: how many people "closest n" keeps by default. */
 export const CLOSEST_LIMIT = 150
+export const CLOSEST_MAX = 5000
 
-/** Wave 33: the 150 people closest to you across all rings (the same order the rings use: pinned, then most recent); 150 or fewer = everyone, ranked. */
-export function closest150(people: readonly Person[], s: Partial<State>, now: number): Person[] {
-  return pickFive(people, s, CLOSEST_LIMIT, now).shown
+/** Wave 34: n of "closest n" (s.uiRings.closestN): absent or junk = 150; clamped 1..5000. */
+export function closestLimit(ui: { closestN?: unknown } | undefined): number {
+  const n = ui?.closestN
+  return typeof n === 'number' && Number.isFinite(n) ? Math.min(CLOSEST_MAX, Math.max(1, Math.floor(n))) : CLOSEST_LIMIT
+}
+
+/** Wave 34: people per ring the rings draw: the membrane limit, or everyone while "most recent of each ring" is unticked (s.uiRings.perRingLimitOff). */
+export const effectiveLimit = (ui: { perRingLimitOff?: boolean } | undefined, s: Pick<AppState, 'membraneLimit'>): number => (ui?.perRingLimitOff ? Infinity : limitOf(s))
+
+/** Wave 33: the n people closest to you across all rings (the same order the rings use: pinned, then most recent); n or fewer = everyone, ranked. */
+export function closest150(people: readonly Person[], s: Partial<State>, now: number, limit = CLOSEST_LIMIT): Person[] {
+  return pickFive(people, s, limit, now).shown
 }
 
 /** The whole zone, shown and rest together: pinned first, then the most recent. */

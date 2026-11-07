@@ -1463,3 +1463,28 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .ring-more.fill-expand{position:absolute; transform:translate(-50%,-50%); width:16px; height:16px; font-size:10px}
 .ring-toggle.drop::before{box-shadow:0 0 0 4px var(--rc,#e8750a)}
 .ring-more.drop{background:var(--rc,#e8750a); color:#fff; transform:translate(-50%,-50%) scale(1.4)}
+/* wave 34 rings-diamonds */
+.num-edit{padding:0 2px; border:0; background:none; color:inherit; font:inherit; text-decoration:underline dashed; text-underline-offset:3px; cursor:pointer}
+.num-edit-input{width:4.5em; padding:1px 4px; font-size:inherit}
+.ring-card-everyone{color:var(--muted-grey,#8a8f94)}
+
+/* wave 34 drag-bins */
+.drag-bins{position:absolute; left:0; right:0; top:100%; margin-top:4px; z-index:4; display:flex; justify-content:center; gap:24px; pointer-events:none; animation:bins-in .12s ease-out}
+.drag-bin{display:flex; flex-direction:column; align-items:center; width:56px; transition:transform .12s}
+.drag-bin b{display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:12px; background:var(--card,#fff); border:2px dashed var(--muted-grey,#8a8f94); font-size:22px; font-weight:400}
+.drag-bin small{font-size:11px; color:var(--muted-grey,#8a8f94)}
+.drag-bin[data-bin=remove] b{border-color:#c62828}
+.drag-bin.drop{transform:scale(1.15)}
+.drag-bin.drop b{background:#fdecea; border-style:solid}
+@keyframes bins-in{from{opacity:0}to{opacity:1}}
+
+/* wave 34 bar-profiles */
+.bar-glyph{opacity:1; width:18px; height:18px; color:var(--ink)}
+.bar-glyph svg{stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+.bar-glyph-primary{width:26px; height:26px; color:#fff}
+.bar-profiles{min-width:0}
+.bar-profile{min-width:0}
+.bar-profile-custom{border:1.5px dashed var(--line,#ccc)}
+.bar-profile-custom.on{border:1.5px solid var(--violet)}
+.bar-profile-plus{justify-content:center; width:100%; font-size:20px; line-height:1; color:var(--ink-soft)}
+.bar-glyph-primary svg{stroke:#fff}

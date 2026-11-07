@@ -125,7 +125,7 @@ describe('pinned first, wording', () => {
   })
   it('the ring view is TrustZones; zone words follow the ladder', () => {
     expect(S.webTitle).toBe('TrustZones')
-    expect([Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending].map((r) => S.ringLabel[r])).toEqual(['Closest few', 'Close friends and allies', 'Friends & acquainted community members', 'Acquaintances', 'Intending'])
+    expect([Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending].map((r) => S.ringLabel[r])).toEqual(['Closest few', 'Close friends and allies', 'Friends & acquainted community members', 'Acquaintances', 'Intending to connect'])
     expect(S.ringHint[Ring.Acquaintance]).toBe('you have been in contact with')
     expect(S.ringHint[Ring.Friend]).toBe('community members per tag')
   })

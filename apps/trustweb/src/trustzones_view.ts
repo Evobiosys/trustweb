@@ -15,6 +15,7 @@ import { communityOf, communityTags, filterOpen, setUi } from './trustzones'
 import { connectionsShown } from './zone_connections'
 import { groupOpen, setGroupOpen } from './filter_groups'
 import { activeCountLabel, activeFilters } from './filter_active'
+import { closestLimit, LIMIT_DEFAULT, limitOf, parseLimit } from './membranes_five'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
 export const triangle = (open: boolean): string => (open ? '▾' : '▸')
@@ -25,10 +26,24 @@ export function outlinerToggle(open: boolean, label: string, onToggle: (btn: HTM
   return b
 }
 
+/** Wave 34: a number shown as an underlined dashed button; a tap turns it into a number field, Enter or leaving it saves (Esc keeps the old number). */
+function numEdit(value: number, attr: string, onSave: (raw: string) => void): HTMLElement {
+  const btn = el('button', { type: 'button', class: 'num-edit', [attr]: '', 'aria-label': S.numEditAria, onclick: (e: Event) => {
+    e.preventDefault()
+    const input = el('input', { type: 'number', class: 'field num-edit-input', min: '1', value: String(value), 'aria-label': S.numEditAria, [attr + '-input']: '' }) as HTMLInputElement
+    let done = false
+    const finish = (save: boolean): void => { if (done) return; done = true; if (save) onSave(input.value); else input.replaceWith(btn) }
+    input.addEventListener('keydown', (k) => { if (k.key === 'Enter') { k.preventDefault(); finish(true) } else if (k.key === 'Escape') finish(false) })
+    input.addEventListener('blur', () => finish(true))
+    btn.replaceWith(input); input.focus(); input.select()
+  } }, [String(value)])
+  return btn
+}
+
 /** Wave 30 (U9): one row per active chip ("Only #family ✕") plus "Show everyone"; empty when no filter is on. */
 function activeRows(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>): HTMLElement[] {
-  const active = activeFilters(d.s.uiRings, d.tags, d.s.people)
-  const off = (keep: (chip: string) => boolean): void => { setUi(d.s, 'show', (d.s.uiRings?.show ?? []).filter(keep)); setUi(d.s, 'hide', (d.s.uiRings?.hide ?? []).filter(keep)); if (!keep('closest150')) setUi(d.s, 'closest150', false); d.onChange() }
+  const active = activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s))
+  const off = (keep: (chip: string) => boolean): void => { setUi(d.s, 'show', (d.s.uiRings?.show ?? []).filter(keep)); setUi(d.s, 'hide', (d.s.uiRings?.hide ?? []).filter(keep)); if (!keep('closest150')) setUi(d.s, 'closest150', false); if (!keep('perRing')) delete d.s.membraneLimit; d.onChange() }
   const link = (attrs: Record<string, string>, label: string, onclick: () => void): HTMLElement => el('button', { type: 'button', class: 'btn btn-ghost btn-sm filter-off', ...attrs, onclick }, [label])
   return active.length ? [
     ...active.map((a) => el('div', { class: 'filter-active', 'data-filter-active': a.chip }, [el('span', {}, [a.label]), link({ 'data-filter-off': a.chip, 'aria-label': S.filterOff(a.label) }, '✕', () => off((c) => c !== a.chip))])),
@@ -58,7 +73,7 @@ export function filterSection(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>)
     ...communityTags(d.tags).map((t) => el('option', { value: t.id, ...(t.id === community ? { selected: '' } : {}) }, [t.label ?? t.id])),
   ])
   return el('section', { class: 'zone-filter', 'data-zone-filter-section': '' }, [
-    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length))])]),
+    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s)).length))])]),
     ...(open ? [...activeRows(d), ...FILTER_RINGS.map(check), el('label', { class: 'zone-check' }, [S.zoneCommunity, ' ', pick])] : []),
   ])
 }
@@ -165,7 +180,13 @@ export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'on
       ' ', S.zoneConnections,
     ]), el('label', { class: 'zone-check' }, [
       el('input', { type: 'checkbox', 'data-closest150': '', ...(d.s.uiRings?.closest150 ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'closest150', (e.target as HTMLInputElement).checked); d.onChange() } }),
-      ' ', S.closest150,
+      ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
+    ]), el('label', { class: 'zone-check' }, [
+      el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); d.onChange() } }),
+      ' ', S.perRingBefore, numEdit(limitOf(d.s), 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) { if (n === LIMIT_DEFAULT) delete d.s.membraneLimit; else d.s.membraneLimit = n } d.onChange() }), S.perRingAfter,
+    ]), el('label', { class: 'zone-check' }, [
+      el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
+      ' ', S.expandButtonsLabel,
     ]), tagFilters(d)] : []),
   ])
 }

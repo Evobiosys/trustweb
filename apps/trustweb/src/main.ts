@@ -122,7 +122,7 @@ import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, remov
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
@@ -1116,23 +1116,32 @@ function barSheet(): void {
     el('h3', {}, [S.barSheetTitle]),
     el('p', { class: 'hint' }, [S.barSheetHint]),
     el('h4', { class: 'eyebrow' }, [S.barProfilesTitle]),
-    el('div', { class: 'bar-profiles' }, [...PROFILES.map((p) => p.id), 'custom'].map((pid) => {
-      const prof = PROFILES.find((p) => p.id === pid)
-      const name = S.barProfileNames[pid]
-      // The mini preview: the preset's five glyphs (Custom shows the bar as it is now), the centre one enlarged.
-      const preview = prof ? { order: prof.order, primary: prof.primary } : { order: ids, primary }
+    el('div', { class: 'bar-profiles' }, [...PROFILES.map((prof) => {
+      const name = S.barProfileNames[prof.id]
+      const on = prof.id === activeProfile(s.uiBar, flags)
+      // The mini preview: the preset's five glyphs with their real icons, the centre one enlarged.
       return el('button', {
-        class: 'bar-profile' + (pid === activeProfile(s.uiBar, flags) ? ' on' : ''), 'data-bar-profile': pid, 'aria-label': S.barProfilePick(name), 'aria-pressed': String(pid === activeProfile(s.uiBar, flags)),
-        ...(prof ? { onclick: () => { if (prof.order.includes('feed') && !flags.feed) s.feed = { ...s.feed, on: true }; redraw(applyProfile(s.uiBar, pid)) } } : { disabled: '' }),
+        class: 'bar-profile' + (on ? ' on' : ''), 'data-bar-profile': prof.id, 'aria-label': S.barProfilePick(name), 'aria-pressed': String(on),
+        onclick: () => { if (prof.order.includes('feed') && !flags.feed) s.feed = { ...s.feed, on: true }; redraw(applyProfile(s.uiBar, prof.id)) },
       }, [
-        el('span', { class: 'bar-profile-prev' }, preview.order.map((id) => {
-          const g = el('span', { class: 'bar-glyph' + (id === preview.primary ? ' bar-glyph-primary' : '') })
+        el('span', { class: 'bar-profile-prev' }, prof.order.map((id) => {
+          const g = el('span', { class: 'bar-glyph' + (id === prof.primary ? ' bar-glyph-primary' : '') })
           g.innerHTML = icon(id === 'record' ? 'mic' : id === 'ask' ? 'query' : TAB_ICON[id])
           return g
         })),
         el('b', {}, [name]),
       ])
-    })),
+    }), (() => {
+      // One empty dashed card: starts a custom bar from the bar as it is now and jumps to the per-view rows.
+      const on = activeProfile(s.uiBar, flags) === 'custom'
+      return el('button', {
+        class: 'bar-profile bar-profile-custom' + (on ? ' on' : ''), 'data-bar-profile': 'custom', 'aria-label': S.barProfilePick(S.barProfileNames.custom), 'aria-pressed': String(on),
+        onclick: () => {
+          s.uiBar = customFrom(s.uiBar, ids, primary); save(); renderTabs(); render(); barSheet()
+          document.querySelector<HTMLElement>('[data-bar-row]')?.scrollIntoView({ block: 'start' })
+        },
+      }, [el('span', { class: 'bar-profile-prev bar-profile-plus' }, ['+']), el('b', {}, [S.barProfileNames.custom])])
+    })()]),
     // The Feed is an opt-in feature: it is always offered here, and ticking it switches the feature on.
     ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).map(({ id, on }) => el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
       el('label', { class: 'radio', 'data-bar-opt': id }, [
@@ -4536,7 +4545,7 @@ const curator = createCurator({
 })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
-  curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo,
+  curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void): void =>

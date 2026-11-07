@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { APPLY_DELAY_MS, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
+import { APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -69,6 +69,7 @@ const CSS = `
 .twp .pill.on.merge{background:#4fd7a0;color:#241b2e;border-color:#4fd7a0}.twp .pill.on.work{background:#e5484d;color:#fff;border-color:#e5484d}
 .twp .bar{position:sticky;bottom:0;margin:4px 0 0;padding:6px 10px;background:#3a2c48;display:grid;gap:5px;border-top:1px solid #7a6a8c}.twp .bar div{display:flex;gap:6px;align-items:center}.twp .bar button{text-decoration:underline}
 .twp .upd{margin-left:4px;padding:0 4px;border-radius:4px;background:#ffbf47;color:#241b2e;font-weight:700}
+.twp .chg{display:block;color:#ffbf47;font-size:10px}.twp .chg button{all:unset;cursor:pointer;text-decoration:underline;margin-left:6px;font-size:10px;color:inherit}
 .twp .where{display:block;color:#9a9aa6;font-size:10px}
 .twp .sec{font:700 10px system-ui;letter-spacing:.04em;opacity:.7;margin:4px 0 2px}
 .see-action{display:none!important}
@@ -268,6 +269,10 @@ export function initDevPreview(): void {
     if (loadFirst) hold.set(true)
     if (plan.assemble) { wanted = true; applyLater() }
   }
+  // approve what changed since the approval: the row stays approved, the new ref becomes the approved one (the CLI's 'changes' verdict)
+  const approveChanges = (key: string): void => {
+    write(p!.features.map((x) => (x.key === key ? { ...x, updated: false, approvedRef: x.ref } : x)), () => call('POST', '/verdict', { feature: key, verdict: 'changes' }))
+  }
   const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allLoaded(p!.features)) }))
   const approveAll = (): Promise<void> => act(null, async () => {
     let q = p!
@@ -376,9 +381,13 @@ export function initDevPreview(): void {
       if (shownVerdict(f) !== 'merge') press(f.key, 'merge')
       else { individual.set([...new Set([...individual.get(), f.key])]); render() }   // approved by the registry before: the note is the owner's own press
     })
+    const chg = changedSinceApproval(f)
+    const changed = chg ? h('small', { className: 'chg', textContent: S.panelChangedSince(chg.from, chg.to) }, h('button', { textContent: S.panelApproveChanges, disabled: loading() })) : null
+    changed?.querySelector('button')?.setAttribute('data-approve-changes', f.key)
+    changed?.querySelector('button')?.addEventListener('click', (e) => { e.stopPropagation(); approveChanges(f.key) })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); foldFor(f); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, h('span', { className: 'go', textContent: mark.prefix + f.title }), ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : []), ...(f.flag && !flagOn(f) ? [flagOnButton(f)] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, h('span', { className: 'go', textContent: mark.prefix + f.title }), ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(changed ? [changed] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : []), ...(f.flag && !flagOn(f) ? [flagOnButton(f)] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }
