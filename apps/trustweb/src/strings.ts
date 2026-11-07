@@ -1504,7 +1504,7 @@ export const S = {
   viewAlt: 'Alternative UI (beta)',
   viewSolar: 'Solar calendar',
   viewSolarOff: 'Solar calendar (module not installed)',
-  screenViewNames: { calendar: 'Calendar', list: 'List', solar: 'Solar calendar', outline: 'Outline', matches: 'Matches' } as Record<string, string>,
+  screenViewNames: { calendar: 'Calendar', list: 'List', solar: 'Solar calendar', outline: 'Outline', matches: 'Matches', notes: 'Notes' } as Record<string, string>,
   matches: {
     title: 'Matches',
     live: (done: number, total: number, n: number) => `Running on pc24: ${done} of ${total} people, ${n} matches`,

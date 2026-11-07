@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 25: the Web screen's view chooser (the eye): Web (default), Network, People, Notes, Map, then Dex and Contacts compact; Expand (top left of the rings) shows everyone. Pure, no DOM. */
+/** Wave 25: the Web screen's view chooser (the eye): Web (default), Network, People, Map, then Dex and Contacts compact; Expand (top left of the rings) shows everyone. Pure, no DOM. */
 export type WebView = 'rings' | 'network' | 'map'
 
 /** Everything the eye menu can open, in menu order; the last two sit under "Other views". Map shows only when a map page exists. */
-export type ViewKey = WebView | 'people' | 'notes' | 'map' | 'dex' | 'compact'
-const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'notes', 'map', 'dex', 'compact']
+export type ViewKey = WebView | 'people' | 'map' | 'dex' | 'compact'
+const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'map', 'dex', 'compact']
 const OTHER: readonly ViewKey[] = ['dex', 'compact']
 /** Wave 28: Dex is the one view that sits in the "Alternative UI (beta)" part of Other views; new unique views join Other views. */
 const ALT: readonly ViewKey[] = ['dex']
@@ -55,9 +55,9 @@ export function expandedOf(stored: string | null, view: WebView): boolean {
 
 export interface ScreenView { key: string; core: boolean; available: boolean }
 
-/** Wave 28: the views menu of Events (Calendar, List, and the non-core Solar calendar, greyed until its module is there) and Resources (List, Outline). */
+/** Wave 28: the views menu of Events (Calendar, List, and the non-core Solar calendar, greyed until its module is there) and Resources (List, Outline, Matches, and wave 33 Notes). */
 export function screenViews(screen: 'events' | 'inventory', solarInstalled: boolean): ScreenView[] {
   return screen === 'events'
     ? [{ key: 'calendar', core: true, available: true }, { key: 'list', core: true, available: true }, { key: 'solar', core: false, available: solarInstalled }]
-    : [{ key: 'list', core: true, available: true }, { key: 'outline', core: true, available: true }, { key: 'matches', core: true, available: true }]
+    : [{ key: 'list', core: true, available: true }, { key: 'outline', core: true, available: true }, { key: 'matches', core: true, available: true }, { key: 'notes', core: true, available: true }]
 }

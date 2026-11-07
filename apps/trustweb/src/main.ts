@@ -1197,22 +1197,26 @@ function tabTap(target: Screen): void {
   history.pushState({ twZoom: target }, '')
   render()
 }
-window.addEventListener('popstate', (e) => { if (peoplePage && ((t) => t === 'people' || typeof t === 'number')((e.state as { twPage?: unknown } | null)?.twPage)) return; if (peoplePage) { peoplePage = false; go(Screen.Web) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
+window.addEventListener('popstate', (e) => { if (peoplePage && ((t) => t === 'people' || typeof t === 'number')((e.state as { twPage?: unknown } | null)?.twPage)) return; if (peoplePage) { peoplePage = false; go(pageBack) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
+/** Where Back from the People / Notes page lands. */
+let pageBack = Screen.Web
 /** Wave 30: the header magnifier's filter field under the People header; it filters the list as you type, Escape clears and closes it. */
 let peopleSearchOpen = false
 function openPeople(query = ''): void {
   resetPeopleList(query)
   peopleSearchOpen = query !== ''
   peoplePage = true
+  pageBack = Screen.Web
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
-/** Wave 32: the Notes outliner opens as a page the same way. */
+/** Wave 32: the Notes outliner opens as a page the same way; wave 33: it hangs under Resources, so Back returns there. */
 function openNotes(): void {
   peoplePage = true
+  pageBack = Screen.Inventory
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Notes)
 }
@@ -1381,7 +1385,6 @@ function mountHeaderControls(): void {
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls('people')
-    : screen === Screen.Notes ? viewControls('notes')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1392,7 +1395,7 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : screen === Screen.Notes ? viewDrop('notes') : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -1515,7 +1518,8 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Notes))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People))
+      || (target === Screen.Inventory && screen === Screen.Notes)
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -2502,7 +2506,7 @@ let invQuery = ''
 /** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
 let invOnly: { label: string; ids: Set<string> } | null = null
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', notes: 'list', map: 'map', dex: 'curator', compact: 'list' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
 /** The web-view-row: the heading of the chosen view or the search field (the magnifier sits in the header, wave 28; expand all sits in the TrustZones sidebar, wave 28b). */
 function webViewRow(view: WebView): HTMLElement {
@@ -2561,10 +2565,10 @@ function viewDrop(current: ViewKey): HTMLElement | null {
 function screenViewDrop(): HTMLElement | null {
   const which = screen === Screen.Events ? 'events' : 'inventory'
   if (!eyeOpen) return null
-  const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : invMatches ? 'matches' : zoom.inventory ? 'outline' : 'list'
+  const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : screen === Screen.Notes ? 'notes' : invMatches ? 'matches' : zoom.inventory ? 'outline' : 'list'
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).map((v) => {
     const b = el('button', { class: 'view-opt' + (v.key === current ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(v.key === current), 'data-view': v.key, disabled: !v.available, onclick: () => chooseScreenView(which, v.key) })
-    b.innerHTML = icon(v.key === 'list' || v.key === 'matches' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
+    b.innerHTML = icon(v.key === 'list' || v.key === 'matches' || v.key === 'notes' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
     b.append(el('b', {}, [v.available ? S.screenViewNames[v.key] : S.viewSolarOff]))
     return b
   }))
@@ -2573,6 +2577,8 @@ function screenViewDrop(): HTMLElement | null {
 function chooseScreenView(which: 'events' | 'inventory', key: string): void {
   eyeOpen = false
   if (which === 'events') { if (key === 'list') eventsView.showList(); else eventsView.open(); render(); return }
+  if (key === 'notes') { if (screen === Screen.Notes) render(); else openNotes(); return }
+  if (screen === Screen.Notes) go(Screen.Inventory)
   if (key === 'matches') { setMatchesView(true); render(); return }
   setMatchesView(false)
   if (key === 'outline' && !zoom.inventory) tabTap(Screen.Inventory)
@@ -2589,7 +2595,6 @@ function toggleExpand(expanded: boolean): void {
 function chooseView(view: ViewKey): void {
   eyeOpen = false
   if (view === 'people') { if (screen === Screen.People) render(); else openPeople(); return }
-  if (view === 'notes') { if (screen === Screen.Notes) render(); else openNotes(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
