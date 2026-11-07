@@ -1504,7 +1504,7 @@ export const S = {
   viewAlt: 'Alternative UI (beta)',
   viewSolar: 'Solar calendar',
   viewSolarOff: 'Solar calendar (module not installed)',
-  screenViewNames: { calendar: 'Calendar', list: 'List', solar: 'Solar calendar', outline: 'Outline', matches: 'Matches' } as Record<string, string>,
+  screenViewNames: { calendar: 'Calendar', list: 'List', solar: 'Solar calendar', outline: 'Outline', matches: 'Matches', notes: 'Notes' } as Record<string, string>,
   matches: {
     title: 'Matches',
     live: (done: number, total: number, n: number) => `Running on pc24: ${done} of ${total} people, ${n} matches`,
@@ -2976,6 +2976,7 @@ export const S = {
   svcColumnIgnore: 'Ignore',
   svcColumnFields: { name: 'Name', given: 'First name', family: 'Last name', email: 'E-mail', phone: 'Phone', org: 'Company', title: 'Job title', birthday: 'Birthday', note: 'Note', labels: 'Labels' },
   askModeSupport: 'Ask for support',
+  panelBackToRow: (title: string) => `back to ${title}`,
   closest150: 'Show only the 150 people closest to you',
   closest150Active: 'Only the 150 closest',
 } as const
