@@ -11,7 +11,11 @@ export interface UiBar {
   order?: string[]
   hidden?: string[]
   primary?: string
+  /** BAR_ORDER_VERSION once the wave-33 default order has been applied (or the user set the order since). */
+  orderVersion?: number
 }
+
+export const BAR_ORDER_VERSION = 2
 
 export interface BarFlags {
   events: boolean
@@ -62,7 +66,7 @@ export function toggleBar(bar: UiBar | undefined, id: string, f: BarFlags): UiBa
   const order = baseOrder(bar)
   const hidden = (bar?.hidden ?? []).filter((h) => h !== id)
   if (!on && !order.includes(id as BarId)) order.push(id as BarId)
-  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden }
+  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden, orderVersion: BAR_ORDER_VERSION }
   if (bar?.primary && !(on && bar.primary === id)) next.primary = bar.primary
   return next
 }
@@ -72,7 +76,7 @@ export function addBar(bar: UiBar | undefined, id: string, ref: string, side: 'l
   if (!offered(f).includes(id as BarId) || id === 'record' || id === ref || !resolveBar(bar, f).ids.includes(ref as BarId)) return bar
   const order = baseOrder(bar).filter((x) => x !== id)
   order.splice(order.indexOf(ref as BarId) + (side === 'right' ? 1 : 0), 0, id as BarId)
-  return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id) }
+  return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION }
 }
 
 /** One step left (-1) or right (+1) among the shown views; at the end it stays. */
@@ -83,7 +87,7 @@ export function moveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: BarF
   const order = baseOrder(bar)
   const [a, b] = [order.indexOf(id as BarId), order.indexOf(other)]
   ;[order[a], order[b]] = [order[b], order[a]]
-  return { ...bar, order }
+  return { ...bar, order, orderVersion: BAR_ORDER_VERSION }
 }
 
 /** Marks a shown view as the raised centre button. */
@@ -100,10 +104,12 @@ export function barLayout(ids: readonly BarId[], primary: BarId, max: number): {
   return { shown: ids.filter((id) => keep.has(id)), overflow: ids.filter((id) => !keep.has(id)) }
 }
 
-/** Wave 33 (schema 3): a record saved before the new default keeps its flags but gets the new order; views it added itself (not Ask, which left the default) stay at the end. */
+/** Wave 33: once per record (marker uiBar.orderVersion, no schema bump), a saved order becomes the new default; flags stay, views it added itself (not Ask, which left the default) stay at the end. */
 export function resetBarOrder(s: { uiBar?: UiBar }): boolean {
-  const old = s.uiBar?.order
-  if (!s.uiBar || !Array.isArray(old)) return false
+  if (!s.uiBar || (s.uiBar.orderVersion ?? 0) >= BAR_ORDER_VERSION) return false
+  s.uiBar.orderVersion = BAR_ORDER_VERSION
+  const old = s.uiBar.order
+  if (!Array.isArray(old)) return true
   const extras = [...new Set(old)].filter((id) => typeof id === 'string' && id !== 'ask' && !DEFAULT_ORDER.includes(id as BarId))
   s.uiBar.order = [...DEFAULT_ORDER, ...extras]
   return true

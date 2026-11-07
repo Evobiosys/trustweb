@@ -14,7 +14,7 @@ import { repairShareFields } from './share_modes'
 import { repairOtherCodes } from './sync_code'
 
 /** 1 = every record from before this field existed. Raise it when a change older builds could misread is made. */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 2
 
 /** A record or bundle written by a newer build: this one must not read it half (a downgrade never loses fields). */
 export class SchemaNewerError extends Error {
@@ -31,11 +31,10 @@ export function assertReadable(version: unknown): void {
 /** Runs the per-store repairs in order, then stamps the version. Idempotent; true when the record changed. */
 export function migrate(s: AppState): boolean {
   assertReadable(s.schemaVersion)
-  const from = s.schemaVersion ?? 1
   const ran = [
     migrateSources(s), normaliseNoteFields(s), migrateChats(s),
     repairConnectRecord(s), repairOtherCodes(s), repairShareFields(s), repairGeneralNotes(s), repairProfile(s), repairAgreements(s), repairPinned(s),
-    from < 3 && resetBarOrder(s),
+    resetBarOrder(s),
   ]
   const stamped = s.schemaVersion !== SCHEMA_VERSION
   s.schemaVersion = SCHEMA_VERSION

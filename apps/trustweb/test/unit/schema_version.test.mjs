@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 // schema_version.ts: one ordered migration chain, a stamp, and no half-reading of a newer record.
+import { toggleBar, addBar, moveBar } from '../../src/bottom_bar.ts'
 import { SCHEMA_VERSION, SchemaNewerError, assertReadable, migrate } from '../../src/schema_version.ts'
 import { parseRecord } from '../../src/store.ts'
 import { bundleOf, parseBundle } from '../../src/sync_core.ts'
@@ -76,14 +77,24 @@ describe('favourite -> pinned', () => {
 
 describe('bottom bar order reset (wave 33)', () => {
   const NEW = ['web', 'chat', 'record', 'events', 'inventory']
-  it('an older record with the old default order gets the new default, once', () => {
+  const all = { events: true, feed: true, inventory: true, people: true, map: true }
+  it('a record without the marker gets the new default once, whatever its schema version', () => {
     const s = base({ schemaVersion: 2, uiBar: { order: ['ask', 'inventory', 'web', 'record', 'chat', 'events'], primary: 'web' } })
     expect(migrate(s)).toBe(true)
     expect(s.uiBar.order).toEqual(NEW)
     expect(s.uiBar.primary).toBe('web')
+    expect(s.uiBar.orderVersion).toBe(2)
     s.uiBar.order = ['chat', 'record', 'web']
     expect(migrate(s)).toBe(false)
     expect(s.uiBar.order).toEqual(['chat', 'record', 'web'])
+  })
+  it('a lower marker resets, a marker of 2 or more does not', () => {
+    const low = base({ uiBar: { order: ['chat', 'record'], orderVersion: 1 } })
+    migrate(low)
+    expect(low.uiBar.order).toEqual(NEW)
+    const done = base({ schemaVersion: 2, uiBar: { order: ['chat', 'record'], orderVersion: 2 } })
+    expect(migrate(done)).toBe(false)
+    expect(done.uiBar.order).toEqual(['chat', 'record'])
   })
   it('a custom order is reset too; opt-in views (feed) and hidden flags survive, ask does not', () => {
     const s = base({ uiBar: { order: ['events', 'feed', 'ask', 'record'], hidden: ['chat'] } })
@@ -96,12 +107,20 @@ describe('bottom bar order reset (wave 33)', () => {
     migrate(s)
     expect('uiBar' in s).toBe(false)
   })
-  it('a uiBar without an order is left alone', () => {
+  it('a uiBar without an order keeps its fields and is marked, so a later custom order survives', () => {
     const s = base({ schemaVersion: 2, uiBar: { primary: 'web' } })
     migrate(s)
-    expect(s.uiBar).toEqual({ primary: 'web' })
+    expect(s.uiBar).toEqual({ primary: 'web', orderVersion: 2 })
   })
-  it('the version is 3', () => {
-    expect(SCHEMA_VERSION).toBe(3)
+  it('a bar edited in the app carries the marker, so the next load keeps it', () => {
+    for (const bar of [toggleBar(undefined, 'map', all), addBar(undefined, 'map', 'web', 'right', all), moveBar(undefined, 'chat', -1, all)]) {
+      const s = base({ uiBar: bar })
+      const order = [...bar.order]
+      migrate(s)
+      expect(s.uiBar.order).toEqual(order)
+    }
+  })
+  it('the schema version stays 2: older builds keep syncing', () => {
+    expect(SCHEMA_VERSION).toBe(2)
   })
 })
