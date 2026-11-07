@@ -248,7 +248,10 @@ import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_t
 import { communityOf, isArchived, zoneFor } from './trustzones'
 import { archivedPeopleView } from './archived_people_view'
 import { purgeDue, recentlyDeleted } from './deleted_people'
-import { zoneSidebar } from './trustzones_view'
+import { trustZonesGroup, zoneSidebar } from './trustzones_view'
+import { ringShown } from './rings_filter'
+import { ownProfilePage } from './own_profile_view'
+import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
@@ -1747,7 +1750,8 @@ const friendsFade = fadeHost(friendsEl, () => { friendsEl.hidden = true })
 function hideNotice(): void { friendsFade.close() }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
-  friendsEl.classList.remove('stack', 'line')
+  friendsEl.classList.remove('stack', 'line', 'tap-close')
+  friendsEl.onclick = null
   friendsEl.replaceChildren(
     el('b', {}, [title]),
     el('span', {}, [body]),
@@ -2436,7 +2440,7 @@ const activePeople = (): Person[] => shown(st(), curatorHiddenIds()).people
 let tagFilter: string | null = null
 
 /** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
-type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView }
+type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView } | { kind: 'me' }
 let webPage: WebPage | null = null
 /** Wave 27: the small card page is expanded in place (card_sections.ts order); Back collapses it first, a second Back leaves. */
 let cardExpanded = false
@@ -2486,6 +2490,12 @@ function webPageScreen(page: WebPage): Node[] {
   const s = shown(st(), curatorHiddenIds())
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
+  if (page.kind === 'me') {
+    return [header(S.ownProfileTitle, { back }), ownProfilePage({
+      profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl), name: () => st().me.displayName,
+      editProfile: profileSheet, editName: () => editNameSheet(true),
+    })]
+  }
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && !isArchived(p) && zoneFor(p, communityOf(s)) === page.ring)
     const zone = S.ringLabel[page.ring]
@@ -2856,14 +2866,14 @@ function chatNewSheet(): void {
 }
 
 /** Wave 27 (D2): once after the upgrade, an honest line that the pass-on default narrowed; drawn once, then marked dismissed. */
-function passOnNotice(): HTMLElement | null {
+function passOnNotice(): null {
   if (!passOnDefaultNoticeDue(st())) return null
   dismissNotice(st(), PASS_ON_DEFAULT_NOTICE); save()
-  const note = el('p', { class: 'meta', role: 'status', 'data-pass-on-notice': '' }, [
-    S.passOnDefaultNotice,
-    el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.noticeDismiss, 'data-notice-dismiss': '', onclick: () => note.remove() }, ['×']),
-  ])
-  return note
+  // Wave 36b: the top notice layer (above the Tools panel, wraps, x and a tap on the text close it), not a line inside the zoomed rings.
+  showNotice(S.passOnDefaultNotice, '', [], 30000)
+  friendsEl.classList.add('tap-close')
+  friendsEl.onclick = hideNotice
+  return null
 }
 
 function screenWeb(): Node[] {
@@ -2895,13 +2905,14 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people.filter((p) => ringShown(st(), webSlot(p))), openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
     : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
     header(S.webTitle),
     webViewRow(view),
+    ...(ringFilterShown(view) ? [trustZonesGroup({ s: st(), onChange: () => { save(); render() } })] : []),
     ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
@@ -2918,7 +2929,10 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
+  const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, 'expand-btn select-tool')
+  select.setAttribute('data-tool', 'select')
+  select.setAttribute('aria-pressed', String(web.selectOn()))
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -3485,20 +3499,12 @@ function blockRow(p: Person): HTMLElement {
   }, [on ? S.unblockPerson(p.name) : S.blockPerson(p.name)])
 }
 
-/** Archive (the default) or, quieter, Delete for good after an in-place "Delete for good?" (Jakob 2026-10-19). */
+/** Archive (the default) or Delete: since wave 36b Delete is the 30-day reversible one (deleted_people.ts), no question, the toast carries Undo. The old "Delete for good?" strings (personDeleteAsk/Yes/No) stay in strings.ts, unused (DEVLOG/wave36b/archive/notices-2). */
 function archiveRow(p: Person): HTMLElement {
-  const row = el('div', { class: 'archive-row' })
-  const draw = (): void => row.replaceChildren(
+  return el('div', { class: 'archive-row' }, [
     el('button', { class: 'btn btn-ghost', 'data-archive-person': p.id, onclick: () => { closeSheet(); void web.hideOnRings(p).then(archivedNotice) } }, [S.personArchive]),
-    el('button', { class: 'btn btn-ghost btn-sm quiet', 'data-delete-person': p.id, onclick: ask }, [S.personDelete]),
-  )
-  const ask = (): void => row.replaceChildren(
-    el('span', { class: 'meta' }, [S.personDeleteAsk]),
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-yes': p.id, onclick: () => deletePerson(p.id) }, [S.personDeleteYes]),
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-no': '', onclick: draw }, [S.personDeleteNo]),
-  )
-  draw()
-  return row
+    el('button', { class: 'btn btn-ghost btn-sm quiet', 'data-delete-person': p.id, onclick: () => deletePerson(p.id) }, [S.personDelete]),
+  ])
 }
 
 /** Wave 36: people deleted more than 30 days ago go for good (deleted_people.ts); the Recently deleted list was their only way back. */
@@ -3510,12 +3516,11 @@ function purgeDeleted(): void {
   save()
 }
 
+/** Person page and Desk delete: the 30-day tombstone and the same Undo toast as the dustbin (web_view removeNow). */
 function deletePerson(personId: string): void {
-  const s = st()
-  s.people = s.people.filter((x) => x.id !== personId)
-  save()
+  const p = st().people.find((x) => x.id === personId)
   closeSheet()
-  render()
+  if (p) web.deleteReversibly([p])
 }
 
 /** Wave 8: how this connection began, when it began as a reach-out through a public link. */
@@ -4622,6 +4627,11 @@ const curator = createCurator({
     state.people = state.people.filter((x) => x.id !== id)
     save()
     if (screen === Screen.Web) render()
+  },
+  softDeletePerson: (person) => {
+    if (!state) return
+    if (!state.people.some((x) => x.id === person.id)) state.people.push(person)
+    web.deleteReversibly([state.people.find((x) => x.id === person.id)!])
   },
   restorePerson: (person) => {
     if (!state) return

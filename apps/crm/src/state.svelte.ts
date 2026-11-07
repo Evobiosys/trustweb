@@ -232,6 +232,8 @@ export function unhidePerson(personId: string): void {
 }
 
 export function deleteHidden(personId: string): void {
+  const p = hidden.get(personId) ?? store.crm.hiddenPeople?.find((h) => h.id === personId)?.person
+  if (p && !p.pendingInvite && !p.wantsToConnect) host.softDeletePerson?.(p)
   hidden.delete(personId)
   deleteArchived(store.crm, personId)
   persist()

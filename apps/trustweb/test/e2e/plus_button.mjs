@@ -91,13 +91,15 @@ async function main() {
     ok('Record is still the raised middle tab', await page.locator('nav.tabs .tab-record').isVisible())
     // your own name: tap yourself in the web
     await page.locator('.node.you').click()
+    await page.locator('[data-own-profile-name]').click() // wave 36b: the centre dot opens the own profile page; the name change sits on it
     await page.getByRole('heading', { name: 'Your name' }).waitFor({ timeout: 5_000 })
     await page.getByLabel('Your name', { exact: true }).fill('Jakob')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
-    ok('tapping yourself lets you change your own name', (await page.locator('.node.you span').innerText()) === 'Jakob')
+    await page.goBack(); await page.waitForTimeout(400)
+    ok('tapping yourself lets you change your own name', (await page.locator('.node.you').getAttribute('aria-label')).includes('Jakob'))
     await page.reload()
     await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
-    ok('the new name is kept', (await page.locator('.node.you span').innerText()) === 'Jakob')
+    ok('the new name is kept', (await page.locator('.node.you').getAttribute('aria-label')).includes('Jakob'))
 
     await page.reload()
     await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })

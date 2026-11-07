@@ -50,3 +50,13 @@ describe('deleted people', () => {
     expect(recentlyDeleted(people, NOW).map((p) => p.id)).toEqual(['new', 'old'])
   })
 })
+
+describe('delete from the person page (wave 36b)', () => {
+  it('a page delete is the tombstone: deleted_at set, the person stays in people', () => {
+    const people = [person('a'), person('b')]
+    deletePersonSoft(people[0], NOW)
+    expect(people).toHaveLength(2)
+    expect(people[0].deleted_at).toBe('2026-11-07T12:00:00.000Z')
+    expect(alive(people).map((p) => p.id)).toEqual(['b'])
+  })
+})
