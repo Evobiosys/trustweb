@@ -1492,6 +1492,10 @@ button.outline-text{text-decoration:underline; cursor:pointer}
   .cv-c-groups,.cv-c-channels,.cv-c-notes,.cv-c-affil{display:block}
 }
 .web-view-row .cv-open{flex:none; font-size:var(--fs-1,12px); text-decoration:underline; background:none; border:0; padding:0; color:var(--ink-soft); cursor:pointer}
+
+/* wave 36 keep-in-touch */
+.keep-row{display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-width:0; max-width:100%}
+.keep-row .linkbtn{text-decoration:underline; background:none; border:0; padding:2px 0; color:inherit; font:inherit; cursor:pointer; text-align:left}
 /* wave 36 merge-countdown */
 [data-merge-countdown]{display:inline-block; min-width:1.5em; text-align:center; font-weight:700; font-size:1.25em; color:var(--ink); font-variant-numeric:tabular-nums}
 .keep-countdown{font-weight:600; color:var(--ink)}

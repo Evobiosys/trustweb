@@ -3143,6 +3143,13 @@ export const S = {
   completeSelectRow: (name: string) => `Select ${name}`,
   completeChannelShort: { signal: 'Sig', whatsapp: 'WA', matrix: 'Mx', delta: 'Dc', telegram: 'Tg', messenger: 'Ms', consensual: 'Cn' } as Record<string, string>,
   completeSortMark: [' ▲', ' ▼'],
+  keepNoticeTitle: (names: string[], more: number) => 'Time to get in touch: ' + (more > 0 ? `${names.join(', ')} and ${more} more` : names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]),
+  keepNoticeOpen: 'Show who',
+  keepRowTitle: 'Keep in touch',
+  keepRowNext: (date: string) => `Next: ${date}`,
+  keepToday: 'I was in touch today',
+  keepTodayToast: (name: string) => `Marked: you were in touch with ${name} today. Tap to undo.`,
+  keepQuiet: 'Gone quiet',
   mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
   keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
 } as const

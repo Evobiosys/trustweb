@@ -42,15 +42,17 @@ const ROW_CARD = 116
 let query = ''
 let sort = DEFAULT_SORT
 let overdueOnly = false
+let quietOnly = false
 let selected: Selection = clearSelection()
 let focusId: string | undefined
 let redraw: () => void = () => undefined
 
 /** A fresh visit starts unfiltered, drifted contacts first. */
-export function resetComplete(startQuery = ''): void {
+export function resetComplete(startQuery = '', startOverdue = false): void {
   query = startQuery
   sort = DEFAULT_SORT
-  overdueOnly = false
+  overdueOnly = startOverdue
+  quietOnly = false
   selected = clearSelection()
   focusId = undefined
 }
@@ -150,6 +152,7 @@ export function completeView(io: CompleteIo): HTMLElement {
     bar.replaceChildren(
       el('span', { class: 'cv-count', 'data-cv-count': '' }, [S.completeCount(rows.length, total)]),
       el('button', { class: 'linkbtn cv-chip' + (overdueOnly ? ' on' : ''), 'data-cv-overdue': '', 'aria-pressed': String(overdueOnly), onclick: () => { overdueOnly = !overdueOnly; refresh() } }, [S.completeOverdue]),
+      el('button', { class: 'linkbtn cv-chip' + (quietOnly ? ' on' : ''), 'data-cv-quiet': '', 'aria-pressed': String(quietOnly), onclick: () => { quietOnly = !quietOnly; refresh() } }, [S.keepQuiet]),
       ...chips.map((f) => el('button', { class: 'linkbtn cv-chip on', 'data-cv-filter': f.chip, onclick: () => {
         const ui = io.state().uiRings
         if (ui) { ui.show = ui.show?.filter((c) => c !== f.chip); ui.hide = ui.hide?.filter((c) => c !== f.chip) }
@@ -227,7 +230,7 @@ export function completeView(io: CompleteIo): HTMLElement {
     const st = io.state()
     const base = { s: st, tags: io.tags(), now: Date.now() }
     const total = completeRows(base, { query: '', overdueOnly: false }).length
-    rows = sortRows(completeRows(base, { query, overdueOnly }), sort)
+    rows = sortRows(completeRows(base, { query, overdueOnly, quietOnly }), sort)
     refreshBar(total)
     refreshBulk()
     redrawRows(true)
