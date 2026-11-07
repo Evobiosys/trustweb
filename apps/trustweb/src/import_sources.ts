@@ -2,11 +2,15 @@
 /** The import paths: what we have verified end to end with real exports, and what is still coming. First-run offers only the verified ones. */
 export interface ImportSource { id: string; label: string }
 
-export const VERIFIED_SOURCES: readonly ImportSource[] = [{ id: 'whatsapp', label: 'WhatsApp' }]
-
-export const COMING_SOURCES: readonly ImportSource[] = [
+export const VERIFIED_SOURCES: readonly ImportSource[] = [
+  { id: 'whatsapp', label: 'WhatsApp' },
   { id: 'vcard', label: 'Phone contacts' },
   { id: 'google-csv', label: 'Google contacts' },
+  { id: 'dex-csv', label: 'Dex' },
+  { id: 'generic-csv', label: 'Spreadsheet (CSV)' },
+]
+
+export const COMING_SOURCES: readonly ImportSource[] = [
   { id: 'linkedin', label: 'LinkedIn' },
   { id: 'facebook-json', label: 'Facebook' },
 ]

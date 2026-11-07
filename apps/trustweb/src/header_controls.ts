@@ -13,6 +13,9 @@ export function headerControls(screen: string): HeaderControl[] | undefined {
   return SCREENS.includes(screen) ? ['search', 'views', 'pins', 'qr', 'settings'] : undefined
 }
 
+/** Wave 33: the settings gear sits in the header of every screen but Start (Meet, Review, Place, hand-over included). */
+export const showsSettingsGear = (screen: string): boolean => screen !== 'start'
+
 /** What can sit as a button beneath Settings: Do Not Disturb (unpinned by default; its switch is in Settings > Chat), Advanced settings, "Share QR only". */
 export const HEADER_PINS = ['dnd', 'advanced', 'qr-only'] as const
 export type HeaderPin = (typeof HEADER_PINS)[number]

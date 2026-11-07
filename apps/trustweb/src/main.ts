@@ -27,11 +27,19 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
-import { addSupportIn, supportButton, supportCards, supportLine } from './support_ask_view'
+import { introForm } from './intro_ask_view'
+import { introCard } from './intro_card_view'
+import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
+import type { IntroLink } from './intro_link'
+import { introAskText } from './intro_ask'
+import { cardInvitationsRow, invitationSheet, invitationsSection } from './invitations_view'
+import type { InvitationIo } from './invitations_view'
+import { addSupportIn, supportCards, supportForm, supportLine } from './support_ask_view'
 import type { SupportIo } from './support_ask_view'
-import { parseHereText, parseSupportText, recordHere } from './support_ask'
+import { ASK_MODES, AskMode, nextAskMode, parseHereText, parseSupportText, recordHere } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
+import { PROVIDERS, guessProvider, validateEmail, composeHref, senderHint, providerLabel, type PrimaryEmail } from './primary_email'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -48,7 +56,7 @@ import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection, timelineImportButton } from './timeline_view'
-import { addTagTo, chatShown, messengerGlyphs, setMetAt, setRing, tagsAddable } from './card_small'
+import { addTagTo, chatShown, setMetAt, setRing, tagsAddable } from './card_small'
 import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
@@ -114,12 +122,12 @@ import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, remov
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, addBar, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
-import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, togglePinned } from './header_controls'
+import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
@@ -215,7 +223,8 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
-import { openServicesImport, servicesGroup } from './services_view'
+import { exportEntry, resumeGoogle } from './contacts_sync_view'
+import { offerContacts, openServicesImport, servicesGroup } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
@@ -435,6 +444,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
+// An intro link (#intro=..., intro_link.ts): the "Intro request" card opens once the app has a record.
+let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
 const qrBody = pendingConnect ? decodeModeLink(location.href) : null
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
@@ -589,6 +600,7 @@ let queryOpen = false
 let pastSearchOpen = false
 let pastSearchText = ''
 let queryText = ''
+let askMode: AskMode = AskMode.Hints
 let askRun: {
   text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
   /** Wave 6: the reach it went out with (hops.ts), for the countdown. */
@@ -924,6 +936,8 @@ const pages = createPages(phone)
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }
 mountOnboardingNotice(onboardHooks)
+// Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
+void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
@@ -1101,6 +1115,24 @@ function barSheet(): void {
   openSheet([
     el('h3', {}, [S.barSheetTitle]),
     el('p', { class: 'hint' }, [S.barSheetHint]),
+    el('h4', { class: 'eyebrow' }, [S.barProfilesTitle]),
+    el('div', { class: 'bar-profiles' }, [...PROFILES.map((p) => p.id), 'custom'].map((pid) => {
+      const prof = PROFILES.find((p) => p.id === pid)
+      const name = S.barProfileNames[pid]
+      // The mini preview: the preset's five glyphs (Custom shows the bar as it is now), the centre one enlarged.
+      const preview = prof ? { order: prof.order, primary: prof.primary } : { order: ids, primary }
+      return el('button', {
+        class: 'bar-profile' + (pid === activeProfile(s.uiBar, flags) ? ' on' : ''), 'data-bar-profile': pid, 'aria-label': S.barProfilePick(name), 'aria-pressed': String(pid === activeProfile(s.uiBar, flags)),
+        ...(prof ? { onclick: () => { if (prof.order.includes('feed') && !flags.feed) s.feed = { ...s.feed, on: true }; redraw(applyProfile(s.uiBar, pid)) } } : { disabled: '' }),
+      }, [
+        el('span', { class: 'bar-profile-prev' }, preview.order.map((id) => {
+          const g = el('span', { class: 'bar-glyph' + (id === preview.primary ? ' bar-glyph-primary' : '') })
+          g.innerHTML = icon(id === 'record' ? 'mic' : id === 'ask' ? 'query' : TAB_ICON[id])
+          return g
+        })),
+        el('b', {}, [name]),
+      ])
+    })),
     // The Feed is an opt-in feature: it is always offered here, and ticking it switches the feature on.
     ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).map(({ id, on }) => el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
       el('label', { class: 'radio', 'data-bar-opt': id }, [
@@ -1196,22 +1228,26 @@ function tabTap(target: Screen): void {
   history.pushState({ twZoom: target }, '')
   render()
 }
-window.addEventListener('popstate', (e) => { if (peoplePage && ((t) => t === 'people' || typeof t === 'number')((e.state as { twPage?: unknown } | null)?.twPage)) return; if (peoplePage) { peoplePage = false; go(Screen.Web) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
+window.addEventListener('popstate', (e) => { if (peoplePage && ((t) => t === 'people' || typeof t === 'number')((e.state as { twPage?: unknown } | null)?.twPage)) return; if (peoplePage) { peoplePage = false; go(pageBack) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
+/** Where Back from the People / Notes page lands. */
+let pageBack = Screen.Web
 /** Wave 30: the header magnifier's filter field under the People header; it filters the list as you type, Escape clears and closes it. */
 let peopleSearchOpen = false
 function openPeople(query = ''): void {
   resetPeopleList(query)
   peopleSearchOpen = query !== ''
   peoplePage = true
+  pageBack = Screen.Web
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
-/** Wave 32: the Notes outliner opens as a page the same way. */
+/** Wave 32: the Notes outliner opens as a page the same way; wave 33: it hangs under Resources, so Back returns there. */
 function openNotes(): void {
   peoplePage = true
+  pageBack = Screen.Inventory
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Notes)
 }
@@ -1308,7 +1344,7 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
 
 /** Wave 27: every main screen carries the settings gear in its header (Web and Resources draw their own). */
 function mountSettingsGear(): void {
-  if (!sectionOfScreen(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
+  if (!showsSettingsGear(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
   const right = host.querySelector('.hdr .hdr-right')
   if (!right) return
   const gear = iconButton('settings', S.invSettings, settingsSheet)
@@ -1380,7 +1416,6 @@ function mountHeaderControls(): void {
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls('people')
-    : screen === Screen.Notes ? viewControls('notes')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1391,7 +1426,7 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : screen === Screen.Notes ? viewDrop('notes') : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -1514,7 +1549,8 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Notes))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People))
+      || (target === Screen.Inventory && screen === Screen.Notes)
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -2184,6 +2220,7 @@ function screenStart(): Node[] {
     else void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
+    maybeOpenPendingIntro()
     maybeOpenPendingBook()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
@@ -2375,7 +2412,7 @@ function webPageScreen(page: WebPage): Node[] {
     onAddResource: (c, title) => { if (addResourceIn(st(), c, title, randomId(8), Date.now())) save(); render() },
     onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
-    heading: cardNameHeading(p), places: connectedPlaces(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
+    heading: cardNameHeading(p), places: connectedPlaces(p), onChat: () => chatSheet(p.id), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
     onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     onQr: () => personQr(p),
@@ -2501,7 +2538,7 @@ let invQuery = ''
 /** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
 let invOnly: { label: string; ids: Set<string> } | null = null
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', notes: 'list', map: 'map', dex: 'curator', compact: 'list' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
 /** The web-view-row: the heading of the chosen view or the search field (the magnifier sits in the header, wave 28; expand all sits in the TrustZones sidebar, wave 28b). */
 function webViewRow(view: WebView): HTMLElement {
@@ -2560,10 +2597,10 @@ function viewDrop(current: ViewKey): HTMLElement | null {
 function screenViewDrop(): HTMLElement | null {
   const which = screen === Screen.Events ? 'events' : 'inventory'
   if (!eyeOpen) return null
-  const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : invMatches ? 'matches' : zoom.inventory ? 'outline' : 'list'
+  const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : screen === Screen.Notes ? 'notes' : invMatches ? 'matches' : zoom.inventory ? 'outline' : 'list'
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).map((v) => {
     const b = el('button', { class: 'view-opt' + (v.key === current ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(v.key === current), 'data-view': v.key, disabled: !v.available, onclick: () => chooseScreenView(which, v.key) })
-    b.innerHTML = icon(v.key === 'list' || v.key === 'matches' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
+    b.innerHTML = icon(v.key === 'list' || v.key === 'matches' || v.key === 'notes' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
     b.append(el('b', {}, [v.available ? S.screenViewNames[v.key] : S.viewSolarOff]))
     return b
   }))
@@ -2572,6 +2609,8 @@ function screenViewDrop(): HTMLElement | null {
 function chooseScreenView(which: 'events' | 'inventory', key: string): void {
   eyeOpen = false
   if (which === 'events') { if (key === 'list') eventsView.showList(); else eventsView.open(); render(); return }
+  if (key === 'notes') { if (screen === Screen.Notes) render(); else openNotes(); return }
+  if (screen === Screen.Notes) go(Screen.Inventory)
   if (key === 'matches') { setMatchesView(true); render(); return }
   setMatchesView(false)
   if (key === 'outline' && !zoom.inventory) tabTap(Screen.Inventory)
@@ -2588,7 +2627,6 @@ function toggleExpand(expanded: boolean): void {
 function chooseView(view: ViewKey): void {
   eyeOpen = false
   if (view === 'people') { if (screen === Screen.People) render(); else openPeople(); return }
-  if (view === 'notes') { if (screen === Screen.Notes) render(); else openNotes(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
@@ -2745,24 +2783,10 @@ function screenWeb(): Node[] {
     ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
-      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, fiveRingsOn() ? fieldOverviewPanel(s, { live: st, save, render }) : fiveRingsTry()])])
+      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
       : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
-}
-
-/** Five rings off: one underlined line under the rings that turns the prototype on. */
-function fiveRingsTry(): HTMLElement {
-  return el('button', { class: 'link-toggle five-rings-try', 'data-five-rings-try': '', onclick: () => { writeFlag(true); render() } }, [S.fiveRingsTry])
-}
-
-/** Settings > Web: the plain switch for the five-ring prototype. */
-function fiveRingsSwitch(): HTMLElement {
-  const on = fiveRingsOn()
-  return el('button', {
-    class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-five-rings-switch': '',
-    onclick: () => { writeFlag(!on); render(); settingsSheet() },
-  }, [el('b', {}, [S.setFiveRings]), el('small', {}, [S.setFiveRingsHint])])
 }
 
 /** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: expand all, add, tag filters. (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
@@ -3099,6 +3123,8 @@ function personQr(p: Person): void {
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
+const invitationIo = (): InvitationIo => ({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), newId: () => randomId(8) })
+
 function cardMore(p: Person): Node[] {
   const cons = chatOnConsensual(p, st().preferConsensual)
   const rows: Record<string, () => (Node | null)[]> = {
@@ -3110,6 +3136,7 @@ function cardMore(p: Person): Node[] {
     askLinks: () => [askLinksRow(p)],
     passOn: () => [passOnRowFor(p)],
     knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace)],
+    invitations: () => [cardInvitationsRow(invitationIo(), p)],
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
@@ -3239,26 +3266,6 @@ function cardChannelsRow(p: Person): HTMLElement | null {
   }))
 }
 
-/** The icon of one messenger service: the channel's own, else the link kind's, else the web glyph. */
-const serviceIcon = (svc: ChatService): string => ICONS[svc.channel ?? svc.linkKind ?? 'web'] ?? ICONS.web
-
-/** Wave 28: one glyph per messenger link with this person; solid = connected on TrustWeb (opens the chat page), dashed = only linked (opens the outside link). */
-function messengerStrip(p: Person): HTMLElement | null {
-  const glyphs = messengerGlyphs(p)
-  if (!glyphs.length) return null
-  return el('div', { class: 'msg-glyphs', 'data-msg-glyphs': p.id }, glyphs.map((g) => {
-    const label = g.connected ? S.cardGlyphConnected : S.cardGlyphLinked(g.service.channel ? chName(g.service.channel) : S.chatRowLink[g.service.linkKind ?? 'other'])
-    const attrs = { class: 'msg-glyph' + (g.connected ? '' : ' linked'), 'data-msg-glyph': g.id, 'aria-label': label, title: label }
-    const node = g.connected || !g.service.url
-      ? el('button', { ...attrs, onclick: () => chatSheet(p.id) })
-      : g.service.channel === Channel.WhatsApp
-        ? el('a', { ...attrs, href: waLink(g.service.url, waDraft(p)), target: '_blank', rel: 'noopener noreferrer', 'data-wa-person': p.id })
-        : el('a', { ...attrs, href: g.service.url, target: '_blank', rel: 'noopener noreferrer' })
-    node.innerHTML = serviceIcon(g.service)
-    return node
-  }))
-}
-
 /** Advanced: write to a connected person without opening the earlier conversation; the message still lands in the chat book. */
 function sendUnreadBox(p: Person): HTMLElement {
   const text = el('textarea', { class: 'field', rows: '2', maxlength: String(CHAT_TEXT_MAX), placeholder: S.cardSendUnreadPh, 'aria-label': S.cardSendUnread, 'data-send-unread-text': p.id }) as HTMLTextAreaElement
@@ -3272,10 +3279,8 @@ function sendUnreadBox(p: Person): HTMLElement {
 
 /** The Chat button (the Chat tab's icon), only for a person connected on TrustWeb; it opens the chat page (or the pinned / last-used service). Not connected: the messenger glyphs and the way to connect (an invitation I hold, else the link panel). */
 function cardChatButton(p: Person, quiet: boolean): HTMLElement {
-  const strip = messengerStrip(p)
   if (!chatShown(p)) {
     return el('div', { class: 'card-chat' }, [
-      strip,
       p.pendingInvite ? el('button', { class: 'btn btn-electric btn-sm', 'data-reopen-invite': p.id, onclick: () => reopenInvite(p.pendingInvite!) }, [S.cardConnect]) : null,
       connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast }),
     ])
@@ -3295,7 +3300,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
     label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
     pin: (id) => { toggleChatPin(st(), p.id, id); save() },
   })
-  return el('div', { class: 'card-chat' }, [b, strip, sendUnreadBox(p)])
+  return el('div', { class: 'card-chat' }, [b, sendUnreadBox(p)])
 }
 
 /** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */
@@ -4543,6 +4548,7 @@ const eventsView = createEventsView({
   by: eventsBy,
   showQr: (ev) => eventQr(ev),
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
+  openInvitation: (i) => invitationSheet(invitationIo(), i),
 })
 const extHooks: ExtHooks = {
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
@@ -4823,11 +4829,29 @@ function maybeOpenPendingBook(): void {
 
 /** A pasted event link (the whole URL or just its fragment): opens the join sheet. */
 function joinLink(text: string): boolean {
-  const ev = decodeEventLink(text.slice(Math.max(0, text.indexOf('#'))))
+  const hash = text.slice(Math.max(0, text.indexOf('#')))
+  const intro = decodeIntroLink(hash)
+  if (intro) { pendingIntro = intro; maybeOpenPendingIntro(); return true }
+  const ev = decodeEventLink(hash)
   if (!ev) return false
   pendingEvent = ev
   maybeOpenPendingEvent()
   return true
+}
+
+/** Wave 33: "Introduce" hands the person a message for the target (the asker's connect link inside when the link carried one) and opens their chat when the target is in the web. */
+function introduceHandoff(l: IntroLink): void {
+  copyLink(introDraft(l), S.introDraftCopied)
+  const target = st().people.find((p) => p.name.trim().toLowerCase() === l.target.toLowerCase())
+  if (target) chatSheet(target.id)
+}
+
+/** An intro link opened: the "Intro request" card, whatever this web holds. */
+function maybeOpenPendingIntro(): void {
+  if (!pendingIntro || !state) return
+  const l = pendingIntro
+  pendingIntro = null
+  openSheet([introCard(l, { introduce: () => { closeSheet(); introduceHandoff(l) }, notNow: closeSheet, decline: closeSheet })])
 }
 
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
@@ -6284,6 +6308,7 @@ function editNameSheet(fromWeb = false): void {
     name,
     el('p', { class: 'meta' }, [S.meNameHint]),
     el('button', { class: 'btn btn-electric', onclick: saveName }, [S.meNameSave]),
+    ...ownEmailLines(s.me.primaryEmail),
     // Tapped in the Web view: a line, then the section for the web itself.
     ...(fromWeb ? [
       el('hr', { class: 'sheet-line' }),
@@ -6293,6 +6318,50 @@ function editNameSheet(fromWeb = false): void {
   ])
   name.focus()
   name.select()
+}
+
+/** Wave 33: the own card shows the primary email (local only) with a compose link and the sender hint. */
+function ownEmailLines(e: PrimaryEmail | undefined): Node[] {
+  if (!e) return []
+  return [el('p', { class: 'meta own-email', 'data-own-email': '1' }, [
+    `${e.address} · `, el('a', { href: composeHref(e), target: '_blank', rel: 'noopener noreferrer', 'data-own-email-compose': '1' }, [S.primaryEmailOpenIn(providerLabel(e.provider))]),
+    el('br'), senderHint(e),
+  ])]
+}
+
+/** Wave 33: Settings > You > Primary email address: provider list (owner order) + address. */
+function editEmailSheet(): void {
+  const s = st()
+  const cur = s.me.primaryEmail
+  let provider = cur?.provider ?? PROVIDERS[0].id
+  let picked = Boolean(cur)
+  const address = el('input', { class: 'field', type: 'email', autocomplete: 'email', 'aria-label': S.setPrimaryEmailAddress, value: cur?.address ?? '', 'data-email-address': '1' })
+  const list = el('div', { class: 'radios' }, [])
+  const draw = (): void => {
+    list.replaceChildren(...PROVIDERS.map((p) => el('button', {
+      class: 'radio' + (p.id === provider ? ' on' : ''), 'aria-pressed': String(p.id === provider), 'data-email-provider': p.id,
+      onclick: () => { provider = p.id; picked = true; draw() },
+    }, [el('b', {}, [p.label])])))
+  }
+  draw()
+  // Typing an address nobody picked a provider for guesses it from the domain.
+  address.addEventListener('input', () => { if (!picked) { provider = guessProvider(address.value); draw() } })
+  const saveEmail = (): void => {
+    const a = validateEmail(address.value)
+    if (!a) { toast(S.setPrimaryEmailBad); address.focus(); return }
+    s.me.primaryEmail = { provider, address: a }
+    save(); closeSheet(); settingsSheet(); toast(S.setPrimaryEmailSaved)
+  }
+  address.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') saveEmail() })
+  openSheet([
+    el('h3', {}, [S.setPrimaryEmail]),
+    list, address,
+    el('p', { class: 'meta' }, [S.setPrimaryEmailHint]),
+    el('p', { class: 'meta' }, [S.setPrimaryEmailSenderNote]),
+    el('button', { class: 'btn btn-electric', 'data-email-save': '1', onclick: saveEmail }, [S.setPrimaryEmailSave]),
+    ...(cur ? [el('button', { class: 'btn btn-ghost', 'data-email-clear': '1', onclick: () => { delete s.me.primaryEmail; save(); closeSheet(); settingsSheet(); toast(S.setPrimaryEmailCleared) } }, [S.setPrimaryEmailClear])] : []),
+  ])
+  address.focus()
 }
 
 /**
@@ -6413,7 +6482,6 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
-      fiveRingsSwitch(),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
       ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
@@ -6560,6 +6628,9 @@ function settingsSheet(): void {
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
       ]),
+      el('button', { class: 'conn-row', 'data-primary-email': '1', onclick: () => editEmailSheet() }, [
+        el('b', {}, [S.setPrimaryEmail]), el('span', {}, [s.me.primaryEmail ? `${providerLabel(s.me.primaryEmail.provider)} · ${s.me.primaryEmail.address}` : S.setPrimaryEmailNotSet]), el('em', {}, [S.setYourNameEdit]),
+      ]),
       linkButton(namesSync().names().name, () => openLinkChange(linkHooks)),
       connectionRow(),
       buildContactBox({}).el,
@@ -6569,6 +6640,7 @@ function settingsSheet(): void {
         onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
       }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
       el('button', { class: 'conn-row', 'data-settings-sovereign': '', onclick: () => sovereign.open() }, [el('b', {}, [S.sov.entry]), el('em', {}, [S.sov.entryHint])]),
+      exportEntry({ state: st, toast: (msg) => toast(msg), pages }),
     ], true),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
@@ -6809,6 +6881,7 @@ function screenInventory(): Node[] {
           onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
         ]),
       ])),
+      ...invitationsSection(invitationIo()),
       ...(cal?.resourcesSection?.() ?? []),
       backup.card(),
     ])
@@ -6998,20 +7071,26 @@ function queryDock(s: AppState): HTMLElement {
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
-  return el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
+  const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r) => {
+    if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
+    save(); render()
+  })
+  const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.map((m) => el('button', {
+    class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
+    onclick: () => { askMode = m; render() },
+  }, [{ [AskMode.Support]: S.askModeSupport, [AskMode.Hints]: S.askModeHints, [AskMode.Intros]: S.askModeIntros }[m]])))
+  const dock = el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
       el('h3', {}, [S.queryTitle]),
-      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; render() } }, ['×']),
+      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; askMode = AskMode.Hints; render() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [
+      run ? null : modeChips,
       run ? null : askHow(),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
-      reachChooser(askReachOf(s), askDirectOnly(s) || busy, (reach) => {
-        if (reach === HOPS_DEFAULT) delete s.askReach; else s.askReach = reach
-        save(); render()
-      }),
+      reach,
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
@@ -7029,12 +7108,25 @@ function queryDock(s: AppState): HTMLElement {
         class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,
         onclick: () => { void sendFromDock(queryText) },
       }, [S.querySend]),
-      run ? null : supportButton(supportIo),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
       !run && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryAnswers)]) : null,
     ]),
   ])
+  // Ask for support swaps the question box for the support form; the chips stay on top.
+  if (!run && nextAskMode(askMode) === AskMode.Support) {
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Hints; queryOpen = false }))
+  }
+  if (!run && nextAskMode(askMode) === AskMode.Intros) {
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, introForm({
+      st, reach, steps: () => askReachOf(st()),
+      ask: (peerId, target) => net.askIntro(peerId, target),
+      onResult: (target, r) => recordFound(introAskText(target), [r]),
+      link: async (target, why) => encodeIntroLink(linkOrigin(location.origin), { by: st().me.displayName, target, ...(why.trim() ? { why: why.trim() } : {}), connect: await (async () => { await net.start(); return net.connectLink(CONNECT_URL) })() }),
+      copy: (text) => copyLink(text, S.meetCopied),
+    }))
+  }
+  return dock
 }
 
 // ---------------------------------------------------------------------------
@@ -7062,7 +7154,13 @@ function renderAsk(): void {
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       fitLine(a),
-      decided === null
+      a.intro && decided === null
+        ? introCard({ by: a.fromName, target: a.intro }, {
+            introduce: () => { decide(true); showNextAsk(); introduceHandoff({ by: a.fromName, target: a.intro! }) },
+            notNow: showNextAsk,
+            decline: () => decide(false),
+          })
+        : decided === null
         ? el('div', {}, [
             el('p', { class: 'ask-lbl' }, [S.askMatches]),
             ...a.matches.map((m) => el('div', { class: 'ask-line' }, [el('span', {}, [m.text, threadIsDemo(st(), m.threadId) ? dummyChip() : null]), el('small', {}, [m.context])])),
@@ -7237,6 +7335,7 @@ if (state && !state.testOf?.handedOverAt) {
   void completePendingConnect()
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
+  maybeOpenPendingIntro()
   maybeOpenPendingBook()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)

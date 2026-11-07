@@ -28,7 +28,7 @@
  * it in, set once; the bundle's optional `from` carries it, v stays 2: parseBundle ignores unknown fields). Stored beside the record, never in it. CAVEAT: "newer" is a wall-clock comparison between two devices; a device with a
  * wrong clock can win edits it should lose. That is why the loser always stays readable in Review merge and a snapshot is taken before every merge.
  */
-import type { AppState, InventoryItem, PastMeeting, Person, TwEvent, TwTask } from './model'
+import type { AppState, InventoryItem, Invitation, PastMeeting, Person, TwEvent, TwTask } from './model'
 import { CHANNELS } from './model'
 import { CHAT_MAX_THREADS, MessageState, byStamp, lastAt, sanitizeChatBook, trimThread } from './chat'
 import type { ChatBook } from './chat'
@@ -56,7 +56,7 @@ export const REVIEW_MAX = 50
  */
 export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // carried by their own bundle parts, or the record's identity
-  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview',
+  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview',
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
@@ -73,7 +73,7 @@ export function settingsOf(s: object): Record<string, unknown> {
   return Object.fromEntries(Object.entries(s).filter(([k, v]) => v !== undefined && !SYNC_EXCLUDED.has(k)))
 }
 
-export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'channel' | 'sameAs' | 'chat' | 'name'
+export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'invitation' | 'channel' | 'sameAs' | 'chat' | 'name'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
 export type Stamps = Record<string, { h: string; at: number; by: string; from?: string }>
 
@@ -94,6 +94,8 @@ export interface SyncBundle {
   events?: TwEvent[]
   /** Wave 24: optional, sent only when I have tasks; a device without the field leaves mine untouched. */
   tasks?: TwTask[]
+  /** Wave 33: optional, sent only when I have invitations; an older build ignores the field. */
+  invitations?: Invitation[]
   chats?: ChatBook
   sameAs?: Record<string, string>
   /** Wave 26 (v3): every record field the owner set that is not per device (settingsOf). Absent from v2. */
@@ -130,7 +132,7 @@ export interface MergeResult {
 export interface Counts { people: number; lines: number; resources: number; meetings: number; events: number; tasks: number; messages: number }
 
 const SETTING_PREFIX = 'g:'
-const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:', task: 't:' } as const
+const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:', task: 't:', invitation: 'v:' } as const
 
 /** djb2 over the JSON text: change detection (a stored stamp), and the "identical on both sides" skip in stampsAfterMerge. The merge itself compares the JSON text, so a collision cannot keep an older version. */
 function hashOf(v: unknown): string {
@@ -162,7 +164,7 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
   return { ...rest, transcript: [] }
 }
 
-type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'myChannels' | 'contactShare'> & { me?: { displayName: string } }
+type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare'> & { me?: { displayName: string } }
 
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
@@ -172,13 +174,14 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
     ...(s.meetings ?? []).map((x): [string, unknown] => [KEY_PREFIX.meeting + x.id, x]),
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
     ...(s.tasks ?? []).map((x): [string, unknown] => [KEY_PREFIX.task + x.id, x]),
+    ...(s.invitations ?? []).map((x): [string, unknown] => [KEY_PREFIX.invitation + x.id, x]),
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
     ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
   ]
 }
 
-const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined })
+const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, invitations: b.invitations, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined })
 
 /** The stamps after looking at the record now: unchanged entities keep theirs, new or edited ones get `now` and this device's name. Gone ones drop out. */
 export function refreshStamps(s: AppState, prev: Stamps, now: number, device: string): Stamps {
@@ -204,6 +207,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     channels: { mine: s.myChannels ?? {}, share: s.contactShare ?? {} },
     events: (s.events ?? []).map(syncEvent),
     ...(s.tasks?.length ? { tasks: s.tasks } : {}),
+    ...(s.invitations?.length ? { invitations: s.invitations } : {}),
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
     settings: settingsOf(s),
@@ -273,6 +277,7 @@ function parseSettings(v: unknown): Record<string, unknown> | null {
 }
 
 const isTask = (e: unknown): e is TwTask => isObj(e) && ['id', 'title'].every((k) => typeof e[k] === 'string') && typeof e.stamp === 'number'
+const isInvitation = (e: unknown): e is Invitation => isObj(e) && e.kind === 'invitation' && typeof e.id === 'string' && typeof e.status === 'string'
 const isEvent = (e: unknown): e is TwEvent => isObj(e) && ['id', 'name', 'from', 'where'].every((k) => typeof e[k] === 'string')
   && typeof e.createdAt === 'number' && typeof e.attended === 'boolean'
 
@@ -295,11 +300,13 @@ export function parseBundle(v: unknown): SyncBundle | null {
   const channels = parseChannels(v.channels)
   if (!by || !from || !sameAs || !channels || !isList(v.events) || !v.events.every(isEvent) || !isObj(v.chats)) return null
   if (v.tasks !== undefined && !(isList(v.tasks) && v.tasks.every(isTask))) return null
+  if (v.invitations !== undefined && !(Array.isArray(v.invitations) && v.invitations.every(isInvitation))) return null
   out.by = by
   if (Object.keys(from).length) out.from = from
   out.channels = channels
   out.events = (v.events as TwEvent[]).map(syncEvent)
   if (v.tasks) out.tasks = v.tasks as TwTask[]
+  if (v.invitations) out.invitations = v.invitations as Invitation[]
   out.chats = sanitizeChatBook(v.chats)
   const settings = parseSettings(v.settings)
   if (settings) out.settings = settings
@@ -477,6 +484,7 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)
   // A task is edited whole (ticking removes `done`): the newer version wins as it is, nothing is filled in from the older.
   if (theirs.tasks?.length) mine.tasks = mergeList('task', mine.tasks ?? [], theirs.tasks, c, (x) => x.title, (winner) => winner)
+  if (theirs.invitations?.length) mine.invitations = mergeList('invitation', mine.invitations ?? [], theirs.invitations, c, (x) => x.event ?? x.place ?? x.id, (winner) => winner)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
   mergeSettings(mine, theirs, c)

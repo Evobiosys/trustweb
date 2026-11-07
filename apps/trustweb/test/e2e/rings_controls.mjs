@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+/** Wave 33 rings-controls proof (headless): PORT=5461 EXE=<chromium> PW=<playwright-core index.mjs> node rings_controls.mjs. Synthetic record. */
+const { chromium } = await import(process.env.PW ?? 'playwright-core')
+const URL = `http://127.0.0.1:${process.env.PORT ?? 5461}/`
+const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+let failed = false
+const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
+try {
+  for (const [name, opts] of [['1280', { viewport: { width: 1280, height: 900 } }], ['360', { viewport: { width: 360, height: 780 } }]]) {
+    const ctx = await browser.newContext(opts)
+    const page = await ctx.newPage()
+    const errors = []
+    page.on('pageerror', (e) => errors.push(String(e)))
+    const mk = (id, ring, o = {}) => ({ id, name: `P ${id}`, ring, lines: [], context: '', metAt: Date.now() - 86_400_000, fields: {}, ...o })
+    const people = [...Array.from({ length: 9 }, (_, i) => mk(`f${i}`, 'friend')), ...Array.from({ length: 8 }, (_, i) => mk(`a${i}`, 'acquaintance'))]
+    const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], inventory: [], people })
+    await page.goto(URL); await page.waitForTimeout(1500)
+    await page.evaluate((r) => { localStorage.setItem('trustweb.v1.me', r); localStorage.setItem('trustweb.ui.webView', 'rings') }, record)
+    await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
+
+    const geo = await page.evaluate(() => {
+      const w = document.querySelector('.rings-wrap').getBoundingClientRect(), z = 352 / w.width // the view may be zoomed: measure in the wrap's own px
+      const box = (e) => { const r = e.getBoundingClientRect(); return { x: (r.x + r.width / 2 - w.x) * z, y: (r.y + r.height / 2 - w.y) * z, w: Math.round(r.width * z), r: (r.width * z) / 2 } }
+      return {
+        diamonds: [...document.querySelectorAll('.rings-wrap .ring-toggle')].map(box),
+        more: [...document.querySelectorAll('.rings-wrap .ring-more')].map(box),
+        dots: [...document.querySelectorAll('.rings-wrap .node:not(.you)')].map(box),
+        stray: [...document.querySelectorAll('.rings-wrap > *')].filter((e) => !e.matches('svg, .node, .zzz, .ring-toggle, .ring-more, .rings-hint, .ring-card')).map((e) => e.className),
+        expanseDrop: document.querySelectorAll('.rings-wrap [data-expanse-drop]').length,
+      }
+    })
+    const { diamonds, more, dots } = geo
+    check(`${name}: 3 diamonds (friend, acquaintance, close ring) , 2 expand buttons`, diamonds.length >= 2 && more.length === 2)
+    check(`${name}: diamonds in ONE column at the centre x`, diamonds.every((c) => Math.abs(c.x - 176) < 1))
+    const ys = diamonds.map((c) => c.y).sort((p, q) => q - p)
+    check(`${name}: bottom-anchored (lowest within 20 px of the bottom edge), 20 px pitch upward`, 352 - ys[0] < 20 && ys.slice(1).every((y, i) => Math.abs(ys[i] - y - 20) < 1.5))
+    check(`${name}: each expand button sits on its diamond's row, 20 px to the right, 16 px`, more.every((m) => diamonds.some((d) => Math.abs(d.y - m.y) < 1 && Math.abs(m.x - d.x - 20) < 1)) && more.every((m) => m.w === 16))
+    check(`${name}: diamonds are 16 px`, diamonds.every((c) => c.w === 16))
+    check(`${name}: nothing outside the column except dots (no corner diamonds, no orange expand ring)`, geo.stray.length === 0 && geo.expanseDrop === 0 && [...diamonds, ...more].every((c) => c.x >= 176 - 1 && c.x <= 176 + 21))
+    const ctl = [...diamonds, ...more]
+    const gap = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) - a.r - b.r
+    let dd = Infinity, dc = Infinity
+    dots.forEach((a, i) => { dots.slice(i + 1).forEach((b) => { dd = Math.min(dd, gap(a, b)) }); ctl.forEach((c) => { dc = Math.min(dc, gap(a, c)) }) })
+    check(`${name}: no dot overlaps another (min gap ${dd.toFixed(1)})`, dd >= -1)
+    check(`${name}: no dot overlaps a control (min gap ${dc.toFixed(1)})`, dc >= -1)
+    check(`${name}: no horizontal scrolling`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    const scaled = await page.evaluate(() => [...document.querySelectorAll('.rings-wrap .node:not(.you)')].every((n) => parseFloat(n.style.getPropertyValue('--d')) > 0))
+    check(`${name}: dots sized by the view (dot*k)`, scaled)
+
+    const targets = ['.rings-wrap .ring-toggle >> nth=0', '.rings-wrap .ring-more >> nth=0', '.rings-wrap .ring-toggle >> nth=1']
+    for (const [i, sel] of targets.entries()) {
+      const node = page.locator('.rings-wrap .node:not(.you)').first()
+      const nb = await node.boundingBox()
+      const cx = nb.x + nb.width / 2, cy = nb.y + nb.height / 2
+      const pid = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.node')?.dataset.pid, [cx, cy]) // the topmost dot there
+      await page.mouse.move(cx, cy); await page.mouse.down()
+      const tb = await page.locator(sel).boundingBox()
+      await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2, { steps: 8 })
+      check(`${name}: control ${i} shows .drop while hovered`, await page.locator(sel).evaluate((e) => e.classList.contains('drop')))
+      await page.mouse.up(); await page.waitForTimeout(500)
+      check(`${name}: drop on control ${i} hides ${pid}`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 0)
+    }
+    await page.locator('.rings-wrap .node.you').dispatchEvent('contextmenu'); await page.waitForTimeout(300)
+    check(`${name}: sheet (context press on you) lists 3 hidden`, (await page.locator('[data-expanse-restore-one]').count()) === 3 && (await page.locator('[data-expanse-count="3"]').count()) === 1)
+    check(`${name}: no page errors`, errors.length === 0)
+    await page.screenshot({ path: `/tmp/rings_controls_${name}.png` })
+    await ctx.close()
+  }
+} finally { await browser.close() }
+process.exit(failed ? 1 : 0)

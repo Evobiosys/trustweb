@@ -293,6 +293,22 @@ export interface AvailSnap { name: string; tz: string; windows: Availability['wi
 
 export interface HeldAvail { personId?: string; name: string; snap: AvailSnap; at: number }
 
+/** An invitation I received (wave 33, invitations.ts). Local plus my own devices (sync_core.ts, sealed): never in a share, pack, answer or cascade. date is "YYYY-MM-DD". */
+export interface Invitation {
+  id: string
+  kind: 'invitation'
+  event?: string
+  /** The Person.id of who invited me. */
+  host?: string
+  place?: string
+  date?: string
+  link?: string
+  note?: string
+  /** Where it was imported from (Tana workspace and node). Local only. */
+  source?: { workspace: string; nodeId: string }
+  status: 'open' | 'accepted' | 'declined' | 'past'
+}
+
 /**
  * A light task (wave 24, cal3; feature shape inspired by tasks.org, no code taken). Local plus my own devices (sync_core.ts, sealed): never in a
  * share, pack, answer or cascade (cascade.ts askSources strips it). due is "YYYY-MM-DD", optionally with "THH:MM"; remindAt is ms.
@@ -717,6 +733,8 @@ export interface HeldAsk {
   arrivedLate?: boolean
   /** The person said yes after the moment, but the relay has not taken the late answer yet (offline, another tab drains). */
   yesAt?: number
+  /** Wave 33: an intro ask's target (net.ts IncomingAsk.intro). */
+  intro?: string
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring: when it was first asked. */
   earlierAt?: number
   /** Wave 6i: the qid of that first ask (so the same earlier ask is not shown twice). */
@@ -773,6 +791,8 @@ export interface AwayAsk {
 export interface Me {
   id: string
   displayName: string
+  /** Wave 33: the owner's own mail address; local only, never in the connect link. */
+  primaryEmail?: { provider: string; address: string }
 }
 
 /**
@@ -1025,6 +1045,8 @@ export interface AppState {
   signalImport?: SignalImport
   /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
   tasks?: TwTask[]
+  /** Invitations (wave 33, invitations.ts). Absent = none; no schema migration. Travels only between the owner's own devices, sealed. */
+  invitations?: Invitation[]
   /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
   atEvent?: { eventId: string; since: number; bell?: boolean }
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
@@ -1038,7 +1060,7 @@ export interface AppState {
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
   /** Wave 31 (bottom_bar.ts): the configurable bottom row {order, hidden, primary}. Absent: the default. Syncs with the record. */
-  uiBar?: { order?: string[]; hidden?: string[]; primary?: string }
+  uiBar?: { order?: string[]; hidden?: string[]; primary?: string; orderVersion?: number }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
@@ -1050,7 +1072,7 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[] }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
@@ -1383,9 +1405,11 @@ export interface ServiceRow {
   closeness?: number
   /** Wave 31: phone export with text only: items they seem to offer or need, short guesses (inventory_guess.ts). */
   items?: { title: string; need: boolean }[]
+  /** Wave 33: contact files and Google: what the file holds about them, copied to the person on Accept. */
+  emails?: string[]; phones?: string[]; title?: string; birthday?: string; note?: string; labels?: string[]
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
-export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean }
+export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean; /** Fields the decision wrote into an existing person; undo removes them while they still hold that value. */ filled?: Record<string, string> }
 /** Wave 27: one "From other services" import, kept for the Curate page and its undo. */
 export interface ServiceBatch { id: string; at: number; counts: Record<string, number>; rows: ServiceRow[]; done: Record<string, ServiceDone> }
 

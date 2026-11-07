@@ -4,8 +4,8 @@ import { ContactSource, type ImportedContact, type Parser } from './types'
 const MULTI = ' ::: '
 const BIRTHDAY = /^(\d{4}-\d{2}-\d{2}|--\d{2}-\d{2})$/
 
-/** RFC 4180: quoted fields, "" escape, newlines in quotes, CRLF/LF. Rows without text are dropped. */
-export function parseCsv(text: string): string[][] {
+/** RFC 4180 (`delim`: ',' by default; ';' and TAB for European exports): quoted fields, "" escape, newlines in quotes, CRLF/LF. Rows without text are dropped. */
+export function parseCsv(text: string, delim = ','): string[][] {
   const rows: string[][] = []
   let row: string[] = []
   let cell = ''
@@ -23,7 +23,7 @@ export function parseCsv(text: string): string[][] {
       else if (text[i + 1] === '"') { cell += '"'; i++ }
       else quoted = false
     } else if (c === '"') quoted = true
-    else if (c === ',') { row.push(cell); cell = '' }
+    else if (c === delim) { row.push(cell); cell = '' }
     else if (c === '\n') endRow()
     else if (c !== '\r') cell += c
   }

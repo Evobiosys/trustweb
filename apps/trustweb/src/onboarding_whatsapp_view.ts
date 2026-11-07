@@ -55,6 +55,9 @@ export function onboardingCard(h: OnboardingHooks, _redraw: () => void): HTMLEle
   // Wave 32: no card on its own, only the link; the owner opens the import page.
   return el('p', { class: 'meta', style: 'text-align:center', 'data-onboard-card': '' }, [
     ...VERIFIED_SOURCES.filter((x) => x.id === 'whatsapp').map((x) => el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'data-onboard-source': x.id, 'data-onboard-whatsapp': '', 'data-wa-import': '', onclick: () => openOnboarding(h) }, [S.onbImportFrom(x.label)])),
+    ' ',
+    // Wave 33: contact files (Google, phone, Dex, any CSV) have no chat evidence to place from; they go to the Curate page of Settings > Import.
+    el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'data-onboard-contacts': '', onclick: () => h.more() }, [S.onbImportContacts]),
   ])
 }
 

@@ -15,9 +15,11 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { matchesReply } from './vite_matches.mjs'
-import { approveMergeRoute, diagnosticsFor, ghBin, readyToGo } from './dev_preview_rules.mjs'
+import { approveMergeRoute, diagnosticsFor, ghBin, jobQueue, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+// execFile ignores `stdio`, so stdin stays an open pipe: close it, a command that reads stdin (a git/gh prompt) gets EOF instead of waiting out its timeout.
+const execClosed = (cmd, args, o) => { const pr = promisify(execFile)(cmd, args, o); pr.child.stdin?.end(); return pr }
 const repo = path.resolve(here, '../..')
 const crm = path.resolve(here, '../crm')
 
@@ -94,6 +96,8 @@ function pwaFiles() {
     },
   }
 }
+// `git status` refreshes (writes) the index: never while the preview assembly merges into it ("Unable to write index", 2026-11-07).
+const GIT_ENV = { ...process.env, GIT_OPTIONAL_LOCKS: '0' }
 let resolvedOutDir = path.resolve(here, 'dist')
 
 
@@ -101,8 +105,8 @@ let resolvedOutDir = path.resolve(here, 'dist')
 // A tree with uncommitted changes says so ("-dirty"); no git at all: "dev".
 function appVersion() {
   try {
-    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim()
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd: here, encoding: 'utf8' }).trim() !== ''
+    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim()
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim() !== ''
     return /^[0-9a-f]{4,40}$/.test(sha) ? sha + (dirty ? '-dirty' : '') : 'dev'
   } catch {
     return 'dev'
@@ -114,7 +118,7 @@ function appVersion() {
 function releaseId() {
   let release = process.env.TW_RELEASE ?? ''
   if (!release) {
-    try { release = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim() } catch { release = 'dev' }
+    try { release = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim() } catch { release = 'dev' }
     if (appVersion().endsWith('-dirty')) release += '-dirty'
   }
   return release
@@ -227,7 +231,7 @@ function approveApi() {
   return {
     name: 'trustweb-approve-api',
     configureServer(server) {
-      const git = (...a) => execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim()
+      const git = (...a) => execFileSync('git', a, { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim()
       const json = (res, o) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
       server.middlewares.use('/__tw/status', (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
@@ -309,12 +313,15 @@ function previewApi() {
     configureServer(server) {
       if (!previewFile()) return
       const json = (res, o, code = 200) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
-      const run = (args) => {
+      // Async and one at a time (wave 33): the CLI calls used to block this server (execFileSync), so the panel's reads and the page itself hung while a verdict ran.
+      // A client that timed out leaves its job running; an identical new request shares it (jobQueue), and GET reports `queued` so the panel re-reads when the queue empties.
+      const queue = jobQueue(async (args) => {
         try {
-          execFileSync(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] })
+          await execClosed(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000 })
           return null
         } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
-      }
+      })
+      const run = queue.run
       server.middlewares.use('/__tw/wait', (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -334,13 +341,13 @@ function previewApi() {
         }
         const pr = /^pr=(\d+)$/.exec(query ?? '')?.[1]
         if (sub !== '/diagnostics' || !pr) { fail('bad request', 400); return }
-        const run = async (bin, a) => (await promisify(execFile)(bin, a, { encoding: 'utf8', maxBuffer: 50e6, timeout: 60000, env: { ...process.env, HOME: process.env.HOME || os.homedir() } })).stdout
+        const run = async (bin, a) => (await execClosed(bin, a, { encoding: 'utf8', maxBuffer: 50e6, timeout: 60000, env: { ...process.env, HOME: process.env.HOME || os.homedir() } })).stdout
         try { text(await diagnosticsFor(pr, ghBin(process.env, existsSync), run)) } catch (e) { fail(e.message, 500) }
       })
       server.middlewares.use('/__tw/preview', async (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
         const sub = (req.url ?? '/').split('?')[0]
-        if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted }); return }
+        if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted, queued: queue.size() }); return }
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
         if (sub === '/pr' || sub === '/test' || sub === '/apply') {   // /apply = `preview <id> apply`: assemble the approved set (the panel's "Reload with approved")
           spawn(bin(), [readPreview().id, sub.slice(1)], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
@@ -355,7 +362,7 @@ function previewApi() {
         if (sub === '/verdict' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature) && [null, 'merge', 'needs-work'].includes(b.verdict)) args = ['verdict', b.feature, b.verdict ?? 'clear']
         if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
         if (!args) { json(res, { error: 'bad request' }, 400); return }
-        const error = run(args)
+        const error = await run(args)
         if (error !== null) json(res, { error }, 500)
         else json(res, readPreview())
       })
@@ -366,7 +373,7 @@ function previewApi() {
 // Dev only: where the overlay is built from (git at serve start), personal or stock, and the stock twin's URL.
 function devBuild(command) {
   if (command !== 'serve') return 'null'
-  const git = (...a) => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim() } catch { return '?' } }
+  const git = (...a) => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim() } catch { return '?' } }
   const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
   const sha = git('rev-parse', '--short', 'HEAD')
   return JSON.stringify({ branch, sha, time: hhmm(new Date()), n: bumpBuildCounter(branch), approved: approvedAt(branch, sha), mode: process.env.TW_STOCK ? 'stock' : 'personal', stockUrl: process.env.TW_STOCK_URL ?? '' })

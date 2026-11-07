@@ -4,11 +4,11 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveEach, retryFor, unapprovedLine, waveBusy, waveIdle, waveLabel, waveStep, type WaveEvent } from './dev_wave_press'
-import { hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, mergeResult, mergeResume, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, MERGE_DONE } from './dev_preview_rules'
+import { retryFor, unapprovedNote, waveBusy, waveIdle, waveLabel, waveStep, type WaveEvent } from './dev_wave_press'
+import { CALL_TIMEOUT_MS, WRITE_TIMEOUT_MS, hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, mergeResult, mergeResume, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
-declare const __TW_PREVIEW__: { id: string } | null | undefined
+declare const __TW_PREVIEW__: { id: string; created?: string } | null | undefined
 declare const __TW_BUILD__: { branch: string; sha: string; time: string; mode: string; stockUrl: string; n?: number; approved?: string | null } | null | undefined
 
 const CSS = `
@@ -20,7 +20,8 @@ const CSS = `
 .twf-ok{position:fixed;right:16px;bottom:16px;z-index:2147483000;width:320px;max-width:calc(100vw - 32px);font:13px/1.4 system-ui,sans-serif;color:#1d2a2e;background:#fff;border:1.5px solid #b8650a;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);touch-action:none}
 @media (max-width:600px){.twf-ok{bottom:96px}}
 .twf-ok .hx{position:absolute;top:4px;right:6px;width:auto;margin:0;padding:0 5px;background:none;color:#fff;font-size:16px;line-height:1}
-.twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
+.twf-ok{max-height:calc(100dvh - 32px);overflow-y:auto}
+.twf-ok header{position:sticky;top:0;z-index:2;padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
 .twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok .big.light{background:#8fd9ae;color:#10361f}.twf-ok .big.fail{background:#a3271f;color:#fff}.twf-ok .big.grey{background:#5b6b70;color:#fff}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .more{font-size:12px;font-weight:600;color:#b8650a;text-align:center}.twf-ok .more:empty,.twf-ok .warn:empty{display:none}.twf-ok .big.closed{opacity:.45}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok.ok{border-color:#1f7a4d}.twf-ok.ok header{background:#1f7a4d}.twf-ok .warn{color:#a3271f;font-weight:600}
@@ -151,7 +152,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
         const r = mergeResult(j.step)
         const cls = r.ok === true ? 'go big' : r.ok === false ? 'go big fail' : 'go big grey'
         body.append(btn(`${r.ok === true ? '✓' : r.ok === false ? '✗' : '–'} ${r.text}${r.ok === true ? (j.url ? ': open app.trustweb.one' : '') : ': back to the panel'}`, cls, () => { if (r.ok === true) { if (j.url) window.open(j.url, '_blank') } else buttons() }))
-        if (j.step !== 'released') body.append(btn('Back', 'alt small', buttons))
+        body.append(btn('Back', 'alt small', buttons))
       }
     }, '/__tw/approve-merge', (j) => !stale(j) && MERGE_DONE.includes(j.step))
   }
@@ -163,10 +164,9 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     })
     if (preview) {
       const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: APPROVE_HINT })
-      const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview').then((r) => r.json())
+      const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview', { signal: AbortSignal.timeout(CALL_TIMEOUT_MS) }).then((r) => r.json())
       // Open from the start; the press reads the registry fresh (and closes with the reason), so it works without a reload after boxes or verdicts changed.
-      // "Approve wave" approves every loaded row first (a press per row, in the background of this click: it may take a moment), then runs the merge flow.
-      const post = (feature: string): Promise<Response> => fetch('/__tw/preview/verdict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature, verdict: 'merge' }) })
+      // "Approve wave" asks for Touch ID at once; tw_approve_merge.sh then approves every loaded row (one verdict per row), assembles and merges.
       const asApproved = (q: Parameters<typeof approveGate>[0]): Parameters<typeof approveGate>[0] => ({ ...q, features: applyVerdicts(q.features, unapproved(q.features).map((f) => f.key), 'merge') })
       const id = __TW_PREVIEW__!.id
       // The conflict text sits folded under "details", never as a paragraph.
@@ -177,7 +177,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       }
       // The press state (dev_wave_press.ts) decides the label and the button, never a refresh tick: a tick only updates what the gate says (`view`).
       let press = waveIdle
-      let view = { ok: true, light: false, title: '', open: 0 }
+      let view = { ok: true, light: false, title: '', note: '' }
       const more = Object.assign(document.createElement('div'), { className: 'more' })
       const why = Object.assign(document.createElement('div'), { className: 'warn' })
       const go = btn(APPROVE_WAVE_LABEL, 'go big', () => {
@@ -188,7 +188,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const paint = (): void => {
         go.textContent = waveLabel(press); go.disabled = waveBusy(press)
         go.classList.toggle('light', view.light); go.classList.toggle('closed', !view.ok && !waveBusy(press)); go.title = view.title
-        more.textContent = view.open ? unapprovedLine(view.open) : ''
+        more.textContent = view.note
         why.textContent = press.error ? hintParts(press.error).head : ''
       }
       const step = (e: WaveEvent): void => { press = waveStep(press, e); paint() }
@@ -202,9 +202,8 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
           if (!g.ok) { fail(g.hint); setHint(g.hint); return }
           const w = waveState(q.features, individualStore(localStorage, id).get())
           if (w.warn) { foldStore(sessionStorage, id).set(expandFor(q.features, w.implicit, foldStore(sessionStorage, id).get())); loadOpenStore(sessionStorage, id).set(true) }
-          await approveEach(unapproved(q.features), async (k) => (await retryFor(async () => sure(await post(k)))).ok)
-          step({ type: 'merging' })
-          const r = await retryFor(async () => sure(await fetch('/__tw/approve-merge', { method: 'POST' })))
+          step({ type: 'merging' })   // Touch ID comes first (Jakob 2026-11-07): the script approves the open rows itself, after the confirmation
+          const r = await retryFor(async () => sure(await fetch('/__tw/approve-merge', { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) })))
           if (r.status === 202 || r.status === 409) { step({ type: 'handed' }); pollMerge(since) } else fail(`Approve wave refused (HTTP ${r.status})`)
         } catch (e) { fail((e as Error).message || 'Preview server not answering') }
       }
@@ -213,7 +212,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
         void read().then((q) => {
           const g = approveGate(asApproved(q)); setHint(g.ok ? APPROVE_HINT : g.hint)
           const w = waveState(q.features, individualStore(localStorage, id).get())
-          view = { ok: g.ok, light: w.light, open: w.implicit.length, title: w.warn ? `${w.implicit.length} loaded row(s) not approved one by one: the press approves them and opens them in the list` : 'Every loaded row was approved one by one' }
+          view = { ok: g.ok, light: w.light, note: unapprovedNote(q.features), title: w.warn ? `${w.implicit.length} loaded row(s) not approved one by one: the press approves them and opens them in the list` : 'Every loaded row was approved one by one' }
           paint()
           personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
@@ -228,7 +227,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     buttons()
     // A reload while a run is going, or after one ended today, shows its line and result again, whatever commit this page was built from
     // (the assembly and the test step move HEAD and restart vite; a sha match hid the result behind the default buttons, Jakob 2026-11-03).
-    if (preview) void fetch('/__tw/approve-merge').then((r) => r.json()).then((j: ApprovalStatus) => { if (mergeResume(j, Date.now()) !== 'none') pollMerge(0) }).catch(() => { /* no status: buttons stay */ })
+    if (preview) void fetch('/__tw/approve-merge').then((r) => r.json()).then((j: ApprovalStatus) => { if (mergeResume(j, Date.now(), __TW_PREVIEW__ ?? undefined) !== 'none') pollMerge(0) }).catch(() => { /* no status: buttons stay */ })
   }
   head.addEventListener('pointerdown', (down) => {
     const dx = down.clientX - bar.offsetLeft, dy = down.clientY - bar.offsetTop

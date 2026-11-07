@@ -1374,10 +1374,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .support-sheet .field{width:100%; margin:8px 0}
 .skins-store{opacity:.55; display:flex; flex-direction:column; gap:2px}
 
-/* Wave 32: the expanse control (drop a dot on it to hide the dot) and its count badge */
-.expanse-drop{position:absolute; top:4px; right:4px; z-index:4; width:32px; height:32px; padding:0; border:2px solid #e8750a; border-radius:50%; background:#fff3e6; color:#3a1d00; font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
-.expanse-drop.drop{background:#e8750a; color:#fff; transform:scale(1.2)}
-.expanse-count{position:absolute; top:-6px; right:-6px; min-width:16px; height:16px; padding:0 3px; box-sizing:border-box; border-radius:8px; background:#e8750a; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center}
+/* Wave 32: the expanse control (drop a dot on it to hide the dot); no count badge since wave 33 */
+.expanse-drop{position:absolute; z-index:4; width:32px; height:32px; padding:0; border:2px solid #e8750a; border-radius:50%; background:#fff3e6; color:#3a1d00; font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .expanse-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0}
 .expanse-row span{min-width:0; overflow-wrap:anywhere}
 /* Wave 30 (person-share-link): the text button is underlined; the received box wraps on a 360 px screen */
@@ -1394,6 +1392,15 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tab.tab-primary.on{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen), 0 0 0 8px rgba(23,143,134,.35)}
 .tab.tab-primary svg{stroke:#fff}
 .phone.ask-in-bar [data-open-query]{display:none}
+.bar-profiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:12px}
+.bar-profile{display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px; border:1px solid var(--line,#ccc); border-radius:12px; background:none; font:inherit; color:inherit; cursor:pointer}
+.bar-profile.on{border-color:var(--violet); box-shadow:0 0 0 2px var(--violet) inset}
+.bar-profile[disabled]{cursor:default}
+.bar-profile-prev{display:flex; align-items:center; gap:3px; height:30px}
+.bar-glyph{display:inline-flex; width:16px; height:16px; opacity:.6}
+.bar-glyph svg{width:100%; height:100%}
+.bar-glyph-primary{width:26px; height:26px; opacity:1; color:#fff; border-radius:50%; padding:4px; box-sizing:border-box; background:linear-gradient(135deg,var(--coral),var(--violet))}
+.bar-glyph-primary svg{stroke:#fff}
 .bar-opt-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .bar-opt-row .radio{flex:1 1 140px}
 .bar-opt-acts{display:flex; gap:2px}
@@ -1433,3 +1440,26 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .note-share .chips{margin:0}
 .note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
 .shared-notes .field{width:100%; box-sizing:border-box}
+
+/* wave 33 primary-email */
+.own-email a{text-decoration:underline}
+.own-email{overflow-wrap:anywhere}
+/* wave 33 contacts-sync */
+[data-google-sync] .field, [data-svc-columns] select{max-width:100%; box-sizing:border-box}
+[data-google-connect][aria-disabled="true"]{opacity:.45}
+[data-svc-columns]{overflow-wrap:anywhere}
+/* wave 33 small-ui: the top-right controls stay on screen at any width (search, eye, gear never hidden) */
+.hdr{position:sticky; top:0; z-index:5; flex-wrap:nowrap}
+.hdr-right > *{flex-shrink:0}
+@media (max-width:380px){
+  .hdr{padding-left:12px; padding-right:12px}
+  .hdr-right{gap:4px}
+  .hdr-btn.icon-only{width:30px; height:30px}
+}
+@media (max-width:339px){
+  .hdr-right [data-header-pin]{display:none}
+}
+/* wave 33 rings-controls: the expand controls are one column at the bottom edge, same 16 px as the diamonds */
+.ring-more.fill-expand{position:absolute; transform:translate(-50%,-50%); width:16px; height:16px; font-size:10px}
+.ring-toggle.drop::before{box-shadow:0 0 0 4px var(--rc,#e8750a)}
+.ring-more.drop{background:var(--rc,#e8750a); color:#fff; transform:translate(-50%,-50%) scale(1.4)}

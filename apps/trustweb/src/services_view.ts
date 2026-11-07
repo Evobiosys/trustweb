@@ -7,11 +7,15 @@ import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { Ring } from './model'
 import type { AppState } from './model'
+import { autoMap, CSV_FIELDS } from '../../crm/src/import/generic_csv'
+import type { CsvField } from '../../crm/src/import/generic_csv'
+import type { ImportedContact } from '../../crm/src/import/types'
+import { exportEntry, googleGroup } from './contacts_sync_view'
 import { COMING_SOURCES, VERIFIED_SOURCES } from './import_sources'
 import { failRun, finishRun, IDLE_RUN, startRun, tickRun } from './import_run'
 import type { Run } from './import_run'
 import type { Pages } from './page_view'
-import { bulkAccept, commitPlan, countsLine, decide, pendingProposals, planServices, undoBatch } from './services_import'
+import { bulkAccept, commitPlan, countsLine, decide, pendingProposals, personFor, planServices, undoBatch } from './services_import'
 import type { ServiceFile, ServicePlan } from './services_import'
 import { S } from './strings'
 import { bulkAcceptable } from './zone_proposals'
@@ -38,6 +42,20 @@ let me = ''
 let dayFirst: boolean | undefined
 let notRecognised = 0
 let run: Run = IDLE_RUN
+
+/** Rebuilds the open import box (set by servicesGroup), so contacts that arrive later (Connect Google) show in the summary. */
+let redraw: (() => void) | null = null
+
+/** Connect Google came back with contacts: they join the same summary as a file (wave 33). */
+export function offerContacts(h: ServicesHooks, contacts: ImportedContact[]): void {
+  files = [{ name: 'Google contacts', text: '', contacts }]
+  dayFirst = undefined
+  plan = planServices(h.state(), files, { me: me || h.state().me.displayName, now: Date.now() })
+  notRecognised = 0
+  run = IDLE_RUN
+  if (redraw && document.querySelector('[data-import-services]')?.isConnected) redraw()
+  else openServicesImport(h)
+}
 
 export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   const box = el('div', { 'data-import-services': '1' })
@@ -69,6 +87,24 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
     if (next !== run) { run = failRun(run, S.svcTimedOut); draw() }
   }, 1000)
 
+  /** Generic CSV: one picker per column, guessed from the header; a fixed pick replans at once. */
+  function columns(p: ServicePlan): HTMLElement[] {
+    return p.files.flatMap((f, i) => (f.headers && f.mapping ? [el('details', { class: 'meta', open: true, 'data-svc-columns': f.name }, [
+      el('summary', { style: 'text-decoration:underline;cursor:pointer;display:inline' }, [`${f.name}: ${S.svcColumns}`]),
+      ...f.headers.map((hd, c) => el('label', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0' }, [
+        el('span', { style: 'min-width:0;overflow-wrap:anywhere' }, [hd || `#${c + 1}`]),
+        el('select', { style: 'max-width:100%', 'aria-label': hd, 'data-svc-column': String(c), onchange: (e: Event) => {
+          const v = (e.target as HTMLSelectElement).value
+          const next = [...(files[i].mapping ?? autoMap(f.headers!))]
+          next[c] = (v || null) as CsvField | null
+          files = files.map((x, j) => (j === i ? { ...x, mapping: next } : x))
+          replan()
+          draw()
+        } }, [el('option', { value: '', selected: f.mapping![c] === null }, [S.svcColumnIgnore]), ...CSV_FIELDS.map((k) => el('option', { value: k, selected: f.mapping![c] === k }, [S.svcColumnFields[k]]))]),
+      ])),
+    ])] : []))
+  }
+
   function summary(p: ServicePlan): HTMLElement {
     const n = p.rows.length
     const d = p.diff
@@ -76,6 +112,7 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
       el('p', { class: 'meta' }, [S.svcSummary(countsLine(p.counts), p.groups, n)]),
       (h.state().serviceImports ?? []).length ? el('p', { class: 'meta', 'data-svc-diff': `${d.added}/${d.changed}/${d.unchanged}` }, [S.svcDiff(d.added, d.changed, d.unchanged)]) : null,
       notRecognised ? el('p', { class: 'warn' }, [S.svcNotRecognised(notRecognised)]) : null,
+      ...columns(p),
       p.counts.whatsapp ? el('label', { class: 'meta' }, [S.svcMeLabel + ' ', el('input', { class: 'field', value: me, 'data-svc-me': '1', onchange: (e: Event) => { me = (e.target as HTMLInputElement).value.trim(); replan(); draw() } })]) : null,
       p.ambiguous ? el('p', { class: 'meta' }, [S.svcAmbiguous, ' ', el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-monthfirst': '1', onclick: () => { dayFirst = false; replan(); draw() } }, [S.svcMonthFirst])]) : null,
       n ? el('button', { class: 'btn btn-electric', 'data-svc-yes': '1', onclick: () => yes(p) }, [S.svcYes(n)]) : null,
@@ -121,8 +158,9 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
       ].filter((x): x is HTMLElement => x !== null)) : null,
     ].filter((x): x is HTMLElement => x !== null))
   }
+  redraw = draw
   draw()
-  return [box]
+  return [box, googleGroup((contacts) => offerContacts(h, contacts), h.toast), exportEntry({ state: h.state, toast: h.toast, pages: h.pages })]
 }
 
 /** The one way in from Contacts and from Settings: the same section, as a page with Back (shared state lives in this module). */
@@ -146,6 +184,8 @@ export function curatePage(h: ServicesHooks): void {
         if (choice.do !== 'leave') { h.changed(); h.toast(S.svcAccepted(row.name)) }
         draw()
       }
+      const found = personFor(h.state(), row)
+      const maybe = found?.by === 'name' && (row.emails?.length || row.phones?.length) ? found : undefined
       const pick = el('select', { style: 'max-width:100%', 'aria-label': S.svcChange, 'data-svc-ring': row.key }, CHANGE_RINGS.map((r) => el('option', { value: r, selected: r === p.ring }, [S.ringLabel[r]]))) as HTMLSelectElement
       return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:6px', 'data-svc-row': row.key }, [
         el('b', {}, [row.name]),
@@ -154,13 +194,15 @@ export function curatePage(h: ServicesHooks): void {
           el('summary', { style: 'text-decoration:underline;cursor:pointer;display:inline' }, [S.svcInfoMark]),
           el('p', { class: 'meta' }, [S.svcTerms(p.terms.freq, p.terms.recency, p.terms.reciprocity, p.n365)]),
           ...p.flags.map((f) => el('p', { class: 'warn' }, [f === 'one-way' ? S.svcFlagOneWay : S.svcFlagDupe])),
-        ]),
-        el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' }, [
+          maybe ? el('p', { class: 'warn', 'data-svc-possible-match': row.key }, [S.svcPossibleMatch(maybe.person.name)]) : null,
+        ].filter((x): x is HTMLElement => x !== null)),
+        el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' }, ([
           el('button', { class: 'btn btn-electric btn-sm', 'data-svc-accept': row.key, onclick: () => act({ do: 'accept' }) }, [S.svcAccept]),
+          maybe ? el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-confirm-match': row.key, onclick: () => act({ do: 'accept', confirm: true }) }, [S.svcConfirmMatch(maybe.person.name)]) : null,
           pick,
           el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-change': row.key, onclick: () => act({ do: 'change', ring: pick.value as Ring }) }, [S.svcChange]),
           el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-leave': row.key, onclick: () => act({ do: 'leave' }) }, [S.svcLeave]),
-        ]),
+        ] as (HTMLElement | null)[]).filter((x): x is HTMLElement => x !== null)),
       ])
     }) : [el('p', { class: 'meta', 'data-svc-empty': '1' }, [S.svcCurateEmpty])]))
   }
