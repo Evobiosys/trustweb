@@ -195,6 +195,7 @@ import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
 import { mergeIncoming } from './matches'
 import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
+import { liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
@@ -501,6 +502,8 @@ let autoBackup: BackupView | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
 if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
+// A personal preview takes the record another preview shared when it is newer (dev_record_live.ts, 2026-11-07).
+if (!solo) void seedLiveDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
 // The demo's carry-over (demo_to_live.ts): the demo page's Install button left
 // the person's own content for the live app. Applied to the live app's own
 // record only; at once where nothing would be overwritten, else after asking.
@@ -563,6 +566,7 @@ function save(): void {
   if (state && !superseded) {
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
+    if (!solo) pushLiveDevRecord(persona, state)
     mirrorPushBundle(state)
     autoBackup?.changed()
   }
@@ -6805,6 +6809,7 @@ function settingsSheet(): void {
     ]),
     ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
     ...askWebSettings({ state: st, save }),
+    ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),

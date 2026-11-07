@@ -3172,4 +3172,7 @@ export const S = {
   aiTestHintTimeout: 'No answer in 30 s',
   aiTestHintKey: 'Key rejected',
   aiTestHintJson: 'The endpoint answered, but not with JSON: check the model name',
+  // Wave 36 dev-record-carry (personal previews only)
+  devRecordSynced: (time: string) => `Personal preview record synced ${time}`,
+  devRecordNotYet: 'Personal preview record not synced yet',
 } as const
