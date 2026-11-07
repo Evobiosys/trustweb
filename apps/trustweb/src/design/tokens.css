@@ -60,6 +60,17 @@
   --focus:#1A9AA6;
   --person-default:#B8700A;
   --shadow-float:0 12px 32px rgba(31,42,40,.18);
+  --start-end:#CBE6E2;
+  --reached-ink:#5C4300;
+  --hit-tint:#FFF1C2;
+  --hit-edge:#F2B544;
+  --hit-mark:#F5EEDC;
+  --phone-edge:#101A19;
+  --phone-rim:#2F4543;
+  --rec-a:#CDEEE9;
+  --rec-b:#7ED9CF;
+  --rec-paused-a:#E3E8E6;
+  --rec-paused-b:#B4C0BC;
   color-scheme:light;
 }
 :root[data-theme="dark"]{
@@ -93,6 +104,17 @@
   --focus:#1A9AA6;
   --person-default:#CB8529;
   --shadow-float:0 12px 32px rgba(0,0,0,.5);
+  --start-end:#1E3A3C;
+  --reached-ink:#F2C200;
+  --hit-tint:#4A3B12;
+  --hit-edge:#C99A2E;
+  --hit-mark:#5A4A1A;
+  --phone-edge:#070D0C;
+  --phone-rim:#27383A;
+  --rec-a:#7ED9CF;
+  --rec-b:#2F8F8A;
+  --rec-paused-a:#4A5E5B;
+  --rec-paused-b:#34443F;
   color-scheme:dark;
 }
 @media (prefers-color-scheme:dark){
@@ -127,6 +149,17 @@
     --focus:#1A9AA6;
     --person-default:#CB8529;
     --shadow-float:0 12px 32px rgba(0,0,0,.5);
+    --start-end:#1E3A3C;
+    --reached-ink:#F2C200;
+    --hit-tint:#4A3B12;
+    --hit-edge:#C99A2E;
+    --hit-mark:#5A4A1A;
+    --phone-edge:#070D0C;
+    --phone-rim:#27383A;
+    --rec-a:#7ED9CF;
+    --rec-b:#2F8F8A;
+    --rec-paused-a:#4A5E5B;
+    --rec-paused-b:#34443F;
     color-scheme:dark;
   }
 }
