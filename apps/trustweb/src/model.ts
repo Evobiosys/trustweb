@@ -394,6 +394,8 @@ export interface Person {
   peerId?: string
   /** Wave 30: the ring before the person was archived (Ring.None); Restore puts them back. Local only. */
   prevRing?: Ring
+  /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
+  deleted_at?: string
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
