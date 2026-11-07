@@ -16,13 +16,14 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
   const me = (): CoPerson => ({ did: h.me().did ?? 'local', name: h.me().name || '?' })
   const known = (did: string): boolean => st().people.some((p) => h.didOf(p.id) === did)
   const log = (line: string): void => { st().coNotesLog = audit(st().coNotesLog, line, Date.now()) }
+  const on = (): boolean => st().coNotesOn === true
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
   /** A few seconds after the last edit the whole document goes out sealed to each participant (not keystroke by keystroke). */
   const push = async (id: string): Promise<void> => {
     const r = h.relay()
     const d = docs().find((x) => x.id === id)
-    if (!r || !d) return
+    if (!r || !d || !on()) return
     const n = await sendDoc(r.deps, d, r.identity, known)
     if (n) { log(`Sent "${d.title}" to ${n} ${n === 1 ? 'person' : 'people'}`); h.save() }
   }
@@ -42,7 +43,7 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
     if (!r || !st().coNotesOn) return false
     let changed = 0
     for (const { from, doc } of await pollDocs(r.deps, r.identity, known)) {
-      const out = receive(docs(), from, doc, known)
+      const out = receive(docs(), from, doc, known, me().did)
       if (!out) continue
       st().coNotes = out.docs
       log(out.line)
@@ -68,7 +69,6 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
     el('button', { class: 'btn btn-ghost btn-sm', 'data-co-new': '', onclick: create }, [S_.newBtn]),
   ])
 
-  const on = (): boolean => st().coNotesOn === true
   return {
     body: () => [],
     notesSection: () => (on() ? [list()] : []),

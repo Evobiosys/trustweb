@@ -6,7 +6,7 @@ import { matchPeople } from '../../events'
 import type { Person } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks } from '../registry'
-import { editText, fromText, indent, insertAfter, moveDown, moveUp, outdent, remove, setTitle, toText, tree, type CoDoc, type CoPerson } from './co_doc'
+import { editText, fromText, indent, insertAfter, moveDown, moveUp, outdent, remove, setLogseq, setTitle, textOver, toText, tree, type CoDoc, type CoPerson } from './co_doc'
 import { chipToken, fromEdit, fromLogseq, logseqUrl, parseChips, parseLogseqRef, refsOf, toEdit, toLogseq } from './co_links'
 
 export interface CoCtx {
@@ -34,6 +34,8 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
   const refs = refsOf(c.get(id) as CoDoc)
   let editing = ''
   let adding = false
+  /** The copy the plain-text box shows; typing applies against it, so lines others added meanwhile are not taken for deleted. */
+  let base: CoDoc | null = null
   const doc = (): CoDoc => c.get(id) as CoDoc
   const people = (): Person[] => c.h.state().people
   const personOf = (ref: string): Person | undefined => (ref.startsWith('tw:') ? people().find((p) => p.id === ref.slice(3)) : people().find((p) => c.h.didOf(p.id) === ref))
@@ -43,9 +45,13 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     const f = field()
     const d = c.get(id)
     if (!f || !d || f.value === f.defaultValue) return
-    const next = f instanceof HTMLTextAreaElement
-      ? fromText(d, fromEdit(f.value, refs), c.me(), Date.now())
-      : editText(d, f.dataset.coInput ?? '', fromEdit(f.value, refs), c.me())
+    let next: CoDoc
+    if (f instanceof HTMLTextAreaElement) {
+      const r = textOver(base ?? d, d, fromEdit(f.value, refs), c.me(), Date.now())
+      next = r.doc
+      base = r.base
+      f.defaultValue = f.value
+    } else next = editText(d, f.dataset.coInput ?? '', fromEdit(f.value, refs), c.me())
     if (next !== d) c.put(next)
   }
   /** Commits what is typed, applies one op, shows the result with the cursor in `editing`. */
@@ -130,6 +136,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
   const plain = (d: CoDoc): HTMLElement => {
     const area = el('textarea', { class: 'field co-plain', rows: '12', placeholder: S_.textPh, 'aria-label': S_.modeText, 'data-co-input': 'text', onblur: commit }) as HTMLTextAreaElement
     area.defaultValue = toEdit(toText(d))
+    base = d
     return el('div', {}, [area, mention(area)])
   }
 
@@ -180,8 +187,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
           el('button', { class: 'btn btn-ghost btn-sm', 'data-co-logseq-save': '', onclick: () => {
             const ref = parseLogseqRef(link.value)
             if (!ref && link.value.trim()) { c.h.toast(S_.logseqBad); return }
-            const { logseq: _old, ...rest } = doc()
-            c.put(ref ? { ...rest, logseq: ref } : rest)
+            c.put(setLogseq(doc(), ref ?? undefined, c.me()))
             c.h.toast(S_.logseqLinked)
             fill()
           } }, [S_.logseqSave]),
@@ -193,7 +199,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
           const got = fromLogseq(paste.value)
           const cur = doc()
           const next = fromText(cur, [toText(cur), got.text].filter(Boolean).join('\n'), c.me(), Date.now())
-          c.put(got.uuid && cur.logseq ? { ...next, logseq: { ...cur.logseq, uuid: got.uuid } } : next)
+          c.put(got.uuid && cur.logseq ? setLogseq(next, { ...cur.logseq, uuid: got.uuid }, c.me()) : next)
           c.h.toast(S_.imported)
           history.back()
           draw()

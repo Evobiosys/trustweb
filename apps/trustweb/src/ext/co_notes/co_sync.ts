@@ -5,7 +5,7 @@
  */
 import type { Identity } from '../../../../demo/src/did'
 import { pollPayloads, postPayload, type RelayDeps } from '../../notes_relay'
-import { cleanDoc, merge, type CoDoc } from './co_doc'
+import { cleanDoc, merge, type CoBlock, type CoDoc, type Stamp } from './co_doc'
 import { forSend } from './co_links'
 
 /** How many co-created notes one phone keeps from others. */
@@ -35,9 +35,39 @@ export async function pollDocs(d: RelayDeps, me: Identity, known: (did: string) 
   return (await pollPayloads(d, me, known, parseDoc)).map(({ from, item }) => ({ from, doc: item }))
 }
 
+const OWNER_ONLY: readonly (CoDoc['kind'])[] = ['desires', 'memories']
+type Group = 'text' | 'place' | 'share' | 'del'
+const GROUP_FIELDS: Record<Group, (keyof CoBlock)[]> = { text: ['text'], place: ['parent', 'pos'], share: ['share'], del: ['del'] }
+
+/**
+ * What a received copy may change (I8): nobody adds a line in my name or rewrites who wrote a line; in Desires and Memories (each person writes only
+ * their own lines) my lines never change from outside, and another person's line changes only under that person's own stamp.
+ */
+export function guard(local: CoDoc | undefined, incoming: CoDoc, myDid: string): CoDoc {
+  const have = new Map((local?.blocks ?? []).map((b) => [b.id, b]))
+  const ownerOnly = OWNER_ONLY.includes(local?.kind ?? incoming.kind)
+  const byAuthor = (x: CoBlock, g: Group): boolean => (x.st[g]?.[1] ?? x.by.did) === x.by.did
+  const blocks = incoming.blocks.flatMap((x): CoBlock[] => {
+    const old = have.get(x.id)
+    if (!old) return x.by.did === myDid || (ownerOnly && !(['text', 'place', 'share', 'del'] as Group[]).every((g) => byAuthor(x, g))) ? [] : [x]
+    if (ownerOnly && old.by.did === myDid) return [old]
+    const y: CoBlock = { ...x, by: old.by, at: old.at, st: { ...x.st } }
+    if (ownerOnly) {
+      for (const g of Object.keys(GROUP_FIELDS) as Group[]) {
+        if (byAuthor({ ...x, by: old.by }, g)) continue
+        for (const f of GROUP_FIELDS[g]) { if (old[f] === undefined) delete y[f]; else Object.assign(y, { [f]: old[f] }) }
+        if (old.st[g]) y.st[g] = old.st[g] as Stamp; else delete y.st[g]
+      }
+    }
+    return [y]
+  })
+  return { ...incoming, blocks }
+}
+
 /** The documents after taking `incoming` from `from`, with a log line; null when ignored (unknown sender, too many) or nothing changed. */
-export function receive(local: readonly CoDoc[], from: string, incoming: CoDoc, known: (did: string) => boolean): { docs: CoDoc[]; line: string } | null {
-  const mine = local.find((d) => d.id === incoming.id)
+export function receive(local: readonly CoDoc[], from: string, raw: CoDoc, known: (did: string) => boolean, myDid: string): { docs: CoDoc[]; line: string } | null {
+  const mine = local.find((d) => d.id === raw.id)
+  const incoming = guard(mine, raw, myDid)
   const name = incoming.people.find((p) => p.did === from)?.name ?? from.slice(-8)
   if (mine) {
     if (!known(from) && !mine.people.some((p) => p.did === from)) return null

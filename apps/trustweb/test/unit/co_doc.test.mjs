@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 // Co-created notes (src/ext/co_notes/co_doc.ts): fractional keys, ops, tombstones, CRDT merge laws, text round trip, hostile JSON.
 import {
-  between, cleanDoc, editText, fromText, indent, insertAfter, merge, moveDown, moveUp, newDoc, outdent, remove, setShare, setTitle, toText, tree,
+  between, cleanDoc, editText, fromText, indent, insertAfter, merge, moveDown, moveUp, newDoc, outdent, remove, setLogseq, setShare, setTitle, textOver, toText, tree,
 } from '../../src/ext/co_notes/co_doc.ts'
 
 const A = { did: 'did:a', name: 'Anna' }
@@ -242,5 +242,55 @@ describe('cleanDoc', () => {
     const d = cleanDoc(JSON.parse('{"__proto__":{"x":1},"id":"q","title":"t","blocks":[],"people":[],"clock":0,"mode":"outline"}'))
     expect(d?.x).toBeUndefined()
     expect({}.x).toBeUndefined()
+  })
+})
+
+describe('review fixes (wave36b)', () => {
+  it('a deleted line carries no words to anyone, and the blank wins over the old text in a merge', () => {
+    const d = seeded(['keep', 'secret'])
+    const gone = remove(d, idOf(d, 'secret'), A)
+    expect(gone.blocks.find((b) => b.del).text).toBe('')
+    expect(merge(d, gone).blocks.find((b) => b.del).text).toBe('')
+  })
+  it('a long note typed line after line survives the wire (keys grow but are not dropped)', () => {
+    let d = newDoc({ id: 'd1', title: 'Long', me: A, at: T })
+    let last = null
+    for (let i = 0; i < 500; i++) { const r = insertAfter(d, last, `line ${i}`, A, T); d = r.doc; last = r.id }
+    expect(cleanDoc(JSON.parse(JSON.stringify(d))).blocks.length).toBe(500)
+  })
+  it('a key ending in the lowest digit is refused from the wire (nothing could ever sort before it)', () => {
+    const d = seeded(['x'])
+    const raw = JSON.parse(JSON.stringify(d))
+    raw.blocks[0].pos = 'V0'
+    expect(cleanDoc(raw).blocks.length).toBe(0)
+  })
+  it('a re-linked Logseq block wins over the older link in a merge, both ways', () => {
+    const d = setLogseq(seeded(['x']), { graph: 'g', uuid: 'ffffffff-ffff-4fff-8fff-ffffffffffff' }, A)
+    const relinked = setLogseq(d, { graph: 'g', uuid: '00000000-0000-4000-8000-000000000000' }, A)
+    expect(merge(d, relinked).logseq.uuid).toBe('00000000-0000-4000-8000-000000000000')
+    expect(merge(relinked, d).logseq.uuid).toBe('00000000-0000-4000-8000-000000000000')
+    const unlinked = setLogseq(relinked, undefined, A)
+    expect(merge(relinked, unlinked).logseq).toBeUndefined()
+    expect(cleanDoc(JSON.parse(JSON.stringify(relinked))).logseqSt).toEqual(relinked.logseqSt)
+  })
+  it('a line added in the middle in plain text does not move the lines after it', () => {
+    const d = seeded(['one', 'two', 'three', 'four'])
+    const next = fromText(d, '- one\n- new\n- two\n- three\n- four', A, T)
+    expect(texts(next)).toEqual(['0:one', '0:new', '0:two', '0:three', '0:four'])
+    for (const t of ['two', 'three', 'four']) {
+      const before = d.blocks.find((b) => b.text === t)
+      const after = next.blocks.find((b) => b.text === t)
+      expect(after.st.place).toEqual(before.st.place)
+    }
+  })
+  it('plain text typed over an older copy keeps what others added meanwhile', () => {
+    const base = seeded(['one', 'two'])
+    const theirs = insertAfter(base, idOf(base, 'two'), 'from Ben', B, T).doc
+    const mine = textOver(base, theirs, '- one\n- two edited\n- new', A, T)
+    expect(texts(mine.doc).sort()).toEqual(['0:from Ben', '0:new', '0:one', '0:two edited'])
+    expect(textOver(base, theirs, toText(base), A, T).doc).toBe(theirs)
+    // a second commit of the same box text (blur again) adds nothing twice
+    const again = textOver(mine.base, mine.doc, '- one\n- two edited\n- new', A, T)
+    expect(again.doc).toBe(mine.doc)
   })
 })

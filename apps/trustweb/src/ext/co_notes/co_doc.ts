@@ -32,6 +32,7 @@ export interface CoDoc {
   blocks: CoBlock[]
   people: CoPerson[]
   logseq?: { graph: string; uuid: string }
+  logseqSt?: Stamp // when the Logseq link was last set or cleared; the newer wins a merge
   eventId?: string
   kind?: 'note' | 'desires' | 'memories'
   /** My Lamport counter: above every stamp I have seen. */
@@ -46,7 +47,8 @@ const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const BASE = DIGITS.length
 const BLOCKS_WIRE_MAX = BLOCKS_TOTAL_MAX * 2
 const NO_STAMP: Stamp = [0, '']
-const POS_RE = /^[0-9A-Za-z]{1,64}$/
+/** Keys grow about one digit per six inserts at one spot (a 500-line note stays far below 400); a key never ends in the lowest digit, else nothing could sort before it. */
+const POS_RE = /^[0-9A-Za-z]{0,399}[1-9A-Za-z]$/
 const SHARES: readonly string[] = ['me', 'event', 'zones']
 
 /** A key strictly between `a` and `b` ('' = no bound on that side). Falls back to "after a" when the bounds are crossed. */
@@ -131,6 +133,8 @@ type Groups = Map<string | null, CoBlock[]>
 interface Ctx { s: Stamp; groups: Groups; all: Map<string, CoBlock> }
 type Patch = Omit<Partial<CoBlock>, 'st'> & { st?: Partial<CoBlock['st']> }
 interface Change { set?: Map<string, Patch>; add?: CoBlock[] }
+/** A tombstone also blanks the words, so a deleted line's text leaves every copy. */
+const tomb = (s: Stamp): Patch => ({ del: true, text: '', st: { del: s, text: s } })
 
 /** Applies one change under one fresh stamp. Returns `doc` itself when `fn` answers null. */
 function apply(doc: CoDoc, me: CoPerson, fn: (c: Ctx) => Change | null): CoDoc {
@@ -176,6 +180,10 @@ export function setShare(doc: CoDoc, id: string, share: ShareLevel, me: CoPerson
   return apply(doc, me, ({ s, all }) => (all.get(id) && all.get(id)?.share !== share ? { set: new Map([[id, { share, st: { share: s } }]]) } : null))
 }
 
+/** Sets or clears (undefined) the Logseq link under a fresh stamp. */
+export const setLogseq = (doc: CoDoc, ref: { graph: string; uuid: string } | undefined, me: CoPerson): CoDoc =>
+  ({ ...doc, logseq: ref, logseqSt: stampOf(doc, me), clock: doc.clock + 1 })
+
 export function setTitle(doc: CoDoc, title: string, me: CoPerson): CoDoc {
   const t = cleanText(title, TITLE_MAX)
   return t && t !== doc.title ? { ...doc, title: t, titleSt: stampOf(doc, me), clock: doc.clock + 1, seen: { ...doc.seen, [me.did || 'me']: Date.now() } } : doc
@@ -216,7 +224,7 @@ export function remove(doc: CoDoc, id: string, me: CoPerson): CoDoc {
   return apply(doc, me, ({ s, groups, all }) => {
     if (!all.get(id) || all.get(id)?.del) return null
     const set = new Map<string, Patch>()
-    const mark = (b: string): void => { set.set(b, { del: true, st: { del: s } }); for (const k of groups.get(b) ?? []) mark(k.id) }
+    const mark = (b: string): void => { set.set(b, tomb(s)); for (const k of groups.get(b) ?? []) mark(k.id) }
     mark(id)
     return { set }
   })
@@ -235,7 +243,7 @@ const mergeBlock = (a: CoBlock, b: CoBlock): CoBlock => {
   }
 }
 
-const topStamp = (d: CoDoc): number => Math.max(d.clock, d.titleSt?.[0] ?? 0, ...d.blocks.flatMap((b) => [b.st.text[0], b.st.place[0], b.st.del?.[0] ?? 0, b.st.share?.[0] ?? 0]))
+const topStamp = (d: CoDoc): number => Math.max(d.clock, d.titleSt?.[0] ?? 0, d.logseqSt?.[0] ?? 0, ...d.blocks.flatMap((b) => [b.st.text[0], b.st.place[0], b.st.del?.[0] ?? 0, b.st.share?.[0] ?? 0]))
 
 /** The union of two replicas of one document. Commutative, associative and idempotent; `mode` stays this device's (a). */
 export function merge(a: CoDoc, b: CoDoc): CoDoc {
@@ -244,14 +252,14 @@ export function merge(a: CoDoc, b: CoDoc): CoDoc {
   const people = new Map<string, CoPerson>()
   for (const p of [...a.people, ...b.people]) { const q = people.get(p.did); people.set(p.did, !q || p.name < q.name ? p : q) }
   const [titleSt, title] = newer(a.titleSt ?? NO_STAMP, a.title, b.titleSt ?? NO_STAMP, b.title)
-  const logseq = either(a.logseq, b.logseq)
+  const [logseqSt, logseq] = newer(a.logseqSt ?? NO_STAMP, a.logseq, b.logseqSt ?? NO_STAMP, b.logseq)
   const eventId = either(a.eventId, b.eventId)
   const kind = either(a.kind, b.kind)
   const seen: Record<string, number> = { ...a.seen }
   for (const [did, t] of Object.entries(b.seen ?? {})) seen[did] = Math.max(seen[did] ?? 0, t)
   const out: CoDoc = {
     id: a.id, title, mode: a.mode, blocks: sortBlocks([...blocks.values()]), people: [...people.values()].sort((x, y) => (x.did < y.did ? -1 : 1)),
-    ...(logseq ? { logseq } : {}), ...(eventId ? { eventId } : {}), ...(kind ? { kind } : {}), clock: 0, ...(titleSt[0] ? { titleSt } : {}), ...(Object.keys(seen).length ? { seen } : {}),
+    ...(logseq ? { logseq } : {}), ...(logseqSt[0] ? { logseqSt } : {}), ...(eventId ? { eventId } : {}), ...(kind ? { kind } : {}), clock: 0, ...(titleSt[0] ? { titleSt } : {}), ...(Object.keys(seen).length ? { seen } : {}),
   }
   out.clock = Math.max(topStamp(a), topStamp(b), topStamp(out))
   return out
@@ -287,9 +295,21 @@ export function fromText(doc: CoDoc, text: string, me: CoPerson, at: number): Co
     const [oe, ne] = anchors[k + 1]
     for (let d = 1; oi + d < oe && nj + d < ne; d++) { match.set(nj + d, oi + d); used.add(oi + d) }
   }
+  // The line each line hangs under (-1: top level), to find the next sibling that keeps its key.
+  const up: number[] = []
+  lines.reduce<number[]>((st, l, j) => { while (st.length && lines[st[st.length - 1]].depth >= l.depth) st.pop(); up.push(st.length ? st[st.length - 1] : -1); return [...st, j] }, [])
   return apply(doc, me, ({ s, groups, all }) => {
     const set = new Map<string, Patch>()
     const add: CoBlock[] = []
+    // The key of the next sibling below line j that stays under `parent`, so a line put in between moves nothing after it.
+    const nextPos = (j: number, parent: string | null): string => {
+      for (let k = j + 1; k < lines.length && lines[k].depth >= lines[j].depth; k++) {
+        if (up[k] !== up[j]) continue
+        const b = match.has(k) ? all.get(old[match.get(k) ?? 0].id) : undefined
+        return b && siblings(groups, b.id).parent === parent ? b.pos : ''
+      }
+      return ''
+    }
     const stack: { id: string; depth: number }[] = []
     const lastPos = new Map<string | null, string>()
     lines.forEach((l, j) => {
@@ -305,22 +325,28 @@ export function fromText(doc: CoDoc, text: string, me: CoPerson, at: number): Co
         const patch: Patch = {}
         if (cur.text !== l.text) { patch.text = l.text; patch.st = { text: s } }
         if (curParent !== parent || cur.pos <= prev) {
-          const pos = between(prev, '')
+          const pos = between(prev, nextPos(j, parent))
           Object.assign(patch, { parent, pos }); patch.st = { ...patch.st, place: s }
           lastPos.set(parent, pos)
         } else lastPos.set(parent, cur.pos)
         if (patch.st) set.set(id, patch)
       } else {
         id = randomId()
-        const pos = between(prev, '')
+        const pos = between(prev, nextPos(j, parent))
         lastPos.set(parent, pos)
         add.push({ id, parent, pos, text: l.text, by: me, at, st: { text: s, place: s } })
       }
       stack.push({ id, depth: l.depth })
     })
-    old.forEach((r, i) => { if (!used.has(i)) set.set(r.id, { del: true, st: { del: s } }) })
+    old.forEach((r, i) => { if (!used.has(i)) set.set(r.id, tomb(s)) })
     return set.size || add.length ? { set, add } : null
   })
+}
+
+/** Plain text typed over `base` (the copy the text box showed), applied to `current`: what others added meanwhile stays. `base` = what the box shows now. */
+export function textOver(base: CoDoc, current: CoDoc, text: string, me: CoPerson, at: number): { doc: CoDoc; base: CoDoc } {
+  const raised = { ...base, clock: Math.max(base.clock, current.clock) }; const mine = fromText(raised, text, me, at)
+  return mine === raised ? { doc: current, base } : { doc: merge(current, mine), base: mine }
 }
 
 const stampClean = (v: unknown): Stamp => {
@@ -364,13 +390,14 @@ export function cleanDoc(raw: unknown): CoDoc | null {
     const eventId = cleanText(o.eventId, 40)
     const clock = typeof o.clock === 'number' && Number.isSafeInteger(o.clock) && o.clock >= 0 && o.clock < 1e15 ? o.clock : 0
     const titleSt = o.titleSt !== undefined ? stampClean(o.titleSt) : undefined
+    const logseqSt = o.logseqSt !== undefined ? stampClean(o.logseqSt) : undefined
     const seen: Record<string, number> = {}
     for (const [did, t] of Object.entries((o.seen ?? {}) as Record<string, unknown>).slice(0, 50)) {
       if (did !== '__proto__' && did.length <= 200 && typeof t === 'number' && Number.isFinite(t) && t >= 0) seen[did] = t
     }
     return {
       id, title: cleanText(o.title, TITLE_MAX), mode: o.mode === 'text' ? 'text' : 'outline', blocks, people, ...(logseq ? { logseq } : {}),
-      ...(eventId ? { eventId } : {}), ...(kind ? { kind } : {}), clock, ...(titleSt ? { titleSt } : {}), ...(Object.keys(seen).length ? { seen } : {}),
+      ...(eventId ? { eventId } : {}), ...(kind ? { kind } : {}), clock, ...(titleSt ? { titleSt } : {}), ...(logseqSt ? { logseqSt } : {}), ...(Object.keys(seen).length ? { seen } : {}),
     }
   } catch {
     return null

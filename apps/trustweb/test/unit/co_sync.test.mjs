@@ -80,19 +80,19 @@ describe('send', () => {
 describe('receive', () => {
   it('ignores an unknown sender, adds a new doc from a known one, merges from a participant', () => {
     const d = shared()
-    expect(receive([], 'did:stranger', d, known(BEN.did))).toBeNull()
-    expect(receive([], BEN.did, d, known(BEN.did))?.docs).toHaveLength(1)
+    expect(receive([], 'did:stranger', d, known(BEN.did), ANNA.did)).toBeNull()
+    expect(receive([], BEN.did, d, known(BEN.did), CARA.did)?.docs).toHaveLength(1)
     const mine = { ...d, mode: 'text' }
     const theirs = editText(d, tree(d)[0].id, 'pack more', b)
-    const out = receive([mine], BEN.did, theirs, () => false)
+    const out = receive([mine], BEN.did, theirs, () => false, ANNA.did)
     expect(out?.docs[0].mode).toBe('text')
     expect(tree(out.docs[0])[0].text).toBe('pack more')
     expect(out.line).toContain('Trip')
   })
   it('a doc from a known person who is not a participant of my copy is still ignored when they are unknown, and an unchanged doc reports nothing', () => {
     const d = shared()
-    expect(receive([d], CARA.did, d, () => false)).toBeNull()
-    expect(receive([d], BEN.did, d, known(BEN.did))).toBeNull()
+    expect(receive([d], CARA.did, d, () => false, ANNA.did)).toBeNull()
+    expect(receive([d], BEN.did, d, known(BEN.did), ANNA.did)).toBeNull()
   })
 })
 
@@ -100,13 +100,13 @@ describe('two phones', () => {
   it('Anna and Ben edit concurrently, exchange through the relay and end with the same text', async () => {
     const srv = fakeServer()
     let anna = shared()
-    let ben = receive([], ANNA.did, anna, known(ANNA.did)).docs[0]
+    let ben = receive([], ANNA.did, anna, known(ANNA.did), BEN.did).docs[0]
     anna = insertAfter(anna, tree(anna)[0].id, 'tickets', a, NOW).doc
     ben = insertAfter(ben, tree(ben)[0].id, 'snacks', b, NOW).doc
     await sendDoc(deps(srv), anna, ANNA, known(BEN.did))
     await sendDoc(deps(srv), ben, BEN, known(ANNA.did))
-    for (const x of await pollDocs(deps(srv), BEN, known(ANNA.did))) ben = receive([ben], x.from, x.doc, known(ANNA.did)).docs[0]
-    for (const x of await pollDocs(deps(srv), ANNA, known(BEN.did))) anna = receive([anna], x.from, x.doc, known(BEN.did)).docs[0]
+    for (const x of await pollDocs(deps(srv), BEN, known(ANNA.did))) ben = receive([ben], x.from, x.doc, known(ANNA.did), BEN.did).docs[0]
+    for (const x of await pollDocs(deps(srv), ANNA, known(BEN.did))) anna = receive([anna], x.from, x.doc, known(BEN.did), ANNA.did).docs[0]
     expect(toText(anna)).toBe(toText(ben))
     expect(toText(anna)).toContain('tickets')
     expect(toText(anna)).toContain('snacks')
@@ -148,5 +148,33 @@ describe('own devices', () => {
     bundle.settings.coNotes = [null, 5, { id: 'x', blocks: 'bad' }, ...bundle.settings.coNotes]
     expect(() => mergeBundle(mac, refreshStamps(mac, {}, 1, 'T'), bundle, 0)).not.toThrow()
     expect(mac.coNotes.map((d) => d.id)).toEqual(['co1'])
+  })
+})
+
+describe('review fixes (wave36b): what a received copy may not change', () => {
+  it('nobody else can add a line in my name or take over the authorship of my line', () => {
+    const d = shared()
+    const mineId = tree(d)[0].id
+    const forged = { ...insertAfter(d, mineId, 'I owe Ben 100', b, NOW + 1, { id: 'fake' }).doc }
+    forged.blocks = forged.blocks.map((x) => (x.id === 'fake' ? { ...x, by: a } : x.id === mineId ? { ...x, by: b, at: 1 } : x))
+    const out = receive([d], BEN.did, forged, known(BEN.did), ANNA.did)
+    const got = out ? out.docs[0] : d
+    expect(got.blocks.some((x) => x.id === 'fake')).toBe(false)
+    expect(got.blocks.find((x) => x.id === mineId).by).toEqual(a)
+  })
+  it('in a Desires note a received copy cannot change my lines, nor anyone\'s line under another person\'s stamp; own lines of the sender merge', () => {
+    let d = { ...shared(), kind: 'desires', people: [a, b, c] }
+    const mineId = tree(d)[0].id
+    const r1 = insertAfter(d, mineId, 'Ben wish', b, NOW); d = r1.doc
+    const r2 = insertAfter(d, r1.id, 'Cara wish', c, NOW); d = r2.doc
+    let theirs = editText(d, mineId, 'Anna wants nothing', b)
+    theirs = editText(theirs, r2.id, 'Cara wants Ben', b)
+    theirs = editText(theirs, r1.id, 'Ben wish edited', b)
+    const forgedStamp = { ...theirs, blocks: theirs.blocks.map((x) => (x.id === mineId ? { ...x, text: 'forged', st: { ...x.st, text: [999, ANNA.did] } } : x)) }
+    const out = receive([d], BEN.did, forgedStamp, known(BEN.did), ANNA.did)
+    const text = (id) => out.docs[0].blocks.find((x) => x.id === id).text
+    expect(text(mineId)).toBe('pack @[Cara](tw:p7)')
+    expect(text(r2.id)).toBe('Cara wish')
+    expect(text(r1.id)).toBe('Ben wish edited')
   })
 })
