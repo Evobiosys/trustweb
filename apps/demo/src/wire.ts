@@ -84,6 +84,11 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   // QueryEnvelope.direct doc comment): the same convention once more.
   if ('direct' in o && o.direct !== true) return null
   const direct = o.direct === true ? (true as const) : undefined
+  // TrustWeb wave 33 (types.ts QueryEnvelope.kind/target): both or neither; a present-and-malformed pair rejects the envelope.
+  if ('kind' in o || 'target' in o) {
+    if (o.kind !== 'intro' || !isNonEmptyString(o.target) || o.target.length > 80) return null
+  }
+  const intro = o.kind === 'intro' && isNonEmptyString(o.target) ? { kind: 'intro' as const, target: o.target } : undefined
   const hops = parseHopFields(o)
   if (hops === null) return null
   // TrustWeb wave 6i (types.ts QueryEnvelope.reask): the same strictness once more.
@@ -105,6 +110,7 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
     ...(relayed ? { relayed } : {}),
     ...(escalated ? { escalated } : {}),
     ...(direct ? { direct } : {}),
+    ...(intro ?? {}),
     ...hops,
     ...(reask ? { reask } : {}),
   }

@@ -27,6 +27,8 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
+import { introForm } from './intro_ask_view'
+import { introAskText } from './intro_ask'
 import { addSupportIn, supportCards, supportForm, supportLine } from './support_ask_view'
 import type { SupportIo } from './support_ask_view'
 import { ASK_MODES, AskMode, nextAskMode, parseHereText, parseSupportText, recordHere } from './support_ask'
@@ -589,7 +591,7 @@ let queryOpen = false
 let pastSearchOpen = false
 let pastSearchText = ''
 let queryText = ''
-let askMode: AskMode = AskMode.Web
+let askMode: AskMode = AskMode.Hints
 let askRun: {
   text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
   /** Wave 6: the reach it went out with (hops.ts), for the countdown. */
@@ -6995,14 +6997,18 @@ function queryDock(s: AppState): HTMLElement {
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
+  const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r) => {
+    if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
+    save(); render()
+  })
   const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.map((m) => el('button', {
     class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
     onclick: () => { askMode = m; render() },
-  }, [m === AskMode.Web ? S.webCall : S.askModeSupport])))
+  }, [{ [AskMode.Support]: S.askModeSupport, [AskMode.Hints]: S.askModeHints, [AskMode.Intros]: S.askModeIntros }[m]])))
   const dock = el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
       el('h3', {}, [S.queryTitle]),
-      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; askMode = AskMode.Web; render() } }, ['×']),
+      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; askMode = AskMode.Hints; render() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : modeChips,
@@ -7010,10 +7016,7 @@ function queryDock(s: AppState): HTMLElement {
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
-      reachChooser(askReachOf(s), askDirectOnly(s) || busy, (reach) => {
-        if (reach === HOPS_DEFAULT) delete s.askReach; else s.askReach = reach
-        save(); render()
-      }),
+      reach,
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
@@ -7038,7 +7041,14 @@ function queryDock(s: AppState): HTMLElement {
   ])
   // Ask for support swaps the question box for the support form; the chips stay on top.
   if (!run && nextAskMode(askMode) === AskMode.Support) {
-    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Web; queryOpen = false }))
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Hints; queryOpen = false }))
+  }
+  if (!run && nextAskMode(askMode) === AskMode.Intros) {
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, introForm({
+      st, reach, steps: () => askReachOf(st()),
+      ask: (peerId, target) => net.askIntro(peerId, target),
+      onResult: (target, r) => recordFound(introAskText(target), [r]),
+    }))
   }
   return dock
 }

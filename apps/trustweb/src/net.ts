@@ -62,8 +62,9 @@ import { rank, threadStats } from './search_rank'
 import { createDrainLock, drainLockName } from './drain_lock'
 import type { DrainLock, LockManagerLike } from './drain_lock'
 import { directFlag, surfacesHere } from './direct_ask'
+import { introAskText, parseIntroTarget } from './intro_ask'
 import {
-  askerOf, askFields, askReachOf, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
+  askerOf, askFields, askReachOf, HOPS_DEFAULT, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
   mayCascade, RootMemory, sanitizeHopItems, seenHash, throughOf,
 } from './hops'
 import type { HopInfo } from './hops'
@@ -1042,6 +1043,25 @@ export class Net {
       this.hooks.save()
     }
     return results
+  }
+
+  /**
+   * Wave 33 (intro_ask.ts): "ask <name> for an intro". One ordinary ask to ONE connected peer, direct only, carrying kind 'intro' and the target;
+   * the readable request is its free text, so an older build shows an ordinary ask. Resolves null when the person is not a connected peer.
+   */
+  async askIntro(peerId: string, targetText: string): Promise<AskResult | null> {
+    const target = parseIntroTarget(targetText)
+    await this.start()
+    const s = this.hooks.state()
+    const peer = askPeers(s).find((p) => p.id === peerId)
+    if (!target || !peer) return null
+    const root = randomId(12)
+    const qid = randomId(12)
+    const text = introAskText(target)
+    const extra: Partial<QueryEnvelope> = { ...directFlag(true), kind: 'intro', target, ...askFields(HOPS_DEFAULT, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs) }
+    s.sentAsks = addSentAsk(s.sentAsks, { id: root, text, at: Date.now(), to: [{ peerId: peer.id, qid }] }, Date.now())
+    this.hooks.save()
+    return { peerId: peer.id, peerName: peer.displayName, qid, decoded: await this.sendAsk(peer, text, extra, askTimeoutMs(HOPS_DEFAULT, this.windowMs), qid) }
   }
 
   // -------------------------------------------------------------------------

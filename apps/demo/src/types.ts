@@ -308,6 +308,13 @@ export interface QueryEnvelope {
    * `direct` together mean a hop ignored the asker's wish (never surfaced).
    */
   direct?: true
+  /**
+   * TrustWeb wave 33 ("Ask for intros", apps/trustweb/src/intro_ask.ts): `kind: 'intro'` with a `target` (1..80 characters, the person,
+   * organisation or topic the asker wants an introduction to). Both optional and always together; `freeText` still carries the readable
+   * request, so an older build (which ignores both fields) shows it as an ordinary ask. No schema bump.
+   */
+  kind?: 'intro'
+  target?: string
   // ----- BEGIN TrustWeb wave 6 (U1): how far an ask travels (hops) -----
   // All optional; an older build's parseQuery copies known fields only, so it
   // ignores every one of them (the ask then behaves as one hop, as before).
