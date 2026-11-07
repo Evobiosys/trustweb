@@ -89,16 +89,16 @@ export function packLaps(angles: readonly number[], radius: number, dot: number)
 
 /**
  * Evenly spaced angles per ring (all rings, or just `ring`), keeping the order around the circle and the first dot where it is.
- * Returns each touched person's previous stored angle (undefined = none) for Undo.
+ * Returns each touched person's previous stored angle (undefined = none) for Undo. `avoid` moves an angle out of a keep-out sector.
  */
-export function spaceOut(s: Pick<AppState, 'people' | 'expanse'>, ring?: Ring): Map<string, number | undefined> {
+export function spaceOut(s: Pick<AppState, 'people' | 'expanse'>, ring?: Ring, avoid: (angle: number, ring: Ring) => number = (a) => a): Map<string, number | undefined> {
   const before = new Map<string, number | undefined>()
   for (const r of WEB_RINGS) {
     if (ring && r !== ring) continue
     const around = s.people.filter((p) => webSlot(p) === r && !inExpanse(s, p.id)).sort((a, b) => angleOf(a) - angleOf(b) || (a.id < b.id ? -1 : 1))
     if (!around.length) continue
     const start = angleOf(around[0])
-    around.forEach((p, i) => { before.set(p.id, p.angle); p.angle = (start + (360 * i) / around.length) % 360 })
+    around.forEach((p, i) => { before.set(p.id, p.angle); p.angle = avoid((start + (360 * i) / around.length) % 360, r) })
   }
   return before
 }
@@ -162,6 +162,30 @@ export function placeOnRing(p: Person, ring: Ring, now: number, desire = DESIRE_
 }
 
 
+/** A rectangle relative to the rings centre (px, y down): left edge `x`, width `w`, vertical centre `cy`, height `h`. */
+export interface Column { x: number; w: number; cy: number; h: number }
+
+/**
+ * Wave 36: the angles (degrees, 0 = top, clockwise) at which a dot of radius `pad` on a ring of radius `ringR` touches the keep-out column below the centre, as [from, to];
+ * null when the ring never reaches it. A ring the column cuts in two pieces gets the hull.
+ */
+export function columnSector(ringR: number, c: Column, pad = 0): [number, number] | null {
+  const x0 = c.x - pad, x1 = c.x + c.w + pad, y0 = c.cy - c.h / 2 - pad, y1 = c.cy + c.h / 2 + pad
+  if (ringR < y0 || y1 <= 0) return null
+  // phi = angle from 6 o'clock: x = R sin phi, y = R cos phi (phi in -90..90 below the centre).
+  const lo = Math.max(Math.asin(Math.max(x0 / ringR, -1)), -Math.acos(Math.max(Math.min(y0 / ringR, 1), -1)))
+  const hi = Math.min(Math.asin(Math.min(x1 / ringR, 1)), Math.acos(Math.max(Math.min(y0 / ringR, 1), -1)))
+  if (lo > hi) return null
+  const deg = 180 / Math.PI
+  return [180 - hi * deg, 180 - lo * deg]
+}
+
+/** Wave 36: an angle inside the sector moves to its nearer edge; anything else stays. */
+export function avoidSector(angle: number, sector: readonly [number, number] | null): number {
+  if (!sector || angle < sector[0] || angle > sector[1]) return angle
+  return angle - sector[0] <= sector[1] - angle ? sector[0] : sector[1]
+}
+
 /** A drawn disc (centre x, y and radius r, in rings px). */
 export interface Spot { x: number; y: number; r: number }
 /** Wave 33: free space kept between a dot and a control. */
@@ -169,17 +193,19 @@ export const CONTROL_GAP = 2
 
 /**
  * Wave 33: the angle each dot is DRAWN at: the given one, or the nearest (1° steps, alternating sides) where it clears every dot placed before it
- * (centre distance >= both radii, i.e. the dot size) and every control in `obstacles`. Display only: stored angles stay.
+ * (centre distance >= both radii, i.e. the dot size), every control in `obstacles` and outside the `keepOut` sector (wave 36: the diamond column). Display only: stored angles stay.
  */
-export function nudgeAngles(dots: readonly { id: string; angle: number; radius: number; r: number }[], obstacles: readonly Spot[], centre: number): Map<string, number> {
+export function nudgeAngles(dots: readonly { id: string; angle: number; radius: number; r: number }[], obstacles: readonly Spot[], centre: number, keepOut: (radius: number, r: number) => readonly [number, number] | null = () => null): Map<string, number> {
   const out = new Map<string, number>()
   const placed: Spot[] = []
   const at = (angle: number, radius: number): { x: number; y: number } => { const a = (angle * Math.PI) / 180; return { x: centre + radius * Math.sin(a), y: centre - radius * Math.cos(a) } }
   const clear = (s: Spot): boolean => placed.every((o) => Math.hypot(s.x - o.x, s.y - o.y) >= s.r + o.r) && obstacles.every((o) => Math.hypot(s.x - o.x, s.y - o.y) >= s.r + o.r + CONTROL_GAP)
   for (const d of dots) {
     let best = d.angle
+    const sector = keepOut(d.radius, d.r)
     for (let i = 0; i <= 360; i++) {
       const a = d.angle + (i % 2 ? 1 : -1) * Math.ceil(i / 2)
+      if (avoidSector(((a % 360) + 360) % 360, sector) !== ((a % 360) + 360) % 360) continue
       if (clear({ ...at(a, d.radius), r: d.r })) { best = a; break }
     }
     const angle = ((best % 360) + 360) % 360

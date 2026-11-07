@@ -9,10 +9,11 @@
 import { el } from '../../demo/src/ui/dom'
 import { arcsGradient, loadColourTags, tagColours } from './colour_tags'
 import { isBlocked, isNonResponsive } from './non_responsive'
-import { DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
+import { type Column, DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, avoidSector, beyondRings, columnSector, lapRadius, CONTROL_GAP, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry, Spot } from './rings_layout'
 import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, visiblePeople } from './rings_hide'
 import { EXPAND_DX, HANDLE, ringPoints } from './ring_handles'
+import { initialColor } from './avatar_initial'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { isConnected } from './card_view'
 import { HintId, isDemoPerson, Ring, RINGS, REACH_OUT_INK, ringColor } from './model'
@@ -150,6 +151,9 @@ export function createWebView(deps: WebViewDeps): WebView {
   /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
   let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
   let ringsK = 1
+  /** Wave 36: the diamond / expand column (relative to the rings centre): dots keep out of it, whether the expand buttons show or not. */
+  let ringsColumn: Column | undefined
+  const keepOutColumn = (radius: number, pad: number): [number, number] | null => (ringsColumn ? columnSector(radius, ringsColumn, pad) : null)
 
   /** `desk`: the rings lent to the Desk's Web page (curator.ts LentRings): a tap picks the person there, no phone sheets, no add-someone tap or space-out menu. */
   function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings, opts: RingsOpts = {}): HTMLElement {
@@ -227,12 +231,13 @@ export function createWebView(deps: WebViewDeps): WebView {
       ring: r, at: diamondAt[i],
       more: s.uiRings?.expandButtons === true && !desk && !hidden.has(r) && !complete && Boolean(rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > effectiveLimit(s.uiRings, s),
     }))
+    if (diamondAt.length) ringsColumn = { x: -HANDLE / 2 - CONTROL_GAP, w: HANDLE + EXPAND_DX + 2 * CONTROL_GAP, cy: (diamondAt[0].top + diamondAt[diamondAt.length - 1].top) / 2 - C, h: diamondAt[diamondAt.length - 1].top - diamondAt[0].top + HANDLE }
     const controls: Spot[] = rows.flatMap((w) => [{ x: w.at.left, y: w.at.top, r: HANDLE / 2 }, ...(w.more ? [{ x: w.at.left + EXPAND_DX, y: w.at.top, r: HANDLE / 2 }] : [])])
     // Dots never overlap each other or a control: each is drawn at the nearest free angle on its lap (stored angles stay).
     const drawAngle = nudgeAngles(ringsGeo.rings.flatMap((ring) => {
       const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
       return visiblePeople(members[ring] ?? [], hidden).map((p) => ({ id: p.id, angle: angleOfP(p), radius: lapRadius(ringsGeo, ring, laps.get(p)!) * k, r: (ringsGeo.dot[ring] * k) / 2 }))
-    }), controls, C)
+    }), controls, C, keepOutColumn)
     for (const ring of ringsGeo.rings) {
       const dot = ringsGeo.dot[ring]
       const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
@@ -260,7 +265,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         face.style.background = p.reachedOut && ring === Ring.Intending ? ringColor(p) : toneVar(ring)
         if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
         if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
-          face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
+          face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = initialColor('outlined')
         }
         pictured(face, p.theirProfile?.picture)
         const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
@@ -377,7 +382,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: w.ring, grace: false }; showAll(w.ring, { clientX: b.right, clientY: b.bottom }) })
       }
       if (w.more) {
-        const more = ringMore(w.ring, filled.includes(w.ring), () => { { const cur = st().uiRings?.filled ?? []; setUi(st(), 'filled', cur.includes(w.ring) ? cur.filter((x) => x !== w.ring) : [...cur, w.ring]) } s.uiRings = st().uiRings; save(); toggle(hidden, wrap) })
+        const more = ringMore(w.ring, filled.includes(w.ring), (btn) => { { const cur = st().uiRings?.filled ?? []; setUi(st(), 'filled', cur.includes(w.ring) ? cur.filter((x) => x !== w.ring) : [...cur, w.ring]) } s.uiRings = st().uiRings; save(); toggle(hidden, btn.parentElement ?? wrap) })
         more.style.left = w.at.left + EXPAND_DX + 'px'; more.style.top = w.at.top + 'px'
         wrap.appendChild(more)
       }
@@ -407,7 +412,7 @@ export function createWebView(deps: WebViewDeps): WebView {
   /** Wave 28 (was the "+" that opened the list): beside a membrane's diamond an outliner triangle. The first press fills the ring with everyone in it (a list button appears to its right, the triangle stays in place), the second folds it back to the closest few. */
   function ringMore(ring: Ring, filled: boolean, onFill: (btn: HTMLElement) => void): HTMLElement {
     // Wave 28b (Jakob): the fill control is the expand glyph, not the outliner triangle (that looks like "play").
-    const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'aria-label': filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle, title: filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle,
+    const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'data-expanded': filled ? '1' : false, 'aria-label': filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle, title: filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle,
       style: `--rc:${toneVar(ring)}`, onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onFill(fill) } }, ['⛶'])
     return fill
   }
@@ -646,6 +651,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         // Released while the merge offer shows: the dot goes back, nothing moves or merges.
         if (offered) { render(); done(); return }
         const outcome = dropOutcome(p, ring, out)
+        angle = avoidSector(angle, keepOutColumn(ringsGeo.radius[ring] * ringsK, (ringsGeo.dot[ring] * ringsK) / 2))
         if (outcome === 'hide') { void hideOnRings(p).then(done); return }
         if (outcome === 'family-stays') { render(); done(); return }
         // The dot keeps the angle it was dropped at.
@@ -725,7 +731,7 @@ export function createWebView(deps: WebViewDeps): WebView {
   /** Spaces the dots out equally (one ring, or all); Undo for 30 s restores every angle. */
   function spaceOutWeb(ring?: Ring): void {
     const s = st()
-    const before = spaceOut(s, ring)
+    const before = spaceOut(s, ring, (a, r) => avoidSector(a, keepOutColumn(ringsGeo.radius[r] * ringsK, (ringsGeo.dot[r] * ringsK) / 2)))
     save()
     render()
     showNotice(S.ringsSpaced, '', [
