@@ -248,6 +248,10 @@ export interface RingCardDeps {
   onRename: (p: Person, next: string) => void
   /** The archive box was pressed: the caller archives `p` (Settings > Archived people restores) and redraws. */
   onArchive: (p: Person) => void
+  /** Wave 36: ✕ pressed while other dots are selected: the caller deletes them all and returns true; false = ✕ only cancels the edit. */
+  onDelete?: (p: Person) => boolean
+  /** Wave 36: a name edit opened (the person) or ended (null): the caller starts or drops its multi-selection. */
+  onEdit?: (p: Person | null) => void
 }
 
 const ARCHIVE_BOX = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>'
@@ -263,12 +267,14 @@ export function ringCard(zone: string, people: readonly Person[], d: RingCardDep
     )
     const edit = (): void => {
       state = rowStep(state, { type: 'open' })
+      d.onEdit?.(p)
       const input = el('input', { class: 'field tap-edit-input', 'aria-label': S.zoneRename(p.name), maxlength: String(HELLO_NAME_MAX), 'data-ring-card-input': p.id })
       input.value = p.name
       const end = (e: RowEvent): void => {
         state = rowStep(state, e)
         if (state.editing) return
         const r = state.result
+        if (r?.kind !== 'archive') d.onEdit?.(null)
         if (r?.kind === 'commit') d.onRename(p, r.name)
         if (r?.kind === 'archive') { d.onArchive(p); return }
         show()
@@ -282,7 +288,7 @@ export function ringCard(zone: string, people: readonly Person[], d: RingCardDep
       host.replaceChildren(
         input,
         btn('ring-card-ok ok-mark', 'data-ring-card-accept', S.ringCardAccept, ['✓'], accept),
-        btn('ring-card-no cancel-mark', 'data-ring-card-cancel', S.ringCardCancel, ['✕'], () => end({ type: 'cancel' })),
+        btn('ring-card-no cancel-mark', 'data-ring-card-cancel', S.ringCardCancel, ['✕'], () => { if (!d.onDelete?.(p)) end({ type: 'cancel' }) }),
         box,
       )
       input.focus(); input.select()

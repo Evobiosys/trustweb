@@ -6,8 +6,8 @@ describe('drag bins', () => {
   it('archive files the person away and asks nothing', () => {
     expect(binDrop('archive', { id: 'a' })).toEqual({ do: 'archive', id: 'a' })
   })
-  it('remove only asks, never deletes by itself', () => {
-    expect(binDrop('remove', { id: 'a' })).toEqual({ do: 'ask-remove', id: 'a' })
+  it('remove deletes at once (reversible for 30 days, so no question)', () => {
+    expect(binDrop('remove', { id: 'a' })).toEqual({ do: 'remove', id: 'a' })
   })
   it('finds the bin under the pointer', () => {
     const boxes = [{ kind: 'archive', left: 0, top: 0, right: 44, bottom: 44 }, { kind: 'remove', left: 68, top: 0, right: 112, bottom: 44 }]

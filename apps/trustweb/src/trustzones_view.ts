@@ -171,7 +171,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
 const addingTo: { tag?: string; added: string[] } = { added: [] }
 
 /** Wave 28b: the TrustZones view's only side control (left on desktop, above the rings on the phone, unfolded by default): expand all, add, tag filters. */
-export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; hiddenCount: number; openHidden: () => void }): HTMLElement {
+export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void }): HTMLElement {
   const open = d.s.uiRings?.sidebarOpen !== false
   return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneSidebarTitle, () => { setUi(d.s, 'sidebarOpen', !open); d.onChange() }, { 'data-zone-side-toggle': '' }), el('b', {}, [S.zoneSidebarTitle])]),
@@ -185,9 +185,9 @@ export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'on
       el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); if ((e.target as HTMLInputElement).checked) setUi(d.s, 'filled', undefined); d.onChange() } }),
       ' ', S.perRingBefore, numEdit(limitOf(d.s), 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) { if (n === LIMIT_DEFAULT) delete d.s.membraneLimit; else d.s.membraneLimit = n } d.onChange() }), ' ',
       el('button', { type: 'button', class: 'num-edit', 'data-recent-mode': '', onclick: (e: Event) => { e.preventDefault(); setUi(d.s, 'rankBy', d.s.uiRings?.rankBy === 'frequent' ? undefined : 'frequent'); d.onChange() } }, [d.s.uiRings?.rankBy === 'frequent' ? S.perRingFrequent : S.perRingRecent]), S.perRingAfter,
-    ]), el('label', { class: 'zone-check' }, [
+    ]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-space-out-tools': '', onclick: d.spaceOut }, [S.spaceOutEvenly])]), el('label', { class: 'zone-check' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
-    ]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-hidden-people': '', ...(d.hiddenCount ? {} : { disabled: '' }), onclick: d.openHidden }, [S.hiddenPeopleBtn(d.hiddenCount)])]), tagFilters(d)] : []),
+    ]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-hidden-people': '', ...(d.hiddenCount ? {} : { disabled: '' }), onclick: d.openHidden }, [S.hiddenPeopleBtn(d.hiddenCount)])]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-recently-deleted': '', ...(d.deletedCount ? {} : { disabled: '' }), onclick: d.openDeleted }, [S.recentlyDeleted(d.deletedCount)])]), tagFilters(d)] : []),
   ])
 }
