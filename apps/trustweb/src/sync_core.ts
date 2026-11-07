@@ -67,6 +67,8 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
   'serverTranscriptionConsent', 'apkVersion', 'apkCheckedAt', 'apkUpdates', 'tabOrder', 'tabRow', 'shareMode', 'demo', 'demoHidden', 'demoOffered',
   'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports',
+  // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
+  'groups',
 ])
 
 /** The settings of a record: every field not in SYNC_EXCLUDED. */

@@ -26,6 +26,8 @@ export interface IntroIo {
 let target = ''
 let why = ''
 const state = new Map<string, string>()
+/** Wave 36: groups_view.ts opens the intro ask with this target already typed. */
+export function setIntroTarget(t: string): void { target = t.slice(0, 80) }
 /** Targets an intro ask went out for in this visit. */
 const asked = new Set<string>()
 
