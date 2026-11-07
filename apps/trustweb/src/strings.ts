@@ -2957,4 +2957,16 @@ export const S = {
   panelAssembleNow: 'Assemble now',
   panelAssembleNowTip: 'Assemble the checked rows now',
   panelShowAll: 'show all rows',
+  // wave 33 primary-email
+  setPrimaryEmail: 'Primary email address',
+  setPrimaryEmailNotSet: 'not set',
+  setPrimaryEmailHint: 'Stays on this phone and in your backup. Your connections never see it.',
+  setPrimaryEmailAddress: 'Email address',
+  setPrimaryEmailSave: 'Save',
+  setPrimaryEmailClear: 'Remove',
+  setPrimaryEmailBad: 'That does not look like an email address.',
+  setPrimaryEmailSaved: 'Email address saved',
+  setPrimaryEmailCleared: 'Email address removed',
+  setPrimaryEmailSenderNote: 'Your mail program picks the sender; this app cannot set it.',
+  primaryEmailOpenIn: (provider: string) => `open in ${provider}`,
 } as const

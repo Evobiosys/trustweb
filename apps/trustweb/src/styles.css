@@ -1433,3 +1433,7 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .note-share .chips{margin:0}
 .note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
 .shared-notes .field{width:100%; box-sizing:border-box}
+
+/* wave 33 primary-email */
+.own-email a{text-decoration:underline}
+.own-email{overflow-wrap:anywhere}

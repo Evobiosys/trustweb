@@ -773,6 +773,8 @@ export interface AwayAsk {
 export interface Me {
   id: string
   displayName: string
+  /** Wave 33: the owner's own mail address; local only, never in the connect link. */
+  primaryEmail?: { provider: string; address: string }
 }
 
 /**
