@@ -1063,6 +1063,8 @@ export interface AppState {
   engagementNoticeDay?: string
   /** Wave 36 keep-in-touch: the local day (YYYY-MM-DD) the "Time to get in touch" notice last went out. */
   keepNoticeDay?: string
+  /** Wave 37 (browser_only_notice.ts): the person dismissed the "your data lives only in this browser" line. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
+  browserOnlyDismissed?: boolean
   /** Wave 24b: when the engagement check first ran here; counts as contact for everybody (engagement.ts). Local only. */
   engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */

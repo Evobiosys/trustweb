@@ -3,11 +3,11 @@
 import { viewMenuEntries, pinnedViews, togglePin, viewHeading, webViewOf, expandedOf, screenViews } from '../../src/view_menu.ts'
 
 describe('view_menu', () => {
-  it('viewMenuEntries lists Web, Network, People, Complete, Map first, whoever is in the web', () => {
+  it('viewMenuEntries lists Web, Network, Simple list, Table, Map first, whoever is in the web', () => {
     const main = viewMenuEntries({ current: 'rings', hasMap: true, pins: [] }).filter((i) => i.group === 'main').map((i) => i.view)
     expect(main).toEqual(['rings', 'network', 'people', 'complete', 'map'])
   })
-  it('lists Web, Network, People, Complete, then Other views: Dex, Contacts compact; the current one is on', () => {
+  it('lists Web, Network, Simple list, Table, then Other views: Dex, Contacts compact; the current one is on', () => {
     const m = viewMenuEntries({ current: 'rings', hasMap: true, pins: [] })
     expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups'])
     expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact', 'groups'])

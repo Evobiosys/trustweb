@@ -762,7 +762,7 @@ export const S = {
   rowArchived: (name: string) => `${name} archived. Tap to undo.`,
   rowMoved: (name: string, zone: string) => `${name} moved to ${zone}. Tap to undo.`,
   peopleZoneAdd: (zone: string) => `Add someone to ${zone}`,
-  peopleTitle: 'People',
+  peopleTitle: 'Simple list',
   // Wave 7: the outliner's rows and views.
   olNoContext: 'intending to connect',
   olWants: (n: number) => `wants ${n}/10`,
@@ -1503,12 +1503,12 @@ export const S = {
   setTabRow: 'Bottom row',
   setTabRowSlot: (n: number) => `Place ${n}`,
   setTabRowLocked: 'Resources stays on the right.',
-  tabLabel: { web: 'Web', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', feed: 'Feed', network: 'Network', desk: 'Contacts', ask: 'Ask', people: 'People', map: 'Map' } as Record<string, string>,
+  tabLabel: { web: 'Web', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', feed: 'Feed', network: 'Network', desk: 'Contacts', ask: 'Ask', people: 'Simple list', map: 'Map' } as Record<string, string>,
   // Wave 31: the configurable bottom row (bottom_bar.ts): the ⋮ button, its sheet, the remove-by-long-press toast.
   barMore: 'Change the bottom row',
   barSheetTitle: 'Bottom row',
   barSheetHint: 'Tap the bubble to show or hide a view, or tap Add to choose its place. Hold a button there to take it away. Record stays in the row.',
-  barNames: { web: 'Web', feed: 'Feed', chat: 'Chat', events: 'Events', inventory: 'Resources', ask: 'Ask your web', network: 'Network', people: 'People', map: 'Map' } as Record<string, string>,
+  barNames: { web: 'Web', feed: 'Feed', chat: 'Chat', events: 'Events', inventory: 'Resources', ask: 'Ask your web', network: 'Network', people: 'Simple list', map: 'Map' } as Record<string, string>,
   barProfilesTitle: 'Profiles',
   barProfileNames: { connector: 'Connector', up_to_date: 'Reader', note_taker: 'Note taker', custom: 'Custom' } as Record<string, string>,
   barProfilePick: (name: string) => `Use the ${name} bottom row`,
@@ -1529,7 +1529,7 @@ export const S = {
   viewMenuAria: 'Choose a view',
   // unused since wave27 review, archive candidate
   viewMenuTitle: 'View',
-  viewNames: { rings: 'Web', network: 'Network', people: 'People', complete: 'Complete', notes: 'Notes', map: 'Map', dex: 'Dex', compact: 'Contacts compact', groups: 'Groups I could join or help' } as Record<string, string>,
+  viewNames: { rings: 'Web', network: 'Network', people: 'Simple list', complete: 'Table', notes: 'Notes', map: 'Map', dex: 'Dex', compact: 'Contacts compact', groups: 'Groups I could join or help' } as Record<string, string>,
   viewOther: 'Other views',
   viewAlt: 'Alternative UI (beta)',
   viewSolar: 'Solar calendar',
@@ -3121,7 +3121,6 @@ export const S = {
   spaceOutEvenly: 'Space out bubbles evenly',
   multiCount: (n: number) => `${n} selected`,
   // Wave 36 (complete_view.ts): everyone in one table.
-  completeOpen: 'All people as a table',
   completeCols: { name: 'Name', ring: 'Ring', last: 'Last contact', next: 'Next reminder', cadence: 'Keep in touch', tags: 'Tags', groups: 'Groups', channels: 'Channels', notes: 'Notes', affil: 'Work' },
   completeSortAria: (col: string) => `Sort by ${col}`,
   completeOverdue: 'Overdue',
@@ -3284,4 +3283,12 @@ export const S = {
   },
   ringsAutoAdjust: 'Rings adjust themselves after a move',
   ringsAutoAdjustHint: 'Off: moving a dot changes only that dot. On: dots slowly fade in or out so each ring keeps its most recent ones.',
+  // wave 37 renames: the leaving notice
+  browserOnlyNotice: 'Your data lives only in this browser. Make a backup in Settings, or create an account at',
+  browserOnlyLink: 'TrustInTheWeb.com',
+  browserOnlyNoticeEnd: 'and it syncs for you.',
+  browserOnlyDismiss: 'Got it',
+  // wave 37 renames: Settings search
+  setSearchPh: 'Search settings',
+  setSearchAria: 'Search settings',
 } as const

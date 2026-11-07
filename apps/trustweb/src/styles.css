@@ -1593,3 +1593,7 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 @keyframes ring-fade-in{from{opacity:0;transform:translate(-50%,-50%) scale(.4)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
 @keyframes ring-fade-out{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-50%) scale(.4)}}
 @media (prefers-reduced-motion:reduce){ .node.fade-in,.node.fade-out{animation:none} }
+/* wave 37 renames */
+.browser-only{margin:8px 12px; padding:8px 10px; font-size:var(--fs-1,12px); color:var(--ink-soft); background:var(--card,#F5F0E8); border-radius:var(--r-chip,8px); overflow-wrap:anywhere}
+.browser-only a,.browser-only-x{text-decoration:underline; color:inherit}
+.browser-only-x{background:none; border:0; padding:0 0 0 6px; font:inherit; cursor:pointer}

@@ -76,7 +76,9 @@ import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
 import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
 import { inviteText, sendInvite } from './invite'
 import { PASS_ON_DEFAULT_NOTICE, dismissNotice, namePreviousId, noticeShown, noticesOff, passOnDefaultNoticeDue, setNoticesOff } from './notices'
-import { cardPopAction } from './page_stack'
+import { cardPopAction, webTabAction } from './page_stack'
+import { shouldShowBrowserOnly } from './browser_only_notice'
+import { filterSettings } from './settings_search'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit } from './card_view'
@@ -1078,7 +1080,8 @@ function barOpen(id: BarId): void {
   const view = viewOfBar(id) // wave 35: a view pinned into the row
   if (view) { chooseView(view as ViewKey); return }
   switch (id) {
-    case 'web': if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
+    case 'web': if (webTabAction(webPage) === 'leave-page') { cardExpanded = false; webPage = null } // wave 37: Web from a card lands on the main Web view
+      if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
     case 'events': openEvents(); break
     case 'ask': openQuery(); break
     case 'network': case 'people': case 'map': chooseView(id); break
@@ -2669,7 +2672,7 @@ function webViewRow(view: WebView): HTMLElement {
     })
     : el('span', { class: 'web-view' }, [heading ? S.viewNames[heading] : ''])
   if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
-  return el('div', { class: 'web-view-row' }, [mid, view === 'rings' && !webSearchOpen ? el('button', { class: 'cv-open', 'data-view': 'complete', onclick: () => chooseView('complete') }, [S.completeOpen]) : null])
+  return el('div', { class: 'web-view-row' }, [mid])
 }
 
 /** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
@@ -2885,6 +2888,21 @@ function passOnNotice(): null {
   return null
 }
 
+/** Wave 37: the visit began here; hidden once = the person left and came back (browser_only_notice.ts). */
+const visitOpenedAt = Date.now()
+let visitWasHidden = document.visibilityState === 'hidden'
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') visitWasHidden = true; else if (visitWasHidden && screen === Screen.Web) render() })
+setTimeout(() => { if (screen === Screen.Web) render() }, 5 * 60_000 + 1000)
+function browserOnlyNotice(): HTMLElement | null {
+  if (!state || !shouldShowBrowserOnly({ dismissed: Boolean(state.browserOnlyDismissed), demo: demoPhone(), openedAt: visitOpenedAt, wasHidden: visitWasHidden }, Date.now())) return null
+  return el('p', { class: 'browser-only', 'data-browser-only-notice': '' }, [
+    S.browserOnlyNotice + ' ',
+    el('a', { href: 'https://trustintheweb.com/', target: '_blank', rel: 'noopener noreferrer' }, [S.browserOnlyLink]),
+    ' ' + S.browserOnlyNoticeEnd + ' ',
+    el('button', { class: 'browser-only-x', type: 'button', 'data-browser-only-dismiss': '', onclick: () => { st().browserOnlyDismissed = true; save(); render() } }, [S.browserOnlyDismiss]),
+  ])
+}
+
 function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
@@ -2911,6 +2929,7 @@ function screenWeb(): Node[] {
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
+    browserOnlyNotice(),
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
@@ -6593,6 +6612,8 @@ function settingsSection(key: string, title: string, children: (Node | null)[], 
 
 /** Group ids that stay open across the redraws a toggle causes; reset to the lead group whenever Settings opens afresh. */
 const settingsOpen = new Set<string>()
+/** Wave 37: what the Settings search field holds; kept over the redraws a toggle causes. */
+let settingsQuery = ''
 
 /** Wave 27: the groups in `order`; the first opens, the rest are folded. An empty group is not drawn. */
 function settingsGroups(groups: Record<SettingsSection, (Node | null)[]>, order: SettingsSection[]): (Node | null)[] {
@@ -6629,6 +6650,7 @@ function tabRowSettings(): (Node | null)[] {
 
 function settingsSheet(): void {
   const s = st()
+  if (sheet.dataset.kind !== 'settings') settingsQuery = ''
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
   if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
@@ -6900,6 +6922,10 @@ function settingsSheet(): void {
   }
   openSheet([
     el('h3', {}, [S.setTitle]),
+    el('input', {
+      class: 'field', type: 'search', 'data-settings-search': '', placeholder: S.setSearchPh, 'aria-label': S.setSearchAria, autocomplete: 'off', value: settingsQuery,
+      oninput: (e) => { settingsQuery = (e.target as HTMLInputElement).value; filterSettings(sheet, settingsQuery) },
+    }),
     viewRow(),
     apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
@@ -6909,6 +6935,7 @@ function settingsSheet(): void {
     ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
   ])
   sheet.dataset.kind = 'settings'
+  if (settingsQuery) filterSettings(sheet, settingsQuery)
 }
 
 /**

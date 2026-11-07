@@ -262,7 +262,7 @@ async function main() {
     const cur = h.page.locator('.sheet.on .curator')
     await cur.locator('.gear').waitFor({ timeout: 15_000 })
     ok('Curator header: Timeline icon and ⋮ (Settings), bottom bar People only', await cur.locator('.top-btns [data-tab="timeline"]').count() === 1
-      && await cur.locator('.gear').getAttribute('aria-label') === 'Settings' && (await cur.locator('.tabbar .tab').allInnerTexts()).join() === 'People')
+      && await cur.locator('.gear').getAttribute('aria-label') === 'Settings' && (await cur.locator('.tabbar .tab').allInnerTexts()).join() === 'Simple list')
     await h.page.waitForTimeout(300)
     await shot(h.page, '../wants-to-connect/02-curator-header.png')
     await cur.locator('.gear').click()
