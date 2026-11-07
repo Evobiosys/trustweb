@@ -122,7 +122,7 @@ import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, remov
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, moveBar, overflowChoices, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
@@ -1083,7 +1083,7 @@ function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
   const { ids, primary } = resolveBar(state?.uiBar, barFlags())
   const { shown } = barLayout(ids, primary, barMax())
-  const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barSheet }, ['⋮'])
+  const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), more)
   tabs.classList.toggle('four', shown.length > 3)
   tabs.classList.toggle('many', shown.length > 5)
@@ -1092,7 +1092,20 @@ function renderTabs(): void {
 }
 renderTabs()
 
-/** The ⋮ sheet: a checkbox per view, order arrows, "highlight one"; views the phone bar has no room for are marked and open from here. */
+/** Wave 35: ⋮ lists the views that are not in the bar as direct buttons; with none to list it opens the sheet at once. */
+function barMoreTap(): void {
+  const s = st()
+  const { ids, primary } = resolveBar(s.uiBar, barFlags())
+  const rest = [...barLayout(ids, primary, barMax()).overflow, ...overflowChoices(ids, s.uiBar?.hidden ?? [], barFlags())]
+  if (!rest.length) { barSheet(); return }
+  openSheet([
+    el('h3', {}, [S.barMoreViews]),
+    ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view', 'data-bar-view': id, onclick: () => { closeSheet(); barOpen(id) } }, [S.barNames[id]])),
+    el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
+  ])
+}
+
+/** The ⋮ sheet: the bubble at the left of each view turns it on or off per view, order arrows, "highlight one"; views the phone bar has no room for are marked and open from here. */
 function barSheet(): void {
   const s = st()
   const flags = barFlags()
@@ -1145,8 +1158,8 @@ function barSheet(): void {
     })()]),
     // The Feed is an opt-in feature: it is always offered here, and ticking it switches the feature on.
     ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).map(({ id, on }) => el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
-      el('label', { class: 'radio', 'data-bar-opt': id }, [
-        el('input', { type: 'checkbox', ...(on ? { checked: '' } : {}), onchange: () => {
+      el('label', { class: 'radio bar-bubble' + (on ? ' on' : ''), 'data-bar-opt': id }, [
+        el('input', { type: 'checkbox', class: 'bar-hide-input', 'aria-label': S.barNames[id], ...(on ? { checked: '' } : {}), onchange: () => {
           if (id === 'feed' && !flags.feed) { s.feed = { ...s.feed, on: true }; redraw(resolveBar(s.uiBar, { ...flags, feed: true }).ids.includes('feed') ? s.uiBar : toggleBar(s.uiBar, id, { ...flags, feed: true })); return }
           redraw(toggleBar(s.uiBar, id, flags))
         } }),
@@ -1157,9 +1170,9 @@ function barSheet(): void {
     ])),
     el('h4', { class: 'eyebrow' }, [S.barHighlight]),
     el('p', { class: 'meta' }, [S.barHighlightHint]),
-    ...ids.map((id) => el('label', { class: 'radio', 'data-bar-primary': id }, [
-      el('input', { type: 'radio', name: 'bar-primary', ...(id === primary ? { checked: '' } : {}), 'aria-label': S.barHighlightPick(S.barNames[id] ?? S.navRecord), onchange: () => redraw(setPrimary(s.uiBar, id, flags)) }),
-      el('b', {}, [S.barNames[id] ?? S.navRecord]),
+    ...(['none', ...ids] as (BarId | 'none')[]).map((id) => el('label', { class: 'radio bar-bubble' + ((id === 'none' ? primary === null : id === primary) ? ' on' : ''), 'data-bar-primary': id }, [
+      el('input', { type: 'radio', class: 'bar-hide-input', name: 'bar-primary', ...((id === 'none' ? primary === null : id === primary) ? { checked: '' } : {}), 'aria-label': S.barHighlightPick(id === 'none' ? S.barHighlightNone : S.barNames[id] ?? S.navRecord), onchange: () => redraw(setPrimary(s.uiBar, id, flags)) }),
+      el('b', {}, [id === 'none' ? S.barHighlightNone : S.barNames[id] ?? S.navRecord]),
     ])),
     overflow.length ? el('p', { class: 'meta' }, [S.barOverflow + ': ' + overflow.map((id) => S.barNames[id]).join(', ')]) : null,
   ])

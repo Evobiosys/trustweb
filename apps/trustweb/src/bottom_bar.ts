@@ -47,11 +47,17 @@ function baseOrder(bar: UiBar | undefined): BarId[] {
   return order
 }
 
-export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[]; primary: BarId } {
+/** Wave 35: the raised button when the user never chose: none for an even number of buttons, else the preset's (Record by default). */
+export function defaultPrimary(ids: readonly BarId[], preset: BarId = 'record'): BarId | null {
+  return ids.length % 2 === 0 ? null : ids.includes(preset) ? preset : 'record'
+}
+
+/** primary is null when no button is raised (stored as 'none'). */
+export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[]; primary: BarId | null } {
   const ok = new Set<string>(offered(f))
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
   const ids = baseOrder(bar).filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
-  const primary = ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : 'record'
+  const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(ids)
   return { ids, primary }
 }
 
@@ -92,17 +98,17 @@ export function moveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: BarF
   return { ...bar, order, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
 
-/** Marks a shown view as the raised centre button. */
+/** Marks a shown view as the raised centre button; 'none' raises nothing. */
 export function setPrimary(bar: UiBar | undefined, id: string, f: BarFlags): UiBar | undefined {
-  if (!resolveBar(bar, f).ids.includes(id as BarId)) return bar
+  if (id !== 'none' && !resolveBar(bar, f).ids.includes(id as BarId)) return bar
   return { ...bar, primary: id, profile: 'custom' }
 }
 
 /** At most `max` buttons show (the primary always among them); the rest go into the sheet. */
-export function barLayout(ids: readonly BarId[], primary: BarId, max: number): { shown: BarId[]; overflow: BarId[] } {
+export function barLayout(ids: readonly BarId[], primary: BarId | null, max: number): { shown: BarId[]; overflow: BarId[] } {
   if (ids.length <= max) return { shown: [...ids], overflow: [] }
   const keep = new Set(ids.slice(0, max))
-  if (!keep.has(primary)) { keep.delete(ids[max - 1]); keep.add(primary) }
+  if (primary && !keep.has(primary)) { keep.delete(ids[max - 1]); keep.add(primary) }
   return { shown: ids.filter((id) => keep.has(id)), overflow: ids.filter((id) => !keep.has(id)) }
 }
 
@@ -137,8 +143,8 @@ export function applyProfile(bar: UiBar | undefined, id: string): UiBar | undefi
 }
 
 /** Wave 34: starts a custom bar from the bar as it is now (the shown ids, in order, and the current primary). */
-export function customFrom(bar: UiBar | undefined, ids: readonly BarId[], primary: BarId): UiBar {
-  return { ...bar, order: [...ids], hidden: [], primary, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+export function customFrom(bar: UiBar | undefined, ids: readonly BarId[], primary: BarId | null): UiBar {
+  return { ...bar, order: [...ids], hidden: [], primary: primary ?? 'none', orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
 
 /** The stored profile; without one, the preset the bar happens to match, else 'custom'. */
@@ -146,4 +152,9 @@ export function activeProfile(bar: UiBar | undefined, f: BarFlags): string {
   if (bar?.profile && (bar.profile === 'custom' || PROFILES.some((p) => p.id === bar.profile))) return bar.profile
   const { ids, primary } = resolveBar(bar, f)
   return PROFILES.find((p) => p.primary === primary && p.order.join() === ids.join())?.id ?? 'custom'
+}
+
+/** Wave 35: the views the ⋮ button lists: offered, not in the bar. People and Map only once the user took them out of it. */
+export function overflowChoices(ids: readonly BarId[], hidden: readonly string[], f: BarFlags): BarId[] {
+  return CHOICES.filter((id) => offered(f).includes(id) && !ids.includes(id) && (id !== 'people' && id !== 'map' || hidden.includes(id)))
 }
