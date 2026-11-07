@@ -3074,4 +3074,10 @@ export const S = {
   panelApproveChanges: 'Approve changes',
   barHighlightNone: 'None',
   barMoreViews: 'More views',
+  // Wave 35 (web_default_view.ts): pin a view as the default of Web.
+  viewMoreAria: (name: string) => `More for ${name}`,
+  viewPinDefault: 'Pin as the default view of Web',
+  viewPinned: 'Default view of Web ✓',
+  viewInBar: 'Also show in the bottom row',
+  webDefaultLabel: 'Default view',
 } as const
