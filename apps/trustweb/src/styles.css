@@ -1441,6 +1441,17 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
 .shared-notes .field{width:100%; box-sizing:border-box}
 
+/* wave 33 small-ui: the top-right controls stay on screen at any width (search, eye, gear never hidden) */
+.hdr{position:sticky; top:0; z-index:5; flex-wrap:nowrap}
+.hdr-right > *{flex-shrink:0}
+@media (max-width:380px){
+  .hdr{padding-left:12px; padding-right:12px}
+  .hdr-right{gap:4px}
+  .hdr-btn.icon-only{width:30px; height:30px}
+}
+@media (max-width:339px){
+  .hdr-right [data-header-pin]{display:none}
+}
 /* wave 33 rings-controls: the expand controls are one column at the bottom edge, same 16 px as the diamonds */
 .ring-more.fill-expand{position:absolute; transform:translate(-50%,-50%); width:16px; height:16px; font-size:10px}
 .ring-toggle.drop::before{box-shadow:0 0 0 4px var(--rc,#e8750a)}

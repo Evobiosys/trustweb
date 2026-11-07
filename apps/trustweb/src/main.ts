@@ -53,7 +53,7 @@ import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection, timelineImportButton } from './timeline_view'
-import { addTagTo, chatShown, messengerGlyphs, setMetAt, setRing, tagsAddable } from './card_small'
+import { addTagTo, chatShown, setMetAt, setRing, tagsAddable } from './card_small'
 import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
@@ -124,7 +124,7 @@ import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
-import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, togglePinned } from './header_controls'
+import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
@@ -1338,7 +1338,7 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
 
 /** Wave 27: every main screen carries the settings gear in its header (Web and Resources draw their own). */
 function mountSettingsGear(): void {
-  if (!sectionOfScreen(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
+  if (!showsSettingsGear(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
   const right = host.querySelector('.hdr .hdr-right')
   if (!right) return
   const gear = iconButton('settings', S.invSettings, settingsSheet)
@@ -2406,7 +2406,7 @@ function webPageScreen(page: WebPage): Node[] {
     onAddResource: (c, title) => { if (addResourceIn(st(), c, title, randomId(8), Date.now())) save(); render() },
     onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
-    heading: cardNameHeading(p), places: connectedPlaces(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
+    heading: cardNameHeading(p), places: connectedPlaces(p), onChat: () => chatSheet(p.id), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
     onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     onQr: () => personQr(p),
@@ -3257,26 +3257,6 @@ function cardChannelsRow(p: Person): HTMLElement | null {
   }))
 }
 
-/** The icon of one messenger service: the channel's own, else the link kind's, else the web glyph. */
-const serviceIcon = (svc: ChatService): string => ICONS[svc.channel ?? svc.linkKind ?? 'web'] ?? ICONS.web
-
-/** Wave 28: one glyph per messenger link with this person; solid = connected on TrustWeb (opens the chat page), dashed = only linked (opens the outside link). */
-function messengerStrip(p: Person): HTMLElement | null {
-  const glyphs = messengerGlyphs(p)
-  if (!glyphs.length) return null
-  return el('div', { class: 'msg-glyphs', 'data-msg-glyphs': p.id }, glyphs.map((g) => {
-    const label = g.connected ? S.cardGlyphConnected : S.cardGlyphLinked(g.service.channel ? chName(g.service.channel) : S.chatRowLink[g.service.linkKind ?? 'other'])
-    const attrs = { class: 'msg-glyph' + (g.connected ? '' : ' linked'), 'data-msg-glyph': g.id, 'aria-label': label, title: label }
-    const node = g.connected || !g.service.url
-      ? el('button', { ...attrs, onclick: () => chatSheet(p.id) })
-      : g.service.channel === Channel.WhatsApp
-        ? el('a', { ...attrs, href: waLink(g.service.url, waDraft(p)), target: '_blank', rel: 'noopener noreferrer', 'data-wa-person': p.id })
-        : el('a', { ...attrs, href: g.service.url, target: '_blank', rel: 'noopener noreferrer' })
-    node.innerHTML = serviceIcon(g.service)
-    return node
-  }))
-}
-
 /** Advanced: write to a connected person without opening the earlier conversation; the message still lands in the chat book. */
 function sendUnreadBox(p: Person): HTMLElement {
   const text = el('textarea', { class: 'field', rows: '2', maxlength: String(CHAT_TEXT_MAX), placeholder: S.cardSendUnreadPh, 'aria-label': S.cardSendUnread, 'data-send-unread-text': p.id }) as HTMLTextAreaElement
@@ -3290,10 +3270,8 @@ function sendUnreadBox(p: Person): HTMLElement {
 
 /** The Chat button (the Chat tab's icon), only for a person connected on TrustWeb; it opens the chat page (or the pinned / last-used service). Not connected: the messenger glyphs and the way to connect (an invitation I hold, else the link panel). */
 function cardChatButton(p: Person, quiet: boolean): HTMLElement {
-  const strip = messengerStrip(p)
   if (!chatShown(p)) {
     return el('div', { class: 'card-chat' }, [
-      strip,
       p.pendingInvite ? el('button', { class: 'btn btn-electric btn-sm', 'data-reopen-invite': p.id, onclick: () => reopenInvite(p.pendingInvite!) }, [S.cardConnect]) : null,
       connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast }),
     ])
@@ -3313,7 +3291,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
     label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
     pin: (id) => { toggleChatPin(st(), p.id, id); save() },
   })
-  return el('div', { class: 'card-chat' }, [b, strip, sendUnreadBox(p)])
+  return el('div', { class: 'card-chat' }, [b, sendUnreadBox(p)])
 }
 
 /** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */

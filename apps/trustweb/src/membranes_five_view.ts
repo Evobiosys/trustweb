@@ -42,6 +42,8 @@ export interface SmallCardDeps {
   face?: { button: HTMLElement; menu: HTMLElement }
   /** The places this person is connected with me, an icon each under the name (connected_places.ts). Absent or empty: no row. */
   places?: readonly ConnectedPlace[]
+  /** Wave 33: a tap on the TrustWeb icon opens the chat. */
+  onChat?: () => void
   /** The QR code of this person: top right, small and extended alike. */
   onQr?: () => void
   /** The zones the person can move to; the ring chip and the "visible to" line open them. */
@@ -133,11 +135,13 @@ function sharesLine(d: SmallCardDeps): HTMLElement {
 }
 
 /** One small icon per place (data-connected-on): a link where the channel opens, else a plain symbol; the name is its tooltip and aria-label. */
-export function connectedOnRow(places: readonly ConnectedPlace[]): HTMLElement | null {
+export function connectedOnRow(places: readonly ConnectedPlace[], onChat?: () => void): HTMLElement | null {
   if (!places.length) return null
   return el('div', { class: 'msg-glyphs connected-on', 'data-connected-on': '' }, places.map((pl) => {
-    const attrs = { class: 'msg-glyph', 'data-connected-place': pl.id, 'aria-label': pl.label, title: pl.label }
-    const node = pl.href
+    const attrs = { class: 'msg-glyph' + (pl.linked ? ' linked' : ''), 'data-connected-place': pl.id, 'aria-label': pl.label, title: pl.label }
+    const node = pl.id === 'trustweb' && onChat
+      ? el('button', { ...attrs, onclick: onChat })
+      : pl.href
       ? el('a', { ...attrs, href: pl.href, ...(pl.href.startsWith('https:') ? { target: '_blank', rel: 'noopener noreferrer' } : {}) })
       : el('span', { ...attrs, role: 'img' })
     node.innerHTML = ICONS[pl.icon] ?? ICONS.web
@@ -173,7 +177,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
       d.onQr ? el('button', { class: 'btn btn-ghost btn-sm', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, title: S.qrShowAria, onclick: d.onQr }, [S.qrPageTitle]) : null]),
     d.face?.menu,
-    d.places ? connectedOnRow(d.places) : null,
+    d.places ? connectedOnRow(d.places, d.onChat) : null,
     el('div', { 'data-chat-row': '' }, [d.chat]),
     el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
     picker,
