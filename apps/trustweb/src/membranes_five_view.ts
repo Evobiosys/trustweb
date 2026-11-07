@@ -7,7 +7,7 @@ import type { Person } from './model'
 import { S } from './strings'
 import { andSep, type VisibleCategory } from './zone_visibility'
 import { editKey } from './tap_edit'
-import { nameEdit } from './ring_hover'
+import { ROW_VIEW, rowStep, type RowEvent } from './ring_hover'
 import { HELLO_NAME_MAX } from './hello'
 import { RESOURCE_TITLE_MAX } from './resource_edit'
 
@@ -206,36 +206,51 @@ export interface RingCardDeps {
   onOpen: (id: string) => void
   /** A name was changed (already stored on `p` by the caller); the card stays open and shows it. */
   onRename: (p: Person, next: string) => void
+  /** The archive box was pressed: the caller archives `p` (Settings > Archived people restores) and redraws. */
+  onArchive: (p: Person) => void
 }
 
-/** Wave 29: the interactive "Everyone in <ring>" card: each name opens its person, a pencil turns the name into an input (Enter or blur saves, Esc cancels). */
+const ARCHIVE_BOX = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>'
+
+/** Wave 30: the interactive "Everyone in <ring>" card: each name opens its person; the pencil turns the name into an input with save, cancel and archive (Enter saves, Esc cancels, blur changes nothing). */
 export function ringCard(zone: string, people: readonly Person[], d: RingCardDeps): HTMLElement {
   const row = (p: Person): HTMLElement => {
     const host = el('span', { class: 'ring-card-row', 'data-ring-card-row': p.id })
+    let state = ROW_VIEW
     const show = (): void => host.replaceChildren(
       el('button', { class: 'ring-card-name', 'data-ring-card-open': p.id, onclick: () => d.onOpen(p.id) }, [p.name]),
       el('button', { class: 'ring-card-edit', 'data-ring-card-edit': p.id, 'aria-label': S.ringCardEditName, title: S.ringCardEditName, onclick: edit }, ['✎']),
     )
     const edit = (): void => {
+      state = rowStep(state, { type: 'open' })
       const input = el('input', { class: 'field tap-edit-input', 'aria-label': S.zoneRename(p.name), maxlength: String(HELLO_NAME_MAX), 'data-ring-card-input': p.id })
       input.value = p.name
-      let done = false
-      const finish = (how: 'save' | 'cancel'): void => {
-        if (done) return
-        done = true
-        const r = nameEdit(p.name, input.value, how)
-        if (r.kind === 'commit') d.onRename(p, r.name)
+      const end = (e: RowEvent): void => {
+        state = rowStep(state, e)
+        if (state.editing) return
+        const r = state.result
+        if (r?.kind === 'commit') d.onRename(p, r.name)
+        if (r?.kind === 'archive') { d.onArchive(p); return }
         show()
       }
-      input.addEventListener('keydown', (e) => { const a = editKey(e.key); if (a) { e.stopPropagation(); finish(a) } })
-      input.addEventListener('blur', () => finish('save'))
-      host.replaceChildren(input)
+      const accept = (): void => end({ type: 'accept', current: p.name, typed: input.value })
+      input.addEventListener('keydown', (e) => { const a = editKey(e.key); if (a) { e.stopPropagation(); e.preventDefault(); if (a === 'save') accept(); else end({ type: 'cancel' }) } })
+      const btn = (cls: string, attr: string, label: string, kids: (string | Node)[], on: () => void): HTMLElement =>
+        el('button', { class: 'ring-card-btn ' + cls, [attr]: p.id, 'aria-label': label, title: label, onclick: on }, kids)
+      const box = btn('ring-card-archive', 'data-ring-card-archive', S.ringCardArchive, [], () => end({ type: 'archive' }))
+      box.innerHTML = ARCHIVE_BOX
+      host.replaceChildren(
+        input,
+        btn('ring-card-ok', 'data-ring-card-accept', S.ringCardAccept, ['✓'], accept),
+        btn('ring-card-no', 'data-ring-card-cancel', S.ringCardCancel, ['✕'], () => end({ type: 'cancel' })),
+        box,
+      )
       input.focus(); input.select()
     }
     show()
     return host
   }
-  return el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.membraneAllTitle(zone), onpointerdown: (e: Event) => { e.stopPropagation() } }, [
+  return el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.membraneAllTitle(zone), onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation() } }, [
     el('b', {}, [S.membraneAllTitle(zone)]),
     ...people.map(row),
   ])
