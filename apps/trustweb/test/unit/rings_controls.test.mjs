@@ -49,3 +49,27 @@ describe('dots scale with the view again (as on main)', () => {
     expect((await import('../../src/rings_layout.ts')).dotSize).toBeUndefined()
   })
 })
+
+describe('nudgeAngles: no overlaps', () => {
+  const C = 176
+  const xy = (angle, radius) => ({ x: C + radius * Math.sin((angle * Math.PI) / 180), y: C - radius * Math.cos((angle * Math.PI) / 180) })
+  it('dots stacked on one angle end >= the dot size apart', async () => {
+    const { nudgeAngles } = await import('../../src/rings_layout.ts')
+    const dots = Array.from({ length: 6 }, (_, i) => ({ id: 'd' + i, angle: 90, radius: 100, r: 10 }))
+    const out = nudgeAngles(dots, [], C)
+    const ps = dots.map((d) => xy(out.get(d.id), d.radius))
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) expect(Math.hypot(ps[i].x - ps[j].x, ps[i].y - ps[j].y)).toBeGreaterThanOrEqual(20 - 1e-9)
+  })
+  it('a dot over a control (badge) moves off it by dot radius + control radius', async () => {
+    const { nudgeAngles } = await import('../../src/rings_layout.ts')
+    const badge = { ...xy(180, 100), r: 8 }
+    const out = nudgeAngles([{ id: 'x', angle: 180, radius: 100, r: 10 }], [badge], C)
+    const p = xy(out.get('x'), 100)
+    expect(Math.hypot(p.x - badge.x, p.y - badge.y)).toBeGreaterThanOrEqual(18)
+    expect(out.get('x')).not.toBe(180)
+  })
+  it('a free dot keeps its angle', async () => {
+    const { nudgeAngles } = await import('../../src/rings_layout.ts')
+    expect(nudgeAngles([{ id: 'a', angle: 33, radius: 80, r: 8 }], [], C).get('a')).toBe(33)
+  })
+})
