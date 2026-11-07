@@ -23,7 +23,7 @@ function suggestionsText(): string | null {
 }
 
 const cache = path.join(os.homedir(), '.cache', 'trustweb-dev')
-const git = (...a: string[]): string => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim() } catch { return '?' } }
+const git = (...a: string[]): string => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8', env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } }).trim() } catch { return '?' } }
 const slug = (branch: string): string => branch.replace(/[^\w.-]+/g, '-')
 
 /** Dev only: this branch's build number, +1 at every serve start (the file resets when Jakob says so). */
