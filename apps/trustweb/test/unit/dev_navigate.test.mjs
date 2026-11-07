@@ -77,11 +77,12 @@ describe('readFlag', () => {
 })
 
 describe('flagSteps', () => {
-  const sw = 'tap Try Five rings @ [data-flag-switch="five_rings"]'
+  const sw = 'tap Turn on Five rings @ [data-flag-on="five_rings"]'
   it('a flagged row with the flag off starts with the panel switch (once); others stay as they are', () => {
     expect(flagSteps({ title: 'Five rings', flag: 'five_rings', steps: ['a @ b'] }, false)).toEqual([sw, 'a @ b'])
     expect(flagSteps({ title: 'Five rings', flag: 'five_rings', steps: [sw, 'a @ b'] }, false)).toEqual([sw, 'a @ b'])
     expect(flagSteps({ title: 'X', steps: ['a @ b'] }, false)).toEqual(['a @ b'])
+    expect(flagSteps({ title: 'Five rings', flag: 'five_rings', steps: ['tap Try Five rings @ [data-flag-switch="five_rings"]', 'a @ b'] }, false)).toEqual([sw, 'a @ b'])   // the older switch step is replaced
   })
   it('with the flag on, the switch step is done already', () => {
     expect(flagSteps({ title: 'Five rings', flag: 'five_rings', steps: [sw, 'a @ b'] }, true)).toEqual(['a @ b'])
