@@ -383,6 +383,18 @@ export function focusSplit(features: PreviewFeature[], key: string | null): { wa
   return row ? { wave: row.branch.split('/')[0], row, rest: rows.filter((f) => f !== row) } : null
 }
 
+/** Panel header (wave 37): the preview id and the wave of the newest loaded row (any shown row when none is loaded). */
+export function panelTitle(id: string, features: PreviewFeature[]): string {
+  const rows = visible(features), loaded = rows.filter((f) => f.checked)
+  const waves = (loaded.length ? loaded : rows).map((f) => f.branch.split('/')[0])
+  const num = (w: string): number => Number(/\d+/.exec(w)?.[0] ?? -1)
+  const newest = waves.reduce<string | undefined>((a, w) => (a === undefined || num(w) > num(a) ? w : a), undefined)
+  return newest ? `${id} ${newest}` : id
+}
+
+/** After approve, needs work or note the panel stays on the pressed row (wave 37: no hop to the next one); a press from the full list leaves the focus empty. */
+export const focusAfterPress = (focus: string | null, pressed: string): string | null => (focus === pressed ? focus : null)
+
 /** The focus toggle (wave 33): in focus mode it leaves for the full list and remembers the row; in the full list it returns to the last focused row. null = nothing to toggle. */
 export function focusToggle(features: PreviewFeature[], focus: string | null, last: string | null): { to: 'full' | 'focus'; focus: string | null; last: string | null; row: PreviewFeature } | null {
   const rows = visible(features), now = rows.find((f) => f.key === focus), before = rows.find((f) => f.key === last)

@@ -2986,6 +2986,7 @@ export const S = {
   panelAssembleNow: 'Assemble now',
   panelAssembleNowTip: 'Assemble the checked rows now',
   panelShowAll: 'show all rows',
+  panelExpandAll: 'Show all rows',
   // wave 33 primary-email
   setPrimaryEmail: 'Primary email address',
   setPrimaryEmailNotSet: 'not set',
