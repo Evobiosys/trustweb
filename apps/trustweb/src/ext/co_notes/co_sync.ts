@@ -6,7 +6,7 @@
 import type { Identity } from '../../../../demo/src/did'
 import { pollPayloads, postPayload, type RelayDeps } from '../../notes_relay'
 import { cleanDoc, merge, type CoBlock, type CoDoc, type Stamp } from './co_doc'
-import { forSend } from './co_links'
+import { forSend, headId } from './co_links'
 
 /** How many co-created notes one phone keeps from others. */
 export const CO_DOCS_MAX = 100
@@ -41,7 +41,8 @@ const GROUP_FIELDS: Record<Group, (keyof CoBlock)[]> = { text: ['text'], place: 
 
 /**
  * What a received copy may change (I8): nobody adds a line in my name or rewrites who wrote a line; in Desires and Memories (each person writes only
- * their own lines) my lines never change from outside, and another person's line changes only under that person's own stamp.
+ * their own lines) my lines never change from outside, another person's line changes only under that person's own stamp, and a name block's id is its
+ * author's (co_links headId), so nobody takes mine before I make it.
  */
 export function guard(local: CoDoc | undefined, incoming: CoDoc, myDid: string): CoDoc {
   const have = new Map((local?.blocks ?? []).map((b) => [b.id, b]))
@@ -49,7 +50,8 @@ export function guard(local: CoDoc | undefined, incoming: CoDoc, myDid: string):
   const byAuthor = (x: CoBlock, g: Group): boolean => (x.st[g]?.[1] ?? x.by.did) === x.by.did
   const blocks = incoming.blocks.flatMap((x): CoBlock[] => {
     const old = have.get(x.id)
-    if (!old) return x.by.did === myDid || (ownerOnly && !(['text', 'place', 'share', 'del'] as Group[]).every((g) => byAuthor(x, g))) ? [] : [x]
+    const badHead = ownerOnly && x.id.startsWith('h-') && x.id !== headId(x.by.did)
+    if (!old) return x.by.did === myDid || badHead || (ownerOnly && !(['text', 'place', 'share', 'del'] as Group[]).every((g) => byAuthor(x, g))) ? [] : [x]
     if (ownerOnly && old.by.did === myDid) return [old]
     const y: CoBlock = { ...x, by: old.by, at: old.at, st: { ...x.st } }
     if (ownerOnly) {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 // Event desires and memories (src/ext/co_notes/co_desires.ts): per-person blocks, own-lines-only editing, share cycle, Combine prompt and write-back.
-import { canEdit, combine, combinePrompt, cycleShare, desiresDoc, ensureMine, applyCombined, SHARE_LABELS } from '../../src/ext/co_notes/co_desires.ts'
+import { canEdit, combine, combinePrompt, cycleShare, desiresDoc, ensureMine, applyCombined, mineId, SHARE_LABELS } from '../../src/ext/co_notes/co_desires.ts'
 import { insertAfter, indent, merge, setShare, tree, remove } from '../../src/ext/co_notes/co_doc.ts'
 import { forSend } from '../../src/ext/co_notes/co_links.ts'
 
@@ -176,5 +176,20 @@ describe('combine (injected fetch)', () => {
 
   it('lets an endpoint error through', async () => {
     await expect(combine(setup(), A, AI, async () => ({ ok: false, status: 500, json: async () => ({ error: { message: 'boom' } }) }), T)).rejects.toThrow('boom')
+  })
+})
+
+describe('review fixes (wave36b event-desires): name blocks of real identities', () => {
+  it('two people on the same relay get different name blocks (a did:peer:2 ends with the shared relay address)', async () => {
+    const { createIdentity } = await import('../../../demo/src/did.ts')
+    const a = { did: createIdentity('https://x.invalid/relay').did, name: 'Anna' }
+    const b = { did: createIdentity('https://x.invalid/relay').did, name: 'Ben' }
+    expect(mineId(a)).not.toBe(mineId(b))
+    expect(mineId(a)).toBe(mineId({ ...a, name: 'Anna on her laptop' }))
+    expect(mineId(a).length).toBeLessThanOrEqual(40)
+    let d = desiresDoc({ kind: 'desires', ev: EV, me: a, others: [b], at: T })
+    d = ensureMine(d, a, T).doc
+    const theirs = ensureMine(d, b, T).doc
+    expect(tree(merge(d, theirs)).filter((r) => r.depth === 0).map((r) => r.by.name).sort()).toEqual(['Anna', 'Ben'])
   })
 })

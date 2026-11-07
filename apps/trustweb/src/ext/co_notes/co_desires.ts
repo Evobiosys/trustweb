@@ -8,7 +8,7 @@ import { askEndpointText, configured, type FetchLike } from '../../llm_endpoint'
 import type { AiEndpoint } from '../../model'
 import { S } from '../../strings'
 import { indent, insertAfter, newDoc, tree, type CoBlock, type CoDoc, type CoPerson, type ShareLevel } from './co_doc'
-import { chipToken, parseChips } from './co_links'
+import { chipToken, headId, parseChips } from './co_links'
 
 export type EventKind = 'desires' | 'memories'
 const S_ = S.coDesires
@@ -31,7 +31,7 @@ export function desiresDoc(o: { kind: EventKind; ev: { id: string; name: string 
 }
 
 /** The id of the top-level block holding my chip; the same on every device of mine. */
-export const mineId = (me: CoPerson): string => `h-${me.did.slice(-12)}`
+export const mineId = (me: CoPerson): string => headId(me.did)
 
 /** The top-level block holding my chip (made on first use, shared with the event); its children are my lines. */
 export function ensureMine(doc: CoDoc, me: CoPerson, at: number): { doc: CoDoc; id: string } {
