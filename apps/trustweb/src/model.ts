@@ -377,6 +377,8 @@ export interface Person {
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
   did?: string
+  /** Wave 32 (feed_nostr.ts): their Nostr public key (hex), so their group posts show by my trust ring. Local only. Absent: unknown. */
+  nostrPub?: string
   /** Wave 27: where this person was imported from (one entry per source file, I8). Local only. Absent: entered by hand. */
   sources?: PersonSource[]
   /**
@@ -975,6 +977,10 @@ export interface AppState {
   shareDefaultZone?: string
   /** Wave 29 (zone_tags.ts): tag ids per zone (ring value) with a stamp. Absent: none. */
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
+  /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
+  groupPosts?: GroupPost[]
+  /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
+  nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
   shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
@@ -1275,7 +1281,18 @@ export interface FeedSettings {
   myInstance?: string
   /** The person's own Pixelfed instance, for "Share to Pixelfed" (host only). */
   myPixelfed?: string
+  /** Wave 31: followed Mastodon accounts / hashtags ("@user@host", "#tag@host"), read through their public RSS. Absent: none. */
+  follows?: string[]
+  /** Wave 31: the news feed (RSS or JSON Feed address, https). Absent: none. */
+  newsUrl?: string
+  /** Wave 32 (feed_nostr.ts): Nostr relays (wss://) that carry group posts. Absent or empty: posts stay on this phone. */
+  relays?: string[]
+  /** Wave 32 (feed_nostr.ts): per group (our id) its governance, channels and vouches. Absent: open, no channels. */
+  groupMeta?: Record<string, { governance?: 'open' | 'invite' | 'vouch' | 'admin' | 'consensus'; channels?: { id: string; name: string }[]; vouchedBy?: string[] } | undefined>
 }
+
+/** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
+export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number; /** feed_nostr.ts: discussion, request, offer or event. Absent: discussion. */ type?: string; /** A channel id of the group (FeedSettings.groupMeta). Absent: the group itself. */ channel?: string; /** 0 members only, 1 friends of members, 2 friends of friends. Absent: 0. */ hops?: number; /** A relay took it. Absent: kept on this phone only. */ sent?: true }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {

@@ -13,6 +13,7 @@
  */
 import { isDemoItem, isDemoPerson, Provenance } from './model'
 import type { AppState } from './model'
+import { showsUnmatched } from './unmatched_asks'
 
 export enum PostKind {
   /** A line someone shared with you in an answer. */
@@ -25,6 +26,21 @@ export enum PostKind {
   Mine = 'mine',
   /** A public post from someone's Mastodon or Pixelfed. */
   Remote = 'remote',
+  /** A post to a group you are in (feed_sources.ts). */
+  Group = 'group',
+  /** An item of a feed you follow: an account or hashtag on the fediverse, or the news feed (feed_sources.ts). */
+  Follow = 'follow',
+  /** An ask addressed to you. */
+  Ask = 'ask',
+}
+
+/** The chips: one stream, grouped by where an item comes from. */
+export enum FeedSource {
+  Web = 'web',
+  Group = 'group',
+  Fediverse = 'fediverse',
+  News = 'news',
+  Ask = 'ask',
 }
 
 /** What tapping a post opens. */
@@ -53,6 +69,16 @@ export interface Post {
   /** A remote picture (fediverse; only loaded where pictures are switched on). */
   imageUrl?: string
   open: PostTarget
+  /** Group posts: the group chip id (`tag:<id>` or `event:<id>`). */
+  group?: string
+  /** Followed items: the news feed rather than the fediverse. */
+  news?: boolean
+  /** Group posts: the channel id inside the group. */
+  channel?: string
+  /** Group posts: discussion, request, offer or event (feed_nostr.ts). */
+  type?: string
+  /** Group posts: no relay took it (it stays on this phone). */
+  unsent?: boolean
 }
 
 /** At most this many posts. */
@@ -128,8 +154,35 @@ function mine(s: AppState): Post[] {
     }))
 }
 
+/** Asks addressed to me (held for consent, and the ones that matched nothing here) as cards; this phone only, the answer moment stays in the stack. */
+export function askPosts(s: AppState): Post[] {
+  const held = (Array.isArray(s.heldAsks) ? s.heldAsks : []).map((a): Post => ({
+    id: `ask:${a.qid}`, kind: PostKind.Ask, who: a.fromName, personId: s.people.find((p) => p.peerId === a.peerId)?.id, at: a.receivedAt, text: a.text, dummy: false, open: { kind: 'none' },
+  }))
+  const unmatched = showsUnmatched(s, Boolean(s.demo?.people?.length)) ? (Array.isArray(s.unmatchedAsks) ? s.unmatchedAsks : []).map((a): Post => ({
+    id: `ask:${a.id}`, kind: PostKind.Ask, who: a.from, personId: s.people.find((p) => p.peerId === a.peerId)?.id, at: a.at, text: a.text, dummy: false, open: { kind: 'none' },
+  })) : []
+  return [...held, ...unmatched]
+}
+
+/** Which chip a post belongs to. */
+export function sourceOf(p: Post): FeedSource {
+  switch (p.kind) {
+    case PostKind.Group: return FeedSource.Group
+    case PostKind.Ask: return FeedSource.Ask
+    case PostKind.Remote: return FeedSource.Fediverse
+    case PostKind.Follow: return p.news ? FeedSource.News : FeedSource.Fediverse
+    default: return FeedSource.Web
+  }
+}
+
+/** The chips' filter: a source, and inside Groups one group. */
+export function filterFeed(posts: readonly Post[], f: { source?: FeedSource; group?: string }): Post[] {
+  return posts.filter((p) => (!f.source || sourceOf(p) === f.source) && (!f.group || p.group === f.group))
+}
+
 /** Every post this phone can show, newest first. Pure: reads the record, sends nothing. */
 export function buildFeed(s: AppState, remote: readonly Post[] = []): Post[] {
-  const all = [...answers(s), ...meetings(s), ...sharedNotes(s), ...mine(s), ...remote]
+  const all = [...answers(s), ...meetings(s), ...sharedNotes(s), ...mine(s), ...askPosts(s), ...remote]
   return all.filter((p) => p.text.trim()).sort((a, b) => b.at - a.at).slice(0, FEED_MAX)
 }
