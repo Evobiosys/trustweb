@@ -96,6 +96,8 @@ function pwaFiles() {
     },
   }
 }
+// `git status` refreshes (writes) the index: never while the preview assembly merges into it ("Unable to write index", 2026-11-07).
+const GIT_ENV = { ...process.env, GIT_OPTIONAL_LOCKS: '0' }
 let resolvedOutDir = path.resolve(here, 'dist')
 
 
@@ -103,8 +105,8 @@ let resolvedOutDir = path.resolve(here, 'dist')
 // A tree with uncommitted changes says so ("-dirty"); no git at all: "dev".
 function appVersion() {
   try {
-    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim()
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd: here, encoding: 'utf8' }).trim() !== ''
+    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim()
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim() !== ''
     return /^[0-9a-f]{4,40}$/.test(sha) ? sha + (dirty ? '-dirty' : '') : 'dev'
   } catch {
     return 'dev'
@@ -116,7 +118,7 @@ function appVersion() {
 function releaseId() {
   let release = process.env.TW_RELEASE ?? ''
   if (!release) {
-    try { release = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim() } catch { release = 'dev' }
+    try { release = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim() } catch { release = 'dev' }
     if (appVersion().endsWith('-dirty')) release += '-dirty'
   }
   return release
@@ -229,7 +231,7 @@ function approveApi() {
   return {
     name: 'trustweb-approve-api',
     configureServer(server) {
-      const git = (...a) => execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim()
+      const git = (...a) => execFileSync('git', a, { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim()
       const json = (res, o) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
       server.middlewares.use('/__tw/status', (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
@@ -371,7 +373,7 @@ function previewApi() {
 // Dev only: where the overlay is built from (git at serve start), personal or stock, and the stock twin's URL.
 function devBuild(command) {
   if (command !== 'serve') return 'null'
-  const git = (...a) => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim() } catch { return '?' } }
+  const git = (...a) => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8', env: GIT_ENV }).trim() } catch { return '?' } }
   const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
   const sha = git('rev-parse', '--short', 'HEAD')
   return JSON.stringify({ branch, sha, time: hhmm(new Date()), n: bumpBuildCounter(branch), approved: approvedAt(branch, sha), mode: process.env.TW_STOCK ? 'stock' : 'personal', stockUrl: process.env.TW_STOCK_URL ?? '' })

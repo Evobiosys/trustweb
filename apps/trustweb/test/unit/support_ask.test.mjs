@@ -122,12 +122,13 @@ describe('the safety line', () => {
 })
 
 describe('ask dock mode: Ask your web | Ask for support', () => {
-  it('offers the two modes, web first', () => {
-    expect(ASK_MODES).toEqual([AskMode.Web, AskMode.Support])
+  it('offers the three modes: support, hints, intros', () => {
+    expect(ASK_MODES).toEqual([AskMode.Support, AskMode.Hints, AskMode.Intros])
   })
-  it('an unknown or missing mode falls back to web', () => {
-    expect(nextAskMode(undefined)).toBe(AskMode.Web)
-    expect(nextAskMode('x')).toBe(AskMode.Web)
+  it('an unknown or missing mode falls back to hints', () => {
+    expect(nextAskMode(undefined)).toBe(AskMode.Hints)
+    expect(nextAskMode('web')).toBe(AskMode.Hints)
     expect(nextAskMode('support')).toBe(AskMode.Support)
+    expect(nextAskMode('intros')).toBe(AskMode.Intros)
   })
 })

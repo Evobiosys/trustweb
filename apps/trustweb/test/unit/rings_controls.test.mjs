@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 33 rings-controls: drop on any bottom-row control, hidden people before the top five, dots keep their size. */
 import { hitControls, visibleIn, inExpanse, hideInExpanse } from '../../src/expanse.ts'
-import { dotSize, ringsGeometry } from '../../src/rings_layout.ts'
+import { chainPoints, HANDLE } from '../../src/ring_handles.ts'
 import { pickFive } from '../../src/membranes_five.ts'
 
 const box = (id, left) => ({ id, left, top: 100, right: left + 30, bottom: 130 })
@@ -34,15 +34,18 @@ describe('hidden before the top five', () => {
   })
 })
 
-describe('dots keep their size (pre-#80)', () => {
-  it('dotSize is min(42, dot) at scale 1 for a crowded ring and with an Unsorted ring', () => {
-    for (const counts of [{ acquaintance: 120 }, { friend: 5, unsorted: 40 }, { closest: 3, intending: 2 }]) {
-      const g = ringsGeometry(counts, {}, 1)
-      for (const r of g.rings) expect(dotSize(g, r)).toBe(Math.min(42, g.dot[r]))
-    }
+describe('chainPoints: one bottom-anchored column', () => {
+  it('same x, first at the bottom edge, each next one pitch higher toward the centre', () => {
+    const pts = chainPoints(4, 176, 352)
+    expect(new Set(pts.map((p) => p.left))).toEqual(new Set([176]))
+    expect(pts[0].top).toBe(352 - HANDLE / 2 - 2)
+    pts.slice(1).forEach((p, i) => expect(pts[i].top - p.top).toBe(HANDLE + 4))
   })
-  it('the view scale never shrinks a dot: a full ring stays 42', () => {
-    const g = ringsGeometry({ friend: 2 }, {}, 0.85)
-    expect(dotSize(g, 'friend')).toBe(42)
+  it('empty for no controls', () => expect(chainPoints(0, 176, 352)).toEqual([]))
+})
+
+describe('dots scale with the view again (as on main)', () => {
+  it('dotSize no longer exists; the geometry dot is what the view multiplies by k', async () => {
+    expect((await import('../../src/rings_layout.ts')).dotSize).toBeUndefined()
   })
 })
