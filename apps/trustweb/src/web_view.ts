@@ -28,7 +28,9 @@ import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
 import { dueMoves, releaseTies } from './engagement'
 import { ringCard } from './membranes_five_view'
-import { archivePerson } from './archived_people'
+import { archivePerson, restorePerson } from './archived_people'
+import { binAt, binDrop } from './drag_bins'
+import type { BinKind } from './drag_bins'
 import { GRACE_MS, HOVER_IDLE, hoverStep } from './ring_hover'
 import type { HoverEvent } from './ring_hover'
 import { singleOrDouble } from './press'
@@ -124,6 +126,8 @@ export interface WebViewDeps {
   openSheet(children: (Node | null)[]): void
   closeSheet(): void
   solo: boolean
+  /** Delete for good (main.ts deletePerson); the Remove bin asks first. */
+  removePerson(personId: string): void
 }
 
 export interface RingsOpts { complete?: boolean }
@@ -140,7 +144,7 @@ export interface WebView {
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
-  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo } = deps
+  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo, removePerson } = deps
   /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
   let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
   let ringsK = 1
@@ -300,7 +304,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     you.style.left = C + 'px'
     you.style.top = C + 'px'
     wrap.appendChild(you)
-    dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
+    dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing, desk === undefined)
     // Re-render IN PLACE: the Desk slots this very element (slot name, styles, its fit() transform) and the phone's zoom layer wraps it,
     // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
     const toggle = (next: ReadonlySet<Ring>, live: HTMLElement): void => {
@@ -530,7 +534,7 @@ export function createWebView(deps: WebViewDeps): WebView {
    * from the distance to the centre; "intending to connect" first asks how much (0..10, default 5). The ring is the same value the outliner
    * and the CRM use (changeRing / placeOnRing).
    */
-  function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) => void, settled?: (personId: string, ring: Ring) => void): void {
+  function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) => void, settled?: (personId: string, ring: Ring) => void, withBins = false): void {
     let lifted = false
     wrap.addEventListener('touchmove', (e) => { if (lifted) e.preventDefault() }, { passive: false })
     wrap.addEventListener('pointerdown', (down) => {
@@ -541,6 +545,8 @@ export function createWebView(deps: WebViewDeps): WebView {
       let out = false
       let angle = angleOf(p)
       let intoExpanse = false
+      let bin: BinKind | null = null
+      let bins: HTMLElement | undefined
       // While a person is held, every ring guide shows in full so the drop target is visible.
       const hiddenNow = loadHiddenRings()
       const guides = (dragging: boolean): void => wrap.querySelectorAll<SVGCircleElement>('circle[data-ring]').forEach((c) => { c.style.opacity = guideDimmed(hiddenNow.has(c.getAttribute('data-ring') as Ring), dragging) ? HIDDEN_GUIDE_OPACITY : '' })
@@ -561,9 +567,12 @@ export function createWebView(deps: WebViewDeps): WebView {
         const targets = [...wrap.querySelectorAll<HTMLElement>('.ring-toggle, .ring-more')]
         const boxes = targets.map((t) => { const { left, top, right, bottom } = t.getBoundingClientRect(); return { left, top, right, bottom, t } })
         const hit = hitControls(boxes, e.clientX, e.clientY)
-        intoExpanse = hit !== null
+        const binBoxes = [...(bins?.querySelectorAll<HTMLElement>('[data-bin]') ?? [])].map((t) => { const { left, top, right, bottom } = t.getBoundingClientRect(); return { left, top, right, bottom, kind: t.dataset.bin as BinKind, t } })
+        bin = binAt(binBoxes, e.clientX, e.clientY)
+        for (const b of binBoxes) b.t.classList.toggle('drop', b.kind === bin)
+        intoExpanse = hit !== null && bin === null
         for (const t of targets) t.classList.toggle('drop', t === hit?.t)
-        wrap.classList.toggle('hide-zone', out && !intoExpanse)
+        wrap.classList.toggle('hide-zone', out && !intoExpanse && bin === null)
         wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
       }
       // Hold on another dot: after HOLD_MS a bubble offers to merge the two (dot_merge.ts); only a tap on Merge goes on.
@@ -583,7 +592,14 @@ export function createWebView(deps: WebViewDeps): WebView {
         holdApply({ type: 'move', over: hitDot(dots, p.id, e.clientX, e.clientY), at: now })
         if (hold.phase === 'pending') holdTimer = window.setTimeout(() => holdApply({ type: 'elapsed', at: performance.now() }), Math.max(0, hold.since + HOLD_MS - now))
       }
-      const lift = (): void => { lifted = true; node.classList.add('lifted'); setDragged(true) }
+      const lift = (): void => {
+        lifted = true; node.classList.add('lifted'); setDragged(true)
+        if (withBins) {
+          const mk = (kind: BinKind, icon: string, word: string, aria: string): HTMLElement => el('span', { class: 'drag-bin', 'data-bin': kind, role: 'img', 'aria-label': aria }, [el('b', {}, [icon]), el('small', {}, [word])])
+          bins = el('div', { class: 'drag-bins' }, [mk('archive', '🗃', S.binArchive, S.binArchiveAria), mk('remove', '🗑', S.binRemove, S.binRemoveAria)])
+          wrap.appendChild(bins)
+        }
+      }
       const timer = down.pointerType === 'mouse' ? 0 : window.setTimeout(lift, 300)
       // A second finger is a pinch: the lift ends without moving the dot.
       const second = (e: PointerEvent): void => { if (!e.isPrimary) cancel() }
@@ -608,6 +624,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
         wrap.classList.remove('hide-zone')
         wrap.querySelectorAll('.ring-toggle.drop, .ring-more.drop').forEach((c) => c.classList.remove('drop'))
+        bins?.remove()
       }
       // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
       const done = (): void => settled?.(p.id, p.ring)
@@ -618,6 +635,11 @@ export function createWebView(deps: WebViewDeps): WebView {
         end(); lifted = false
         setTimeout(() => setDragged(false), 0)
         if (!was) return
+        if (bin !== null) {
+          if (binDrop(bin, p).do === 'archive') { archivePerson(p); save(); render(); archivedUndo(p) } else { render(); askRemove(p) }
+          done()
+          return
+        }
         if (intoExpanse) { hideInExpanse(s, p.id); save(); render(); done(); return }
         // Released while the merge offer shows: the dot goes back, nothing moves or merges.
         if (offered) { render(); done(); return }
@@ -634,6 +656,23 @@ export function createWebView(deps: WebViewDeps): WebView {
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', cancel)
     })
+  }
+
+  /** Dropped on the archive box: the toast says where they went; Undo for 30 s puts them back on the ring they had. */
+  function archivedUndo(p: Person): void {
+    showNotice(S.archivedToast, '', [
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-archive': p.id, onclick: () => { hideNotice(); restorePerson(p); save(); render() } }, [S.ringsHiddenUndo]),
+    ], 30000)
+  }
+
+  /** Dropped on the dustbin: nothing is deleted before Yes; No leaves the dot where it was. */
+  function askRemove(p: Person): void {
+    showNotice(displayName(p.name).text, S.personDeleteAsk, [
+      el('span', {}, [
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-yes': p.id, onclick: () => { hideNotice(); removePerson(p.id) } }, [S.personDeleteYes]),
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-no': '', onclick: hideNotice }, [S.personDeleteNo]),
+      ]),
+    ], 30000)
   }
 
   /** The bubble "Merge A into B?"; Merge opens the Same person sheet, which asks again before anything merges. */

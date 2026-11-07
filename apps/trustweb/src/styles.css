@@ -1467,3 +1467,13 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .num-edit{padding:0 2px; border:0; background:none; color:inherit; font:inherit; text-decoration:underline dashed; text-underline-offset:3px; cursor:pointer}
 .num-edit-input{width:4.5em; padding:1px 4px; font-size:inherit}
 .ring-card-everyone{color:var(--muted-grey,#8a8f94)}
+
+/* wave 34 drag-bins */
+.drag-bins{position:absolute; left:0; right:0; top:100%; margin-top:4px; z-index:4; display:flex; justify-content:center; gap:24px; pointer-events:none; animation:bins-in .12s ease-out}
+.drag-bin{display:flex; flex-direction:column; align-items:center; width:56px; transition:transform .12s}
+.drag-bin b{display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:12px; background:var(--card,#fff); border:2px dashed var(--muted-grey,#8a8f94); font-size:22px; font-weight:400}
+.drag-bin small{font-size:11px; color:var(--muted-grey,#8a8f94)}
+.drag-bin[data-bin=remove] b{border-color:#c62828}
+.drag-bin.drop{transform:scale(1.15)}
+.drag-bin.drop b{background:#fdecea; border-style:solid}
+@keyframes bins-in{from{opacity:0}to{opacity:1}}
