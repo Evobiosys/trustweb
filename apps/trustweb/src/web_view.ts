@@ -157,6 +157,8 @@ export interface WebView {
   /** Wave 36b: the select tool (third tool button) on or off; leaving clears the selection. Returns the new state. */
   toggleSelect(): boolean
   selectOn(): boolean
+  /** Wave 36b: delete with the 30-day tombstone and the Undo toast (person page, Desk, dustbin). */
+  deleteReversibly(ps: readonly Person[]): void
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
@@ -851,8 +853,8 @@ export function createWebView(deps: WebViewDeps): WebView {
   function offerMerge(p: Person, otherId: string, n: number): void {
     const other = st().people.find((x) => x.id === otherId)
     if (!other || !mergeSheet) return
-    showNotice(S.mergeCountdown(displayName(p.name).text, displayName(other.name).text, n), '', [
-      el('span', { 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
+    showNotice(S.mergeCountdownLead(displayName(p.name).text, displayName(other.name).text), '', [
+      el('span', { class: 'countdown-num', 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
     ], 20000)
   }
 
@@ -865,7 +867,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       el('h3', {}, [S.recentlyDeletedTitle]),
       el('p', { class: 'meta' }, [S.recentlyDeletedHint]),
       ...people.map((p) => el('div', { class: 'expanse-row', 'data-deleted-row': p.id }, [
-        el('span', {}, [displayName(p.name).text, ' ', el('small', { class: 'meta' }, [S.daysLeft(daysLeft(p, now))])]),
+        el('span', {}, [displayName(p.name).text, ' ', el('small', { class: 'meta' }, [S.restoreDaysLeft(daysLeft(p, now))])]),
         el('button', { class: 'btn btn-ghost btn-sm', 'data-put-back': p.id, onclick: () => back(p) }, [S.putBack]),
       ])),
     ])
@@ -1013,5 +1015,6 @@ export function createWebView(deps: WebViewDeps): WebView {
     openDeleted: deletedSheet,
     toggleSelect: () => { if (selectMode) leaveSelect(); else selectMode = true; return selectMode },
     selectOn: () => selectMode,
+    deleteReversibly: removeNow,
   }
 }

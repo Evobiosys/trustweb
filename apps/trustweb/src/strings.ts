@@ -3110,8 +3110,8 @@ export const S = {
     open: 'Open the group',
   },
   // Wave 36 (deleted_people.ts): delete is reversible for 30 days.
-  deletedToast: (name: string) => `${name} deleted`,
-  deletedToastMany: (n: number) => `${n} people deleted`,
+  deletedToast: (name: string) => `${name} deleted (you can restore it within 30 days)`,
+  deletedToastMany: (n: number) => `${n} people deleted (you can restore them within 30 days)`,
   undo: 'Undo',
   recentlyDeleted: (n: number) => `Recently deleted (${n})`,
   recentlyDeletedTitle: 'Recently deleted',
@@ -3163,4 +3163,13 @@ export const S = {
   ownProfileNothing: 'Nothing yet',
   ownProfileEdit: 'Edit what I share',
   ownProfileName: 'Change my name',
+  // Wave 36b (notices-2): the number sits in its own turquoise span; the 30-day wording per row.
+  mergeCountdownLead: (a: string, b: string) => `Merging ${a} into ${b} …`,
+  keepCountdownLead: (b: string) => `Keeping ${b} in`,
+  restoreDaysLeft: (n: number) => `${n === 1 ? '1 day' : `${n} days`} left to restore it`,
+  aiTestOk: (ms: number) => `Answered in ${(ms / 1000).toFixed(1)} s`,
+  aiTestFailed: 'Failed',
+  aiTestHintTimeout: 'No answer in 30 s',
+  aiTestHintKey: 'Key rejected',
+  aiTestHintJson: 'The endpoint answered, but not with JSON: check the model name',
 } as const
