@@ -1,0 +1,9 @@
+<!-- SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 124 124" color="#4A9BD1">
+  <style>@media (prefers-color-scheme:dark){svg{color:#8FC6EE}}</style>
+  <path d="M60 24 A36 36 0 1 1 24 60" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>
+  <path d="M113 60 A53 53 0 1 1 60 7" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="60" cy="7" r="8.5" fill="currentColor"/>
+  <circle cx="60" cy="24" r="8" fill="currentColor"/>
+  <g transform="translate(60 60) scale(1.25) translate(-60 -60)"><polygon points="64.5,43.5 49.5,63 59,63 55.5,76.5 70.5,56.5 61,56.5" fill="currentColor" stroke-linejoin="round"/></g>
+</svg>
