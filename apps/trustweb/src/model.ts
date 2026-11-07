@@ -1308,6 +1308,8 @@ export interface AppState {
   features?: { events?: false; inventory?: false }
   /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
+  /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
+  agent?: AgentLink
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
   askSets?: AskSet[]
   /** Wave 31, Ask your web: your own "also search online" engine, https with {q} for the words. Absent: none (the engine chips only). */
@@ -1322,6 +1324,12 @@ export interface AskSet {
   name: string
   personIds: string[]
   tags: string[]
+}
+
+/** The pi agent: its loopback address and when /health last answered (ISO). */
+export interface AgentLink {
+  baseUrl: string
+  connectedAt?: string
 }
 
 export interface AiEndpoint {

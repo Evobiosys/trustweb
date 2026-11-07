@@ -3152,4 +3152,13 @@ export const S = {
   keepQuiet: 'Gone quiet',
   mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
   keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
+  // wave 36 llm-button
+  aiButton: 'Your AI',
+  agentBlockTitle: 'Agent (pi)',
+  agentUrl: 'Agent address (this device only)',
+  agentCheck: 'Check',
+  agentChecking: 'Checking …',
+  agentConnected: (when: string) => `Connected, checked ${when}. The Your AI button shows in the Web header.`,
+  agentNotConnected: 'Not connected. The agent must answer at this address on this device.',
+  agentHint: 'Optional. The Your AI button shows only with an endpoint above and a connected agent; a check holds for 10 minutes.',
 } as const
