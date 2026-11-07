@@ -39,6 +39,7 @@ import { contextPress } from './context_press'
 import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
+import { createCountdown } from './merge_countdown'
 import { HOLD_MS, type HoldEvent, hitDot, holdStart, holdStep } from './dot_merge'
 
 /** The rings' own layout size (px): the viewBox, and the box a pointer is read against. */
@@ -115,6 +116,8 @@ export interface WebViewDeps {
   curatorPerson(personId: string): void
   /** Opens the "Same person" sheet for two persons (the first is kept first, so Enter keeps it); null on a demo phone, where merging is off. */
   mergeSheet: ((aId: string, bId: string) => void) | null
+  /** Wave 36: merges `dropId` into `keepId` (snapshot first); null where mergeSheet is. */
+  mergeNow: ((keepId: string, dropId: string) => void) | null
   dummyChip(): HTMLElement
   avatar(name: string, id: string, cls?: string): HTMLElement
   pictured(face: HTMLElement, url: string | undefined): HTMLElement
@@ -602,18 +605,45 @@ export function createWebView(deps: WebViewDeps): WebView {
       // Hold on another dot: after HOLD_MS a bubble offers to merge the two (dot_merge.ts); only a tap on Merge goes on.
       let hold = holdStart()
       let holdTimer: number | undefined
+      // Wave 36: the offer counts 3-2-1 and merges by itself; leaving the dot, releasing or Escape cancels.
+      const countdown = createCountdown()
+      let countTimer: number | undefined
+      let cancelled = false
+      const stopCount = (): void => { clearInterval(countTimer); countTimer = undefined; countdown.cancel() }
       const holdApply = (ev: HoldEvent): void => {
         const was = hold.phase
         hold = holdStep(hold, ev)
-        if (hold.phase === 'offer' && was !== 'offer') offerMerge(p, hold.over)
-        else if (hold.phase !== 'offer' && was === 'offer') hideNotice()
+        if (hold.phase === 'offer' && was !== 'offer') {
+          const over = hold.over
+          let shown = 0
+          countdown.start(performance.now())
+          const step = (): void => {
+            const t = countdown.tick(performance.now())
+            if (t.fire) { stopCount(); mergeDrop(over); return }
+            if (t.secondsLeft !== shown) { shown = t.secondsLeft; offerMerge(p, over, shown) }
+          }
+          step()
+          countTimer = window.setInterval(step, 200)
+        } else if (hold.phase !== 'offer' && was === 'offer') { stopCount(); hideNotice() }
       }
+      const mergeDrop = (otherId: string): void => {
+        // The finger is still down: the dot stays "dragged" until it lifts, so the release is no tap that opens the merged-away card.
+        hideNotice(); end(); lifted = false
+        const release = (): void => { window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release); setTimeout(() => setDragged(false), 0) }
+        window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release)
+        deps.mergeNow?.(otherId, p.id)
+        done()
+      }
+      const onEscape = (e: KeyboardEvent): void => { if (e.key === 'Escape' && hold.phase !== 'none') { cancelled = true; holdApply({ type: 'leave' }) } }
+      window.addEventListener('keydown', onEscape)
       const holdMove = (e: PointerEvent): void => {
         if (!mergeSheet) return
         const dots = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')].map((n) => { const r = n.getBoundingClientRect(); return { id: n.dataset.pid ?? '', left: r.left, top: r.top, right: r.right, bottom: r.bottom } })
         const now = performance.now()
         clearTimeout(holdTimer)
-        holdApply({ type: 'move', over: hitDot(dots, p.id, e.clientX, e.clientY), at: now })
+        const over = hitDot(dots, p.id, e.clientX, e.clientY)
+        if (over === null) cancelled = false
+        holdApply({ type: 'move', over: cancelled ? null : over, at: now })
         if (hold.phase === 'pending') holdTimer = window.setTimeout(() => holdApply({ type: 'elapsed', at: performance.now() }), Math.max(0, hold.since + HOLD_MS - now))
       }
       const lift = (): void => {
@@ -640,6 +670,8 @@ export function createWebView(deps: WebViewDeps): WebView {
       const end = (): void => {
         clearTimeout(timer)
         clearTimeout(holdTimer)
+        stopCount()
+        window.removeEventListener('keydown', onEscape)
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', cancel)
@@ -700,16 +732,12 @@ export function createWebView(deps: WebViewDeps): WebView {
     ], 30000)
   }
 
-  /** The bubble "Merge A into B?"; Merge opens the Same person sheet, which asks again before anything merges. */
-  function offerMerge(p: Person, otherId: string): void {
+  /** The bubble "Merging A into B … n" (wave 36): nobody presses Yes; staying put merges at 0, the major dot B keeps its name. */
+  function offerMerge(p: Person, otherId: string, n: number): void {
     const other = st().people.find((x) => x.id === otherId)
     if (!other || !mergeSheet) return
-    const close = (): void => hideNotice()
-    showNotice(S.dmOffer(displayName(p.name).text, displayName(other.name).text), '', [
-      el('span', { 'data-merge-offer': '1' }, [
-        el('button', { class: 'btn btn-electric btn-sm', onclick: () => { close(); mergeSheet(other.id, p.id) } }, [S.dmMerge]),
-        el('button', { class: 'btn btn-ghost btn-sm', onclick: close }, [S.dvCancel]),
-      ]),
+    showNotice(S.mergeCountdown(displayName(p.name).text, displayName(other.name).text, n), '', [
+      el('span', { 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
     ], 20000)
   }
 
