@@ -1,0 +1,7 @@
+<!-- SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <circle cx="20" cy="20" r="5.5" fill="none" stroke="currentColor" stroke-width="3"/>
+  <path d="M20 8.5 A11.5 11.5 0 1 1 8.5 20" fill="none" stroke="var(--ink, #1F2A28)" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M37 20 A17 17 0 1 1 20 3" fill="none" stroke="var(--ink, #1F2A28)" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="20" cy="3" r="2.3" fill="var(--ink, #1F2A28)"/>
+</svg>

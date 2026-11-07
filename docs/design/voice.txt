@@ -1,0 +1,28 @@
+TrustWeb voice (on demand; loaded by a button in the styleguide, never with the page)
+SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+
+Tone
+  One person speaking to another, in sentence case. Plain verbs. Nothing sells, nothing cheers.
+  Warm by being specific, not by adjectives.
+
+Person
+  You and your people by name. The app never says "we", never "the system", never
+  "automatically". When something happened without the person doing it, say who or what caused
+  it: "Lena shared this with you."
+
+Buttons
+  Say what happens: "I can drive", "Ask Lena to introduce", "Share with first ring". The same
+  words carry through: a button "Share" ends in a line "Shared."
+
+Never
+  Scores, streaks, counts about a person, "trust level 3", badges, "verified", exclamation
+  marks, apologies in errors, "Oops". Private means invisible, so no "locked" or "restricted"
+  wording either.
+
+Empty and error states
+  An empty screen says what can happen here and offers the first step. An error says what went
+  wrong and the one thing to do next. Neither has a mood.
+
+Source
+  Design laws and ring vocabulary come from the UX decision log in the primary repo
+  (docs/10-ux-decisions.md). This text extends it; where they differ, the log wins.
