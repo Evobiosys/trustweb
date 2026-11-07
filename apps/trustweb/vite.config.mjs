@@ -15,6 +15,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { matchesReply } from './vite_matches.mjs'
+import { liveRecordReply } from './vite_dev_record.mjs'
 import { approveMergeRoute, diagnosticsFor, ghBin, jobQueue, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -199,6 +200,28 @@ function matchesApi() {
         res.statusCode = r.code
         if (r.body) res.setHeader('Content-Type', 'application/json')
         res.end(r.body ? JSON.stringify(r.body) : undefined)
+      })
+    },
+  }
+}
+
+// Dev only: every personal preview shares one record (src/dev_record_live.ts): GET/POST /__tw/dev-record <-> dev-record.live.json. The stock twin has neither route nor define.
+const devLive = (command) => (command === 'serve' && process.env.TW_DEV_RECORD && !process.env.TW_STOCK ? 'true' : 'null')
+function devRecordLiveApi() {
+  return {
+    name: 'trustweb-dev-record-live-api',
+    configureServer(server) {
+      if (devLive('serve') !== 'true') return
+      const file = process.env.TW_DEV_LIVE ?? path.join(os.homedir(), '.cache/trustweb-dev/dev-record.live.json')
+      server.middlewares.use('/__tw/dev-record', (req, res) => {
+        let text = ''
+        req.on('data', (c) => { text += c })
+        req.on('end', () => {
+          const r = liveRecordReply(file, req.method ?? '', req.headers, text)
+          res.statusCode = r.code
+          for (const [k, v] of Object.entries(r.headers)) res.setHeader(k, v)
+          res.end(r.body)
+        })
       })
     },
   }
@@ -393,8 +416,8 @@ export default ({ command }) => ({
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
     __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
-    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_RELEASE__: JSON.stringify(releaseId()), __TW_BUILT_AT__: JSON.stringify(BUILT_AT), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_DEV_MATCHES__: devMatches(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
-  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi(), eventsApi(), matchesApi()] : [])],
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_RELEASE__: JSON.stringify(releaseId()), __TW_BUILT_AT__: JSON.stringify(BUILT_AT), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_DEV_MATCHES__: devMatches(command), __TW_DEV_LIVE__: devLive(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
+  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi(), eventsApi(), matchesApi(), devRecordLiveApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,

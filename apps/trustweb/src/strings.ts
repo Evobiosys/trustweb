@@ -3152,4 +3152,7 @@ export const S = {
   keepQuiet: 'Gone quiet',
   mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
   keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
+  // Wave 36 dev-record-carry (personal previews only)
+  devRecordSynced: (time: string) => `Personal preview record synced ${time}`,
+  devRecordNotYet: 'Personal preview record not synced yet',
 } as const
