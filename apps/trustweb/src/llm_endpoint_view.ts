@@ -5,7 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { activeEndpoint, apiBase, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
-import { askEndpoint, configured, switchPreset } from './llm_endpoint'
+import { configured, switchPreset, testEndpoint, testResultLines } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
 
@@ -125,7 +125,7 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
 
   const byokGroup = (): HTMLElement => {
     const cur = ai().preset
-    const result = el('p', { class: 'meta', 'data-ai-result': '' })
+    const result = el('div', { class: 'ai-test-result', 'data-ai-test-result': '', role: 'status' })
     return el('div', { class: 'ai-group', 'data-ai-group': 'byok' }, [
       el('h5', { class: 'eyebrow' }, [S.aiByokTitle]),
       ...BYOK.map((p) => el('button', {
@@ -138,9 +138,9 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
         el('button', {
           class: 'btn btn-ghost btn-sm', 'data-ai-test': '1',
           onclick: async () => {
-            if (!configured(h.state().advanced?.ai)) { result.textContent = S.aiNotSet; return }
-            result.textContent = S.aiTesting
-            try { await askEndpoint(ai(), 'I want to play padel'); result.textContent = S.aiOk } catch (e) { result.textContent = S.aiError((e as Error).message) }
+            if (!configured(h.state().advanced?.ai)) { result.replaceChildren(el('p', { class: 'meta' }, [S.aiNotSet])); return }
+            result.replaceChildren(el('p', { class: 'meta' }, [S.aiTesting]))
+            result.replaceChildren(...testResultLines(await testEndpoint(ai())).map((l) => el('p', { class: `ai-test-${l.kind}${l.ok === undefined ? '' : l.ok ? ' ok' : ' bad'}`, 'data-ai-test-line': l.kind }, [(l.kind === 'status' ? (l.ok ? '✓ ' : '✗ ') : '') + l.text])))
           },
         }, [S.aiTest]),
         result,

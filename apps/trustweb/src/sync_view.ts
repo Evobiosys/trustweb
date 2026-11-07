@@ -488,7 +488,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     const keep = (kept: Person, dropped: Person): Promise<void> => mergeNow(kept.id, dropped.id).then(back)
     // Wave 36: optional choice. The suggestion is pre-selected and applies by itself after 3-2-1; tapping a row applies that one at once.
     const suggested = suggestKeep(a, b)
-    const counter = el('p', { class: 'meta keep-countdown', 'data-keep-countdown': '3', 'aria-live': 'polite' }, [S.keepCountdown(suggested.name, 3)])
+    const num = el('span', { class: 'countdown-num' }, ['3'])
+    const counter = el('p', { class: 'meta keep-countdown', 'data-keep-countdown': '3', 'aria-live': 'polite' }, [S.keepCountdownLead(suggested.name), ' ', num])
     const countdown = createCountdown()
     let ticker: number | undefined
     const stop = (): void => { clearInterval(ticker); countdown.cancel() }
@@ -509,7 +510,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       const t = countdown.tick(performance.now())
       if (t.fire) { stop(); void keep(suggested, suggested === a ? b : a); return }
       counter.setAttribute('data-keep-countdown', String(t.secondsLeft))
-      counter.textContent = S.keepCountdown(suggested.name, t.secondsLeft)
+      num.textContent = String(t.secondsLeft)
     }, 200)
   }
 
