@@ -327,6 +327,15 @@ class ThreeSites(unittest.TestCase):
                         self.assertIn(f'href="{url}"', footer)
             self.assertEqual(html.count("with love from Vienna"), 1)
 
+    def test_org_keeps_the_ecosystem_and_no_site_has_the_lineage(self) -> None:
+        org = (self.tmp / "trustintheweb-org" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="ecosystem"', org)
+        section = org.split('id="ecosystem"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(section.count('class="ecocard"'), 5)
+        for d, p, html in self.pages():
+            with self.subTest(site=d, page=p.name):
+                self.assertNotIn('id="lineage"', html)
+
     def test_roles(self) -> None:
         one = (self.tmp / "trustweb-one" / "index.html").read_text(encoding="utf-8")
         for needle in ('href="https://app.trustweb.one/"', 'href="https://app.trustweb.one/?install=1"', 'href="https://app.trustweb.one/demo/"'):

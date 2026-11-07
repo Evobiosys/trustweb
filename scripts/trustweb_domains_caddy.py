@@ -29,6 +29,11 @@ Transforms
                       Refused unless the app.trustweb.one block exists. app-trustweb-one turns a redirect catch-all in the .org
                       block back into the file_server for the .one block, so a rerun never copies the redirect onto the new host.
 
+  site-trustweb-one   (wave 36 sites-three-2, Jakob 2026-11-07 go-live) trustweb.one stops redirecting to trustintheweb.org and serves
+                      /srv/questhub-static/trustweb-one (the static site). Edits only inside the live block: /apk, /slides, the username
+                      route (now yielding to a real page of that name) and the error pages stay; the `redir @rest` line becomes root +
+                      tw_static_site; www.trustweb.one gets its own block, 301 to the apex.
+
   python3 -I -B scripts/trustweb_domains_caddy.py --in live --parity   exits 1 and prints the diff when the two app
                       blocks differ in anything but host, marker and the page catch-all (the evidence for "modelled exactly").
 """
@@ -43,6 +48,7 @@ from enum import Enum
 QUESTHUB_STATIC = "/srv/questhub-static"
 SITE_ORG_DIR = f"{QUESTHUB_STATIC}/trustintheweb-org"
 SITE_COM_DIR = f"{QUESTHUB_STATIC}/trustintheweb-com"
+SITE_ONE_DIR = f"{QUESTHUB_STATIC}/trustweb-one"
 APP_DIR = f"{QUESTHUB_STATIC}/app-trustintheweb"
 APP_ONE_DIR = f"{QUESTHUB_STATIC}/app-trustweb-one"
 BACKUP_UPSTREAM = "127.0.0.1:8960"
@@ -51,6 +57,8 @@ RELAY_UPSTREAM = "127.0.0.1:4177"
 SITES_MARKER = "# --- TrustInTheWeb domains (wave 3, scripts/trustweb_domains.sh) ---"
 IDEA2_MARKER = "# TrustInTheWeb migration (wave 3, 2026-10-07):"
 EVOBIOSYS_MARKER = "# TrustInTheWeb (wave 3, 2026-10-07):"
+SITE_ONE_HEAD_OLD = "trustweb.one, www.trustweb.one {"
+SITE_ONE_MARKER = "# trustweb.one (wave 36 sites-three-2, Jakob 2026-11-07): the static site; www goes to the apex."
 APP_ONE_HEAD = "app.trustweb.one {"
 APP_ORG_HEAD = "app.trustintheweb.org {"
 DEMO_ONE_HEAD = "demo.trustweb.one {"
@@ -72,6 +80,7 @@ class Transform(str, Enum):
     APP_TRUSTWEB_ONE = "app-trustweb-one"
     DEMO_TRUSTWEB_ONE = "demo-trustweb-one"
     APP_ORG_REDIRECT = "app-org-redirect"
+    SITE_TRUSTWEB_ONE = "site-trustweb-one"
 
 
 # Static sites get the header set of the hardened sites on this server (transparent.news, 2026-10-06):
@@ -399,6 +408,38 @@ def app_org_redirect(text: str) -> str:
     return text[:start] + block.replace(ORG_SERVE_CATCHALL, ORG_REDIRECT_CATCHALL) + text[end:]
 
 
+SITE_ONE_USER_OLD = "\t\tnot path /slides /slides/*\n\t}\n"
+SITE_ONE_USER_NEW = (
+    "\t\tnot path /slides /slides/*\n"
+    "\t\t# a real page of that name (privacy, faq ...) wins over the person, like on trustintheweb.org\n"
+    "\t\tnot file {\n"
+    "\t\t\ttry_files {path} {path}.html {path}/index.html\n"
+    "\t\t}\n"
+    "\t}\n"
+)
+SITE_ONE_REST_OLD = "\t@rest not path /slides /slides/*\n\tredir @rest https://trustintheweb.org{uri} permanent\n"
+SITE_ONE_REST_NEW = f"\troot * {SITE_ONE_DIR}\n\timport tw_static_site\n"
+SITE_ONE_WWW = f"""\
+www.trustweb.one {{
+	redir https://trustweb.one{{uri}} permanent
+}}
+"""
+
+
+def site_trustweb_one(text: str) -> str:
+    """The apex block serves the static site; the username route, /apk, /slides and the error pages stay."""
+    if SITE_ONE_MARKER in text:
+        return text
+    start, end = _site_block_span(text, SITE_ONE_HEAD_OLD)
+    block = text[start:end]
+    for old in (SITE_ONE_USER_OLD, SITE_ONE_REST_OLD):
+        if block.count(old) != 1:
+            raise TransformError(f"expected exactly one anchor in {SITE_ONE_HEAD_OLD!r}, found {block.count(old)}: {old.splitlines()[0]!r}")
+    block = block.replace(SITE_ONE_USER_OLD, SITE_ONE_USER_NEW).replace(SITE_ONE_REST_OLD, SITE_ONE_REST_NEW)
+    block = block.replace(SITE_ONE_HEAD_OLD, SITE_ONE_MARKER + "\ntrustweb.one {", 1)
+    return text[:start] + block + "\n" + SITE_ONE_WWW + text[end:]
+
+
 TRANSFORMS: dict[Transform, Callable[[str], str]] = {
     Transform.SITES: add_sites,
     Transform.IDEA2_REDIRECT: idea2_redirect,
@@ -406,6 +447,7 @@ TRANSFORMS: dict[Transform, Callable[[str], str]] = {
     Transform.APP_TRUSTWEB_ONE: add_app_trustweb_one,
     Transform.DEMO_TRUSTWEB_ONE: add_demo_trustweb_one,
     Transform.APP_ORG_REDIRECT: app_org_redirect,
+    Transform.SITE_TRUSTWEB_ONE: site_trustweb_one,
 }
 
 

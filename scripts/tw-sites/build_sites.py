@@ -82,7 +82,7 @@ PAGE_BY_NAME = {p.name: p for p in (*ts.ORG_PAGES, *ts.COM_PAGES)}
 FONT_FREE_PAGES = {"privacy", "data-policy"}  # all three sites fetch no font, so these say "your own device"
 
 HOME_FRAGMENTS = {
-    "org": ("sites/org-hero.html", "features.html", "@how-it-works", "game-phases.html", "use-cases.html", "for-ea-groups.html", "source-code.html", "about-us.html"),
+    "org": ("sites/org-hero.html", "features.html", "@how-it-works", "game-phases.html", "use-cases.html", "for-ea-groups.html", "sites/ecosystem.html", "source-code.html", "about-us.html"),
 }
 INDEX_META = {
     "org": ("Find people and things through people you trust", SPECS["org"].tagline),
