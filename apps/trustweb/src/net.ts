@@ -62,8 +62,9 @@ import { rank, threadStats } from './search_rank'
 import { createDrainLock, drainLockName } from './drain_lock'
 import type { DrainLock, LockManagerLike } from './drain_lock'
 import { directFlag, surfacesHere } from './direct_ask'
+import { introAskText, parseIntroTarget } from './intro_ask'
 import {
-  askerOf, askFields, askReachOf, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
+  askerOf, askFields, askReachOf, HOPS_DEFAULT, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
   mayCascade, RootMemory, sanitizeHopItems, seenHash, throughOf,
 } from './hops'
 import type { HopInfo } from './hops'
@@ -134,6 +135,8 @@ export interface IncomingAsk {
   through: string[]
   /** Wave 6: the front door that forwarded it (a travelling ask; `fromName` is then the person who asked the door). Null: none or an older door. */
   doorName: string | null
+  /** Wave 33: an intro ask: who or what the asker wants an introduction to (the card shows it whether or not anything matched). */
+  intro?: string
   /** Wave 6h: the answer moment on this phone's clock. */
   deadline: number
   /** Wave 6h: a yes after the moment reaches the asker as "answered later" (the ask carried its window, ask_window.ts). */
@@ -622,7 +625,9 @@ export class Net {
     const silent = repeat || cycle || quietEarlier || !surfacesHere(q)
     const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer), this.hooks.askerTags?.(peer))
     const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
-    const { surface } = classifyIncomingQuery(match, false, Boolean(text))
+    // Wave 33: an intro ask always reaches the person (the card names the target), whatever the matcher found: no silent PASS.
+    const intro = q.kind === 'intro' && !silent ? parseIntroTarget(q.target) : undefined
+    const surface = classifyIncomingQuery(match, false, Boolean(text)).surface || intro !== undefined
     const key = await this.pairKey(peer)
     // Passed on the moment it arrives, never waiting for the person here: the next step's answers are
     // in before this phone's own moment, whatever the person does.
@@ -652,7 +657,7 @@ export class Net {
       through: info.door ? [] : throughOf(info, peer.displayName),
       doorName: info.door ? peer.displayName : null,
       relayed: q.relayed === true && (info.door || !info.travels),
-      matches, receivedAt, deadline, lateMode, ...this.earlierFields(earlier, peer, receivedAt),
+      matches, receivedAt, deadline, lateMode, ...(intro ? { intro } : {}), ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, reply)
   }
 
@@ -707,7 +712,7 @@ export class Net {
     this.hooks.onAsk({
       qid: held.qid, fromName: held.fromName, text: held.text, matches: held.matches, receivedAt: held.receivedAt,
       relayed: held.relayed, through: held.through, doorName: held.doorName,
-      deadline: held.deadline, lateMode: held.lateMode, arrivedLate: held.arrivedLate === true,
+      deadline: held.deadline, lateMode: held.lateMode, arrivedLate: held.arrivedLate === true, ...(held.intro ? { intro: held.intro } : {}),
       askerPeerId: !held.relayed && held.doorName === null && held.through.length === 0 ? held.peerId : null,
       earlier: held.reaskOf !== undefined ? { at: held.earlierAt ?? null } : null,
       decide: async (share: boolean) => {
@@ -871,7 +876,8 @@ export class Net {
     if (!this.straightFromAsker(q, info, peer)) { this.handleAwayAsk(q, peer, info, text); return }
     const { threads, refs } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer), this.hooks.askerTags?.(peer))
     const match = matchAsk(text, threads)
-    if (!classifyIncomingQuery(match, false, true).surface) {
+    const intro = q.kind === 'intro' ? parseIntroTarget(q.target) : undefined
+    if (!intro && !classifyIncomingQuery(match, false, true).surface) {
       // Wave 6i: an earlier ask that came again and still matches nothing stays silent (no log row, no card).
       if (earlier) return
       const entry = this.log(peer, text, LogOutcome.NoMatch)
@@ -885,7 +891,7 @@ export class Net {
     const tplId = templateFor(text).id
     this.present({
       qid: q.qid, peerId: peer.id, text, fromName: peer.displayName, through: [], doorName: null, relayed: false,
-      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true, ...this.earlierFields(earlier, peer, receivedAt),
+      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true, ...(intro ? { intro } : {}), ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, this.replier(q.qid, tplId, peer, key, receivedAt, receivedAt, Promise.resolve(NO_HARVEST)))
   }
 
@@ -1042,6 +1048,25 @@ export class Net {
       this.hooks.save()
     }
     return results
+  }
+
+  /**
+   * Wave 33 (intro_ask.ts): "ask <name> for an intro". One ordinary ask to ONE connected peer, direct only, carrying kind 'intro' and the target;
+   * the readable request is its free text, so an older build shows an ordinary ask. Resolves null when the person is not a connected peer.
+   */
+  async askIntro(peerId: string, targetText: string): Promise<AskResult | null> {
+    const target = parseIntroTarget(targetText)
+    await this.start()
+    const s = this.hooks.state()
+    const peer = askPeers(s).find((p) => p.id === peerId)
+    if (!target || !peer) return null
+    const root = randomId(12)
+    const qid = randomId(12)
+    const text = introAskText(target)
+    const extra: Partial<QueryEnvelope> = { ...directFlag(true), kind: 'intro', target, ...askFields(HOPS_DEFAULT, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs) }
+    s.sentAsks = addSentAsk(s.sentAsks, { id: root, text, at: Date.now(), to: [{ peerId: peer.id, qid }] }, Date.now())
+    this.hooks.save()
+    return { peerId: peer.id, peerName: peer.displayName, qid, decoded: await this.sendAsk(peer, text, extra, askTimeoutMs(HOPS_DEFAULT, this.windowMs), qid) }
   }
 
   // -------------------------------------------------------------------------

@@ -33,7 +33,8 @@ function recipients(io: SupportIo, widest: Ring): { peer: Peer; name: string }[]
     .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name }))
 }
 
-export function supportSheet(io: SupportIo): void {
+/** The send form: the sheet and the Ask dock both show it; `sent` runs after a send. */
+export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
   let widest: Ring = Ring.Closest
   const chosen = new Set<string>()
   let window: SupportWindow = SupportWindow.Today
@@ -43,7 +44,6 @@ export function supportSheet(io: SupportIo): void {
     const to = recipients(io, widest)
     const num = emergencyNumber(navigator.language)
     body.replaceChildren(
-      el('h3', {}, [S.supportTitle]),
       el('p', { class: 'chips-lbl' }, [S.supportWho]),
       el('div', { class: 'chips' }, WIDEST.map((r) => el('button', {
         class: 'chip' + (r === widest ? ' on' : ''), type: 'button', 'data-support-ring': r, 'aria-pressed': String(r === widest),
@@ -72,31 +72,28 @@ export function supportSheet(io: SupportIo): void {
     io.save()
     const text = supportText(io.appUrl, ask)
     for (const t of to) void io.send(t.peer, text).catch(() => { /* the card shows who answered; nobody else is told */ })
-    io.closeSheet()
+    sent()
     io.toast(S.supportSent(to.length))
     io.render()
   }
   draw()
-  io.openSheet([body])
+  return body
 }
 
-/** The second big button next to the question box. */
-export function supportButton(io: SupportIo): HTMLElement {
-  return el('button', { class: 'btn btn-ghost wide', type: 'button', 'data-support-ask': '', onclick: () => supportSheet(io) }, [S.supportBtn])
+export function supportSheet(io: SupportIo): void {
+  io.openSheet([el('h3', {}, [S.supportTitle]), supportForm(io, io.closeSheet)])
 }
 
-/** The small underlined line under the rings, with the sender's open ask and who answered. */
-export function supportLine(io: SupportIo): HTMLElement {
+/** The small underlined line under the rings, only while the sender has an ask open: until when and who answered. */
+export function supportLine(io: SupportIo): HTMLElement | null {
   const s = io.st()
   const now = Date.now()
   const mine = openAsks(s.supportAsks, now)[0]
   const name = (id: string): string => s.people.find((p) => p.peerId === id)?.name ?? s.peers.find((p) => p.id === id)?.displayName ?? ''
-  return el('div', { class: 'support-line' }, [
-    el('button', { class: 'link-name', type: 'button', 'data-support-line': '', onclick: () => supportSheet(io) }, [S.supportLine]),
-    mine ? el('p', { class: 'hint', 'data-support-mine': mine.id }, [
-      S.supportOpenUntil(new Date(mine.until).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })) + ' ',
-      mine.here.length ? S.supportHereNames(mine.here.map(name).filter(Boolean).join(', ')) : S.supportNobodyYet,
-    ]) : null,
+  if (!mine) return null
+  return el('p', { class: 'hint support-line', 'data-support-line': '', 'data-support-mine': mine.id }, [
+    S.supportOpenUntil(new Date(mine.until).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })) + ' ',
+    mine.here.length ? S.supportHereNames(mine.here.map(name).filter(Boolean).join(', ')) : S.supportNobodyYet,
   ])
 }
 

@@ -137,3 +137,12 @@ export function emergencyNumber(locale: string | undefined): string {
   const region = locale?.split('-')[1]?.toUpperCase()
   return (region && LOCAL_NUMBER[region]) || '112'
 }
+
+/** The three things the ask dock can do: ask for hints (a question to the web), for support, or for intros. */
+export const AskMode = { Hints: 'hints', Support: 'support', Intros: 'intros' } as const
+export type AskMode = (typeof AskMode)[keyof typeof AskMode]
+export const ASK_MODES: readonly AskMode[] = [AskMode.Support, AskMode.Hints, AskMode.Intros]
+
+export function nextAskMode(mode: unknown): AskMode {
+  return ASK_MODES.find((m) => m === mode) ?? AskMode.Hints
+}
