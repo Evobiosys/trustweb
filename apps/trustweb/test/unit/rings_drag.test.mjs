@@ -146,6 +146,13 @@ describe('rings drag', () => {
       spaceOut(s)
       expect([s.people[3].angle, s.people[4].angle]).toEqual([5, 185])
     })
+    it('spaceOut skips people in the expanse', () => {
+      const s = { expanse: ['b'], people: [at('a', Ring.Close, 0), at('b', Ring.Close, 10), at('c', Ring.Close, 20)] }
+      const before = spaceOut(s)
+      expect([...before.keys()].sort()).toEqual(['a', 'c'])
+      expect(s.people[1].angle).toBe(10)
+      expect(s.people[2].angle).toBe(180)
+    })
     it('restoreAngles puts every angle back, including none', () => {
       const s = { people: [at('a', Ring.Close, 300), at('b', Ring.Close)] }
       restoreAngles(s, spaceOut(s))

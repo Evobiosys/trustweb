@@ -3,6 +3,8 @@
 import { el } from '../../demo/src/ui/dom'
 import type { ColourTag } from './colour_tags'
 import { Ring } from './model'
+import type { ConnectedPlace } from './connected_places'
+import { ICONS } from './icons'
 import type { Person } from './model'
 import { S } from './strings'
 import { andSep, type VisibleCategory } from './zone_visibility'
@@ -38,6 +40,8 @@ export interface SmallCardDeps {
   onPin: () => void
   /** The picture slot (card_pages_view.ts cardFace): the button left of the name, its menu under the name row. Absent: none. */
   face?: { button: HTMLElement; menu: HTMLElement }
+  /** The places this person is connected with me, an icon each under the name (connected_places.ts). Absent or empty: no row. */
+  places?: readonly ConnectedPlace[]
   /** The QR code of this person: top right, small and extended alike. */
   onQr?: () => void
   /** The zones the person can move to; the ring chip and the "visible to" line open them. */
@@ -128,6 +132,19 @@ function sharesLine(d: SmallCardDeps): HTMLElement {
   return el('div', {}, [box, list])
 }
 
+/** One small icon per place (data-connected-on): a link where the channel opens, else a plain symbol; the name is its tooltip and aria-label. */
+export function connectedOnRow(places: readonly ConnectedPlace[]): HTMLElement | null {
+  if (!places.length) return null
+  return el('div', { class: 'msg-glyphs connected-on', 'data-connected-on': '' }, places.map((pl) => {
+    const attrs = { class: 'msg-glyph', 'data-connected-place': pl.id, 'aria-label': pl.label, title: pl.label }
+    const node = pl.href
+      ? el('a', { ...attrs, href: pl.href, ...(pl.href.startsWith('https:') ? { target: '_blank', rel: 'noopener noreferrer' } : {}) })
+      : el('span', { ...attrs, role: 'img' })
+    node.innerHTML = ICONS[pl.icon] ?? ICONS.web
+    return node
+  }))
+}
+
 /** The "Inventory" button and the panel it opens: what we know they have, and a form to add a line. */
 function inventoryPanel(id: string, inv: NonNullable<SmallCardDeps['inventory']>): HTMLElement {
   const host = el('div', { class: 'card-inventory', 'data-card-inventory-panel': id, hidden: true })
@@ -156,6 +173,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
       d.onQr ? el('button', { class: 'btn btn-ghost btn-sm', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, title: S.qrShowAria, onclick: d.onQr }, [S.qrPageTitle]) : null]),
     d.face?.menu,
+    d.places ? connectedOnRow(d.places) : null,
     el('div', { 'data-chat-row': '' }, [d.chat]),
     el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
     picker,

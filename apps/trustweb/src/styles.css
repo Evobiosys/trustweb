@@ -176,6 +176,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .card-shares{font-size:12.5px; color:var(--ink-soft)}
 .msg-glyphs{display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 0}
 .msg-glyph{display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; border:1.5px solid var(--teal); border-radius:8px; background:none; color:var(--teal); cursor:pointer; text-decoration:none}
+.connected-on .msg-glyph{width:24px; height:24px; border-radius:6px; cursor:default}
+.connected-on a.msg-glyph{cursor:pointer}
+.connected-on .msg-glyph svg{width:15px; height:15px}
 .msg-glyph.linked{border-style:dashed; color:var(--ink-soft); border-color:var(--ink-soft)}
 .msg-glyph svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2}
 .tl-head{display:flex; align-items:center; gap:6px}
@@ -1367,6 +1370,12 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .card-res-btn,.card-res-add{background:none; border:0; padding:0 2px; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
 .card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}
 
+/* Wave 32: the expanse control (drop a dot on it to hide the dot) and its count badge */
+.expanse-drop{position:absolute; top:4px; right:4px; z-index:4; width:32px; height:32px; padding:0; border:2px solid #e8750a; border-radius:50%; background:#fff3e6; color:#3a1d00; font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
+.expanse-drop.drop{background:#e8750a; color:#fff; transform:scale(1.2)}
+.expanse-count{position:absolute; top:-6px; right:-6px; min-width:16px; height:16px; padding:0 3px; box-sizing:border-box; border-radius:8px; background:#e8750a; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center}
+.expanse-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0}
+.expanse-row span{min-width:0; overflow-wrap:anywhere}
 /* Wave 30 (person-share-link): the text button is underlined; the received box wraps on a 360 px screen */
 .card-share-link .btn{text-decoration:underline}
 .person-share{margin-top:8px; overflow-wrap:anywhere; text-align:left}
