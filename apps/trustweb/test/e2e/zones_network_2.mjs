@@ -28,7 +28,7 @@ try {
 
     // ---- TrustZones: the sidebar only
     check(`${name}: sidebar unfolded by default, left of / above the rings`, (await page.locator('[data-zone-side-toggle]').getAttribute('aria-expanded')) === 'true')
-    check(`${name}: sidebar holds add, tag filters (expand all sits in the bottom row)`, (await page.locator('[data-zone-side] [data-expand]').count()) === 0 && (await page.locator('[data-expand-row] [data-expand]').count()) === 1 && (await page.locator('[data-zone-side] [data-add-node]').count()) === 1 && (await page.locator('[data-zone-side] [data-zone-tag-filters]').count()) === 1)
+    check(`${name}: sidebar holds expand all, add, tag filters`, (await page.locator('[data-zone-side] [data-expand]').count()) === 1 && (await page.locator('[data-zone-side] [data-add-node]').count()) === 1 && (await page.locator('[data-zone-side] [data-zone-tag-filters]').count()) === 1)
     check(`${name}: nothing else (no old filter block, no zone lists, no legend)`, (await page.locator('[data-zone-filter-section], [data-zone-panel], [data-zone-legend-i], [data-zone-community]').count()) === 0)
     check(`${name}: ring fill control is the expand glyph`, (await page.locator('[data-membrane-more]').first().innerText()).trim() === '⛶')
     const dots = () => page.locator('.rings-wrap .node:not(.you)').count()

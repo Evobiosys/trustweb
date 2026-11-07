@@ -138,11 +138,11 @@ export function emergencyNumber(locale: string | undefined): string {
   return (region && LOCAL_NUMBER[region]) || '112'
 }
 
-/** The two things the ask dock can send: a question to the web, or a call for support. */
-export const AskMode = { Web: 'web', Support: 'support' } as const
+/** The three things the ask dock can do: ask for hints (a question to the web), for support, or for intros. */
+export const AskMode = { Hints: 'hints', Support: 'support', Intros: 'intros' } as const
 export type AskMode = (typeof AskMode)[keyof typeof AskMode]
-export const ASK_MODES: readonly AskMode[] = [AskMode.Web, AskMode.Support]
+export const ASK_MODES: readonly AskMode[] = [AskMode.Support, AskMode.Hints, AskMode.Intros]
 
 export function nextAskMode(mode: unknown): AskMode {
-  return mode === AskMode.Support ? AskMode.Support : AskMode.Web
+  return ASK_MODES.find((m) => m === mode) ?? AskMode.Hints
 }
