@@ -7,7 +7,7 @@ describe('trust zones ladder', () => {
     expect(RINGS).toEqual([Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending])
   })
   it('labels the zones with the ladder words', () => {
-    expect(RINGS.map((r) => S.ringLabel[r])).toEqual(['Closest few', 'Close friends and allies', 'Friends & acquainted community members', 'Acquaintances', 'Intending'])
+    expect(RINGS.map((r) => S.ringLabel[r])).toEqual(['Closest few', 'Close friends and allies', 'Friends & acquainted community members', 'Acquaintances', 'Intending to connect'])
     expect(S.ringHint[Ring.Closest]).toBe('the few you would call at 3 am')
     expect(S.ringHint[Ring.Intending]).toBe('not yet acquainted: you intend to connect or reached out')
   })

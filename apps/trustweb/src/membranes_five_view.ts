@@ -236,8 +236,8 @@ export function zoneTagsRow(zone: string, tags: readonly ColourTag[], suggest: (
 /** The names of everyone in one membrane, shown while hovering or holding its diamond. */
 export function membraneAll(zone: string, people: readonly Person[]): HTMLElement {
   return el('div', { class: 'membrane-all', 'data-membrane-all': '', role: 'status' }, [
-    el('b', {}, [S.membraneAllTitle(zone)]),
-    el('span', {}, [people.map((p) => p.name).join(', ')]),
+    el('b', {}, [zone]),
+    el('span', {}, [S.ringCardEveryone(people.map((p) => p.name).join(', '))]),
   ])
 }
 
@@ -290,8 +290,9 @@ export function ringCard(zone: string, people: readonly Person[], d: RingCardDep
     show()
     return host
   }
-  return el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.membraneAllTitle(zone), onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation() } }, [
-    el('b', {}, [S.membraneAllTitle(zone)]),
+  return el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.ringCardAria(zone, people.map((p) => p.name).join(', ')), onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation() } }, [
+    el('b', {}, [zone]),
+    el('span', { class: 'ring-card-everyone' }, [S.ringCardEveryone('').trimEnd()]),
     ...people.map(row),
   ])
 }

@@ -10,7 +10,7 @@ describe('rings filter', () => {
   it('lists every ring of the ladder exactly once, innermost first, with the existing labels', () => {
     expect(FILTER_RINGS).toEqual([Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, Ring.Unsorted])
     expect(new Set(FILTER_RINGS).size).toBe(FILTER_RINGS.length)
-    expect(FILTER_RINGS.map((r) => S.ringLabel[r])).toEqual(['Closest few', 'Close friends and allies', 'Friends & acquainted community members', 'Acquaintances', 'Intending', 'Not yet sorted'])
+    expect(FILTER_RINGS.map((r) => S.ringLabel[r])).toEqual(['Closest few', 'Close friends and allies', 'Friends & acquainted community members', 'Acquaintances', 'Intending to connect', 'Not yet sorted'])
   })
   it('every ring is shown by default', () => {
     for (const r of FILTER_RINGS) expect(ringShown({}, r)).toBe(true)
