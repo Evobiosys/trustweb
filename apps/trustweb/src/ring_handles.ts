@@ -55,3 +55,13 @@ export const EXPAND_DX = TAB_PITCH
 /** Wave 33: the diamonds' ONE column: `count` row centres on x = `centre`, the first at the bottom edge of the `size` square, each next one `HANDLE + 4` px higher (toward the centre). */
 export const chainPoints = (count: number, centre: number, size: number): Point[] =>
   Array.from({ length: count }, (_, i) => ({ left: centre, top: size - HANDLE / 2 - 2 - i * TAB_PITCH }))
+
+/** Wave 34: each ring's diamond ON its drawn line at 6 o'clock: `radii` innermost first (layout px), scaled by `k`; the innermost is topmost, an outer one is pushed down just far enough to keep a diamond's pitch from the one above. */
+export const ringPoints = (radii: readonly number[], centre: number, k: number, handle: number): Point[] => {
+  let prev = -Infinity
+  return radii.map((r) => {
+    const top = Math.max(centre + r * k, prev + handle + 4)
+    prev = top
+    return { left: centre, top }
+  })
+}

@@ -12,7 +12,7 @@ import { isBlocked, isNonResponsive } from './non_responsive'
 import { DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry, Spot } from './rings_layout'
 import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, visiblePeople } from './rings_hide'
-import { chainPoints, EXPAND_DX, HANDLE } from './ring_handles'
+import { EXPAND_DX, HANDLE, ringPoints } from './ring_handles'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { isConnected } from './card_view'
 import { HintId, isDemoPerson, Ring, RINGS, REACH_OUT_INK, ringColor } from './model'
@@ -22,7 +22,7 @@ import type { Curator, LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { bringAllBack, bringBack, expanseList, hideInExpanse, hitControls, visibleIn } from './expanse'
 import { shortLabel } from './short_label'
-import { closest150, limitOf, pickFive, withTag } from './membranes_five'
+import { closest150, closestLimit, effectiveLimit, pickFive, withTag } from './membranes_five'
 import { communityOf, filledRings, isArchived, inZones, toggleRing, toneVar, zoneFor } from './trustzones'
 import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
@@ -157,7 +157,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     // Wave 33: "closest 150" keeps the 150 closest across all rings (ring membership unchanged) and draws them all.
     const only150 = !desk && s.uiRings?.closest150 === true
     if (only150) {
-      const keep = new Set(closest150(Object.values(everyone).flat(), s, Date.now()).map((p) => p.id))
+      const keep = new Set(closest150(Object.values(everyone).flat(), s, Date.now(), closestLimit(s.uiRings)).map((p) => p.id))
       for (const r of Object.keys(everyone) as Ring[]) everyone[r] = everyone[r]!.filter((p) => keep.has(p.id))
     }
     // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
@@ -168,7 +168,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     for (const [r, ps] of Object.entries(everyone) as [Ring, Person[]][]) {
       if (complete) { members[r] = ps; continue }
       // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
-      const f = pickFive(withTag(ps, deps.tagFilter()), s, filled.includes(r) ? Infinity : limitOf(s), Date.now())
+      const f = pickFive(withTag(ps, deps.tagFilter()), s, filled.includes(r) ? Infinity : effectiveLimit(s.uiRings, s), Date.now())
       members[r] = f.shown; rest[r] = f.rest
     }
     // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
@@ -215,10 +215,11 @@ export function createWebView(deps: WebViewDeps): WebView {
       svg.appendChild(t)
     }
     wrap.appendChild(svg)
-    // Wave 33: the control column at the bottom edge, growing upward at the centre: one row per ring, outermost first: its diamond (hide) and, right beside it, its ⛶ (expand the rest).
-    const rows = [...ringsGeo.rings].reverse().map((r, i) => ({
-      ring: r, at: chainPoints(ringsGeo.rings.length, C, RINGS_SIZE)[i],
-      more: !desk && !hidden.has(r) && !complete && Boolean(rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s),
+    // Wave 34: each ring's diamond (hide) sits ON its drawn line at 6 o'clock, innermost topmost; the ⛶ (expand the rest) beside it only when Filters ask for it.
+    const diamondAt = ringPoints(ringsGeo.rings.map((r) => ringsGeo.radius[r]), C, k, HANDLE)
+    const rows = ringsGeo.rings.map((r, i) => ({
+      ring: r, at: diamondAt[i],
+      more: s.uiRings?.expandButtons === true && !desk && !hidden.has(r) && !complete && Boolean(rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > effectiveLimit(s.uiRings, s),
     }))
     const controls: Spot[] = rows.flatMap((w) => [{ x: w.at.left, y: w.at.top, r: HANDLE / 2 }, ...(w.more ? [{ x: w.at.left + EXPAND_DX, y: w.at.top, r: HANDLE / 2 }] : [])])
     // Dots never overlap each other or a control: each is drawn at the nearest free angle on its lap (stored angles stay).
