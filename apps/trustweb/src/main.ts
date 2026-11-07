@@ -37,6 +37,7 @@ import type { SupportIo } from './support_ask_view'
 import { ASK_MODES, AskMode, nextAskMode, parseHereText, parseSupportText, recordHere } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
+import { PROVIDERS, guessProvider, validateEmail, composeHref, senderHint, providerLabel, type PrimaryEmail } from './primary_email'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -6301,6 +6302,7 @@ function editNameSheet(fromWeb = false): void {
     name,
     el('p', { class: 'meta' }, [S.meNameHint]),
     el('button', { class: 'btn btn-electric', onclick: saveName }, [S.meNameSave]),
+    ...ownEmailLines(s.me.primaryEmail),
     // Tapped in the Web view: a line, then the section for the web itself.
     ...(fromWeb ? [
       el('hr', { class: 'sheet-line' }),
@@ -6310,6 +6312,50 @@ function editNameSheet(fromWeb = false): void {
   ])
   name.focus()
   name.select()
+}
+
+/** Wave 33: the own card shows the primary email (local only) with a compose link and the sender hint. */
+function ownEmailLines(e: PrimaryEmail | undefined): Node[] {
+  if (!e) return []
+  return [el('p', { class: 'meta own-email', 'data-own-email': '1' }, [
+    `${e.address} · `, el('a', { href: composeHref(e), target: '_blank', rel: 'noopener noreferrer', 'data-own-email-compose': '1' }, [S.primaryEmailOpenIn(providerLabel(e.provider))]),
+    el('br'), senderHint(e),
+  ])]
+}
+
+/** Wave 33: Settings > You > Primary email address: provider list (owner order) + address. */
+function editEmailSheet(): void {
+  const s = st()
+  const cur = s.me.primaryEmail
+  let provider = cur?.provider ?? PROVIDERS[0].id
+  let picked = Boolean(cur)
+  const address = el('input', { class: 'field', type: 'email', autocomplete: 'email', 'aria-label': S.setPrimaryEmailAddress, value: cur?.address ?? '', 'data-email-address': '1' })
+  const list = el('div', { class: 'radios' }, [])
+  const draw = (): void => {
+    list.replaceChildren(...PROVIDERS.map((p) => el('button', {
+      class: 'radio' + (p.id === provider ? ' on' : ''), 'aria-pressed': String(p.id === provider), 'data-email-provider': p.id,
+      onclick: () => { provider = p.id; picked = true; draw() },
+    }, [el('b', {}, [p.label])])))
+  }
+  draw()
+  // Typing an address nobody picked a provider for guesses it from the domain.
+  address.addEventListener('input', () => { if (!picked) { provider = guessProvider(address.value); draw() } })
+  const saveEmail = (): void => {
+    const a = validateEmail(address.value)
+    if (!a) { toast(S.setPrimaryEmailBad); address.focus(); return }
+    s.me.primaryEmail = { provider, address: a }
+    save(); closeSheet(); settingsSheet(); toast(S.setPrimaryEmailSaved)
+  }
+  address.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') saveEmail() })
+  openSheet([
+    el('h3', {}, [S.setPrimaryEmail]),
+    list, address,
+    el('p', { class: 'meta' }, [S.setPrimaryEmailHint]),
+    el('p', { class: 'meta' }, [S.setPrimaryEmailSenderNote]),
+    el('button', { class: 'btn btn-electric', 'data-email-save': '1', onclick: saveEmail }, [S.setPrimaryEmailSave]),
+    ...(cur ? [el('button', { class: 'btn btn-ghost', 'data-email-clear': '1', onclick: () => { delete s.me.primaryEmail; save(); closeSheet(); settingsSheet(); toast(S.setPrimaryEmailCleared) } }, [S.setPrimaryEmailClear])] : []),
+  ])
+  address.focus()
 }
 
 /**
@@ -6575,6 +6621,9 @@ function settingsSheet(): void {
     settingsSection('you', S.setSecYou, [
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
+      ]),
+      el('button', { class: 'conn-row', 'data-primary-email': '1', onclick: () => editEmailSheet() }, [
+        el('b', {}, [S.setPrimaryEmail]), el('span', {}, [s.me.primaryEmail ? `${providerLabel(s.me.primaryEmail.provider)} · ${s.me.primaryEmail.address}` : S.setPrimaryEmailNotSet]), el('em', {}, [S.setYourNameEdit]),
       ]),
       linkButton(namesSync().names().name, () => openLinkChange(linkHooks)),
       connectionRow(),

@@ -23,6 +23,9 @@ const MESSENGER_USER = /^[a-z0-9.]{5,50}$/i
 /** An address only: no ? # & = / anywhere, so a value (also one another phone sent) can never carry mailto: parameters such as a prefilled body. */
 const EMAIL = /^[^\s@?#&=/]+@[^\s@?#&=/]+\.[a-z]{2,}$/i
 
+/** True for a bare address (wave 33, primary email). */
+export const isEmailAddress = (v: string): boolean => EMAIL.test(v)
+
 function linkOn(input: string, hosts: readonly string[]): URL | null {
   try {
     const u = new URL(input.trim())
