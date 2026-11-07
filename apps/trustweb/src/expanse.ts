@@ -31,3 +31,10 @@ export function expanseList(s: Held & { people: readonly Person[] }): Person[] {
 /** Whether a pointer at (x, y) is over a control's box. */
 export const overControl = (b: { left: number; top: number; right: number; bottom: number }, x: number, y: number): boolean =>
   x >= b.left && x <= b.right && y >= b.top && y <= b.bottom
+
+/** The control under a pointer at (x, y) among the bottom row's boxes (expanse control and every ring's ⛶), or null. */
+export const hitControls = <T extends { left: number; top: number; right: number; bottom: number }>(boxes: readonly T[], x: number, y: number): T | null =>
+  boxes.find((b) => overControl(b, x, y)) ?? null
+
+/** People still on the rings: the hidden ones leave before any "closest five" is picked. */
+export const visibleIn = <P extends { id: string }>(s: Held, people: readonly P[]): P[] => people.filter((p) => !inExpanse(s, p.id))
