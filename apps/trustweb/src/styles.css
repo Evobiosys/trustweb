@@ -1539,3 +1539,8 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .ai-test-status.bad{color:var(--warm-deep)}
 .ai-test-raw{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; white-space:pre-wrap; background:var(--tint-teal); border-radius:8px; padding:6px 8px}
 .ai-test-hint{font-size:12.5px; color:var(--ink-soft)}
+
+/* wave 36b channel-readers */
+.readers-row{flex-wrap:wrap; gap:var(--s-2)}
+.readers .link-btn{background:none; border:0; padding:var(--s-1) 0; color:var(--ink); font:inherit; text-decoration:underline; cursor:pointer}
+.readers-provider{display:flex; align-items:center; gap:var(--s-2); padding:var(--s-2) 0}

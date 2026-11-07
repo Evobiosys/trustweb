@@ -289,6 +289,8 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
 import { aiSettings } from './llm_endpoint_view'
+import { ownChannels } from './channel_readers'
+import { readersBlock } from './channel_readers_view'
 import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
@@ -6844,6 +6846,7 @@ function settingsSheet(): void {
       onclick: () => { removeDemoContent(); settingsSheet() },
     }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
+    readersBlock({ state: st, save, redraw: settingsSheet, openSheet: (c) => openSheet(c), toast }),
     el('div', { 'data-blocked-list': '1' }, [
       el('b', {}, [S.blockedTitle]),
       ...(s.people.some(isBlocked)
@@ -7153,7 +7156,7 @@ async function sendFromDock(text: string): Promise<void> {
   }
   // Drafting only through the person's own endpoint (Settings > Advanced > Your AI); any error falls back to the plain reading.
   const ai = st().advanced?.ai
-  const read = await draftOrPlain(text, now, (t) => askEndpoint(ai!, t), configured(ai))
+  const read = await draftOrPlain(text, now, (t) => askEndpoint(ai!, t, undefined, undefined, ownChannels(st())), configured(ai))
   if (!read) { void runAsk(text); return }
   const req = togetherPlace?.label && !read.area ? { ...read, area: togetherPlace.label } : read
   const filled = fillFromPrefs(req, st().togetherPrefs, now)
