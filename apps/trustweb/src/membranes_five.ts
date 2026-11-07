@@ -7,6 +7,7 @@
 import { audienceAdmits } from './model'
 import type { AppState, PinnedOrder, Person } from './model'
 import { lastContact } from './engagement'
+import { ChatDirection } from './chat'
 import { tagsOf } from './colour_tags'
 import { webSlot } from './rings_layout'
 
@@ -73,6 +74,30 @@ export function pickFive(people: readonly Person[], s: Partial<State>, limit: nu
   const sorted = pinnedOrder(people, pinnedModeOf(s), (p) => recency(s, p, now))
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
 }
+
+const YEAR_MS = 365 * 86_400_000
+
+/** Wave 35: signs of contact with `p` in the last 365 days, weight 1 each: chat messages, timeline entries, meetings, events together (the sources recency reads). */
+export function frequency(s: Partial<State>, p: Person, now: number): number {
+  const since = now - YEAR_MS
+  const inYear = (t: number): boolean => Number.isFinite(t) && t >= since && t <= now
+  const chat = (s.chats?.[p.peerId ?? '']?.messages ?? []).filter((m) => (m.dir === ChatDirection.In || m.dir === ChatDirection.Out) && inYear(m.at)).length
+  const line = (p.timeline ?? []).filter((t) => inYear(t.at)).length
+  const met = (s.meetings ?? []).filter((m) => m.personId === p.id && inYear(m.endedAt || m.startedAt)).length
+  const together = (s.events ?? []).filter((e) => (e.people?.includes(p.id) || p.events?.includes(e.id)) && inYear(new Date(e.from).getTime())).length
+  return chat + line + met + together
+}
+
+/** Wave 35: pickFive by `ui.rankBy`: 'frequent' = most signs in the last year first (ties: most recent), absent = most recent. Pinned stay first. */
+export function rankedBy(ui: { rankBy?: string } | undefined, s: Partial<State>, people: readonly Person[], limit: number, now: number): { shown: Person[]; rest: Person[] } {
+  if (ui?.rankBy !== 'frequent') return pickFive(people, s, limit, now)
+  const sorted = pinnedOrder(people, pinnedModeOf(s), (p) => Math.min(frequency(s, p, now), 800) * 1e13 + recency(s, p, now))
+  return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
+}
+
+/** Wave 35: people one ring draws: everyone while the row is unticked or the user filled that ring (s.uiRings.filled, explicit only), else the membrane limit. */
+export const drawnLimit = (s: { uiRings?: { perRingLimitOff?: boolean; filled?: readonly string[] } }, lim: Pick<AppState, 'membraneLimit'>, ring: string): number =>
+  s.uiRings?.perRingLimitOff || s.uiRings?.filled?.includes(ring) ? Infinity : limitOf(lim)
 
 /** Wave 33: how many people "closest n" keeps by default. */
 export const CLOSEST_LIMIT = 150

@@ -1410,3 +1410,21 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .bar-profile-custom.on{border:1.5px solid var(--violet)}
 .bar-profile-plus{justify-content:center; width:100%; font-size:20px; line-height:1; color:var(--ink-soft)}
 .bar-glyph-primary svg{stroke:#fff}
+
+/* wave 34 rings-filters-2 */
+.num-edit:disabled{color:var(--muted,#888); cursor:default; text-decoration-style:dotted}
+/* wave 34 bar-sheet-2: the bubble is the control (filled like the skin picker's .radio.on); the real input stays for keyboards and screen readers */
+.bar-bubble .bar-hide-input{position:absolute; opacity:0; width:1px; height:1px; margin:0; pointer-events:none}
+.bar-bubble:focus-within{outline:3px solid var(--electric); outline-offset:2px}
+.bar-more-view{text-decoration:underline; display:block; width:100%; margin-top:8px; text-align:left}
+/* wave 34 views-pin-default */
+.view-opt-line{display:flex; align-items:center}
+.view-opt-line .view-opt{flex:1; min-width:0}
+.view-more-btn{border:0; background:none; color:inherit; font:inherit; font-size:18px; padding:6px 10px; cursor:pointer; text-decoration:underline}
+.view-more-menu{display:flex; flex-direction:column; align-items:flex-start; gap:6px; padding:4px 10px 8px 38px}
+.view-more-menu .linkbtn{text-decoration:underline; text-align:left}
+.view-more-menu .linkbtn:disabled{text-decoration:none; opacity:.7}
+.web-default-line{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:0 0 6px 28px}
+.web-default-select{font:inherit; text-decoration:underline; background:none; color:inherit; border:0; max-width:100%}
+.view-in-bar{display:flex; align-items:center; gap:8px; cursor:pointer}
+.view-in-bar b{font-weight:600; text-decoration:underline}

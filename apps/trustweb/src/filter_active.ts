@@ -7,7 +7,7 @@ import { S } from './strings'
 
 export interface ActiveFilter { chip: string; label: string }
 
-export function activeFilters(ui: { show?: string[]; hide?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean } | undefined, tags: readonly ColourTag[], people: readonly Pick<Person, 'id' | 'name'>[], perRing: number = LIMIT_DEFAULT): ActiveFilter[] {
+export function activeFilters(ui: { show?: string[]; hide?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; rankBy?: string } | undefined, tags: readonly ColourTag[], people: readonly Pick<Person, 'id' | 'name'>[], perRing: number = LIMIT_DEFAULT): ActiveFilter[] {
   const name = (chip: string): string => chip.startsWith('person:')
     ? '@' + (people.find((p) => p.id === chip.slice(7))?.name ?? chip.slice(7))
     : '#' + (tags.find((t) => t.id === chip.slice(4))?.label ?? chip.slice(4))
@@ -15,7 +15,8 @@ export function activeFilters(ui: { show?: string[]; hide?: string[]; closest150
     ...(ui?.show ?? []).map((chip) => ({ chip, label: S.tagFilterOn(name(chip)) })),
     ...(ui?.hide ?? []).map((chip) => ({ chip, label: S.filterHidden(name(chip)) })),
     ...(ui?.closest150 ? [{ chip: 'closest150', label: S.closestActive(closestLimit(ui)) }] : []),
-    ...(!ui?.perRingLimitOff && perRing !== LIMIT_DEFAULT ? [{ chip: 'perRing', label: S.perRingActive(perRing) }] : []),
+    ...(!ui?.perRingLimitOff && ui?.rankBy === 'frequent' ? [{ chip: 'perRing', label: S.perRingFrequentActive(perRing) }]
+      : !ui?.perRingLimitOff && perRing !== LIMIT_DEFAULT ? [{ chip: 'perRing', label: S.perRingActive(perRing) }] : []),
   ]
 }
 
