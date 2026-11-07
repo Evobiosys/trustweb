@@ -117,6 +117,21 @@ export function closest150(people: readonly Person[], s: Partial<State>, now: nu
   return pickFive(people, s, limit, now).shown
 }
 
+/** Wave 36b: "closest n" adds nothing while m per ring over the rings that hold people already stays within n. */
+export const closestMoot = (m: number, ringsWithPeople: number, closestN: number): boolean => m * ringsWithPeople <= closestN
+
+/** Wave 36b: a dot just dragged or dropped (s.uiRings.pinnedId) stays drawn in addition to the cut: it moves from `rest` to the end of `shown`. */
+export function keepPinned<T extends { id: string }>(cut: { shown: T[]; rest: T[] }, pinnedId: string | undefined): { shown: T[]; rest: T[] } {
+  const hit = pinnedId === undefined ? undefined : cut.rest.find((p) => p.id === pinnedId)
+  return hit ? { shown: [...cut.shown, hit], rest: cut.rest.filter((p) => p !== hit) } : cut
+}
+
+/** Wave 36b: a new m resets every ring to exactly m (no ring stays filled); the ranking is deterministic, so dialling back brings the same people. */
+export function setPerRingLimit(s: Pick<AppState, 'membraneLimit' | 'uiRings'>, n: number): void {
+  if (n === LIMIT_DEFAULT) delete s.membraneLimit; else s.membraneLimit = n
+  if (s.uiRings?.filled) s.uiRings = { ...s.uiRings, filled: undefined }
+}
+
 /** The whole zone, shown and rest together: pinned first, then the most recent. */
 export function wholeZone(people: readonly Person[], s: Partial<State>, now: number): Person[] {
   const { shown, rest } = pickFive(people, s, Infinity, now)

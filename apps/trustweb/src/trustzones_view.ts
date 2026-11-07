@@ -14,7 +14,8 @@ import { FILTER_RINGS, ringShown, setRingShown } from './rings_filter'
 import { communityOf, communityTags, filterOpen, setUi } from './trustzones'
 import { connectionsShown } from './zone_connections'
 import { activeCountLabel, activeFilters } from './filter_active'
-import { closestLimit, LIMIT_DEFAULT, limitOf, parseLimit } from './membranes_five'
+import { closestLimit, closestMoot, limitOf, parseLimit, setPerRingLimit } from './membranes_five'
+import { webSlot } from './rings_layout'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
 export const triangle = (open: boolean): string => (open ? '▾' : '▸')
@@ -173,21 +174,32 @@ const addingTo: { tag?: string; added: string[] } = { added: [] }
 /** Wave 28b: the TrustZones view's only side control (left on desktop, above the rings on the phone, unfolded by default): expand all, add, tag filters. */
 export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; select: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void }): HTMLElement {
   const open = d.s.uiRings?.sidebarOpen !== false
+  const m = limitOf(d.s)
+  const rings = new Set(d.people.map((p) => webSlot(p))).size
+  // Wave 36b: "closest n" adds nothing while the per-ring cut already stays within n (and the cut is on).
+  const moot = !d.s.uiRings?.perRingLimitOff && closestMoot(m, rings, closestLimit(d.s.uiRings))
+  /** Every Tools row is one line: a leading control, then its label. */
+  const action = (attr: string, glyph: string, label: string, enabled: boolean, onclick: () => void): HTMLElement =>
+    el('div', { class: 'zone-check zone-row' }, [el('button', { type: 'button', class: 'row-action', [attr]: '', ...(enabled ? {} : { disabled: '' }), onclick }, [el('span', { 'aria-hidden': 'true', class: 'row-glyph' }, [glyph]), el('u', {}, [label])])])
+  const connections = el('label', { class: 'zone-check zone-row' }, [
+    el('input', { type: 'checkbox', 'data-zone-connections': '', ...(connectionsShown(d.s) ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'connections', (e.target as HTMLInputElement).checked); d.onChange() } }),
+    ' ', S.zoneConnections,
+  ])
+  const perRing = el('label', { class: 'zone-check zone-row' }, [
+    el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); if ((e.target as HTMLInputElement).checked) setUi(d.s, 'filled', undefined); d.onChange() } }),
+    ' ', S.perRingBefore, numEdit(m, 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) setPerRingLimit(d.s, n); d.onChange() }), ' ',
+    el('button', { type: 'button', class: 'num-edit', 'data-recent-mode': '', onclick: (e: Event) => { e.preventDefault(); setUi(d.s, 'rankBy', d.s.uiRings?.rankBy === 'frequent' ? undefined : 'frequent'); d.onChange() } }, [d.s.uiRings?.rankBy === 'frequent' ? S.perRingFrequent : S.perRingRecent]), S.perRingAfter,
+  ])
+  const closest = el(moot ? 'div' : 'label', { class: 'zone-check zone-row' + (moot ? ' moot' : ''), ...(moot ? { 'aria-disabled': 'true', 'data-closest-moot': '1', title: S.closestMootHint(m * rings) } : {}) }, [
+    el('input', { type: 'checkbox', 'data-closest150': '', ...(moot ? { disabled: '' } : {}), ...(d.s.uiRings?.closest150 ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'closest150', (e.target as HTMLInputElement).checked); d.onChange() } }),
+    ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
+    ...(moot ? [el('small', { class: 'moot-hint' }, [S.closestMootHint(m * rings)])] : []),
+  ])
   return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneSidebarTitle, () => { setUi(d.s, 'sidebarOpen', !open); d.onChange() }, { 'data-zone-side-toggle': '' }), el('b', {}, [S.zoneSidebarTitle])]),
-    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add, d.select]), el('label', { class: 'zone-check' }, [
-      el('input', { type: 'checkbox', 'data-zone-connections': '', ...(connectionsShown(d.s) ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'connections', (e.target as HTMLInputElement).checked); d.onChange() } }),
-      ' ', S.zoneConnections,
-    ]), el('label', { class: 'zone-check' }, [
-      el('input', { type: 'checkbox', 'data-closest150': '', ...(d.s.uiRings?.closest150 ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'closest150', (e.target as HTMLInputElement).checked); d.onChange() } }),
-      ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
-    ]), el('label', { class: 'zone-check' }, [
-      el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); if ((e.target as HTMLInputElement).checked) setUi(d.s, 'filled', undefined); d.onChange() } }),
-      ' ', S.perRingBefore, numEdit(limitOf(d.s), 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) { if (n === LIMIT_DEFAULT) delete d.s.membraneLimit; else d.s.membraneLimit = n } d.onChange() }), ' ',
-      el('button', { type: 'button', class: 'num-edit', 'data-recent-mode': '', onclick: (e: Event) => { e.preventDefault(); setUi(d.s, 'rankBy', d.s.uiRings?.rankBy === 'frequent' ? undefined : 'frequent'); d.onChange() } }, [d.s.uiRings?.rankBy === 'frequent' ? S.perRingFrequent : S.perRingRecent]), S.perRingAfter,
-    ]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-space-out-tools': '', onclick: d.spaceOut }, [S.spaceOutEvenly])]), el('label', { class: 'zone-check' }, [
+    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add, d.select]), connections, perRing, closest, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
-    ]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-hidden-people': '', ...(d.hiddenCount ? {} : { disabled: '' }), onclick: d.openHidden }, [S.hiddenPeopleBtn(d.hiddenCount)])]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-recently-deleted': '', ...(d.deletedCount ? {} : { disabled: '' }), onclick: d.openDeleted }, [S.recentlyDeleted(d.deletedCount)])]), tagFilters(d)] : []),
+    ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted), tagFilters(d)] : []),
   ])
 }
