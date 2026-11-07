@@ -13,9 +13,10 @@ const OF_SCREEN: Record<string, SettingsSection> = {
   record: 'record', meeting: 'record',
   events: 'events',
   inventory: 'inventory',
+  feed: 'general',
 }
 
-/** The section a screen id (Screen enum value) belongs to; none for Start, Feed and the like. */
+/** The section a screen id (Screen enum value) belongs to; none for Start and the like. */
 export function sectionOfScreen(screen: string): SettingsSection | undefined {
   return OF_SCREEN[screen]
 }
@@ -24,5 +25,6 @@ export function sectionOfScreen(screen: string): SettingsSection | undefined {
 export function settingsOrder(from: SettingsSection | string | undefined, row: readonly string[]): SettingsSection[] {
   const lead = OWN.find((s) => s === from)
   const bar = row.filter((id): id is SettingsSection => OWN.includes(id as SettingsSection))
-  return [...new Set([...(lead ? [lead] : []), ...bar, ...OWN]), 'general']
+  const rest = [...new Set([...(lead ? [lead] : []), ...bar, ...OWN])]
+  return from === 'general' ? ['general', ...rest] : [...rest, 'general']
 }

@@ -21,15 +21,15 @@ export type FetchLike = (url: string, init: { method: string; headers: Record<st
 /** Drafting is on only with a base URL and a model. */
 export const configured = (ai: AiEndpoint | undefined): ai is AiEndpoint => Boolean(ai?.baseUrl.trim() && ai.model.trim())
 
-export function buildRequest(ai: AiEndpoint, text: string): { url: string; init: { method: string; headers: Record<string, string>; body: string } } {
+export function buildRequest(ai: AiEndpoint, text: string, system: string = TOGETHER_DRAFT_SHAPE, maxTokens = 300): { url: string; init: { method: string; headers: Record<string, string>; body: string } } {
   return {
     url: `${ai.baseUrl.trim().replace(/\/+$/, '')}/chat/completions`,
     init: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(ai.apiKey ? { Authorization: `Bearer ${ai.apiKey}` } : {}) },
       body: JSON.stringify({
-        model: ai.model, temperature: 0, stream: false, max_tokens: 300,
-        messages: [{ role: 'system', content: TOGETHER_DRAFT_SHAPE }, { role: 'user', content: text }],
+        model: ai.model, temperature: 0, stream: false, max_tokens: maxTokens,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: text }],
       }),
     },
   }
@@ -54,5 +54,20 @@ export async function askEndpoint(ai: AiEndpoint, text: string, fetchFn: FetchLi
     const parsed = parseReply(body)
     if (parsed === null) throw new Error('not JSON')
     return parsed
+  } finally { clearTimeout(timer) }
+}
+
+/** One plain-text answer (the Ask your web summary); throws with the endpoint's own message on an error or a timeout. */
+export async function askEndpointText(ai: AiEndpoint, system: string, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS): Promise<string> {
+  const { url, init } = buildRequest(ai, text, system, 400)
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), timeoutMs)
+  try {
+    const res = await fetchFn(url, { ...init, signal: ctl.signal })
+    const body = await res.json().catch(() => null)
+    if (!res.ok) throw new Error((body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`)
+    const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
+    if (typeof content !== 'string' || !content.trim()) throw new Error('empty')
+    return content.trim()
   } finally { clearTimeout(timer) }
 }

@@ -14,6 +14,7 @@ import os from 'node:os'
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
+import { matchesReply } from './vite_matches.mjs'
 import { approveMergeRoute, diagnosticsFor, ghBin, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -176,6 +177,24 @@ function eventsApi() {
           } catch { res.statusCode = 400 }
           res.end()
         })
+      })
+    },
+  }
+}
+
+// Dev only: GET /__tw/matches?from=<n> streams the lines of dev-matches.jsonl next to the dev record (src/dev_matches.ts); null in a build.
+const devMatches = (command) => (command === 'serve' && process.env.TW_DEV_RECORD && !process.env.TW_STOCK ? 'true' : 'null')
+function matchesApi() {
+  return {
+    name: 'trustweb-matches-api',
+    configureServer(server) {
+      if (devMatches('serve') !== 'true') return
+      const dir = path.dirname(process.env.TW_DEV_RECORD)
+      server.middlewares.use('/__tw/matches', (req, res) => {
+        const r = req.method === 'GET' ? matchesReply(dir, req.url ?? '/', req.headers) : { code: 405, body: null }
+        res.statusCode = r.code
+        if (r.body) res.setHeader('Content-Type', 'application/json')
+        res.end(r.body ? JSON.stringify(r.body) : undefined)
       })
     },
   }
@@ -367,8 +386,8 @@ export default ({ command }) => ({
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
     __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
-    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_RELEASE__: JSON.stringify(releaseId()), __TW_BUILT_AT__: JSON.stringify(BUILT_AT), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
-  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi(), eventsApi()] : [])],
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_RELEASE__: JSON.stringify(releaseId()), __TW_BUILT_AT__: JSON.stringify(BUILT_AT), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_DEV_MATCHES__: devMatches(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
+  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi(), eventsApi(), matchesApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,
@@ -416,7 +435,7 @@ export default ({ command }) => ({
       // same-origin as on app.idea2.site, so the app sends no Origin the server would refuse.
       ...(process.env.TW_BACKUP_PROXY
         // Origin dropped (dev only, loopback): the service's own-host gate wants https + its own hostname, which a local http origin never is.
-        ? Object.fromEntries(['/backup', '/hosted', '/transcribe', '/feedback', '^/org(/|$)'].map((prefix) => [prefix, { target: process.env.TW_BACKUP_PROXY, changeOrigin: true, configure: (proxy) => { proxy.on('proxyReq', (req) => req.removeHeader('origin')) } }]))
+        ? Object.fromEntries(['/backup', '/hosted', '/transcribe', '/feedback', '/notes/relay', '^/org(/|$)'].map((prefix) => [prefix, { target: process.env.TW_BACKUP_PROXY, changeOrigin: true, configure: (proxy) => { proxy.on('proxyReq', (req) => req.removeHeader('origin')) } }]))
         : {}),
       // Only the mic routes and the availability probe: TalkWeave's other
       // routes (sessions, ask) have no auth and must not be reachable here.

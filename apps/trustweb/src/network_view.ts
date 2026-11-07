@@ -22,6 +22,8 @@ import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, place
 import type { MenuAction } from './network_menu'
 import { S } from './strings'
 import { shortLabel } from './short_label'
+import { skinOf } from './skins'
+import { dotLook } from './network_dots'
 
 export interface NetworkOptions {
   me: { id: string; displayName: string }
@@ -93,8 +95,12 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   // Default: only people who are connected with other contacts too; the rest (only connected with me) sit behind "Show only connected with me".
   const mutual = mutualIds(o.me, inWeb)
   const people = settings.showOthers ? inWeb : inWeb.filter((p) => mutual.has(p.id))
-  const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '') + (settings.showOthers ? '+others' : '')
-  if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null, touched: false, size: null }
+  const rings = skinOf(o.ui?.s ?? {}).id === 'trustweb' // Wave 32: the rings-like dots; the classic look stays a skin
+  const key = keyOf({ ...o, people }) + (rings ? '+rings' : '') + (settings.showAll ? '+all' : '') + (settings.showOthers ? '+others' : '')
+  if (!cached || cached.key !== key) {
+    cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null, touched: false, size: null }
+    if (rings) for (const v of cached.graph.nodes) v.r = dotLook(v.name, v.tier).radius // the bigger dots keep their room in the layout
+  }
   if (cached.iteration === 0 && cached.camera === null) applyPins(cached.graph, loadPins())
   const state = cached
   const g = state.graph
@@ -234,10 +240,21 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       const x = v.x * c.k + c.x
       const y = v.y * c.k + c.y
       if (x < -20 || y < -20 || x > w + 20 || y > h + 20) return
-      const rad = lq ? (1.5 + Math.sqrt(near[i].size) * 1.1) * Math.sqrt(c.k) * (matches.has(v.id) ? 1.6 : 1) : v.r * Math.sqrt(c.k) * (matches.has(v.id) ? 1.5 : 1)
+      const look = rings && !lq ? dotLook(v.name, v.tier) : null
+      const rad = look ? look.radius * Math.sqrt(c.k) * (matches.has(v.id) ? 1.2 : 1) : lq ? (1.5 + Math.sqrt(near[i].size) * 1.1) * Math.sqrt(c.k) * (matches.has(v.id) ? 1.6 : 1) : v.r * Math.sqrt(c.k) * (matches.has(v.id) ? 1.5 : 1)
       ctx.globalAlpha = lit ? (!lq && v.faint ? 0.4 : 1) : 0.15
       ctx.fillStyle = lq ? (v === hover || matches.has(v.id) ? LOGSEQ.lit : LOGSEQ.node) : colour(v)
+      if (look?.you) { // the you dot: gradient face inside a white halo, as on the Web rings
+        const grad = ctx.createLinearGradient(x - rad, y - rad, x + rad, y + rad)
+        grad.addColorStop(0, '#FF715B'); grad.addColorStop(1, '#9A37F0')
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, rad + 2, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = grad
+      }
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
+      if (look && rad >= 7) {
+        ctx.fillStyle = look.ink; ctx.font = `700 ${Math.round(rad * 0.84)}px system-ui, sans-serif`; ctx.textBaseline = 'middle'
+        ctx.fillText(look.initial, x, y + 0.5); ctx.textBaseline = 'alphabetic'
+      }
       if (v.family) {
         ctx.strokeStyle = FAMILY_COLOUR; ctx.lineWidth = 2.5; ctx.setLineDash([])
         ctx.beginPath(); ctx.arc(x, y, rad + 3, 0, Math.PI * 2); ctx.stroke()

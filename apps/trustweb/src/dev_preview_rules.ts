@@ -4,7 +4,7 @@ import { MERGE_DONE } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; flag?: string; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 /** The registry's compat record (written by preview_compat.mjs): the base and row refs it was computed for, each row alone, every pair and the full set merged in a scratch tree. */
 export interface Compat { at?: string; state: 'running' | 'ok' | 'conflict'; baseSha?: string; refs?: Record<string, string | null>; singles?: Record<string, string>; pairs?: Record<string, string>; full?: string }
@@ -152,6 +152,18 @@ export function prMerged(p: { pr: { merged?: boolean } | null }): boolean {
   return p.pr?.merged === true
 }
 
+export const AS_ALWAYS = 'as always'
+/** The approve-result text of a merged PR: "PR #n shipped" only when that PR was merged in this preview's run (made at/after the preview, or its merge recorded without a date); a PR carried over from before says "as always" (nothing changed for the row). A `next` preview stays the way on. */
+export function mergedLabel(p: { created: string; pr: { number: number; at?: string; merged?: boolean; head?: string; mergeCommit?: string } | null; next?: { id: string; port: number } }): { next: { id: string; port: number } } | { text: string } {
+  if (p.next) return { next: p.next }
+  const pr = p.pr
+  const own = !!pr && pr.merged === true && (pr.at ? pr.at >= p.created : !!(pr.mergeCommit || pr.head))
+  return { text: own ? `PR #${pr!.number} shipped` : AS_ALWAYS }
+}
+
+/** The rows behind the amber "needs work" reminder, one clickable title each. */
+export const remindItems = (shown: PreviewFeature[]): { key: string; title: string }[] => shown.map((f) => ({ key: f.key, title: f.title }))
+
 export interface Tested { sha: string; at: string; ok: boolean | null; running: boolean; log?: string; tail?: string }
 export type PrGate = 'untested' | 'running' | 'failed' | 'passed'
 
@@ -234,7 +246,7 @@ export function hintParts(hint: string): { head: string; detail: string } {
   return m ? { head: m[1], detail: m[2] } : { head: hint, detail: '' }
 }
 
-/** A row and the loaded rows below it (their `requires` chain): one approve covers them all. */
+/** A row and the loaded rows below it (their `requires` chain). Only for a whole subtree (e.g. unloading a parent); one row's approve is just [key]. */
 export function subtreeKeys(features: PreviewFeature[], key: string): string[] {
   const out: string[] = []
   const walk = (n: TreeNode): void => { if (n.feature.checked) out.push(n.feature.key); n.children.forEach(walk) }
@@ -267,6 +279,9 @@ export const walkShown = (f: { walkOk?: boolean; steps?: unknown[] }): { disable
 
 /** What the note button copies: the preview, the row, its title, branch and ref, to paste into the pi session. */
 export const noteText = (id: string, f: PreviewFeature): string => `${id} | ${f.key} | ${f.title} | ${f.branch}@${f.ref ?? '?'}`
+
+/** What the needs-work pill copies, like the note button: time, preview, row key, title, verdict. */
+export const needsWorkNote = (iso: string, id: string, f: { key: string; title: string }): string => `${iso} | ${id} | ${f.key} | ${f.title} | needs work`
 
 /** How an apply ended, read from the registry: a newer assembly (moved), nothing left to assemble 5 s after the press (idle), else running. */
 export function applyOutcome(q: { pending?: boolean; assembled?: { at: string } | null }, start: number, now: number): 'moved' | 'idle' | 'running' {
@@ -306,8 +321,16 @@ export function pendingCount(p: { features: PreviewFeature[]; assembled?: { set?
 export const pendingText = (n: number): string => `${n} change${n === 1 ? '' : 's'} not applied`
 
 /** No manual reload (Jakob 2026-10-24): the panel starts `apply` itself whenever the registry says pending and nothing stands in the way: no apply going
- *  (a stuck one waits for the owner's Retry), no local test run (it reads the assembled worktree). */
-export const autoApply = (p: { pending?: boolean; tested?: Tested | null }, applying: { stuck: boolean } | null): boolean => !!p.pending && applying === null && !p.tested?.running
+ *  (a stuck one waits for the owner's Retry). A local test run no longer blocks it (wave 32: an uncheck during a run was never assembled). */
+export const autoApply = (p: { pending?: boolean; tested?: Tested | null }, applying: { stuck: boolean } | null): boolean => !!p.pending && applying === null
+
+/** When the debounced apply fires: 'now' = start it; 'later' = an apply or a write is still going, ask again; 'no' = nothing to do or a stuck apply (the owner's Retry).
+ *  `wanted` = the owner unchecked or pressed needs work, which assembles whatever the registry's pending flag says at that moment. */
+export function applyDue(p: { pending?: boolean }, applying: { stuck: boolean } | null, wanted: boolean, inflight: number): 'now' | 'later' | 'no' {
+  if (!p.pending && !wanted) return 'no'
+  if (applying) return applying.stuck ? 'no' : 'later'
+  return inflight > 0 ? 'later' : 'now'
+}
 
 /** The assembled sha moved away from the one this page knows (a CLI apply, the Approve press, another tab): the page reloads itself. Unknown = not yet compared. */
 export const assemblyMoved = (known: string | null, p: { assembled?: { sha: string } | null }): boolean => known !== null && !!p.assembled && p.assembled.sha !== known
@@ -340,7 +363,15 @@ const isKeys = (v: unknown): v is string[] => Array.isArray(v) && v.every((k) =>
 export const individualStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string[]>(storage, 'twp-indiv-' + id, [], isKeys)
 export const foldStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string[]>(storage, 'twp-tree-' + id, [], isKeys)
 export const remindOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-remind-' + id, false, (v): v is boolean => typeof v === 'boolean')
+/** Focus mode (wave 32): the key of the row whose title was tapped, per preview in the tab. */
+export const focusStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string | null>(storage, 'twp-focus-' + id, null, (v): v is string | null => v === null || typeof v === 'string')
 export const loadOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-load-' + id, false, (v): v is boolean => typeof v === 'boolean')
+
+/** Focus mode: the wave name (branch prefix before the slash), the focused row and the other rows; null when nothing is focused or the row is gone/merged. */
+export function focusSplit(features: PreviewFeature[], key: string | null): { wave: string; row: PreviewFeature; rest: PreviewFeature[] } | null {
+  const rows = visible(features), row = rows.find((f) => f.key === key)
+  return row ? { wave: row.branch.split('/')[0], row, rest: rows.filter((f) => f !== row) } : null
+}
 
 /** What moves while an apply runs; unchanged for 90 s = stuck. */
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, loadedKeys(p.features)])

@@ -22,6 +22,9 @@ describe('settingsOrder', () => {
   it('follows a re-picked bar', () => {
     expect(settingsOrder('chat', ['record', 'chat', 'web', 'inventory'])).toEqual(['chat', 'record', 'web', 'inventory', 'events', 'general'])
   })
+  it('opened from the Feed, general leads (the Feed settings sit there)', () => {
+    expect(settingsOrder('general', ROW)).toEqual(['general', 'web', 'chat', 'record', 'events', 'inventory'])
+  })
   it('no origin: the bar order, general last', () => {
     expect(settingsOrder(undefined, ROW)).toEqual(['web', 'chat', 'record', 'events', 'inventory', 'general'])
   })
@@ -35,6 +38,7 @@ describe('sectionOfScreen', () => {
     expect(sectionOfScreen('meeting')).toBe('record')
     expect(sectionOfScreen('people')).toBe('web')
     expect(sectionOfScreen('events')).toBe('events')
+    expect(sectionOfScreen('feed')).toBe('general') // the Feed header carries the gear (relay setting)
     expect(sectionOfScreen('start')).toBeUndefined()
   })
 })

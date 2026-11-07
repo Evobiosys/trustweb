@@ -77,6 +77,8 @@
 //   CONNECT_PER_MINUTE, CONNECT_PER_HOUR          6, 30     POST /connect and POST /name together, per network address (IPv6: /64), in memory, NOT anonymous
 //   CONNECT_GET_PER_MINUTE, CONNECT_GET_PER_HOUR  20, 300   GET /c/ and GET /who/ together, per network address (plain-text 429)
 //   WHO_PER_NAME_PER_MINUTE          60           GET /who/<name> per name (squashed), all addresses together (plain-text 429)
+//   NOTES_RELAY_MAX_BLOB_BYTES, NOTES_RELAY_MAX_PER_RECIPIENT  20 MB, 100   /notes/relay: opaque blob size cap, blobs waiting per recipient (answer 413 / uniform 404)
+//   NOTES_RELAY_PER_MINUTE, NOTES_RELAY_PER_HOUR  20, 300   /notes/relay together, per network address (JSON 429)
 //   CONNECT_SWEEP_MS                 3600000      how often expired codes are dropped (they also act as unknown when read)
 //   ORG_MAX_EVENTS, ORG_MAX_INVITEES            3, 25      wave 8: free organizer limits (events per org, invitee e-mails per event)
 //   ORG_HOSTED_MAX_EVENTS, ORG_HOSTED_MAX_INVITEES  50, 500  the same for an org the admin switched to plan "hosted" (POST /admin/org)
@@ -280,6 +282,10 @@ export function loadConfig(options = {}) {
     whoPerNamePerMinute: pick(options, 'whoPerNamePerMinute', 'WHO_PER_NAME_PER_MINUTE', 60),
     connectSweepMs: pick(options, 'connectSweepMs', 'CONNECT_SWEEP_MS', 3_600_000),
     nameCap: pick(options, 'nameCap', 'NAME_CAP', 3),
+    notesRelayMaxBlobBytes: pick(options, 'notesRelayMaxBlobBytes', 'NOTES_RELAY_MAX_BLOB_BYTES', 20 * 1024 * 1024),
+    notesRelayMaxPerRecipient: pick(options, 'notesRelayMaxPerRecipient', 'NOTES_RELAY_MAX_PER_RECIPIENT', 100),
+    notesRelayPerMinute: pick(options, 'notesRelayPerMinute', 'NOTES_RELAY_PER_MINUTE', 20),
+    notesRelayPerHour: pick(options, 'notesRelayPerHour', 'NOTES_RELAY_PER_HOUR', 300),
     nameCapAllowFile: pick(options, 'nameCapAllow', 'NAME_CAP_ALLOW', '', String),
     nameCapRequestsFile: pick(options, 'nameCapRequests', 'NAME_CAP_REQUESTS', '', String),
 

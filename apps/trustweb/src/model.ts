@@ -18,7 +18,9 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
+import type { SharedNote } from './notes_outline'
 import type { ConnectRecord } from './connect_code'
+import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
 import type { SeenNonce } from './connect_freshness'
 import type { ShareSettings } from './contact_share'
@@ -27,6 +29,9 @@ import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
 import type { NameReveal } from './events'
+import type { ZoneLink } from './zone_share_link'
+import type { PeerItem } from './peer_items'
+import type { SupportAsk, SupportIn } from './support_ask'
 
 export enum Ring {
   /** The top trust zone (wave 25): the few you would call at 3 am. Family keeps its own closeness; this is a ring of its own. */
@@ -371,10 +376,14 @@ export interface Person {
   connectedVia?: 'legacy-code'
   /** Set once this person is also connected on TrustWeb (a paired peer). */
   peerId?: string
+  /** Wave 30: the ring before the person was archived (Ring.None); Restore puts them back. Local only. */
+  prevRing?: Ring
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
   did?: string
+  /** Wave 32 (feed_nostr.ts): their Nostr public key (hex), so their group posts show by my trust ring. Local only. Absent: unknown. */
+  nostrPub?: string
   /** Wave 27: where this person was imported from (one entry per source file, I8). Local only. Absent: entered by hand. */
   sources?: PersonSource[]
   /**
@@ -395,6 +404,8 @@ export interface Person {
    * a provenance entry or any share or contact payload (test/unit/general_notes.test.mjs guards every place that names it). Absent: none.
    */
   generalNote?: string
+  /** Wave 31 (notes_outline.ts): outline notes shared with or received from this person, each with its provenance. Local record; leaves only in a link the owner makes. Absent: none. */
+  sharedNotes?: SharedNote[]
   /** Wave 6e: no longer chosen or shown; still read from older records and ignored. */
   signalProvider?: SignalProvider
   /**
@@ -553,6 +564,22 @@ export interface Peer {
   /** Wave 8: this connection began as a reach-out through a public link (sent in the connect-ack; kept so a resend carries it). */
   reachOut?: true
 }
+
+export interface Offer { id: string; title: string }
+export type MatchPays = 'self' | 'organised' | 'they-organise'
+export interface Match {
+  personId?: string
+  communityId?: string
+  offerId: string
+  need: string
+  pays?: MatchPays
+  confidence: number
+  next?: string
+  at: number
+  /** My answer: absent = new. */
+  status?: 'dismissed'
+}
+export interface MatchFeedback { key: string; verdict: 'not_relevant'; at: number }
 
 export interface InventoryItem {
   id: string
@@ -948,19 +975,29 @@ export interface AppState {
   wantsToConnect?: WantsToConnect[]
   me: Me
   identity?: SerializedIdentityV1
+  /** Wave 32 (short_alias.ts): host-scoped short links, token -> {did, createdAt, succession?, registeredAt?}. Absent: none made yet. */
+  aliases?: Aliases
   people: Person[]
   /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
   shares?: import('./share_sink/share_lines').ShareLine[]
+  /** Wave 31 (zone_share_link.ts): the named links per zone, revoked ones kept. This phone only. Absent: none. */
+  zoneLinks?: ZoneLink[]
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
   /** Wave 29 (zone_tags.ts): tag ids per zone (ring value) with a stamp. Absent: none. */
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
+  /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
+  groupPosts?: GroupPost[]
+  /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
+  nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
   shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
   shareProfilesWin?: true
   /** Wave 27: an agent may propose shares. Absent: off. */
   agentsMayPropose?: true
+  /** Wave 31 (peer_items.ts): what we know of a person's resources, one line each. Absent: none. This phone only. */
+  peerItems?: PeerItem[]
   peers: Peer[]
   inventory: InventoryItem[]
   log: LogEntry[]
@@ -1000,12 +1037,22 @@ export interface AppState {
   tabOrder?: TabOrder
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
+  /** Wave 31 (bottom_bar.ts): the configurable bottom row {order, hidden, primary}. Absent: the default. Syncs with the record. */
+  uiBar?: { order?: string[]; hidden?: string[]; primary?: string }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
+  /** Wave 31 (matches.ts): what I can offer (edited like My Resources) and the matches the pc24 service found, with my answers. This device only (not in sync_core's bundle). */
+  offers?: Offer[]
+  matches?: Match[]
+  matchFeedback?: MatchFeedback[]
+  /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
+  expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[] }
+  /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
+  skin?: string
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
@@ -1071,6 +1118,9 @@ export interface AppState {
    * you were away"), newest first, at most AWAY_ASKS_MAX, each kept AWAY_ASK_KEEP_MS or until dismissed. Absent: none. Older builds ignore it.
    */
   awayAsks?: AwayAsk[]
+  /** Wave 32 (support_ask.ts): asks for support this phone sent, and received (the helper's card). Never in the feed, never searched. Absent: none. Older builds ignore it. */
+  supportAsks?: SupportAsk[]
+  supportIn?: SupportIn[]
   /** Wave 6h (late_answers.ts): this phone's asks of the last LATE_KEEP_MS, per connection, so a later yes can land. Absent: none. Older builds ignore it. */
   sentAsks?: SentAsk[]
   /** Wave 6h (late_answers.ts): yeses that came after their moment, newest first, kept LATE_KEEP_MS or until dismissed. Absent: none. */
@@ -1113,6 +1163,10 @@ export interface AppState {
   demoOffered?: boolean
   /** Wave 11: the installed app offered notifications once (offerNotifications); the answer is notificationsOn. */
   notifOffered?: boolean
+  /** Wave 31 (features.ts): the version of the newest major feature the notification offer was shown for. */
+  notifFeatureSeen?: string
+  /** Wave 31: "Not now" on the empty-web import card; the card stays away on this phone. */
+  onbDismissed?: boolean
   /** Wave 11 (apk.ts): the Android shell's version this record was last opened by, when the update check last ran, and whether it runs. */
   apkVersion?: string
   apkCheckedAt?: number
@@ -1207,6 +1261,20 @@ export interface AppState {
   features?: { events?: false; inventory?: false }
   /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
+  /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
+  askSets?: AskSet[]
+  /** Wave 31, Ask your web: your own "also search online" engine, https with {q} for the words. Absent: none (the engine chips only). */
+  askEngineUrl?: string
+  /** Wave 31, Ask your web: the engine id picked last (search_engines.ts). Absent: Ecosia. */
+  askEngine?: string
+}
+
+/** A named list of people (and tags) an ask can be narrowed to. */
+export interface AskSet {
+  id: string
+  name: string
+  personIds: string[]
+  tags: string[]
 }
 
 export interface AiEndpoint {
@@ -1229,7 +1297,18 @@ export interface FeedSettings {
   myInstance?: string
   /** The person's own Pixelfed instance, for "Share to Pixelfed" (host only). */
   myPixelfed?: string
+  /** Wave 31: followed Mastodon accounts / hashtags ("@user@host", "#tag@host"), read through their public RSS. Absent: none. */
+  follows?: string[]
+  /** Wave 31: the news feed (RSS or JSON Feed address, https). Absent: none. */
+  newsUrl?: string
+  /** Wave 32 (feed_nostr.ts): Nostr relays (wss://) that carry group posts. Absent or empty: posts stay on this phone. */
+  relays?: string[]
+  /** Wave 32 (feed_nostr.ts): per group (our id) its governance, channels and vouches. Absent: open, no channels. */
+  groupMeta?: Record<string, { governance?: 'open' | 'invite' | 'vouch' | 'admin' | 'consensus'; channels?: { id: string; name: string }[]; vouchedBy?: string[] } | undefined>
 }
+
+/** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
+export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number; /** feed_nostr.ts: discussion, request, offer or event. Absent: discussion. */ type?: string; /** A channel id of the group (FeedSettings.groupMeta). Absent: the group itself. */ channel?: string; /** 0 members only, 1 friends of members, 2 friends of friends. Absent: 0. */ hops?: number; /** A relay took it. Absent: kept on this phone only. */ sent?: true }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
@@ -1296,6 +1375,14 @@ export interface ImportBatch {
 export interface ServiceRow {
   key: string; name: string; source: string; file: string; since?: number; org?: string
   n365: number; out: number; in: number; lastTs?: number; ids: string[]; dupe?: boolean; sig: string
+  /** Wave 30: distinct days with a message in the last year. */
+  days?: number
+  /** Wave 30: WhatsApp only: the group chat this person was seen in, when never in a one-to-one chat. */
+  group?: string
+  /** Wave 31: phone export only: closeness score 0..1 from the interaction signals (interaction_signals.ts). */
+  closeness?: number
+  /** Wave 31: phone export with text only: items they seem to offer or need, short guesses (inventory_guess.ts). */
+  items?: { title: string; need: boolean }[]
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
 export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean }
