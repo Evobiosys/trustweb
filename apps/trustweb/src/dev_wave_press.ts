@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** The Approve wave press as a pure state machine (dev_feature.ts draws it), the retry for a restarting server and the per-row approve loop. */
-import { APPROVE_WAVE_LABEL } from './dev_preview_rules'
+import { APPROVE_WAVE_LABEL, unapproved, type PreviewFeature } from './dev_preview_rules'
 
 export type WavePhase = 'idle' | 'approving' | 'touchid' | 'failed'
 export interface WavePress { phase: WavePhase; error: string }
@@ -19,6 +19,8 @@ export function waveStep(s: WavePress, e: WaveEvent): WavePress {
 export const waveBusy = (s: WavePress): boolean => s.phase === 'approving' || s.phase === 'touchid'
 export const waveLabel = (s: WavePress): string => s.phase === 'approving' ? 'Approving…' : s.phase === 'touchid' ? 'Touch ID…' : APPROVE_WAVE_LABEL
 export const unapprovedLine = (n: number): string => `${n} unapproved items open`
+/** The Approve wave box's count line, by verdict over the visible loaded rows (not by what this browser pressed); empty when none waits. */
+export const unapprovedNote = (features: PreviewFeature[]): string => unapproved(features).length ? unapprovedLine(unapproved(features).length) : ''
 
 /** Runs `run` until it succeeds; a failure is retried every `every` ms (a server that restarts) and thrown once `ms` have passed. */
 export async function retryFor<T>(run: () => Promise<T>, o: { ms?: number; every?: number; now?: () => number; sleep?: (ms: number) => Promise<void> } = {}): Promise<T> {

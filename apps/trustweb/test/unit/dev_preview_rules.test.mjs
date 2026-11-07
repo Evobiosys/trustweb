@@ -13,9 +13,9 @@ describe('dev preview rules', () => {
     expect(APPROVE_WAVE_AND_CONTINUE_LABEL).toBe('Approve wave and continue to dev.trustweb.one')
     for (const l of [APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL]) expect(l).not.toContain('Declare done')
   })
-  it('the left panel is done once an Approve wave run is going or released, free again after a failed or cancelled run', () => {
-    for (const step of ['tests', 'merging', 'released', 'release-pending']) expect(panelDone(step)).toBe(true)
-    for (const step of ['none', '', 'failed', 'checks-failed', 'cancelled']) expect(panelDone(step)).toBe(false)
+  it('the left panel is done (dimmed) only while an Approve wave run is going; free after a failed, cancelled or released run (wave 33: a released status left it dead)', () => {
+    for (const step of ['tests', 'merging']) expect(panelDone(step)).toBe(true)
+    for (const step of ['none', '', 'failed', 'checks-failed', 'cancelled', 'released', 'release-pending']) expect(panelDone(step)).toBe(false)
   })
   it('a box is disabled only while a required feature is unchecked, with its title as hint', () => {
     expect(needsHint(set, 'event-link')).toBeNull()
@@ -554,6 +554,111 @@ describe('panel-approve-2', () => {
       expect(focusSplit(rows, 'm')).toBe(null)
       expect(focusSplit(rows, null)).toBe(null)
       expect(focusSplit([{ ...f('n'), branch: 'solo' }], 'n').wave).toBe('solo')
+    })
+  })
+})
+
+import { readFileSync } from 'node:fs'
+import { CALL_TIMEOUT_MS, PR_STALE_MS, callError, focusToggle, holdStore, lastFocusStore, loadingWhy, pressPlan, prStatusView } from '../../src/dev_preview_rules.ts'
+
+describe('wave 33 panel', () => {
+  const row = (key, over = {}) => ({ key, branch: `wave33/${key}`, title: 'T-' + key, requires: [], checked: true, ...over })
+  const memory = () => { const m = {}; return { getItem: (k) => m[k] ?? null, setItem: (k, v) => { m[k] = v } } }
+
+  describe('focus toggle (items 2a-c)', () => {
+    const rows = [row('a'), row('b'), row('m', { merged: true })]
+    it('in focus mode it goes to the full list and remembers the row; in the full list it returns to the last focused row', () => {
+      expect(focusToggle(rows, 'a', null)).toEqual({ to: 'full', focus: null, last: 'a', row: rows[0] })
+      expect(focusToggle(rows, null, 'a')).toEqual({ to: 'focus', focus: 'a', last: 'a', row: rows[0] })
+    })
+    it('no button without a focus and without a remembered row; a gone or merged row is forgotten', () => {
+      expect(focusToggle(rows, null, null)).toBe(null)
+      expect(focusToggle(rows, null, 'zz')).toBe(null)
+      expect(focusToggle(rows, null, 'm')).toBe(null)
+    })
+    it('round trip: full -> focus -> full lands on the same row', () => {
+      const there = focusToggle(rows, null, 'b')
+      expect(focusToggle(rows, there.focus, there.last)).toEqual({ to: 'full', focus: null, last: 'b', row: rows[1] })
+    })
+    it('the last focused row is kept per preview in the tab', () => {
+      const st = memory()
+      expect(lastFocusStore(st, 'p1').get()).toBe(null)
+      lastFocusStore(st, 'p1').set('a')
+      expect(lastFocusStore(st, 'p1').get()).toBe('a')
+      expect(lastFocusStore(st, 'p2').get()).toBe(null)
+    })
+  })
+
+  describe('approve never hides the personal preview (item 2d; repro: approve on an unticked row assembled and navigated to /__tw/wait)', () => {
+    it('approve on an unticked row loads it and sets the verdict, but never starts an assembly; needs work still does', () => {
+      const rows = [row('a', { checked: false }), row('b')]
+      expect(pressPlan(rows, 'a', 'merge')).toEqual({ loadFirst: true, assemble: false })
+      expect(pressPlan(rows, 'b', 'merge')).toEqual({ loadFirst: false, assemble: false })
+      expect(pressPlan(rows, 'b', 'needs-work')).toEqual({ loadFirst: false, assemble: true })
+    })
+    it('a held assembly (set by the approve) is not started by the registry pending flag; a box or Assemble now releases it', () => {
+      expect(autoApply({ pending: true }, null)).toBe(true)
+      expect(autoApply({ pending: true }, null, true)).toBe(false)
+      expect(autoApply({ pending: true }, { stuck: false }, false)).toBe(false)
+      const st = memory()
+      expect(holdStore(st, 'p1').get()).toBe(false)
+      holdStore(st, 'p1').set(true)
+      expect(holdStore(st, 'p1').get()).toBe(true)
+      expect(holdStore(st, 'p2').get()).toBe(false)
+    })
+    const src = readFileSync(new URL('../../src/dev_preview.ts', import.meta.url), 'utf8')
+    const between = (from, to) => { const i = src.indexOf(from), j = src.indexOf(to, i + 1); expect(i, from).toBeGreaterThan(-1); expect(j, to).toBeGreaterThan(i); return src.slice(i, j) }
+    const never = /tab\.hide|tab\.set\(|setCollapsed|location\.|\bgo\(|\bapply\(\)|fold\.|root\.hidden/
+    const handlers = {
+      'press (pill and note approve / needs work)': between('const press = (', 'const pressAll'),
+      'pressAll (Select all) and approveAll (Approve all)': between('const pressAll', 'const load = '),
+      'verdict pill click': between("const pill = (v: 'merge'", '// 📝:'),
+      'note click': between("const note = h('button'", "const how = h('button'"),
+      'chevron fold': between("const chev = h('button'", 'const walking = '),
+      'search button': between("const searchBtn = h('button'", 'const searchBox'),
+    }
+    for (const [name, body] of Object.entries(handlers)) {
+      it(`${name} never folds, hides, navigates or starts an apply by itself`, () => {
+        expect(body).not.toMatch(never)
+      })
+    }
+    const labelled = (re, labels) => {
+      const lines = src.split('\n').filter((l) => re.test(l) && !/^\s*(\/\/|\*)/.test(l))
+      return lines.map((l) => (labels.find(([r]) => r.test(l)) ?? [null, 'UNLISTED: ' + l.trim().slice(0, 60)])[1])
+    }
+    it('the only handlers that hide / fold the panel are the Walk / ? fold, the x, the minimize button and Esc', () => {
+      expect(labelled(/tab\.hide\(|tab\.set\(true\)|setCollapsed\(true\)/, [[/foldFor/, 'walk fold'], [/close\.add/, 'x'], [/x\.add/, 'minimize'], [/else if \(!collapsed/, 'esc']])).toEqual(['walk fold', 'x', 'minimize', 'esc'])
+    })
+    it('the only navigations are: the assembled reload (go), Open stock/personal preview, dev after the PR, and the flag switch', () => {
+      expect(labelled(/location\.(href\s*=|assign)|(?<![.\w])go\(/, [[/!q\.assembled\.error/, 'apply reload'], [/const go = \(since/, 'go def'], [/shouldReload/, 'watch reload'], [/location\.assign/, 'flag switch'], [/\$\{other === /, 'open other preview'], [/devUrl/, 'dev after PR']])).toEqual(['apply reload', 'go def', 'watch reload', 'dev after PR', 'flag switch', 'open other preview'])
+    })
+  })
+
+  describe('Approve is never dead (item 14)', () => {
+    it('a call gives up after 8 s with a readable error', () => {
+      expect(CALL_TIMEOUT_MS).toBe(8000)
+      expect(callError({ name: 'TimeoutError' })).toBe('no answer after 8 s')
+      expect(callError({ name: 'AbortError' })).toBe('no answer after 8 s')
+      expect(callError(new Error('HTTP 500'))).toBe('HTTP 500')
+    })
+    it('a disabled control says why', () => {
+      expect(loadingWhy('x', '')).toMatch(/saving/)
+      expect(loadingWhy(null, 'tagging and pushing')).toMatch(/PR/)
+    })
+    it('a PR flow without an update for 30 min counts as failed with a retry text; a fresh or finished one is untouched', () => {
+      const now = Date.parse('2026-11-07T10:00:00Z')
+      const old = new Date(now - PR_STALE_MS - 1000).toISOString(), fresh = new Date(now - 60e3).toISOString()
+      expect(prStatusView({ step: 'pr', text: 'x', updated: old }, now)).toMatchObject({ step: 'failed' })
+      expect(prStatusView({ step: 'pr', text: 'x', updated: old }, now).text).toMatch(/Approve again/)
+      expect(prStatusView({ step: 'pr', text: 'x', updated: fresh }, now)).toEqual({ step: 'pr', text: 'x', updated: fresh })
+      expect(prStatusView({ step: 'ready', text: 'x', updated: old }, now).step).toBe('ready')
+      expect(prStatusView({ step: 'pr' }, now).step).toBe('pr')
+    })
+    it('a merge status older than this preview is another wave\'s: no result, no poll', () => {
+      const t0 = Date.parse('2026-11-07T12:00:00Z'), at = (min) => new Date(t0 - min * 60e3).toISOString()
+      expect(mergeResume({ step: 'released', updated: at(600) }, t0, { created: at(60) })).toBe('none')
+      expect(mergeResume({ step: 'released', updated: at(30) }, t0, { created: at(60) })).toBe('result')
+      expect(mergeResume({ step: 'released', updated: at(600) }, t0)).toBe('result')
     })
   })
 })
