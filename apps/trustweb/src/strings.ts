@@ -3084,6 +3084,17 @@ export const S = {
   viewPinned: 'Default view of Web ✓',
   viewInBar: 'Also show in the bottom row',
   webDefaultLabel: 'Default view',
+  // Wave 36 (deleted_people.ts): delete is reversible for 30 days.
+  deletedToast: (name: string) => `${name} deleted`,
+  deletedToastMany: (n: number) => `${n} people deleted`,
+  undo: 'Undo',
+  recentlyDeleted: (n: number) => `Recently deleted (${n})`,
+  recentlyDeletedTitle: 'Recently deleted',
+  recentlyDeletedHint: 'Deleted people stay here for 30 days, then they go for good.',
+  putBack: 'Put back',
+  daysLeft: (n: number) => (n === 1 ? '1 day left' : `${n} days left`),
+  spaceOutEvenly: 'Space out bubbles evenly',
+  multiCount: (n: number) => `${n} selected`,
   mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
   keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
 } as const

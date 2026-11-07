@@ -41,3 +41,10 @@ export function restoreSnapshot(people: Person[], snaps: readonly Snap[]): void 
     if (s.ringSuggested === undefined) delete p.ringSuggested; else p.ringSuggested = s.ringSuggested
   }
 }
+
+/** Wave 36: runs `fn` on the selected people in list order (not tap order), so a bulk delete or archive and its one undo toast read the same every time. Returns the ids it touched. */
+export function applyAll(people: readonly Person[], sel: Selection, fn: (p: Person) => void): string[] {
+  const hit = people.filter((p) => sel.has(p.id))
+  for (const p of hit) fn(p)
+  return hit.map((p) => p.id)
+}
