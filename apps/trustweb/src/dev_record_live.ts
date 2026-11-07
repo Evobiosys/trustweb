@@ -13,6 +13,7 @@ declare const __TW_DEV_LIVE__: boolean | null | undefined
 
 const PATH = '/__tw/dev-record'
 const AT_HEADER = 'X-TW-Live-At'
+const BASE_HEADER = 'X-TW-Live-Base'
 const DEBOUNCE_MS = 2000
 
 /** True in a personal preview (not stock, not a build). */
@@ -64,6 +65,10 @@ async function check(persona: string, deps: { fetch: typeof fetch }): Promise<bo
 
 let timer: ReturnType<typeof setTimeout> | undefined
 let warned = false
+/** Another preview posted a newer record since this tab last synced (409): this tab stops sharing; its next boot takes the newer one and keeps its own as <key>.before-live. */
+let stale = false
+/** Posts run one after another, so a second save never carries a base older than this tab's own previous post. */
+let posting: Promise<unknown> = Promise.resolve()
 
 /** Debounced 2 s: posts the record to the dev server after a save, once the boot check is done and did not replace it. Fire and forget. */
 export function pushLiveDevRecord(persona: string, s: AppState): void {
@@ -71,9 +76,10 @@ export function pushLiveDevRecord(persona: string, s: AppState): void {
   clearTimeout(timer)
   timer = setTimeout(() => {
     const body = JSON.stringify(s)
-    void ready.then((replaced) => {
-      if (replaced) return
-      return fetch(PATH, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then(async (r) => {
+    posting = posting.then(() => ready).then((replaced) => {
+      if (replaced || stale) return
+      return fetch(PATH, { method: 'POST', headers: { 'Content-Type': 'application/json', [BASE_HEADER]: String(readAt(persona) ?? 0) }, body }).then(async (r) => {
+        if (r.status === 409) { stale = true; console.warn('dev record: another personal preview saved a newer record; this tab no longer shares (reload to take it)'); return }
         if (!r.ok) throw new Error(String(r.status))
         const at = Number(r.headers.get(AT_HEADER))
         if (at) writeAt(persona, at)

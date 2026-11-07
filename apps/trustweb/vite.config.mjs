@@ -217,7 +217,7 @@ function devRecordLiveApi() {
         let text = ''
         req.on('data', (c) => { text += c })
         req.on('end', () => {
-          const r = liveRecordReply(file, req.method ?? '', req.headers, text)
+          const r = liveRecordReply(file, req.method ?? '', req.headers, text, { remote: req.socket.remoteAddress })
           res.statusCode = r.code
           for (const [k, v] of Object.entries(r.headers)) res.setHeader(k, v)
           res.end(r.body)

@@ -80,3 +80,29 @@ describe('liveRecordReply', () => {
     expect(liveRecordReply(file, 'POST', ok, '{"v":1,"me":{},"people":"x"}').code).toBe(400)
   })
 })
+
+describe('liveRecordReply review hardening', () => {
+  const fresh = () => { const d = mkdtempSync(path.join(tmpdir(), 'twlive-')); return path.join(d, 'dev-record.live.json') }
+  it('an unparsable Origin ("null" from a sandboxed frame) is a 403, never a thrown error', () => {
+    const f = fresh()
+    expect(() => liveRecordReply(f, 'GET', { ...ok, origin: 'null' }, '')).not.toThrow()
+    expect(liveRecordReply(f, 'GET', { ...ok, origin: 'null' }, '').code).toBe(403)
+  })
+  it('a client that is not on this machine is a 403 even with a loopback Host (tw_dev.sh --lan)', () => {
+    const f = fresh()
+    liveRecordReply(f, 'POST', ok, REC)
+    expect(liveRecordReply(f, 'GET', ok, '', { remote: '192.168.1.20' }).code).toBe(403)
+    expect(liveRecordReply(f, 'GET', ok, '', { remote: '::ffff:127.0.0.1' }).code).toBe(200)
+    expect(liveRecordReply(f, 'GET', ok, '', { remote: '::1' }).code).toBe(200)
+  })
+  it('a stale tab (its base older than the file) gets 409 and never overwrites the newer record', () => {
+    const f = fresh()
+    const first = liveRecordReply(f, 'POST', ok, REC)
+    const at = Number(first.headers['X-TW-Live-At'])
+    const stale = liveRecordReply(f, 'POST', { ...ok, 'x-tw-live-base': String(at - 5000) }, REC.replace('Ann', 'Old'))
+    expect(stale.code).toBe(409)
+    expect(readFileSync(f, 'utf8')).toBe(REC)
+    expect(liveRecordReply(f, 'POST', { ...ok, 'x-tw-live-base': String(at) }, REC.replace('Ann', 'New'), { gapMs: 0 }).code).toBe(200)
+    expect(readFileSync(f, 'utf8')).toContain('New')
+  })
+})
