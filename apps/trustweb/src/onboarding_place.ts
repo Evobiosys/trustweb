@@ -8,9 +8,11 @@ import { Ring } from './model'
 import type { AppState, ServiceRow } from './model'
 import { normalizeName } from '../../crm/src/import/dedup'
 import { decide, pendingProposals } from './services_import'
+import { CLOSE_SCORE, MIN_SCORE } from './interaction_signals'
+import { addPeerItem } from './peer_items'
 import { S } from './strings'
 
-type State = Pick<AppState, 'people' | 'serviceImports'>
+type State = Pick<AppState, 'people' | 'serviceImports' | 'peerItems'>
 
 /** Both ways on this many distinct days in the last year: a Close friends and allies suggestion. */
 export const CLOSE_DAYS = 100
@@ -23,9 +25,13 @@ export const showOnboarding = (s: Pick<AppState, 'people' | 'onbDismissed'>, dis
 /** "Not now": the card stays away on this phone; Settings > Import still offers the import. */
 export const dismissOnboarding = (s: Pick<AppState, 'onbDismissed'>): void => { s.onbDismissed = true }
 
-export function placementFor(r: Pick<ServiceRow, 'n365' | 'out' | 'in' | 'days' | 'group'>): Placement {
+export function placementFor(r: Pick<ServiceRow, 'n365' | 'out' | 'in' | 'days' | 'group' | 'closeness'>): Placement {
   if (r.group !== undefined) return { ring: Ring.Unsorted, note: S.onbSeenInGroup(r.group) }
-  if (r.n365 > 0 && r.out > 0 && r.in > 0) return { ring: Ring.Acquaintance, ...((r.days ?? 0) >= CLOSE_DAYS ? { suggested: Ring.Close } : {}) }
+  if (r.n365 > 0 && r.out > 0 && r.in > 0) {
+    // Wave 31: a phone export adds a closeness score: a tiny one keeps the person unsorted, a high one only raises the suggestion.
+    if (r.closeness !== undefined && r.closeness < MIN_SCORE) return { ring: Ring.Unsorted }
+    return { ring: Ring.Acquaintance, ...((r.days ?? 0) >= CLOSE_DAYS || (r.closeness ?? 0) >= CLOSE_SCORE ? { suggested: Ring.Close } : {}) }
+  }
   if (r.n365 > 0 && r.out > 0) return { ring: Ring.Intending }
   return { ring: Ring.Unsorted }
 }
@@ -52,6 +58,11 @@ export function placeAll(s: State, now: number, newId: () => string): { placed: 
     const known = s.people.some((p) => p.sources?.some((x) => x.key === row.key) || normalizeName(p.name) === normalizeName(row.name))
     decide(s, batchId, row.key, known ? { do: 'accept' } : { do: 'change', ring: pl.ring }, now, newId)
     const done = s.serviceImports?.find((b) => b.id === batchId)?.done[row.key]
+    for (const g of row.items ?? []) {
+      const pid = done?.personId
+      const have = (s.peerItems ?? []).some((i) => i.personId === pid && i.title === g.title)
+      if (pid && !have) addPeerItem(s, pid, g.title, g.need ? S.invGuessNeeds : S.invGuessOffers, S.invGuessed, now, true)
+    }
     const person = done?.created ? s.people.find((p) => p.id === done.personId) : undefined
     if (!person) continue
     out.placed++

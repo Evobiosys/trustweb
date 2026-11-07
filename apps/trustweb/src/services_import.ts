@@ -12,6 +12,8 @@ import type { ImportedContact } from '../../crm/src/import/types'
 import { isWhatsAppChat, parseWhatsApp } from '../../crm/src/import/whatsapp'
 import type { Evidence } from '../../crm/src/import/evidence'
 import { Ring } from './model'
+import { parsePhoneExport, readPhoneExport } from './phone_export'
+import type { PhoneExtras } from './phone_export'
 import type { AppState, Person, ServiceBatch, ServiceDone, ServiceRow } from './model'
 import { fingerprint } from './safe_text'
 import { bulkAcceptable, propose, writeFor } from './zone_proposals'
@@ -58,7 +60,19 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
   let ambiguous = false
   const direct = new Set<string>()
   const groupOf = new Map<string, string>()
+  const extras = new Map<string, PhoneExtras>()
   const summaries: ServicePlan['files'] = files.map((f) => {
+    // Wave 31: the JSON of the phone tool joins the same evidence, group and row logic as a chat .txt.
+    const px = parsePhoneExport(f.text)
+    if (px) {
+      const r = readPhoneExport(px, f.name, o.now)
+      r.direct.forEach((x) => direct.add(x))
+      r.groupOf.forEach((g, x) => groupOf.set(x, g))
+      r.extras.forEach((e, x) => extras.set(x, e))
+      contacts.push(...r.contacts)
+      evidence.push(...r.evidence)
+      return { name: f.name, source: ContactSource.WhatsApp, count: r.contacts.length }
+    }
     const parsed = parseFile(f.name, f.text)
     if (!parsed.format && isWhatsAppChat(f.text)) {
       const r = parseWhatsApp(f.text, f.name, { me: o.me, dayFirst: o.dayFirst })
@@ -90,6 +104,7 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
       n365: u?.n365 ?? 0, ...(u ? { days: u.days } : {}),
       ...(first && !direct.has(c.sourceRef) && groupOf.has(c.sourceRef) ? { group: groupOf.get(c.sourceRef) } : {}), out: u?.out ?? 0, in: u?.in ?? 0, ...(u?.lastTs !== undefined ? { lastTs: u.lastTs } : {}),
       ids: (u?.ids ?? []).slice(-IDS_KEPT),
+      ...(first && extras.has(c.sourceRef) ? { closeness: extras.get(c.sourceRef)!.closeness, ...(extras.get(c.sourceRef)!.items.length ? { items: extras.get(c.sourceRef)!.items } : {}) } : {}),
       ...(grouped.has(i) || have.has(normalizeName(c.name)) ? { dupe: true } : {}),
     }
     rows.push({ ...base, sig: sigOf(base, c) })

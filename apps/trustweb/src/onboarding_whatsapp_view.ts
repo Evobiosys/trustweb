@@ -8,9 +8,10 @@ import { randomId } from '../../demo/src/crypto'
 import type { AppState } from './model'
 import { failRun, finishRun, IDLE_RUN, startRun } from './import_run'
 import type { Run } from './import_run'
-import { dismissOnboarding, exportSteps, isZip, placeAll, resultOf, showOnboarding } from './onboarding_place'
+import { exportSteps, isZip, placeAll, resultOf, showOnboarding } from './onboarding_place'
 import { VERIFIED_SOURCES } from './import_sources'
 import { readZip } from './zip_read'
+import { namesSource, phoneMessageCount, unnamedPeople, withNames } from './phone_export'
 import type { Pages } from './page_view'
 import { commitPlan, planServices } from './services_import'
 import type { ServiceFile, ServicePlan } from './services_import'
@@ -42,19 +43,18 @@ let me = ''
 let messages = 0
 let pct = 0
 let message = ''
+let naming: string | null = null
 let placed: { placed: number; close: number } | null = null
 /** Redraws whatever shows the pass (the page and the notice). */
 const listeners = new Set<() => void>()
 const emit = (): void => { for (const f of [...listeners]) f() }
 
 /** The empty-web card: one primary button and a muted Not now (for this session). Null when it should not show. */
-export function onboardingCard(h: OnboardingHooks, redraw: () => void): HTMLElement | null {
+export function onboardingCard(h: OnboardingHooks, _redraw: () => void): HTMLElement | null {
   if (!showOnboarding(h.state(), dismissed)) return null
-  return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:8px;text-align:center;max-width:420px;margin:0 auto', 'data-onboard-card': '' }, [
-    el('p', { class: 'empty' }, [S.onbEmpty]),
-    ...VERIFIED_SOURCES.map((x) => el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-source': x.id, ...(x.id === 'whatsapp' ? { 'data-onboard-whatsapp': '' } : {}), onclick: () => openOnboarding(h) }, [S.onbImportFrom(x.label)])),
-    el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'data-onboard-more': '', onclick: h.more }, [S.onbMore]),
-    el('button', { class: 'btn btn-ghost', style: 'text-decoration:underline', 'data-onboard-notnow': '', onclick: () => { dismissed = true; dismissOnboarding(h.state()); h.save(); redraw() } }, [S.onbNotNow]),
+  // Wave 32: no card on its own, only the link; the owner opens the import page.
+  return el('p', { class: 'meta', style: 'text-align:center', 'data-onboard-card': '' }, [
+    ...VERIFIED_SOURCES.filter((x) => x.id === 'whatsapp').map((x) => el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'data-onboard-source': x.id, 'data-onboard-whatsapp': '', 'data-wa-import': '', onclick: () => openOnboarding(h) }, [S.onbImportFrom(x.label)])),
   ])
 }
 
@@ -71,7 +71,7 @@ async function start(h: OnboardingHooks, list: File[]): Promise<void> {
   try {
     files = []
     let done = 0
-    const add = (name: string, text: string): void => { files.push({ name, text }); messages += lines(text) }
+    const add = (name: string, text: string): void => { files.push({ name, text }); messages += text.trimStart().startsWith('{') ? phoneMessageCount(text) : lines(text) }
     for (const f of picked) {
       if (!isZip(f.name)) add(f.name, await f.text())
       else {
@@ -94,6 +94,14 @@ async function start(h: OnboardingHooks, list: File[]): Promise<void> {
   emit()
 }
 
+/** The owner names a person the phone file knows by number only: the file text changes, the plan is made again (same evidence, same ring guess). */
+function nameOne(h: OnboardingHooks, jid: string, name: string): void {
+  files = files.map((f) => ({ ...f, text: withNames(f.text, { [jid]: name }) }))
+  naming = null
+  plan = planServices(h.state(), files, { me, now: Date.now() })
+  emit()
+}
+
 function place(h: OnboardingHooks): void {
   if (!plan) return
   commitPlan(h.state(), plan, randomId(8), Date.now())
@@ -107,11 +115,30 @@ function place(h: OnboardingHooks): void {
   emit()
 }
 
+const phoneFile = (fs: ServiceFile[]): ServiceFile | undefined => fs.find((f) => namesSource(f.text) !== null)
+const namesLine = (fs: ServiceFile[]): HTMLElement => {
+  const src = phoneFile(fs) ? namesSource(phoneFile(fs)!.text) : null
+  return el('p', { class: 'meta', 'data-wa-names-source': src ?? 'unknown' }, [src === 'phone_contacts' ? S.onbNamesPhone : src === 'numbers_only' ? S.onbNamesNumbers : S.onbNamesHint])
+}
+/** People known by number only: the number stands in for the name, a pencil lets the owner name them. */
+function unnamed(h: OnboardingHooks): HTMLElement[] {
+  const f = phoneFile(files)
+  return (f ? unnamedPeople(f.text) : []).map((u) => el('p', { class: 'meta', 'data-wa-unnamed': u.jid }, [
+    naming === u.jid
+      ? el('input', { class: 'field', 'aria-label': S.onbNameField(u.phone), placeholder: S.onbNameField(u.phone), 'data-wa-name-input': '', onchange: (e: Event) => nameOne(h, u.jid, (e.target as HTMLInputElement).value) })
+      : `+${u.phone} `,
+    el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'aria-label': S.onbNameThem, title: S.onbNameThem, 'data-wa-name': '', onclick: () => { naming = u.jid; emit() } }, ['✎']),
+  ]))
+}
+
 /** The import page: steps, file pick, progress, result. */
 export function openOnboarding(h: OnboardingHooks): void {
   const steps = { android: S.onbStepsAndroid, iphone: S.onbStepsIphone, desktop: S.onbStepsDesktop }[exportSteps(navigator.userAgent)]
   const input = el('input', { type: 'file', multiple: true, accept: '.txt,.zip,text/*', hidden: true, 'data-onboard-file': '' }) as HTMLInputElement
   input.addEventListener('change', () => { const list = [...(input.files ?? [])]; input.value = ''; void start(h, list) })
+  // Wave 31: the JSON of the phone tool (trustweb-ops/phone) goes through the same start().
+  const phone = el('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-onboard-phone-file': '' }) as HTMLInputElement
+  phone.addEventListener('change', () => { const list = [...(phone.files ?? [])]; phone.value = ''; void start(h, list) })
   me ||= h.state().me.displayName
   const box = el('div', { 'data-onboard-page': '' })
   const draw = (): void => {
@@ -123,12 +150,16 @@ export function openOnboarding(h: OnboardingHooks): void {
       el('ol', { class: 'meta', 'data-onboard-steps': '' }, steps.map((t) => el('li', {}, [t]))),
       el('label', { class: 'meta' }, [S.onbMeLabel + ' ', el('input', { class: 'field', value: me, 'data-onboard-me': '', onchange: (e: Event) => { me = (e.target as HTMLInputElement).value.trim(); if (plan) { plan = planServices(h.state(), files, { me, now: Date.now() }); emit() } } })]),
       input,
+      phone,
       run.phase !== 'reading' && !r && !placed ? el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-choose': '', onclick: () => input.click() }, [S.onbChoose]) : null,
+      run.phase !== 'reading' && !r && !placed ? el('p', { class: 'meta' }, [el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'data-wa-import-phone': '', onclick: () => phone.click() }, [S.onbPhone]), ' ', S.onbPhoneHint]) : null,
+      namesLine(files),
       message ? el('p', { class: 'warn', 'data-onboard-message': '' }, [message]) : null,
       run.phase === 'reading' ? el('p', { class: 'meta', role: 'status', 'data-onboard-reading': String(pct) }, [S.onbReading(messages)]) : null,
       run.phase === 'failed' ? el('p', { class: 'warn', 'data-onboard-failed': '' }, [run.error ?? S.svcReadFailed, ' ', el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', onclick: () => input.click() }, [S.svcRetry])]) : null,
       r ? el('div', { 'data-onboard-result': String(r.total) }, [
         el('p', {}, [S.onbResult(r.total, r.both, r.wroteOnly, r.groupOnly, r.chats)]),
+        ...unnamed(h),
         ...(r.total ? [el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-place': '', onclick: () => place(h) }, [S.onbPlace])] : []),
       ]) : null,
       placed ? el('p', { 'data-onboard-placed': String(placed.placed) }, [S.onbPlaced(placed.placed, placed.close)]) : null,

@@ -1363,6 +1363,10 @@ export interface ServiceRow {
   days?: number
   /** Wave 30: WhatsApp only: the group chat this person was seen in, when never in a one-to-one chat. */
   group?: string
+  /** Wave 31: phone export only: closeness score 0..1 from the interaction signals (interaction_signals.ts). */
+  closeness?: number
+  /** Wave 31: phone export with text only: items they seem to offer or need, short guesses (inventory_guess.ts). */
+  items?: { title: string; need: boolean }[]
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
 export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean }
