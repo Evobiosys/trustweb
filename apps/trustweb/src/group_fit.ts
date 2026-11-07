@@ -34,7 +34,7 @@ function members(g: TwGroup, s: Rec): Person[] {
 }
 
 const mentions = (p: Person, tags: readonly string[]): boolean => {
-  const text = norm([p.generalNote ?? '', ...p.lines.map((l) => l.text)].join(' '))
+  const text = norm(p.lines.map((l) => l.text).join(' '))
   return tags.some((t) => text.includes(t))
 }
 
