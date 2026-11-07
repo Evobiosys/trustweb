@@ -556,6 +556,22 @@ export interface Peer {
   reachOut?: true
 }
 
+export interface Offer { id: string; title: string }
+export type MatchPays = 'self' | 'organised' | 'they-organise'
+export interface Match {
+  personId?: string
+  communityId?: string
+  offerId: string
+  need: string
+  pays?: MatchPays
+  confidence: number
+  next?: string
+  at: number
+  /** My answer: absent = new. */
+  status?: 'dismissed'
+}
+export interface MatchFeedback { key: string; verdict: 'not_relevant'; at: number }
+
 export interface InventoryItem {
   id: string
   text: string
@@ -1012,6 +1028,10 @@ export interface AppState {
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
+  /** Wave 31 (matches.ts): what I can offer (edited like My Resources) and the matches the pc24 service found, with my answers. This device only (not in sync_core's bundle). */
+  offers?: Offer[]
+  matches?: Match[]
+  matchFeedback?: MatchFeedback[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
   uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean }
   /** Absent: QueryStyle.Call. */
