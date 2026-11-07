@@ -664,3 +664,20 @@ describe('wave 33 panel', () => {
     })
   })
 })
+
+import { changedSinceApproval, changesToApprove } from '../../src/dev_preview_rules.ts'
+
+describe('wave 34: approved rows keep their approval when the ref moves', () => {
+  const r = (key, over = {}) => ({ key, branch: 'w/' + key, title: key, requires: [], checked: true, ...over })
+  it('changedSinceApproval: only an approved, updated row whose ref differs from approvedRef; short shas', () => {
+    expect(changedSinceApproval(r('a', { verdict: 'merge', updated: true, approvedRef: 'aaaaaaaa1', ref: 'bbbbbbbb2' }))).toEqual({ from: 'aaaaaaa', to: 'bbbbbbb' })
+    expect(changedSinceApproval(r('a', { verdict: 'merge', approvedRef: 'aaaaaaaa1', ref: 'bbbbbbbb2' }))).toBeNull()
+    expect(changedSinceApproval(r('a', { verdict: null, updated: true, approvedRef: 'aaaaaaaa1', ref: 'bbbbbbbb2' }))).toBeNull()
+    expect(changedSinceApproval(r('a', { verdict: 'merge', updated: true, approvedRef: 'aaaaaaaa1', ref: 'aaaaaaaa1' }))).toBeNull()
+    expect(changedSinceApproval(r('a', { verdict: 'merge', updated: true, ref: 'bbbbbbbb2' }))).toBeNull()
+  })
+  it('changesToApprove counts visible loaded rows with changes since approval', () => {
+    const c = { verdict: 'merge', updated: true, approvedRef: 'aaaaaaaa1', ref: 'bbbbbbbb2' }
+    expect(changesToApprove([r('a', c), r('b', c), r('c', { ...c, merged: true }), r('d', { ...c, checked: false }), r('e', { verdict: 'merge' })])).toBe(2)
+  })
+})
