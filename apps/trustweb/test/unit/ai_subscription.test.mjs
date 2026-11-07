@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 36 ai-subscription: plans, claim, sign-up and poll calls, the active endpoint, legacy pc24 migration, labels. */
 import { describe, expect, it } from 'vitest'
-import { activeEndpoint, checkSubscription, apiBase, devPc24Seed, makeClaim, migrateAi, PLANS, poll, presetLabel, signUp, validEmail } from '../../src/ai_subscription.ts'
+import { activeEndpoint, checkSubscription, apiBase, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, poll, presetLabel, signUp, validEmail } from '../../src/ai_subscription.ts'
 
 const reply = (body, ok = true, status = 200) => ({ ok, status, json: async () => body })
 
@@ -117,5 +117,14 @@ describe('checkSubscription', () => {
   it('does nothing without a sign-up', async () => {
     const plain = { preset: 'custom', baseUrl: '', apiKey: '', model: '' }
     expect((await checkSubscription(async () => { throw new Error('no call') }, '', plain)).ai).toBe(plain)
+  })
+})
+
+describe('pollsOnOpen', () => {
+  it('re-checks pending and active sign-ups, so usage and a revoke show up', () => {
+    expect(pollsOnOpen({ state: 'pending' })).toBe(true)
+    expect(pollsOnOpen({ state: 'active' })).toBe(true)
+    expect(pollsOnOpen({ state: 'revoked' })).toBe(false)
+    expect(pollsOnOpen(undefined)).toBe(false)
   })
 })

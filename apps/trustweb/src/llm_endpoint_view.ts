@@ -4,7 +4,7 @@
  * Ollama, Custom), each with base URL, key, model and a Test button. Kept on this phone and in the sealed record.
  */
 import { el } from '../../demo/src/ui/dom'
-import { activeEndpoint, apiBase, checkSubscription, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
+import { activeEndpoint, apiBase, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
 import { askEndpoint, configured, switchPreset } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
@@ -152,6 +152,6 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
     box.replaceChildren(el('h4', { class: 'eyebrow' }, [S.aiTitle]), subGroup(), byokGroup(), el('p', { class: 'meta' }, [S.aiHint]))
   }
   draw()
-  if (h.state().advanced?.ai?.sub?.state === 'pending' && Date.now() - lastPoll > POLL_GAP_MS) void pollOnce(h).then((changed) => { if (changed) draw() })
+  if (pollsOnOpen(h.state().advanced?.ai?.sub) && Date.now() - lastPoll > POLL_GAP_MS) void pollOnce(h).then((changed) => { if (changed) draw() })
   return [box]
 }

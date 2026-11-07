@@ -60,6 +60,9 @@ export const devPc24Seed = (): AiEndpoint => ({ preset: 'custom', name: 'pc24', 
 export const presetLabel = (ai: AiEndpoint): string => (ai.preset === 'custom' && ai.name ? `Custom: ${ai.name}` : 'Custom')
 
 /** Where a sign-up stands after a poll: the endpoint (the subscription's once a token arrives) and the quota line. */
+/** Opening Your AI re-checks a pending or active sign-up (usage, approval, a revoke); a revoked one stays as it is. */
+export const pollsOnOpen = (sub: Pick<AiSubscription, 'state'> | undefined): boolean => sub?.state === 'pending' || sub?.state === 'active'
+
 export interface Checked { ai: AiEndpoint; used?: number; quota?: number }
 
 /** One poll of a pending or active sign-up; throws with the server's message. A delivered token switches the endpoint to the subscription. */
