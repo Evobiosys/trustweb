@@ -1,0 +1,203 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+/**
+ * Connect Google (src/google_contacts.ts): OAuth code + PKCE in the browser, People API read-only.
+ * Fetch, randomness and hashing are injected; all data synthetic (example.at).
+ */
+import { createHash } from 'node:crypto'
+import {
+  buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadToken,
+  makePkce, mapPerson, parseRedirect, revokeToken, saveClientId, saveToken,
+} from '../../src/google_contacts.ts'
+
+const sha256 = async (s) => new Uint8Array(createHash('sha256').update(s).digest())
+const b64url = (b) => Buffer.from(b).toString('base64url')
+
+const res = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body })
+const memStore = () => {
+  const m = new Map()
+  return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v), removeItem: (k) => void m.delete(k), m }
+}
+
+describe('makePkce', () => {
+  it('matches the RFC 7636 appendix B vector', async () => {
+    const verifierBytes = new Uint8Array(Buffer.from('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk', 'base64url'))
+    const p = await makePkce(() => verifierBytes, async (s) => {
+      expect(s).toBe('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')
+      return sha256(s)
+    })
+    expect(p.challenge).toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM')
+  })
+  it('makes a 43..128 char unreserved verifier, S256 challenge and a state', async () => {
+    const p = await makePkce((n) => new Uint8Array(n).map((_, i) => i * 7 + 1), sha256)
+    expect(p.verifier).toMatch(/^[A-Za-z0-9\-._~]{43,128}$/)
+    expect(p.challenge).toBe(b64url(createHash('sha256').update(p.verifier).digest()))
+    expect(p.state.length).toBeGreaterThan(10)
+  })
+})
+
+describe('buildAuthUrl', () => {
+  const u = new URL(buildAuthUrl({ clientId: 'cid', redirectUri: 'https://app.example.at/', challenge: 'CH', state: 'ST' }))
+  it('targets Google with code + PKCE parameters', () => {
+    expect(u.origin + u.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth')
+    const p = u.searchParams
+    expect(p.get('response_type')).toBe('code')
+    expect(p.get('client_id')).toBe('cid')
+    expect(p.get('redirect_uri')).toBe('https://app.example.at/')
+    expect(p.get('code_challenge')).toBe('CH')
+    expect(p.get('code_challenge_method')).toBe('S256')
+    expect(p.get('state')).toBe('ST')
+    expect(p.get('include_granted_scopes')).toBe('false')
+    expect(p.get('prompt')).toBe('consent')
+  })
+  it('asks for both read scopes and never a write scope', () => {
+    const scopes = u.searchParams.get('scope').split(' ')
+    expect(scopes).toEqual([
+      'https://www.googleapis.com/auth/contacts.readonly',
+      'https://www.googleapis.com/auth/contacts.other.readonly',
+    ])
+    expect(u.search).not.toMatch(/auth\/contacts(%20|&|$)/)
+  })
+})
+
+describe('parseRedirect', () => {
+  it('returns the code when state matches', () => {
+    expect(parseRedirect('https://app.example.at/?code=abc&state=S', 'S')).toEqual({ code: 'abc' })
+  })
+  it('flags a state mismatch', () => {
+    expect(parseRedirect('https://app.example.at/?code=abc&state=X', 'S')).toEqual({ error: 'state' })
+  })
+  it('passes Google errors on', () => {
+    expect(parseRedirect('https://app.example.at/?error=access_denied&state=S', 'S')).toEqual({ error: 'access_denied' })
+  })
+  it('returns null without code or error', () => {
+    expect(parseRedirect('https://app.example.at/', 'S')).toBeNull()
+    expect(parseRedirect('not a url', 'S')).toBeNull()
+  })
+})
+
+describe('exchangeCode', () => {
+  const args = { clientId: 'cid', redirectUri: 'https://app.example.at/', code: 'abc', verifier: 'ver' }
+  it('posts a form and returns the access token only', async () => {
+    let seen
+    const f = async (url, init) => { seen = { url, init }; return res(200, { access_token: 'tok', refresh_token: 'r' }) }
+    expect(await exchangeCode(f, args)).toBe('tok')
+    expect(seen.url).toBe('https://oauth2.googleapis.com/token')
+    expect(seen.init.method).toBe('POST')
+    const body = new URLSearchParams(String(seen.init.body))
+    expect(body.get('grant_type')).toBe('authorization_code')
+    expect(body.get('code')).toBe('abc')
+    expect(body.get('code_verifier')).toBe('ver')
+    expect(body.get('client_id')).toBe('cid')
+    expect(body.get('client_secret')).toBeNull()
+  })
+  it('throws a plain Error on failure', async () => {
+    await expect(exchangeCode(async () => res(400, { error: 'invalid_grant' }), args)).rejects.toThrow(Error)
+    await expect(exchangeCode(async () => res(200, {}), args)).rejects.toThrow(Error)
+  })
+})
+
+describe('fetchAllContacts', () => {
+  const person = (n) => ({ resourceName: `people/c${n}`, names: [{ displayName: `Anna ${n}` }] })
+  it('pages connections and other contacts with a bearer header', async () => {
+    const calls = []
+    const f = async (url, init) => {
+      calls.push({ url, auth: init.headers.Authorization })
+      const u = new URL(url)
+      if (u.pathname === '/v1/people/me/connections') {
+        return u.searchParams.get('pageToken')
+          ? res(200, { connections: [person(2)] })
+          : res(200, { connections: [person(1)], nextPageToken: 'P2' })
+      }
+      return u.searchParams.get('pageToken')
+        ? res(200, { otherContacts: [{ resourceName: 'otherContacts/c4', emailAddresses: [{ value: 'O@example.at' }] }] })
+        : res(200, { otherContacts: [person(3)], nextPageToken: 'Q2' })
+    }
+    const r = await fetchAllContacts(f, 'tok')
+    expect(r.contacts.map((c) => c.sourceRef)).toEqual(['people/c1', 'people/c2', 'people/c3', 'otherContacts/c4'])
+    expect(r.otherSkipped).toBe(false)
+    expect(calls).toHaveLength(4)
+    expect(calls.every((c) => c.auth === 'Bearer tok')).toBe(true)
+    const first = new URL(calls[0].url)
+    expect(first.searchParams.get('personFields')).toBe('names,emailAddresses,phoneNumbers,organizations,birthdays,biographies,memberships')
+    expect(first.searchParams.get('pageSize')).toBe('1000')
+    const other = new URL(calls[2].url)
+    expect(other.pathname).toBe('/v1/otherContacts')
+    expect(other.searchParams.get('readMask')).toBe('names,emailAddresses,phoneNumbers')
+  })
+  it('tolerates 403 on other contacts', async () => {
+    const f = async (url) => (url.includes('otherContacts') ? res(403, {}) : res(200, { connections: [person(1)] }))
+    const r = await fetchAllContacts(f, 'tok')
+    expect(r.contacts).toHaveLength(1)
+    expect(r.otherSkipped).toBe(true)
+  })
+  it('fails when the first call fails', async () => {
+    await expect(fetchAllContacts(async () => res(401, {}), 'tok')).rejects.toThrow(Error)
+  })
+  it('handles an empty account', async () => {
+    const r = await fetchAllContacts(async () => res(200, {}), 'tok')
+    expect(r).toEqual({ contacts: [], otherSkipped: false })
+  })
+})
+
+describe('mapPerson', () => {
+  it('maps a full person', () => {
+    const c = mapPerson({
+      resourceName: 'people/c9',
+      names: [{ displayName: 'Anna Beispiel', givenName: 'Anna', familyName: 'Beispiel' }],
+      emailAddresses: [{ value: 'Anna@Example.at' }, { value: 'anna@example.at' }],
+      phoneNumbers: [{ value: '+43 1 234' }, { value: '+43 1 234' }],
+      organizations: [{ name: 'Example GmbH', title: 'Dev' }],
+      birthdays: [{ date: { year: 1990, month: 3, day: 7 } }],
+      biographies: [{ value: 'Met at a fair' }],
+      memberships: [{ contactGroupMembership: { contactGroupId: 'abc' } }],
+    }, 'Google contacts', 3)
+    expect(c).toEqual({
+      source: 'google-api', file: 'Google contacts', sourceRef: 'people/c9', name: 'Anna Beispiel',
+      given: 'Anna', family: 'Beispiel', emails: ['anna@example.at'], phones: ['+43 1 234'],
+      org: 'Example GmbH', title: 'Dev', birthday: '1990-03-07', note: 'Met at a fair', labels: [],
+    })
+  })
+  it('writes a yearless birthday as --MM-DD', () => {
+    const c = mapPerson({ resourceName: 'p', names: [{ displayName: 'B' }], birthdays: [{ date: { month: 12, day: 5 } }] }, 'f', 0)
+    expect(c.birthday).toBe('--12-05')
+  })
+  it('falls back for the name', () => {
+    expect(mapPerson({ resourceName: 'p', names: [{ givenName: 'A', familyName: 'B' }] }, 'f', 0).name).toBe('A B')
+    expect(mapPerson({ resourceName: 'p', organizations: [{ name: 'Org' }] }, 'f', 0).name).toBe('Org')
+    expect(mapPerson({ resourceName: 'p', emailAddresses: [{ value: 'X@example.at' }] }, 'f', 0).name).toBe('x@example.at')
+    expect(mapPerson({ resourceName: 'p', phoneNumbers: [{ value: '123' }] }, 'f', 0).name).toBe('123')
+  })
+  it('returns null for an empty person and falls back to the position as ref', () => {
+    expect(mapPerson({ resourceName: 'p' }, 'f', 0)).toBeNull()
+    expect(mapPerson({ names: [{ displayName: 'Z' }] }, 'f', 4).sourceRef).toBe('#4')
+  })
+})
+
+describe('revokeToken', () => {
+  it('posts to the revoke endpoint', async () => {
+    let url
+    await revokeToken(async (u) => { url = u; return res(200, {}) }, 'a b')
+    expect(url).toBe('https://oauth2.googleapis.com/revoke?token=a%20b')
+  })
+  it('never throws', async () => {
+    await expect(revokeToken(async () => { throw new Error('offline') }, 't')).resolves.toBeUndefined()
+  })
+})
+
+describe('storage helpers', () => {
+  it('round-trips and clears the token', () => {
+    const s = memStore()
+    expect(loadToken(s)).toBeNull()
+    saveToken(s, 'tok')
+    expect(s.m.get('tw_google_token')).toBe('tok')
+    expect(loadToken(s)).toBe('tok')
+    clearToken(s)
+    expect(loadToken(s)).toBeNull()
+  })
+  it('round-trips the client id under its own key', () => {
+    const s = memStore()
+    saveClientId(s, 'cid')
+    expect(s.m.get('tw_google_client_id')).toBe('cid')
+    expect(loadClientId(s)).toBe('cid')
+  })
+})

@@ -38,4 +38,16 @@ describe('connectedPlaces', () => {
     expect(connectedPlaces({ id: 'a', fields: { [EMAIL_FIELD]: 'a@example.org' } })[0].href).toBe('mailto:a@example.org')
     expect(ids({ id: 'local-9' })).toEqual(['notes'])
   })
+  it('a link typed on the card (no channel number) is a dashed linked-only place that opens the link', () => {
+    const p = { id: 'a', links: { signal: 'https://signal.me/#p/+436601234567', other: 'https://example.org/anna' } }
+    expect(connectedPlaces(p)).toEqual([
+      expect.objectContaining({ id: 'link:signal', linked: true, href: 'https://signal.me/#p/+436601234567', label: 'Signal: linked, not connected on TrustWeb' }),
+      expect.objectContaining({ id: 'link:other', linked: true, href: 'https://example.org/anna' }),
+    ])
+  })
+  it('a link whose channel is already a place is not listed twice', () => {
+    const p = { id: 'a', channels: { signal: '+436601234567' }, links: { signal: 'https://signal.me/#p/+436601234567' } }
+    expect(ids(p)).toEqual(['signal', 'phone'])
+    expect(connectedPlaces(p)[0].linked).toBeUndefined()
+  })
 })

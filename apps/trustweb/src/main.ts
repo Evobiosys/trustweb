@@ -27,9 +27,9 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
-import { addSupportIn, supportButton, supportCards, supportLine } from './support_ask_view'
+import { addSupportIn, supportCards, supportForm, supportLine } from './support_ask_view'
 import type { SupportIo } from './support_ask_view'
-import { parseHereText, parseSupportText, recordHere } from './support_ask'
+import { ASK_MODES, AskMode, nextAskMode, parseHereText, parseSupportText, recordHere } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
 import { PROVIDERS, guessProvider, validateEmail, composeHref, senderHint, providerLabel, type PrimaryEmail } from './primary_email'
@@ -49,7 +49,7 @@ import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection, timelineImportButton } from './timeline_view'
-import { addTagTo, chatShown, messengerGlyphs, setMetAt, setRing, tagsAddable } from './card_small'
+import { addTagTo, chatShown, setMetAt, setRing, tagsAddable } from './card_small'
 import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
@@ -120,7 +120,7 @@ import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
-import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, togglePinned } from './header_controls'
+import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
@@ -216,7 +216,8 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
-import { openServicesImport, servicesGroup } from './services_view'
+import { exportEntry, resumeGoogle } from './contacts_sync_view'
+import { offerContacts, openServicesImport, servicesGroup } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
@@ -590,6 +591,7 @@ let queryOpen = false
 let pastSearchOpen = false
 let pastSearchText = ''
 let queryText = ''
+let askMode: AskMode = AskMode.Web
 let askRun: {
   text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
   /** Wave 6: the reach it went out with (hops.ts), for the countdown. */
@@ -925,6 +927,8 @@ const pages = createPages(phone)
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }
 mountOnboardingNotice(onboardHooks)
+// Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
+void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
@@ -1309,7 +1313,7 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
 
 /** Wave 27: every main screen carries the settings gear in its header (Web and Resources draw their own). */
 function mountSettingsGear(): void {
-  if (!sectionOfScreen(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
+  if (!showsSettingsGear(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
   const right = host.querySelector('.hdr .hdr-right')
   if (!right) return
   const gear = iconButton('settings', S.invSettings, settingsSheet)
@@ -2376,7 +2380,7 @@ function webPageScreen(page: WebPage): Node[] {
     onAddResource: (c, title) => { if (addResourceIn(st(), c, title, randomId(8), Date.now())) save(); render() },
     onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
-    heading: cardNameHeading(p), places: connectedPlaces(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
+    heading: cardNameHeading(p), places: connectedPlaces(p), onChat: () => chatSheet(p.id), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
     onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     onQr: () => personQr(p),
@@ -2719,6 +2723,7 @@ function screenWeb(): Node[] {
   const expanded = expandedOf(expandStored, view)
   webViewNow = view
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
+  const expandSlot = el('span', { class: 'expand-slot' }) // wave 33: filled by ringsView with the expanse control and each ring's ⛶
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
@@ -2728,7 +2733,7 @@ function screenWeb(): Node[] {
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
-      : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
+      : web.ringsView(s, askMarks(), undefined, { complete: expanded, controls: expandSlot }),
     supportLine(supportIo),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -2746,34 +2751,25 @@ function screenWeb(): Node[] {
     ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
-      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, fiveRingsOn() ? fieldOverviewPanel(s, { live: st, save, render }) : fiveRingsTry()])])
+      ? el('div', { class: 'zones-split' }, [zoneColumn(s), el('div', { class: 'zones-main' }, [clip, expandRow(expanded, expandSlot), ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
       : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
 
-/** Five rings off: one underlined line under the rings that turns the prototype on. */
-function fiveRingsTry(): HTMLElement {
-  return el('button', { class: 'link-toggle five-rings-try', 'data-five-rings-try': '', onclick: () => { writeFlag(true); render() } }, [S.fiveRingsTry])
-}
-
-/** Settings > Web: the plain switch for the five-ring prototype. */
-function fiveRingsSwitch(): HTMLElement {
-  const on = fiveRingsOn()
-  return el('button', {
-    class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-five-rings-switch': '',
-    onclick: () => { writeFlag(!on); render(); settingsSheet() },
-  }, [el('b', {}, [S.setFiveRings]), el('small', {}, [S.setFiveRingsHint])])
-}
-
-/** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: expand all, add, tag filters. (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
-function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
-  const live = (): void => { save(); render() }
+/** Wave 33: ONE row under the rings: expand all, the expanse control, one ⛶ per ring with a rest (the slot, filled by ringsView). */
+function expandRow(expanded: boolean, slot: HTMLElement): HTMLElement {
   const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
+  return el('div', { class: 'expand-row', 'data-expand-row': '' }, [expand, slot])
+}
+
+/** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: add, tag filters (expand all sits in the bottom row). (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
+function zoneColumn(s: AppState): HTMLElement {
+  const live = (): void => { save(); render() }
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, add })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -3240,26 +3236,6 @@ function cardChannelsRow(p: Person): HTMLElement | null {
   }))
 }
 
-/** The icon of one messenger service: the channel's own, else the link kind's, else the web glyph. */
-const serviceIcon = (svc: ChatService): string => ICONS[svc.channel ?? svc.linkKind ?? 'web'] ?? ICONS.web
-
-/** Wave 28: one glyph per messenger link with this person; solid = connected on TrustWeb (opens the chat page), dashed = only linked (opens the outside link). */
-function messengerStrip(p: Person): HTMLElement | null {
-  const glyphs = messengerGlyphs(p)
-  if (!glyphs.length) return null
-  return el('div', { class: 'msg-glyphs', 'data-msg-glyphs': p.id }, glyphs.map((g) => {
-    const label = g.connected ? S.cardGlyphConnected : S.cardGlyphLinked(g.service.channel ? chName(g.service.channel) : S.chatRowLink[g.service.linkKind ?? 'other'])
-    const attrs = { class: 'msg-glyph' + (g.connected ? '' : ' linked'), 'data-msg-glyph': g.id, 'aria-label': label, title: label }
-    const node = g.connected || !g.service.url
-      ? el('button', { ...attrs, onclick: () => chatSheet(p.id) })
-      : g.service.channel === Channel.WhatsApp
-        ? el('a', { ...attrs, href: waLink(g.service.url, waDraft(p)), target: '_blank', rel: 'noopener noreferrer', 'data-wa-person': p.id })
-        : el('a', { ...attrs, href: g.service.url, target: '_blank', rel: 'noopener noreferrer' })
-    node.innerHTML = serviceIcon(g.service)
-    return node
-  }))
-}
-
 /** Advanced: write to a connected person without opening the earlier conversation; the message still lands in the chat book. */
 function sendUnreadBox(p: Person): HTMLElement {
   const text = el('textarea', { class: 'field', rows: '2', maxlength: String(CHAT_TEXT_MAX), placeholder: S.cardSendUnreadPh, 'aria-label': S.cardSendUnread, 'data-send-unread-text': p.id }) as HTMLTextAreaElement
@@ -3273,10 +3249,8 @@ function sendUnreadBox(p: Person): HTMLElement {
 
 /** The Chat button (the Chat tab's icon), only for a person connected on TrustWeb; it opens the chat page (or the pinned / last-used service). Not connected: the messenger glyphs and the way to connect (an invitation I hold, else the link panel). */
 function cardChatButton(p: Person, quiet: boolean): HTMLElement {
-  const strip = messengerStrip(p)
   if (!chatShown(p)) {
     return el('div', { class: 'card-chat' }, [
-      strip,
       p.pendingInvite ? el('button', { class: 'btn btn-electric btn-sm', 'data-reopen-invite': p.id, onclick: () => reopenInvite(p.pendingInvite!) }, [S.cardConnect]) : null,
       connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast }),
     ])
@@ -3296,7 +3270,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
     label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
     pin: (id) => { toggleChatPin(st(), p.id, id); save() },
   })
-  return el('div', { class: 'card-chat' }, [b, strip, sendUnreadBox(p)])
+  return el('div', { class: 'card-chat' }, [b, sendUnreadBox(p)])
 }
 
 /** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */
@@ -6459,7 +6433,6 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
-      fiveRingsSwitch(),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
       ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
@@ -6618,6 +6591,7 @@ function settingsSheet(): void {
         onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
       }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
       el('button', { class: 'conn-row', 'data-settings-sovereign': '', onclick: () => sovereign.open() }, [el('b', {}, [S.sov.entry]), el('em', {}, [S.sov.entryHint])]),
+      exportEntry({ state: st, toast: (msg) => toast(msg), pages }),
     ], true),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
@@ -7047,12 +7021,17 @@ function queryDock(s: AppState): HTMLElement {
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
-  return el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
+  const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.map((m) => el('button', {
+    class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
+    onclick: () => { askMode = m; render() },
+  }, [m === AskMode.Web ? S.webCall : S.askModeSupport])))
+  const dock = el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
       el('h3', {}, [S.queryTitle]),
-      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; render() } }, ['×']),
+      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; askMode = AskMode.Web; render() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [
+      run ? null : modeChips,
       run ? null : askHow(),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
@@ -7078,12 +7057,16 @@ function queryDock(s: AppState): HTMLElement {
         class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,
         onclick: () => { void sendFromDock(queryText) },
       }, [S.querySend]),
-      run ? null : supportButton(supportIo),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
       !run && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryAnswers)]) : null,
     ]),
   ])
+  // Ask for support swaps the question box for the support form; the chips stay on top.
+  if (!run && nextAskMode(askMode) === AskMode.Support) {
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Web; queryOpen = false }))
+  }
+  return dock
 }
 
 // ---------------------------------------------------------------------------

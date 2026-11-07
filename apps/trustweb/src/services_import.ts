@@ -4,14 +4,18 @@
  * Pure: no DOM, no network, no storage. Nothing reaches the record before the owner accepts a row (I9); message text is never kept (I1).
  * Undo moves people the batch created out of the web (Ring.None) instead of deleting them, and restores rings it changed.
  */
-import { findDuplicates, normalizeName } from '../../crm/src/import/dedup'
+import { findDuplicates, normalizeName, normalizePhone } from '../../crm/src/import/dedup'
 import { parseFile } from '../../crm/src/import/detect'
+import { autoMap, csvHeaders } from '../../crm/src/import/generic_csv'
+import type { CsvMapping } from '../../crm/src/import/generic_csv'
 import { summariseAll } from '../../crm/src/import/evidence'
 import { ContactSource } from '../../crm/src/import/types'
 import type { ImportedContact } from '../../crm/src/import/types'
 import { isWhatsAppChat, parseWhatsApp } from '../../crm/src/import/whatsapp'
 import type { Evidence } from '../../crm/src/import/evidence'
-import { Ring } from './model'
+import { toE164 } from './channel'
+import { EMAIL_FIELD } from './intending_reminder'
+import { Channel, Ring } from './model'
 import { parsePhoneExport, readPhoneExport } from './phone_export'
 import type { PhoneExtras } from './phone_export'
 import type { AppState, Person, ServiceBatch, ServiceDone, ServiceRow } from './model'
@@ -21,9 +25,11 @@ import type { Choice, Proposal } from './zone_proposals'
 
 type State = Pick<AppState, 'people' | 'serviceImports'>
 
-export interface ServiceFile { name: string; text: string }
+/** `mapping`: the owner's fixed column mapping, generic CSV only. `contacts`: already parsed (Connect Google). */
+export interface ServiceFile { name: string; text: string; mapping?: CsvMapping; contacts?: ImportedContact[] }
 export interface ServicePlan {
-  files: { name: string; source: ContactSource | null; count: number }[]
+  /** `headers`/`mapping`: generic CSV only, for the column picker. */
+  files: { name: string; source: ContactSource | null; count: number; headers?: string[]; mapping?: CsvMapping }[]
   counts: Record<string, number>
   rows: ServiceRow[]
   /** Groups of rows that look like the same person. */
@@ -37,9 +43,20 @@ export interface PlanOptions { me: string; now: number; dayFirst?: boolean }
 const IDS_KEPT = 20
 export const SERVICE_LABEL: Record<string, string> = {
   whatsapp: 'WhatsApp', linkedin: 'LinkedIn', vcard: 'Phone contacts', 'google-csv': 'Google contacts', 'facebook-json': 'Facebook',
+  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts',
 }
 export const countsLine = (counts: Record<string, number>): string =>
   Object.entries(counts).map(([s, n]) => `${SERVICE_LABEL[s] ?? s} ${n}`).join(', ')
+
+/** WhatsApp ids carry the number without its plus ("436605550401"): write it as a number. */
+const withPlus = (v: string): string => (/^\d{7,15}$/.test(v) ? `+${v}` : v)
+const phoneKey = (v: string): string => toE164(v) ?? normalizePhone(v)
+/** The e-mails and phone numbers a person already has (typed or from an earlier import), in comparable form. */
+const reachOf = (p: Person): string[] => [
+  ...Object.entries(p.fields ?? {}).filter(([k]) => k === EMAIL_FIELD || /^email \d+$/.test(k)).map(([, v]) => v.trim().toLowerCase()),
+  ...Object.entries(p.fields ?? {}).filter(([k]) => /^phone( \d+)?$/.test(k)).map(([, v]) => phoneKey(v)),
+  ...[p.channels?.[Channel.WhatsApp], p.channels?.[Channel.Signal]].flatMap((v) => (v ? [phoneKey(v)] : [])),
+].filter(Boolean)
 
 const sigOf = (r: Omit<ServiceRow, 'sig'>, c: ImportedContact): string =>
   fingerprint(JSON.stringify([r.name, c.org, c.title, c.since, c.emails, c.phones, r.n365, r.out, r.in, r.lastTs]))
@@ -62,6 +79,7 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
   const groupOf = new Map<string, string>()
   const extras = new Map<string, PhoneExtras>()
   const summaries: ServicePlan['files'] = files.map((f) => {
+    if (f.contacts) { contacts.push(...f.contacts); return { name: f.name, source: ContactSource.GoogleApi, count: f.contacts.length } }
     // Wave 31: the JSON of the phone tool joins the same evidence, group and row logic as a chat .txt.
     const px = parsePhoneExport(f.text)
     if (px) {
@@ -73,7 +91,7 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
       evidence.push(...r.evidence)
       return { name: f.name, source: ContactSource.WhatsApp, count: r.contacts.length }
     }
-    const parsed = parseFile(f.name, f.text)
+    const parsed = parseFile(f.name, f.text, f.mapping)
     if (!parsed.format && isWhatsAppChat(f.text)) {
       const r = parseWhatsApp(f.text, f.name, { me: o.me, dayFirst: o.dayFirst })
       ambiguous ||= r.dateOrder === 'ambiguous'
@@ -83,10 +101,12 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
       return { name: f.name, source: ContactSource.WhatsApp, count: r.contacts.length }
     }
     contacts.push(...parsed.result.contacts)
-    return { name: f.name, source: parsed.format, count: parsed.result.contacts.length }
+    const generic = parsed.format === ContactSource.GenericCsv ? { headers: csvHeaders(f.text), mapping: f.mapping ?? autoMap(csvHeaders(f.text)) } : {}
+    return { name: f.name, source: parsed.format, count: parsed.result.contacts.length, ...generic }
   })
   const sums = summariseAll(evidence, o.now)
   const have = new Set((s.people ?? []).map((p) => normalizeName(p.name)))
+  const reach = new Set((s.people ?? []).flatMap(reachOf))
   const grouped = new Set(findDuplicates(contacts).flatMap((g) => g.members))
   const taken = new Set<string>()
   const rows: ServiceRow[] = []
@@ -105,7 +125,9 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
       ...(first && !direct.has(c.sourceRef) && groupOf.has(c.sourceRef) ? { group: groupOf.get(c.sourceRef) } : {}), out: u?.out ?? 0, in: u?.in ?? 0, ...(u?.lastTs !== undefined ? { lastTs: u.lastTs } : {}),
       ids: (u?.ids ?? []).slice(-IDS_KEPT),
       ...(first && extras.has(c.sourceRef) ? { closeness: extras.get(c.sourceRef)!.closeness, ...(extras.get(c.sourceRef)!.items.length ? { items: extras.get(c.sourceRef)!.items } : {}) } : {}),
-      ...(grouped.has(i) || have.has(normalizeName(c.name)) ? { dupe: true } : {}),
+      ...(c.emails.length ? { emails: c.emails } : {}), ...(c.phones.length ? { phones: c.phones.map(withPlus) } : {}),
+      ...(c.title ? { title: c.title } : {}), ...(c.birthday ? { birthday: c.birthday } : {}), ...(c.note ? { note: c.note } : {}), ...(c.labels.length ? { labels: c.labels } : {}),
+      ...(grouped.has(i) || have.has(normalizeName(c.name)) || [...c.emails, ...c.phones.map(phoneKey)].some((x) => x && reach.has(x)) ? { dupe: true } : {}),
     }
     rows.push({ ...base, sig: sigOf(base, c) })
   })
@@ -148,6 +170,37 @@ export function pendingProposals(s: State, now: number): Pending[] {
     .map((proposal) => ({ batchId: byKey.get(proposal.personKey)!.batch.id, row: byKey.get(proposal.personKey)!.row, proposal }))
 }
 
+/** What the file knows is written only into empty slots: typed values and channels stay as they are. Extra e-mails and phones go to 'email 2', 'phone 2', ... */
+function fillFrom(p: Person, r: ServiceRow): void {
+  const f = (p.fields ??= {})
+  const put = (key: string, v: string | undefined): void => { if (v && !f[key]) f[key] = v }
+  const have = new Set(Object.entries(f).filter(([k]) => k === EMAIL_FIELD || /^email \d+$/.test(k)).map(([, v]) => v.toLowerCase()))
+  const nextFree = (base: string, n: number): string => { while (f[n === 1 ? base : `${base} ${n}`]) n++; return n === 1 ? base : `${base} ${n}` }
+  for (const e of r.emails ?? []) {
+    if (have.has(e)) continue
+    have.add(e)
+    if (!f[EMAIL_FIELD]) f[EMAIL_FIELD] = e
+    else f[nextFree('email', 2)] = e
+  }
+  const hasPhone = new Set(Object.entries(f).filter(([k]) => /^phone( \d+)?$/.test(k)).map(([, v]) => phoneKey(v)))
+  for (const ph of r.phones ?? []) {
+    if (hasPhone.has(phoneKey(ph))) continue
+    hasPhone.add(phoneKey(ph))
+    f[nextFree('phone', 1)] = ph
+  }
+  const mobile = (r.phones ?? []).map(toE164).find((x): x is string => x !== null)
+  if (mobile) {
+    const c = (p.channels ??= {})
+    for (const ch of [Channel.WhatsApp, Channel.Signal]) if (!c[ch]) c[ch] = mobile
+  }
+  put('organization', r.org)
+  put('job title', r.title)
+  put('birthday', r.birthday)
+  put('note', r.note)
+  if (r.labels?.length) put('labels', r.labels.join(', '))
+  if (!Object.keys(f).length) delete p.fields
+}
+
 const contextOf = (r: ServiceRow): string => `Imported from ${SERVICE_LABEL[r.source] ?? r.source}`
 
 /** Accept / Change write the person into the record; Leave only marks the row. An existing person of that name gets the source and keeps their ring unless Change. */
@@ -166,9 +219,11 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
     done.personId = mine.id
     done.created = false
     if (!mine.sources?.some((x) => x.key === key)) { mine.sources = [...(mine.sources ?? []), origin]; done.added = true }
+    fillFrom(mine, row)
     if (choice.do === 'change' && ring !== mine.ring) { done.prevRing = mine.ring; mine.ring = ring; done.wrote = ring }
   } else {
     const p: Person = { id: newId(), name: row.name, context: contextOf(row), ring, metAt: now, lines: [], sources: [origin] }
+    fillFrom(p, row)
     s.people.push(p)
     done.personId = p.id
     done.created = true

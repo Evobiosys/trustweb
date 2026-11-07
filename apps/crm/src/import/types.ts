@@ -16,6 +16,12 @@ export enum ContactSource {
   WhatsApp = 'whatsapp',
   /** LinkedIn Connections.csv (a data export, re-imported when a newer one is dropped). */
   LinkedIn = 'linkedin',
+  /** Dex CSV export (full_name, dex_emails, ...), wave 33. */
+  DexCsv = 'dex-csv',
+  /** Any other CSV: columns mapped by header name, the owner may fix the mapping (wave 33). */
+  GenericCsv = 'generic-csv',
+  /** Google People API (Connect Google, OAuth in the browser; wave 33). */
+  GoogleApi = 'google-api',
 }
 
 export interface ImportedContact {

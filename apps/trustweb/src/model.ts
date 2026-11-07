@@ -1052,7 +1052,7 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[] }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
@@ -1385,6 +1385,8 @@ export interface ServiceRow {
   closeness?: number
   /** Wave 31: phone export with text only: items they seem to offer or need, short guesses (inventory_guess.ts). */
   items?: { title: string; need: boolean }[]
+  /** Wave 33: contact files and Google: what the file holds about them, copied to the person on Accept. */
+  emails?: string[]; phones?: string[]; title?: string; birthday?: string; note?: string; labels?: string[]
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
 export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean }

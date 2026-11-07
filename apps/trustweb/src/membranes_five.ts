@@ -74,6 +74,14 @@ export function pickFive(people: readonly Person[], s: Partial<State>, limit: nu
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
 }
 
+/** Wave 33: how many people "closest 150" keeps. */
+export const CLOSEST_LIMIT = 150
+
+/** Wave 33: the 150 people closest to you across all rings (the same order the rings use: pinned, then most recent); 150 or fewer = everyone, ranked. */
+export function closest150(people: readonly Person[], s: Partial<State>, now: number): Person[] {
+  return pickFive(people, s, CLOSEST_LIMIT, now).shown
+}
+
 /** The whole zone, shown and rest together: pinned first, then the most recent. */
 export function wholeZone(people: readonly Person[], s: Partial<State>, now: number): Person[] {
   const { shown, rest } = pickFive(people, s, Infinity, now)

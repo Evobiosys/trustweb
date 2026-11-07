@@ -2,7 +2,7 @@
 /** Wave 32: "Ask for support" (src/support_ask.ts): audience rule, chips, window, close, the two texts, the emergency line. */
 import {
   SUPPORT_CHIPS, SupportWindow, audienceRings, audiencePeople, buildSupport, closeAt, emergencyNumber, isOpen, isSupportText,
-  hereText, parseHereText, parseSupportText, supportText, recordHere, openAsks,
+  hereText, parseHereText, AskMode, ASK_MODES, nextAskMode, parseSupportText, supportText, recordHere, openAsks,
 } from '../../src/support_ask.ts'
 import { Ring } from '../../src/model.ts'
 import { routeText, TextKind } from '../../src/chat.ts'
@@ -118,5 +118,16 @@ describe('the safety line', () => {
   it('names the local number where it is known', () => {
     expect(emergencyNumber('en-US')).toBe('911')
     expect(emergencyNumber('en-GB')).toBe('999')
+  })
+})
+
+describe('ask dock mode: Ask your web | Ask for support', () => {
+  it('offers the two modes, web first', () => {
+    expect(ASK_MODES).toEqual([AskMode.Web, AskMode.Support])
+  })
+  it('an unknown or missing mode falls back to web', () => {
+    expect(nextAskMode(undefined)).toBe(AskMode.Web)
+    expect(nextAskMode('x')).toBe(AskMode.Web)
+    expect(nextAskMode('support')).toBe(AskMode.Support)
   })
 })
