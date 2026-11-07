@@ -900,9 +900,6 @@ export const S = {
     [Ring.Unsorted]: 'not on a zone yet',
   } as Record<Ring, string>,
   // Five-ring prototype (five_rings_view.ts, flag tw-five-rings): the field overview. An average, never a limit.
-  fiveRingsTry: 'Try five rings',
-  setFiveRings: 'Five rings (try it)',
-  setFiveRingsHint: 'Shows how many people sit in each of five rings, with a hint of how many people most have at that distance. Switch it off any time.',
   fieldOverviewTitle: 'Your field',
   fieldUpToHere: (cumulative: number, about: number) => `${cumulative} up to here · most people: about ${about}`,
   fieldUnsorted: (n: number) => `not yet sorted: ${n}`,
@@ -2957,4 +2954,7 @@ export const S = {
   panelAssembleNow: 'Assemble now',
   panelAssembleNowTip: 'Assemble the checked rows now',
   panelShowAll: 'show all rows',
+  askModeSupport: 'Ask for support',
+  closest150: 'Show only the 150 people closest to you',
+  closest150Active: 'Only the 150 closest',
 } as const

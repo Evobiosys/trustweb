@@ -27,9 +27,9 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
-import { addSupportIn, supportButton, supportCards, supportLine } from './support_ask_view'
+import { addSupportIn, supportCards, supportForm, supportLine } from './support_ask_view'
 import type { SupportIo } from './support_ask_view'
-import { parseHereText, parseSupportText, recordHere } from './support_ask'
+import { ASK_MODES, AskMode, nextAskMode, parseHereText, parseSupportText, recordHere } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -589,6 +589,7 @@ let queryOpen = false
 let pastSearchOpen = false
 let pastSearchText = ''
 let queryText = ''
+let askMode: AskMode = AskMode.Web
 let askRun: {
   text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
   /** Wave 6: the reach it went out with (hops.ts), for the countdown. */
@@ -2718,6 +2719,7 @@ function screenWeb(): Node[] {
   const expanded = expandedOf(expandStored, view)
   webViewNow = view
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
+  const expandSlot = el('span', { class: 'expand-slot' }) // wave 33: filled by ringsView with the expanse control and each ring's ⛶
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
@@ -2727,7 +2729,7 @@ function screenWeb(): Node[] {
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
-      : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
+      : web.ringsView(s, askMarks(), undefined, { complete: expanded, controls: expandSlot }),
     supportLine(supportIo),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -2745,34 +2747,25 @@ function screenWeb(): Node[] {
     ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
-      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, fiveRingsOn() ? fieldOverviewPanel(s, { live: st, save, render }) : fiveRingsTry()])])
+      ? el('div', { class: 'zones-split' }, [zoneColumn(s), el('div', { class: 'zones-main' }, [clip, expandRow(expanded, expandSlot), ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
       : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
 
-/** Five rings off: one underlined line under the rings that turns the prototype on. */
-function fiveRingsTry(): HTMLElement {
-  return el('button', { class: 'link-toggle five-rings-try', 'data-five-rings-try': '', onclick: () => { writeFlag(true); render() } }, [S.fiveRingsTry])
-}
-
-/** Settings > Web: the plain switch for the five-ring prototype. */
-function fiveRingsSwitch(): HTMLElement {
-  const on = fiveRingsOn()
-  return el('button', {
-    class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-five-rings-switch': '',
-    onclick: () => { writeFlag(!on); render(); settingsSheet() },
-  }, [el('b', {}, [S.setFiveRings]), el('small', {}, [S.setFiveRingsHint])])
-}
-
-/** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: expand all, add, tag filters. (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
-function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
-  const live = (): void => { save(); render() }
+/** Wave 33: ONE row under the rings: expand all, the expanse control, one ⛶ per ring with a rest (the slot, filled by ringsView). */
+function expandRow(expanded: boolean, slot: HTMLElement): HTMLElement {
   const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
+  return el('div', { class: 'expand-row', 'data-expand-row': '' }, [expand, slot])
+}
+
+/** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: add, tag filters (expand all sits in the bottom row). (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
+function zoneColumn(s: AppState): HTMLElement {
+  const live = (): void => { save(); render() }
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, add })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -6391,7 +6384,6 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
-      fiveRingsSwitch(),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
       ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
@@ -6976,12 +6968,17 @@ function queryDock(s: AppState): HTMLElement {
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
-  return el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
+  const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.map((m) => el('button', {
+    class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
+    onclick: () => { askMode = m; render() },
+  }, [m === AskMode.Web ? S.webCall : S.askModeSupport])))
+  const dock = el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
       el('h3', {}, [S.queryTitle]),
-      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; render() } }, ['×']),
+      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; askMode = AskMode.Web; render() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [
+      run ? null : modeChips,
       run ? null : askHow(),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
@@ -7007,12 +7004,16 @@ function queryDock(s: AppState): HTMLElement {
         class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,
         onclick: () => { void sendFromDock(queryText) },
       }, [S.querySend]),
-      run ? null : supportButton(supportIo),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
       !run && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryAnswers)]) : null,
     ]),
   ])
+  // Ask for support swaps the question box for the support form; the chips stay on top.
+  if (!run && nextAskMode(askMode) === AskMode.Support) {
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Web; queryOpen = false }))
+  }
+  return dock
 }
 
 // ---------------------------------------------------------------------------
