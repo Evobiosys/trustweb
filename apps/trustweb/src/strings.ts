@@ -3174,6 +3174,7 @@ export const S = {
   // Wave 36 dev-record-carry (personal previews only)
   devRecordSynced: (time: string) => `Personal preview record synced ${time}`,
   devRecordNotYet: 'Personal preview record not synced yet',
+  editsKept: (n: number, since: string | null) => (since ? `Edits kept: ${n} (since ${since})` : `Edits kept: ${n}`),
   readersTitle: 'Who reads my channels',
   readersHint: 'Pick, per address or messenger, who may read it. AIs only ever see what you allow here.',
   readersPersonal: 'personal',
