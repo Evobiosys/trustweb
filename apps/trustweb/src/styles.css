@@ -1433,5 +1433,6 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .shared-notes .field{width:100%; box-sizing:border-box}
 
 /* wave 33 rings-controls: the expand controls are one column at the bottom edge, same 16 px as the diamonds */
-.expanse-drop,.ring-more.fill-expand{position:absolute; transform:translate(-50%,-50%); width:16px; height:16px; font-size:10px}
-.expanse-drop.drop,.ring-more.drop{background:var(--rc,#e8750a); color:#fff; transform:translate(-50%,-50%) scale(1.4)}
+.ring-more.fill-expand{position:absolute; transform:translate(-50%,-50%); width:16px; height:16px; font-size:10px}
+.ring-toggle.drop::before{box-shadow:0 0 0 4px var(--rc,#e8750a)}
+.ring-more.drop{background:var(--rc,#e8750a); color:#fff; transform:translate(-50%,-50%) scale(1.4)}
