@@ -49,9 +49,11 @@ export function ownChannels(s: Pick<AppState, 'me' | 'myChannels' | 'channelRead
   return raw.map(([id, value]) => ({ id, value, ...s.channelReaders?.[id], readers: s.channelReaders?.[id]?.readers ?? 'humans' }))
 }
 
-/** The text with every channel value this provider may not read blanked out (the guard at the AI request builder). */
+const literal = (v: string): RegExp => new RegExp(v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+
+/** The text with every channel value this provider may not read blanked out, in any letter case (the guard at the AI request builder). */
 export function scrubFor(text: string, own: readonly OwnChannel[], provider: string): string {
-  return own.filter((c) => !mayRead(c, { kind: 'ai', provider })).reduce((t, c) => t.split(c.value).join('[hidden]'), text)
+  return own.filter((c) => !mayRead(c, { kind: 'ai', provider })).reduce((t, c) => t.replace(literal(c.value), '[hidden]'), text)
 }
 
 /** The allow / deny lists after the sheet ticks or unticks one provider, so that mayRead(provider) equals `on`. */

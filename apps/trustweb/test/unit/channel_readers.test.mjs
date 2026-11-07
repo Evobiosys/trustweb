@@ -65,4 +65,9 @@ describe('request builder', () => {
     expect(body(cfg, 'j@ik.me')).toBe('[hidden]')
   })
   it('scrubFor leaves text without channels alone', () => { expect(scrubFor('hello', own, 'openai')).toBe('hello') })
+  it('an address typed in other letter case is hidden too (review)', () => {
+    expect(body(cfg, 'mail Secret@Proton.ME now')).toBe('mail [hidden] now')
+    expect(scrubFor('a.b', [ch('humans', { value: 'a.b' })], 'openai')).toBe('[hidden]')
+    expect(scrubFor('axb', [ch('humans', { value: 'a.b' })], 'openai')).toBe('axb')
+  })
 })
