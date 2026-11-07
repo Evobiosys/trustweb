@@ -43,7 +43,7 @@ function numEdit(value: number, attr: string, onSave: (raw: string) => void): HT
 /** Wave 30 (U9): one row per active chip ("Only #family ✕") plus "Show everyone"; empty when no filter is on. */
 function activeRows(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>): HTMLElement[] {
   const active = activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s))
-  const off = (keep: (chip: string) => boolean): void => { setUi(d.s, 'show', (d.s.uiRings?.show ?? []).filter(keep)); setUi(d.s, 'hide', (d.s.uiRings?.hide ?? []).filter(keep)); if (!keep('closest150')) setUi(d.s, 'closest150', false); if (!keep('perRing')) delete d.s.membraneLimit; d.onChange() }
+  const off = (keep: (chip: string) => boolean): void => { setUi(d.s, 'show', (d.s.uiRings?.show ?? []).filter(keep)); setUi(d.s, 'hide', (d.s.uiRings?.hide ?? []).filter(keep)); if (!keep('closest150')) setUi(d.s, 'closest150', false); if (!keep('perRing')) { delete d.s.membraneLimit; setUi(d.s, 'rankBy', undefined) }; d.onChange() }
   const link = (attrs: Record<string, string>, label: string, onclick: () => void): HTMLElement => el('button', { type: 'button', class: 'btn btn-ghost btn-sm filter-off', ...attrs, onclick }, [label])
   return active.length ? [
     ...active.map((a) => el('div', { class: 'filter-active', 'data-filter-active': a.chip }, [el('span', {}, [a.label]), link({ 'data-filter-off': a.chip, 'aria-label': S.filterOff(a.label) }, '✕', () => off((c) => c !== a.chip))])),
@@ -171,7 +171,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
 const addingTo: { tag?: string; added: string[] } = { added: [] }
 
 /** Wave 28b: the TrustZones view's only side control (left on desktop, above the rings on the phone, unfolded by default): expand all, add, tag filters. */
-export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement }): HTMLElement {
+export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; hiddenCount: number; openHidden: () => void }): HTMLElement {
   const open = d.s.uiRings?.sidebarOpen !== false
   return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneSidebarTitle, () => { setUi(d.s, 'sidebarOpen', !open); d.onChange() }, { 'data-zone-side-toggle': '' }), el('b', {}, [S.zoneSidebarTitle])]),
@@ -182,11 +182,12 @@ export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'on
       el('input', { type: 'checkbox', 'data-closest150': '', ...(d.s.uiRings?.closest150 ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'closest150', (e.target as HTMLInputElement).checked); d.onChange() } }),
       ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
     ]), el('label', { class: 'zone-check' }, [
-      el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); d.onChange() } }),
-      ' ', S.perRingBefore, numEdit(limitOf(d.s), 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) { if (n === LIMIT_DEFAULT) delete d.s.membraneLimit; else d.s.membraneLimit = n } d.onChange() }), S.perRingAfter,
+      el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); if ((e.target as HTMLInputElement).checked) setUi(d.s, 'filled', undefined); d.onChange() } }),
+      ' ', S.perRingBefore, numEdit(limitOf(d.s), 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) { if (n === LIMIT_DEFAULT) delete d.s.membraneLimit; else d.s.membraneLimit = n } d.onChange() }), ' ',
+      el('button', { type: 'button', class: 'num-edit', 'data-recent-mode': '', onclick: (e: Event) => { e.preventDefault(); setUi(d.s, 'rankBy', d.s.uiRings?.rankBy === 'frequent' ? undefined : 'frequent'); d.onChange() } }, [d.s.uiRings?.rankBy === 'frequent' ? S.perRingFrequent : S.perRingRecent]), S.perRingAfter,
     ]), el('label', { class: 'zone-check' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
-    ]), tagFilters(d)] : []),
+    ]), el('div', { class: 'zone-check' }, [el('button', { type: 'button', class: 'num-edit', 'data-hidden-people': '', ...(d.hiddenCount ? {} : { disabled: '' }), onclick: d.openHidden }, [S.hiddenPeopleBtn(d.hiddenCount)])]), tagFilters(d)] : []),
   ])
 }
