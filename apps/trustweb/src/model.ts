@@ -1056,6 +1056,8 @@ export interface AppState {
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
   engagementNoticeDay?: string
+  /** Wave 36 keep-in-touch: the local day (YYYY-MM-DD) the "Time to get in touch" notice last went out. */
+  keepNoticeDay?: string
   /** Wave 24b: when the engagement check first ran here; counts as contact for everybody (engagement.ts). Local only. */
   engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
