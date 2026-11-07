@@ -2957,4 +2957,5 @@ export const S = {
   panelAssembleNow: 'Assemble now',
   panelAssembleNowTip: 'Assemble the checked rows now',
   panelShowAll: 'show all rows',
+  askModeSupport: 'Ask for support',
 } as const
