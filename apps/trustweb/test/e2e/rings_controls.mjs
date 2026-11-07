@@ -12,9 +12,10 @@ try {
     const errors = []
     page.on('pageerror', (e) => errors.push(String(e)))
     const mk = (id, ring, o = {}) => ({ id, name: `P ${id}`, ring, lines: [], context: '', metAt: Date.now() - 86_400_000, fields: {}, ...o })
-    const people = [...Array.from({ length: 9 }, (_, i) => mk(`f${i}`, 'friend')), ...Array.from({ length: 8 }, (_, i) => mk(`a${i}`, 'acquaintance'))]
+    let expanse = []
+    let people = [...Array.from({ length: 9 }, (_, i) => mk(`f${i}`, 'friend')), ...Array.from({ length: 8 }, (_, i) => mk(`a${i}`, 'acquaintance'))]
     const load = async (uiRings) => {
-      const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], inventory: [], people, ...(uiRings ? { uiRings } : {}) })
+      const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], inventory: [], people, ...(expanse.length ? { expanse } : {}), ...(uiRings ? { uiRings } : {}) })
       await page.goto(URL); await page.waitForTimeout(1500)
       await page.evaluate((r) => { localStorage.setItem('trustweb.v1.me', r); localStorage.setItem('trustweb.ui.webView', 'rings') }, record)
       await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
@@ -103,6 +104,20 @@ try {
     check(`${name}: No keeps the dot`, (await page.locator(`.rings-wrap [data-pid="${pid}"]`).count()) === 1)
     await page.locator('.rings-wrap .node.you').dispatchEvent('contextmenu'); await page.waitForTimeout(300)
     check(`${name}: sheet (context press on you) lists 3 hidden`, (await page.locator('[data-expanse-restore-one]').count()) === 3 && (await page.locator('[data-expanse-count="3"]').count()) === 1)
+    // Wave 35 rings-filters-2: 300 acquaintances -> 5 dots; toggle; hidden row.
+    people = [...Array.from({ length: 3 }, (_, i) => mk(`c${i}`, 'close')), ...Array.from({ length: 12 }, (_, i) => mk(`f${i}`, 'friend')), ...Array.from({ length: 300 }, (_, i) => mk(`a${i}`, 'acquaintance'))]
+    expanse = ['f0']
+    await load({ expandButtons: true })
+    const dotsOf = (r) => page.locator(`.rings-wrap .node:not(.you)[data-pid^="${r[0]}"]`).count()
+    check(`${name}: 300 acquaintances -> 5 dots on that ring`, (await dotsOf('acquaintance')) === 5)
+    check(`${name}: the row's text button reads "most recent"`, (await page.locator('[data-recent-mode]').innerText()) === 'most recent')
+    await page.locator('[data-recent-mode]').click(); await page.waitForTimeout(400)
+    check(`${name}: tap switches to "most frequently connected"`, (await page.locator('[data-recent-mode]').innerText()) === 'most frequently connected')
+    check(`${name}: still 5 acquaintance dots`, (await dotsOf('acquaintance')) === 5)
+    check(`${name}: Hidden people row present`, (await page.locator('[data-hidden-people]').count()) === 1)
+    await page.screenshot({ path: `/tmp/rings_filters_2_${name}.png` })
+    await page.locator('[data-hidden-people]').click(); await page.waitForTimeout(300)
+    check(`${name}: Hidden people opens the same sheet`, (await page.locator('[data-expanse-count]').count()) === 1)
     check(`${name}: no page errors`, errors.length === 0)
     await page.screenshot({ path: `/tmp/rings_controls_${name}.png` })
     await ctx.close()

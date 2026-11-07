@@ -22,8 +22,8 @@ import type { Curator, LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { bringAllBack, bringBack, expanseList, hideInExpanse, hitControls, visibleIn } from './expanse'
 import { shortLabel } from './short_label'
-import { closest150, closestLimit, effectiveLimit, pickFive, withTag } from './membranes_five'
-import { communityOf, filledRings, isArchived, inZones, toggleRing, toneVar, zoneFor } from './trustzones'
+import { closest150, closestLimit, drawnLimit, effectiveLimit, rankedBy, withTag } from './membranes_five'
+import { communityOf, isArchived, inZones, setUi, toneVar, zoneFor } from './trustzones'
 import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
 import { dueMoves, releaseTies } from './engagement'
@@ -141,6 +141,8 @@ export interface WebView {
   /** A Web view ring change goes on to Tana through the Curator's sync. */
   ringToTana(p: Person, ring: Ring): void
   spaceOutWeb(ring?: Ring): void
+  /** Wave 35: the sheet of the hidden people (the same one a long press on you opens). */
+  openExpanse(): void
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
@@ -168,11 +170,11 @@ export function createWebView(deps: WebViewDeps): WebView {
     const complete = opts.complete === true || desk !== undefined || only150
     const members: Partial<Record<Ring, Person[]>> = {}
     const rest: Partial<Record<Ring, Person[]>> = {}
-    const filled = filledRings(s)
+    const filled = s.uiRings?.filled ?? [] // wave 35: only a fill the user set; the old default (acquaintances drawn in full) bypassed the per-ring cut
     for (const [r, ps] of Object.entries(everyone) as [Ring, Person[]][]) {
       if (complete) { members[r] = ps; continue }
       // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
-      const f = pickFive(withTag(ps, deps.tagFilter()), s, filled.includes(r) ? Infinity : effectiveLimit(s.uiRings, s), Date.now())
+      const f = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), drawnLimit(s, s, r), Date.now())
       members[r] = f.shown; rest[r] = f.rest
     }
     // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
@@ -375,7 +377,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: w.ring, grace: false }; showAll(w.ring, { clientX: b.right, clientY: b.bottom }) })
       }
       if (w.more) {
-        const more = ringMore(w.ring, filled.includes(w.ring), () => { toggleRing(st(), 'filled', w.ring); s.uiRings = st().uiRings; save(); toggle(hidden, wrap) })
+        const more = ringMore(w.ring, filled.includes(w.ring), () => { { const cur = st().uiRings?.filled ?? []; setUi(st(), 'filled', cur.includes(w.ring) ? cur.filter((x) => x !== w.ring) : [...cur, w.ring]) } s.uiRings = st().uiRings; save(); toggle(hidden, wrap) })
         more.style.left = w.at.left + EXPAND_DX + 'px'; more.style.top = w.at.top + 'px'
         wrap.appendChild(more)
       }
@@ -826,5 +828,6 @@ export function createWebView(deps: WebViewDeps): WebView {
     hideOnRings,
     ringToTana,
     spaceOutWeb,
+    openExpanse: expanseSheet,
   }
 }
