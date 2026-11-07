@@ -733,6 +733,8 @@ export interface HeldAsk {
   arrivedLate?: boolean
   /** The person said yes after the moment, but the relay has not taken the late answer yet (offline, another tab drains). */
   yesAt?: number
+  /** Wave 33: an intro ask's target (net.ts IncomingAsk.intro). */
+  intro?: string
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring: when it was first asked. */
   earlierAt?: number
   /** Wave 6i: the qid of that first ask (so the same earlier ask is not shown twice). */
