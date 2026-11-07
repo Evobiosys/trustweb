@@ -52,3 +52,24 @@ export function approveMergeRoute({ loopback, branch, cache, ops, wt, exists, re
     send(res, 202, { started: true })
   }
 }
+
+/**
+ * One CLI call at a time (wave 33). A request identical to one still queued or running (same args) shares that run
+ * instead of piling up behind it: a panel that timed out and asked again adds no second job.
+ */
+export function jobQueue(exec) {
+  let tail = Promise.resolve()
+  const open = new Map()
+  return {
+    size: () => open.size,
+    run(args) {
+      const key = JSON.stringify(args)
+      const same = open.get(key)
+      if (same) return same
+      const job = tail.then(() => exec(args)).finally(() => { open.delete(key) })
+      open.set(key, job)
+      tail = job.catch(() => {})
+      return job
+    },
+  }
+}

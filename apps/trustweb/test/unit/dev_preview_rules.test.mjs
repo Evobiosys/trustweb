@@ -559,7 +559,7 @@ describe('panel-approve-2', () => {
 })
 
 import { readFileSync } from 'node:fs'
-import { CALL_TIMEOUT_MS, PR_STALE_MS, callError, focusToggle, holdStore, lastFocusStore, loadingWhy, pressPlan, prStatusView } from '../../src/dev_preview_rules.ts'
+import { WRITE_TIMEOUT_MS, WORKING_AFTER_S, CALL_TIMEOUT_MS, PR_STALE_MS, callError, focusToggle, holdStore, lastFocusStore, loadingWhy, pressPlan, prStatusView } from '../../src/dev_preview_rules.ts'
 
 describe('wave 33 panel', () => {
   const row = (key, over = {}) => ({ key, branch: `wave33/${key}`, title: 'T-' + key, requires: [], checked: true, ...over })
@@ -640,6 +640,8 @@ describe('wave 33 panel', () => {
       expect(callError({ name: 'TimeoutError' })).toBe('no answer after 8 s')
       expect(callError({ name: 'AbortError' })).toBe('no answer after 8 s')
       expect(callError(new Error('HTTP 500'))).toBe('HTTP 500')
+      expect([WRITE_TIMEOUT_MS, WORKING_AFTER_S]).toEqual([45000, 2])
+      expect(callError({ name: 'TimeoutError' }, WRITE_TIMEOUT_MS)).toBe('no answer after 45 s')
     })
     it('a disabled control says why', () => {
       expect(loadingWhy('x', '')).toMatch(/saving/)

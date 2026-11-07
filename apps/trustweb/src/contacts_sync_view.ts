@@ -8,7 +8,7 @@ import type { ImportedContact } from '../../crm/src/import/types'
 import { toCsv, toJson, toVCard } from './contacts_export'
 import { lastContact } from './engagement'
 import {
-  buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadToken, makePkce, parseRedirect, revokeToken, saveClientId, saveToken,
+  buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadClientSecret, loadToken, makePkce, parseRedirect, revokeToken, saveClientId, saveClientSecret, saveToken,
 } from './google_contacts'
 import { Ring } from './model'
 import type { AppState } from './model'
@@ -39,11 +39,16 @@ export function googleGroup(offer: (contacts: ImportedContact[]) => void, toast:
     const token = ss ? loadToken(ss) : null
     const input = el('input', { class: 'field', value: clientId, placeholder: S.googleClientId, 'aria-label': S.googleClientId, 'data-google-clientid': '1', style: 'width:100%;box-sizing:border-box' }) as HTMLInputElement
     input.addEventListener('change', () => { if (local()) saveClientId(local()!, input.value.trim()); draw() })
+    const secret = ss ? loadClientSecret(ss) ?? '' : ''
+    const secretInput = el('input', { class: 'field', type: 'password', value: secret, placeholder: S.googleClientSecret, 'aria-label': S.googleClientSecret, 'data-google-clientsecret': '1', autocomplete: 'off', style: 'width:100%;box-sizing:border-box' }) as HTMLInputElement
+    secretInput.addEventListener('change', () => { if (ss) saveClientSecret(ss, secretInput.value.trim()) })
     const ready = clientId !== ''
     const parts: (Node | null)[] = [
       el('h4', { class: 'eyebrow' }, [S.googleTitle]),
       el('p', { class: 'meta' }, [S.googleHint]),
       el('label', { class: 'meta' }, [S.googleClientId, ' ', input]),
+      el('label', { class: 'meta' }, [S.googleClientSecret, ' ', secretInput]),
+      el('p', { class: 'meta' }, [S.googleSecretHint]),
       ready ? null : el('p', { class: 'meta', 'data-google-needs-id': '1' }, [S.googleNeedsId, ' ', el('a', { href: 'https://console.cloud.google.com/apis/credentials', target: '_blank', rel: 'noopener', style: 'text-decoration:underline' }, [S.googleGetId])]),
       el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' }, ([
         el('button', {
@@ -91,7 +96,7 @@ export async function resumeGoogle(h: SyncHooks, offer: (contacts: ImportedConta
   if ('error' in r) { h.toast(S.googleFailed); return }
   try {
     const clientId = (local() ? loadClientId(local()!) : null) ?? ''
-    const token = await exchangeCode(fetchFn, { clientId, redirectUri: redirectUri(), code: r.code, verifier })
+    const token = await exchangeCode(fetchFn, { clientId, clientSecret: loadClientSecret(ss) ?? '', redirectUri: redirectUri(), code: r.code, verifier })
     saveToken(ss, token)
     offer(await load(token))
   } catch {

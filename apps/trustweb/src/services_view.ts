@@ -15,7 +15,7 @@ import { COMING_SOURCES, VERIFIED_SOURCES } from './import_sources'
 import { failRun, finishRun, IDLE_RUN, startRun, tickRun } from './import_run'
 import type { Run } from './import_run'
 import type { Pages } from './page_view'
-import { bulkAccept, commitPlan, countsLine, decide, pendingProposals, planServices, undoBatch } from './services_import'
+import { bulkAccept, commitPlan, countsLine, decide, pendingProposals, personFor, planServices, undoBatch } from './services_import'
 import type { ServiceFile, ServicePlan } from './services_import'
 import { S } from './strings'
 import { bulkAcceptable } from './zone_proposals'
@@ -184,6 +184,8 @@ export function curatePage(h: ServicesHooks): void {
         if (choice.do !== 'leave') { h.changed(); h.toast(S.svcAccepted(row.name)) }
         draw()
       }
+      const found = personFor(h.state(), row)
+      const maybe = found?.by === 'name' && (row.emails?.length || row.phones?.length) ? found : undefined
       const pick = el('select', { style: 'max-width:100%', 'aria-label': S.svcChange, 'data-svc-ring': row.key }, CHANGE_RINGS.map((r) => el('option', { value: r, selected: r === p.ring }, [S.ringLabel[r]]))) as HTMLSelectElement
       return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:6px', 'data-svc-row': row.key }, [
         el('b', {}, [row.name]),
@@ -192,13 +194,15 @@ export function curatePage(h: ServicesHooks): void {
           el('summary', { style: 'text-decoration:underline;cursor:pointer;display:inline' }, [S.svcInfoMark]),
           el('p', { class: 'meta' }, [S.svcTerms(p.terms.freq, p.terms.recency, p.terms.reciprocity, p.n365)]),
           ...p.flags.map((f) => el('p', { class: 'warn' }, [f === 'one-way' ? S.svcFlagOneWay : S.svcFlagDupe])),
-        ]),
-        el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' }, [
+          maybe ? el('p', { class: 'warn', 'data-svc-possible-match': row.key }, [S.svcPossibleMatch(maybe.person.name)]) : null,
+        ].filter((x): x is HTMLElement => x !== null)),
+        el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' }, ([
           el('button', { class: 'btn btn-electric btn-sm', 'data-svc-accept': row.key, onclick: () => act({ do: 'accept' }) }, [S.svcAccept]),
+          maybe ? el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-confirm-match': row.key, onclick: () => act({ do: 'accept', confirm: true }) }, [S.svcConfirmMatch(maybe.person.name)]) : null,
           pick,
           el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-change': row.key, onclick: () => act({ do: 'change', ring: pick.value as Ring }) }, [S.svcChange]),
           el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-leave': row.key, onclick: () => act({ do: 'leave' }) }, [S.svcLeave]),
-        ]),
+        ] as (HTMLElement | null)[]).filter((x): x is HTMLElement => x !== null)),
       ])
     }) : [el('p', { class: 'meta', 'data-svc-empty': '1' }, [S.svcCurateEmpty])]))
   }

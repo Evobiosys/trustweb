@@ -55,8 +55,8 @@ describe('contacts export', () => {
     expect(a.full_name).toBe('Anna Muster')
     expect(a.emails).toBe('anna@example.at ::: anna@example.com')
     expect(a.email).toBe('anna@example.at')
-    expect(a.phone).toBe('+436605550001')
-    expect(a.phones).toBe('+436605550001 ::: +436605550002')
+    expect(a.phone).toBe("'+436605550001")
+    expect(a.phones).toBe("'+436605550001 ::: +436605550002")
     expect(a.company).toBe('Muster; GmbH, Wien')
     expect(a.notes).toBe('Line one\nline, two; \\ end')
     expect(a.labels).toBe('friends ::: choir')
@@ -71,7 +71,15 @@ describe('contacts export', () => {
     expect(b.company).toBe("'@corp")
     expect(b.last_contact).toBe('')
     const a = Object.fromEntries(rows[0].map((k, i) => [k, rows[1][i]]))
-    expect(a.phone.startsWith('+')).toBe(true)
+    expect(a.phone).toBe("'+436605550001")
+  })
+  it('C3: every cell starting with = + - @ TAB CR is guarded, phone cells included', () => {
+    const evil = { ...ben, fields: { phone: '+SUM(1+1)', 'job title': '-1' } }
+    const rows = parseCsv(toCsv([evil], opts))
+    const b = Object.fromEntries(rows[0].map((k, i) => [k, rows[1][i]]))
+    expect(b.phone).toBe("'+SUM(1+1)")
+    expect(b.phones).toBe("'+SUM(1+1)")
+    expect(b.job_title).toBe("'-1")
   })
   it('JSON shape', () => {
     const j = JSON.parse(toJson(people, opts))

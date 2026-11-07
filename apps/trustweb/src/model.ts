@@ -1389,7 +1389,7 @@ export interface ServiceRow {
   emails?: string[]; phones?: string[]; title?: string; birthday?: string; note?: string; labels?: string[]
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
-export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean }
+export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean; /** Fields the decision wrote into an existing person; undo removes them while they still hold that value. */ filled?: Record<string, string> }
 /** Wave 27: one "From other services" import, kept for the Curate page and its undo. */
 export interface ServiceBatch { id: string; at: number; counts: Record<string, number>; rows: ServiceRow[]; done: Record<string, ServiceDone> }
 

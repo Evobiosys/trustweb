@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+import { EMAIL_FIELD } from '../../src/intending_reminder.ts'
 import { Ring } from '../../src/model.ts'
 import { planServices, commitPlan, pendingProposals, decide, bulkAccept, undoBatch, countsLine } from '../../src/services_import.ts'
 
@@ -132,5 +133,49 @@ describe('privacy (T10)', () => {
       pendingProposals(s, NOW)
     } finally { globalThis.fetch = orig }
     expect(calls).toHaveLength(0)
+  })
+})
+
+describe('wave33 review fixes C1/C2/P6', () => {
+  const csv = (body) => ({ name: 'c.csv', text: `name,phone,email\n${body}\n` })
+  it('C1: national numbers keep their 0, 00 becomes +', () => {
+    const plan = planServices(fresh(), [csv('Anna Berger,06641234567,\nCarl Zed,00436641234567,')], opts())
+    expect(plan.rows.map((r) => r.phones)).toEqual([['06641234567'], ['+436641234567']])
+  })
+  it('C2: a same-name person gets no e-mail or phone from a row that shares none of theirs; Accept only stamps the source', () => {
+    const s = { people: [{ id: 'a', name: 'Anna Berger', ring: Ring.Close, metAt: 0, lines: [] }], serviceImports: [] }
+    const plan = planServices(s, [csv('Anna Berger,+436609998887,other.anna@y.de')], opts())
+    commitPlan(s, plan, 'b1', NOW)
+    decide(s, 'b1', plan.rows[0].key, { do: 'accept' }, NOW, newId)
+    expect(s.people).toHaveLength(1)
+    expect(s.people[0].fields).toBeUndefined()
+    expect(s.people[0].channels).toBeUndefined()
+    expect(s.people[0].sources).toHaveLength(1)
+  })
+  it('C2: explicit confirm writes the reach, undo takes it back', () => {
+    const s = { people: [{ id: 'a', name: 'Anna Berger', ring: Ring.Close, metAt: 0, lines: [], fields: { note: 'mine' } }], serviceImports: [] }
+    const plan = planServices(s, [csv('Anna Berger,+436609998887,other.anna@y.de')], opts())
+    commitPlan(s, plan, 'b1', NOW)
+    decide(s, 'b1', plan.rows[0].key, { do: 'accept', confirm: true }, NOW, newId)
+    expect(s.people[0].fields.phone).toBe('+436609998887')
+    undoBatch(s, 'b1')
+    expect(s.people[0].fields).toEqual({ note: 'mine' })
+    expect(s.people[0].sources ?? []).toHaveLength(0)
+  })
+  it('C2: a row whose e-mail matches links to that person despite another spelling of the name', () => {
+    const s = { people: [{ id: 'a', name: 'Anna Berger', ring: Ring.Close, metAt: 0, lines: [], fields: { [EMAIL_FIELD]: 'anna@x.at' } }], serviceImports: [] }
+    const plan = planServices(s, [csv('Anni Berger,+436601112223,anna@x.at')], opts())
+    commitPlan(s, plan, 'b1', NOW)
+    decide(s, 'b1', plan.rows[0].key, { do: 'accept' }, NOW, newId)
+    expect(s.people).toHaveLength(1)
+    expect(s.people[0].fields.phone).toBe('+436601112223')
+  })
+  it('P6: an imported number sets no messenger channel', () => {
+    const s = fresh()
+    const plan = planServices(s, [csv('Carl Zed,+436641234567,')], opts())
+    commitPlan(s, plan, 'b1', NOW)
+    decide(s, 'b1', plan.rows[0].key, { do: 'accept' }, NOW, newId)
+    expect(s.people[0].fields.phone).toBe('+436641234567')
+    expect(s.people[0].channels).toBeUndefined()
   })
 })

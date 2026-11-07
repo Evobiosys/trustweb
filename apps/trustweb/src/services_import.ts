@@ -48,8 +48,9 @@ export const SERVICE_LABEL: Record<string, string> = {
 export const countsLine = (counts: Record<string, number>): string =>
   Object.entries(counts).map(([s, n]) => `${SERVICE_LABEL[s] ?? s} ${n}`).join(', ')
 
-/** WhatsApp ids carry the number without its plus ("436605550401"): write it as a number. */
-const withPlus = (v: string): string => (/^\d{7,15}$/.test(v) ? `+${v}` : v)
+/** WhatsApp ids carry the number without its plus ("436605550401"): write it as a number. Any other number keeps its digits (a leading 0 is a national number, country unknown); "00" is the international prefix. */
+const withPlus = (v: string, source: ContactSource): string =>
+  toE164(v) ?? (source === ContactSource.WhatsApp && /^[1-9]\d{6,14}$/.test(v) ? `+${v}` : v)
 const phoneKey = (v: string): string => toE164(v) ?? normalizePhone(v)
 /** The e-mails and phone numbers a person already has (typed or from an earlier import), in comparable form. */
 const reachOf = (p: Person): string[] => [
@@ -125,7 +126,7 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
       ...(first && !direct.has(c.sourceRef) && groupOf.has(c.sourceRef) ? { group: groupOf.get(c.sourceRef) } : {}), out: u?.out ?? 0, in: u?.in ?? 0, ...(u?.lastTs !== undefined ? { lastTs: u.lastTs } : {}),
       ids: (u?.ids ?? []).slice(-IDS_KEPT),
       ...(first && extras.has(c.sourceRef) ? { closeness: extras.get(c.sourceRef)!.closeness, ...(extras.get(c.sourceRef)!.items.length ? { items: extras.get(c.sourceRef)!.items } : {}) } : {}),
-      ...(c.emails.length ? { emails: c.emails } : {}), ...(c.phones.length ? { phones: c.phones.map(withPlus) } : {}),
+      ...(c.emails.length ? { emails: c.emails } : {}), ...(c.phones.length ? { phones: c.phones.map((x) => withPlus(x, c.source)) } : {}),
       ...(c.title ? { title: c.title } : {}), ...(c.birthday ? { birthday: c.birthday } : {}), ...(c.note ? { note: c.note } : {}), ...(c.labels.length ? { labels: c.labels } : {}),
       ...(grouped.has(i) || have.has(normalizeName(c.name)) || [...c.emails, ...c.phones.map(phoneKey)].some((x) => x && reach.has(x)) ? { dupe: true } : {}),
     }
@@ -170,28 +171,26 @@ export function pendingProposals(s: State, now: number): Pending[] {
     .map((proposal) => ({ batchId: byKey.get(proposal.personKey)!.batch.id, row: byKey.get(proposal.personKey)!.row, proposal }))
 }
 
-/** What the file knows is written only into empty slots: typed values and channels stay as they are. Extra e-mails and phones go to 'email 2', 'phone 2', ... */
-function fillFrom(p: Person, r: ServiceRow): void {
+/**
+ * What the file knows is written only into empty slots: typed values stay as they are. Extra e-mails and phones go to 'email 2', 'phone 2', ...
+ * `reach` false (a same-name person the owner has not confirmed): no e-mail or phone is written. Returns the fields it wrote, for undo.
+ */
+function fillFrom(p: Person, r: ServiceRow, reach: boolean): Record<string, string> {
   const f = (p.fields ??= {})
-  const put = (key: string, v: string | undefined): void => { if (v && !f[key]) f[key] = v }
+  const wrote: Record<string, string> = {}
+  const put = (key: string, v: string | undefined): void => { if (v && !f[key]) { f[key] = v; wrote[key] = v } }
   const have = new Set(Object.entries(f).filter(([k]) => k === EMAIL_FIELD || /^email \d+$/.test(k)).map(([, v]) => v.toLowerCase()))
   const nextFree = (base: string, n: number): string => { while (f[n === 1 ? base : `${base} ${n}`]) n++; return n === 1 ? base : `${base} ${n}` }
-  for (const e of r.emails ?? []) {
+  for (const e of reach ? r.emails ?? [] : []) {
     if (have.has(e)) continue
     have.add(e)
-    if (!f[EMAIL_FIELD]) f[EMAIL_FIELD] = e
-    else f[nextFree('email', 2)] = e
+    put(f[EMAIL_FIELD] ? nextFree('email', 2) : EMAIL_FIELD, e)
   }
   const hasPhone = new Set(Object.entries(f).filter(([k]) => /^phone( \d+)?$/.test(k)).map(([, v]) => phoneKey(v)))
-  for (const ph of r.phones ?? []) {
+  for (const ph of reach ? r.phones ?? [] : []) {
     if (hasPhone.has(phoneKey(ph))) continue
     hasPhone.add(phoneKey(ph))
-    f[nextFree('phone', 1)] = ph
-  }
-  const mobile = (r.phones ?? []).map(toE164).find((x): x is string => x !== null)
-  if (mobile) {
-    const c = (p.channels ??= {})
-    for (const ch of [Channel.WhatsApp, Channel.Signal]) if (!c[ch]) c[ch] = mobile
+    put(nextFree('phone', 1), ph)
   }
   put('organization', r.org)
   put('job title', r.title)
@@ -199,6 +198,21 @@ function fillFrom(p: Person, r: ServiceRow): void {
   put('note', r.note)
   if (r.labels?.length) put('labels', r.labels.join(', '))
   if (!Object.keys(f).length) delete p.fields
+  return wrote
+}
+
+const rowReach = (r: ServiceRow): string[] => [...(r.emails ?? []).map((e) => e.trim().toLowerCase()), ...(r.phones ?? []).map(phoneKey)].filter(Boolean)
+
+/** Who a row is: the person it was imported as, else the one sharing an e-mail or number (whatever the name's spelling), else a same-name person (`by: 'name'`, unconfirmed). */
+export function personFor(s: Pick<AppState, 'people'>, r: ServiceRow): { person: Person; by: 'key' | 'reach' | 'name' } | undefined {
+  const byKey = s.people.find((p) => p.sources?.some((x) => x.key === r.key))
+  if (byKey) return { person: byKey, by: 'key' }
+  const mine = new Set(rowReach(r))
+  const byReach = mine.size ? s.people.find((p) => reachOf(p).some((x) => mine.has(x))) : undefined
+  if (byReach) return { person: byReach, by: 'reach' }
+  const norm = normalizeName(r.name)
+  const byName = s.people.find((p) => normalizeName(p.name) === norm)
+  return byName ? { person: byName, by: 'name' } : undefined
 }
 
 const contextOf = (r: ServiceRow): string => `Imported from ${SERVICE_LABEL[r.source] ?? r.source}`
@@ -212,18 +226,19 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
   const prop = propose([{ ...row, personKey: key }], now)[0]
   const ring = writeFor(prop, choice, now)!.ring
   const origin = { source: row.source, file: row.file, importedAt: now, key }
-  const norm = normalizeName(row.name)
-  const mine = s.people.find((p) => p.sources?.some((x) => x.key === key)) ?? s.people.find((p) => normalizeName(p.name) === norm)
+  const match = personFor(s, row)
+  const mine = match?.person
   const done: ServiceDone = { did: 'accepted' }
   if (mine) {
     done.personId = mine.id
     done.created = false
     if (!mine.sources?.some((x) => x.key === key)) { mine.sources = [...(mine.sources ?? []), origin]; done.added = true }
-    fillFrom(mine, row)
+    const filled = fillFrom(mine, row, match!.by !== 'name' || choice.confirm === true)
+    if (Object.keys(filled).length) done.filled = filled
     if (choice.do === 'change' && ring !== mine.ring) { done.prevRing = mine.ring; mine.ring = ring; done.wrote = ring }
   } else {
     const p: Person = { id: newId(), name: row.name, context: contextOf(row), ring, metAt: now, lines: [], sources: [origin] }
-    fillFrom(p, row)
+    fillFrom(p, row, true)
     s.people.push(p)
     done.personId = p.id
     done.created = true
@@ -252,6 +267,10 @@ export function undoBatch(s: State, batchId: string): { restored: number; archiv
     if (d.created) { if (same) { p.ring = Ring.None; out.archived++ } else out.kept++ }
     else if (d.prevRing !== undefined) { if (same) { p.ring = d.prevRing; out.restored++ } else out.kept++ }
     if (d.created || d.added) p.sources = (p.sources ?? []).filter((x) => x.key !== key)
+    if (!d.created && d.filled) {
+      for (const [k, v] of Object.entries(d.filled)) if (p.fields?.[k] === v) delete p.fields[k]
+      if (p.fields && !Object.keys(p.fields).length) delete p.fields
+    }
   }
   s.serviceImports = (s.serviceImports ?? []).filter((b) => b.id !== batchId)
   return out

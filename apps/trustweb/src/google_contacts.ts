@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Connect Google (wave 33): OAuth 2.0 authorization code + PKCE in the browser, no client secret,
- * no server. Reads contacts through the People API (read-only scopes) into ImportedContact[].
+ * Connect Google (wave 33): OAuth 2.0 authorization code + PKCE in the browser, no server.
+ * A client secret is optional (Google web clients usually need it); it stays in this browser tab. Reads contacts through the People API (read-only scopes) into ImportedContact[].
  * Fetch, randomness and hashing are injected, so nothing here touches the DOM or the network
  * by itself. The access token lives in sessionStorage only and never enters the exported record (I1).
  */
@@ -20,6 +20,7 @@ const SCOPES = [
   'https://www.googleapis.com/auth/contacts.other.readonly',
 ]
 const TOKEN_KEY = 'tw_google_token'
+const SECRET_KEY = 'tw_google_client_secret'
 const CLIENT_ID_KEY = 'tw_google_client_id'
 const FILE = 'Google contacts'
 
@@ -64,7 +65,7 @@ export function parseRedirect(url: string, expectedState: string): { code: strin
 
 export async function exchangeCode(
   fetchFn: FetchFn,
-  a: { clientId: string; redirectUri: string; code: string; verifier: string },
+  a: { clientId: string; clientSecret?: string; redirectUri: string; code: string; verifier: string },
 ): Promise<string> {
   const r = await fetchFn(TOKEN_URL, {
     method: 'POST',
@@ -75,6 +76,7 @@ export async function exchangeCode(
       redirect_uri: a.redirectUri,
       code: a.code,
       code_verifier: a.verifier,
+      ...(a.clientSecret ? { client_secret: a.clientSecret } : {}),
     }).toString(),
   })
   if (!r.ok) throw new Error(`Google token request failed (${r.status})`)
@@ -183,3 +185,6 @@ export const clearToken = (s: KeyValueStore): void => s.removeItem(TOKEN_KEY)
 /** localStorage: the owner's own OAuth client id (public value, no secret). */
 export const saveClientId = (s: KeyValueStore, id: string): void => s.setItem(CLIENT_ID_KEY, id)
 export const loadClientId = (s: KeyValueStore): string | null => s.getItem(CLIENT_ID_KEY)
+/** sessionStorage like the token: the optional client secret is never persisted, exported or synced. */
+export const saveClientSecret = (s: KeyValueStore, v: string): void => (v ? s.setItem(SECRET_KEY, v) : s.removeItem(SECRET_KEY))
+export const loadClientSecret = (s: KeyValueStore): string | null => s.getItem(SECRET_KEY)
