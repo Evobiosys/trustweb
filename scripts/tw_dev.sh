@@ -32,6 +32,8 @@ OPEN=1
 mkdir -p "$STATE"
 if [ -z "${TW_DEV_RECORD:-}" ] && [ -f "$STATE/dev-record.path" ]; then TW_DEV_RECORD="$(cat "$STATE/dev-record.path")"; fi
 export TW_DEV_RECORD="${TW_DEV_RECORD:-}"
+# Personal previews share one record (vite_dev_record.mjs): edits made in one come to the next through this file.
+export TW_DEV_LIVE="${TW_DEV_LIVE:-$STATE/dev-record.live.json}"
 # Feature overlay (dev_feature.ts): TW_FEATURE, else feature.json at the worktree root.
 if [ -z "${TW_FEATURE:-}" ] && [ -f "$REPO/feature.json" ]; then export TW_FEATURE="$(cat "$REPO/feature.json")"; fi
 

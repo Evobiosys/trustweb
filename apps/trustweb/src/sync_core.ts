@@ -57,7 +57,7 @@ export const REVIEW_MAX = 50
  */
 export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // carried by their own bundle parts, or the record's identity
-  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview',
+  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview', 'channelReaders',
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
@@ -66,7 +66,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
   'serverTranscriptionConsent', 'apkVersion', 'apkCheckedAt', 'apkUpdates', 'tabOrder', 'tabRow', 'shareMode', 'demo', 'demoHidden', 'demoOffered',
-  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports',
+  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', 'agent',
   // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
   'groups',
 ])
