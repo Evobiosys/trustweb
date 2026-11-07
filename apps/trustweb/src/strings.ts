@@ -3329,4 +3329,8 @@ export const S = {
   birthdayFieldAria: (name: string) => `Birthday of ${name}`,
   birthdaySave: 'Save',
   thoughtTold: (name: string) => `${name} knows you thought of them.`,
+  // wave 37 overlay-fixes
+  ringCardResize: 'Drag to resize the list',
+  mergeYes: 'Merge now',
+  mergeCancel: 'Do not merge',
 } as const

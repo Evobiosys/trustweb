@@ -30,3 +30,6 @@ export interface DotBox { id: string; left: number; top: number; right: number; 
 export function hitDot(dots: DotBox[], selfId: string, x: number, y: number): string | null {
   return dots.find((d) => d.id !== selfId && x >= d.left && x <= d.right && y >= d.top && y <= d.bottom)?.id ?? null
 }
+
+/** Wave 37: a drag offers a merge unless there is no merge route (solo) or it carries several ticked dots (select tool); one dot in select mode merges as before. */
+export const holdEnabled = (o: { canMerge: boolean; groupSize: number }): boolean => o.canMerge && o.groupSize <= 1
