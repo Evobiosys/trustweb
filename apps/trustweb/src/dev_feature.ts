@@ -5,7 +5,7 @@
  */
 import { createPointer } from './dev_pointer'
 import { approveEach, retryFor, unapprovedNote, waveBusy, waveIdle, waveLabel, waveStep, type WaveEvent } from './dev_wave_press'
-import { CALL_TIMEOUT_MS, hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, mergeResult, mergeResume, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, MERGE_DONE } from './dev_preview_rules'
+import { CALL_TIMEOUT_MS, WRITE_TIMEOUT_MS, hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, mergeResult, mergeResume, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: { id: string; created?: string } | null | undefined
@@ -167,7 +167,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview', { signal: AbortSignal.timeout(CALL_TIMEOUT_MS) }).then((r) => r.json())
       // Open from the start; the press reads the registry fresh (and closes with the reason), so it works without a reload after boxes or verdicts changed.
       // "Approve wave" approves every loaded row first (a press per row, in the background of this click: it may take a moment), then runs the merge flow.
-      const post = (feature: string): Promise<Response> => fetch('/__tw/preview/verdict', { method: 'POST', signal: AbortSignal.timeout(CALL_TIMEOUT_MS), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature, verdict: 'merge' }) })
+      const post = (feature: string): Promise<Response> => fetch('/__tw/preview/verdict', { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature, verdict: 'merge' }) })
       const asApproved = (q: Parameters<typeof approveGate>[0]): Parameters<typeof approveGate>[0] => ({ ...q, features: applyVerdicts(q.features, unapproved(q.features).map((f) => f.key), 'merge') })
       const id = __TW_PREVIEW__!.id
       // The conflict text sits folded under "details", never as a paragraph.
@@ -205,7 +205,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
           if (w.warn) { foldStore(sessionStorage, id).set(expandFor(q.features, w.implicit, foldStore(sessionStorage, id).get())); loadOpenStore(sessionStorage, id).set(true) }
           await approveEach(unapproved(q.features), async (k) => (await retryFor(async () => sure(await post(k)))).ok)
           step({ type: 'merging' })
-          const r = await retryFor(async () => sure(await fetch('/__tw/approve-merge', { method: 'POST', signal: AbortSignal.timeout(CALL_TIMEOUT_MS) })))
+          const r = await retryFor(async () => sure(await fetch('/__tw/approve-merge', { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) })))
           if (r.status === 202 || r.status === 409) { step({ type: 'handed' }); pollMerge(since) } else fail(`Approve wave refused (HTTP ${r.status})`)
         } catch (e) { fail((e as Error).message || 'Preview server not answering') }
       }
