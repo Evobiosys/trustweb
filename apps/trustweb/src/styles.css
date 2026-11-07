@@ -1622,3 +1622,18 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .ring-card-grip{position:sticky; bottom:0; align-self:flex-end; flex:none; width:18px; height:18px; margin:-6px -8px -4px 0; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg,transparent 55%,var(--line-strong) 55%,var(--line-strong) 65%,transparent 65%,transparent 78%,var(--line-strong) 78%,var(--line-strong) 88%,transparent 88%)}
 .merge-btn{min-width:32px; min-height:32px; padding:0 6px; text-decoration:underline; font-size:16px}
 .merge-actions{display:inline-flex; flex-wrap:nowrap; align-items:center; gap:6px}
+/* wave 37 co-notes-link */
+.co-share-sheet,.co-chat,.co-access,.co-general{display:flex; flex-direction:column; gap:var(--s-3); min-width:0; max-width:100%}
+.co-share-sheet{padding-top:var(--s-3)}
+.co-share-sheet button,.co-chat button,.co-share-sheet summary{text-decoration:underline}
+.co-ring-row{display:flex; flex-wrap:wrap; align-items:center; gap:var(--s-2); min-width:0}
+.co-ring-row .btn.on{border-color:var(--trust); color:var(--trust-strong); background:var(--trust-tint)}
+.co-access-row{display:flex; flex-wrap:wrap; align-items:center; gap:var(--s-2); min-width:0; padding:var(--s-2) 0; border-bottom:1px solid var(--line)}
+.co-access-who{display:flex; flex-direction:column; flex:1 1 10em; min-width:0; overflow-wrap:anywhere}
+.co-advanced{display:flex; flex-direction:column; gap:var(--s-2)}
+.co-msgs{display:flex; flex-direction:column; gap:var(--s-2); min-width:0; max-height:40vh; overflow-y:auto; overflow-wrap:anywhere}
+.co-msg{padding:var(--s-2) var(--s-3); border-radius:var(--r-chip); background:var(--surface-2, rgba(0,0,0,.04)); max-width:90%; align-self:flex-start}
+.co-msg.mine{align-self:flex-end; background:var(--trust-tint)}
+.co-chat-send{display:flex; gap:var(--s-2); min-width:0}
+.co-chat-send .field{flex:1 1 8em; min-width:0}
+[data-guest-shell] .bar-more{display:none}

@@ -69,6 +69,8 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', 'agent',
   // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
   'groups',
+  // wave 37 co-notes-link: invites, guest shell, note chats and this device's secret belong to this phone only
+  'coInvites', 'coGuest', 'coChats', 'coDevice',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */
