@@ -149,7 +149,7 @@ export interface WebView {
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
-  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, mergeNow, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo, removePerson } = deps
+  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo, removePerson } = deps
   /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
   let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
   let ringsK = 1
@@ -609,7 +609,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         hideNotice(); end(); lifted = false
         const release = (): void => { window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release); setTimeout(() => setDragged(false), 0) }
         window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release)
-        mergeNow?.(otherId, p.id)
+        deps.mergeNow?.(otherId, p.id)
         done()
       }
       const onEscape = (e: KeyboardEvent): void => { if (e.key === 'Escape' && hold.phase !== 'none') { cancelled = true; holdApply({ type: 'leave' }) } }
