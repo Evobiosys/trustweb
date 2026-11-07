@@ -1433,3 +1433,15 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .note-share .chips{margin:0}
 .note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
 .shared-notes .field{width:100%; box-sizing:border-box}
+
+/* wave 33 small-ui: the top-right controls stay on screen at any width (search, eye, gear never hidden) */
+.hdr{position:sticky; top:0; z-index:5; flex-wrap:nowrap}
+.hdr-right > *{flex-shrink:0}
+@media (max-width:380px){
+  .hdr{padding-left:12px; padding-right:12px}
+  .hdr-right{gap:4px}
+  .hdr-btn.icon-only{width:30px; height:30px}
+}
+@media (max-width:339px){
+  .hdr-right [data-header-pin]{display:none}
+}
