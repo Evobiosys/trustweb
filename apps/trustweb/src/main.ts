@@ -1357,7 +1357,7 @@ function screenNotes(): Node[] {
   const s = st()
   return [
     header(S.viewNames.notes, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [notesOutlineView({ people: () => st().people, me: { did: s.me.id, name: s.me.displayName }, save })]),
+    el('div', { class: 'scroll pad' }, [notesOutlineView({ people: () => st().people, me: { did: s.me.id, name: s.me.displayName }, save }), ...(coNotes?.notesSection?.() ?? [])]),
   ]
 }
 /** Wave 30: what a People / Map row may do to the record (inline name edit, archive, drag to another zone); a tap on the toast undoes. */
@@ -3328,6 +3328,7 @@ async function sendViaRelay(note: Parameters<typeof postNote>[1], personIds: str
 
 /** On open and on Sync now: fetch what was left for me, keep each note on the sender's card, and ask the relay to forget it. */
 async function pollNotesRelay(): Promise<void> {
+  void coNotes?.poll?.().then((changed) => { if (changed) render() })
   if (!state?.identity || !readRelayOn() || !canRegister(SERVER_ORIGIN)) return
   const bySender = (did: string): Person | undefined => st().people.find((p) => relayDidOf(p) === did)
   const got = await pollRelay(relayDeps(), deserializeIdentity(state.identity), (did) => bySender(did) !== undefined)
@@ -4723,8 +4724,12 @@ const extHooks: ExtHooks = {
   },
   page: (title, body, mark) => pages.open(title, body, mark),
   backupNow: () => backup.backUpNow(),
+  openPerson: openCardPage,
+  didOf: (id) => { const p = st().people.find((x) => x.id === id); return p ? relayDidOf(p) : undefined },
+  relay: () => (state?.identity && readRelayOn() && canRegister(SERVER_ORIGIN) ? { deps: relayDeps(), identity: deserializeIdentity(state.identity) } : null),
 }
 const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
+const coNotes = EXT_MODULES.find((m) => m.id === 'co-notes')?.screen(extHooks)
 /** Wave 27: the messengers extension modules add to the Chat screen's Extend. */
 const messengers = EXT_MODULES.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
 
@@ -6805,6 +6810,7 @@ function settingsSheet(): void {
       eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
     })),
     settingsSection('features', S.setSecFeatures, feed.settingsGroup()),
+    settingsSection('extensions', S.coNotes.group, coNotes?.settingsRows?.() ?? []),
     settingsSection('advanced', S.setAdvanced, [
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
     el('h4', { class: 'eyebrow' }, [S.headerPinsTitle]),
@@ -7505,6 +7511,7 @@ if (state && !state.testOf?.handedOverAt) {
   offerApkHint(offerDemoContent)
   offerNotifications()
   cal?.start?.()
+  coNotes?.start?.()
   checkEngagement()
   setInterval(checkEngagement, 15 * 60_000)
   purgeDeleted()
