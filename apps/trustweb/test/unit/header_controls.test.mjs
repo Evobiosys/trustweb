@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 28 views-header: the header controls per screen (left to right), the pins beneath Settings, and what the QR button shows. */
-import { headerControls, headerPins, togglePinned, qrTarget, advancedKeyOf } from '../../src/header_controls.ts'
+import { showsSettingsGear, headerControls, headerPins, togglePinned, qrTarget, advancedKeyOf } from '../../src/header_controls.ts'
 
 describe('header_controls', () => {
   it('orders search, views, pins, QR, settings left to right on web, events and inventory', () => {
@@ -55,5 +55,9 @@ describe('disclosure', () => {
   it('points right when collapsed and down when expanded', () => {
     expect(disclosureGlyph(false)).toBe('▸')
     expect(disclosureGlyph(true)).toBe('▾')
+  })
+  it('every screen but Start carries the settings gear, Meet included', () => {
+    for (const s of ['web', 'chat', 'people', 'events', 'inventory', 'record', 'meeting', 'meet', 'review', 'place', 'notes', 'feed']) expect(showsSettingsGear(s)).toBe(true)
+    expect(showsSettingsGear('start')).toBe(false)
   })
 })

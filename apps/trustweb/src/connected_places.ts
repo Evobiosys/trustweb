@@ -5,6 +5,7 @@ import { EMAIL_FIELD } from './intending_reminder'
 import { Channel, Provenance } from './model'
 import type { Person } from './model'
 import { reachableChannels } from './contact_share'
+import { linkEntries } from './person_links'
 import { sourceOfPerson } from './sources'
 import { S } from './strings'
 
@@ -16,11 +17,13 @@ export interface ConnectedPlace {
   icon: string
   /** Where a tap opens this channel; absent: the icon only tells. */
   href?: string
+  /** Known only by a link typed on the card, not connected: drawn dashed. */
+  linked?: boolean
 }
 
-type Carrier = Pick<Person, 'id' | 'peerId' | 'channels' | 'theirChannels' | 'sources' | 'fields'>
+type Carrier = Pick<Person, 'id' | 'peerId' | 'channels' | 'theirChannels' | 'sources' | 'fields' | 'links'>
 
-/** TrustWeb first (a peer id is set), then the typed or shared messengers, a WhatsApp import, Phone (a number behind WhatsApp or Signal), Mail, and the Tana / notes source. */
+/** TrustWeb first (a peer id is set), then the typed or shared messengers, links typed on the card (dashed), a WhatsApp import, Phone (a number behind WhatsApp or Signal), Mail, and the Tana / notes source. */
 export function connectedPlaces(p: Carrier): ConnectedPlace[] {
   const out: ConnectedPlace[] = []
   if (p.peerId) out.push({ id: 'trustweb', label: S.cardGlyphConnected, icon: 'web' })
@@ -29,6 +32,9 @@ export function connectedPlaces(p: Carrier): ConnectedPlace[] {
   for (const ch of [...reach.map((r) => r.channel), ...(imported ? [Channel.WhatsApp] : [])].filter((c, i, all) => all.indexOf(c) === i)) {
     const r = reach.find((x) => x.channel === ch)
     out.push({ id: ch, label: S.chLabel[ch], icon: ch === Channel.Delta ? 'email' : ch, ...(r ? { href: r.link } : {}) })
+  }
+  for (const { kind, url } of linkEntries(p)) {
+    if (!reach.some((r) => r.channel === kind)) out.push({ id: 'link:' + kind, label: S.cardGlyphLinked(S.chatRowLink[kind]), icon: kind, href: url, linked: true })
   }
   const number = [Channel.WhatsApp, Channel.Signal].map((c) => toE164(reach.find((r) => r.channel === c)?.value ?? '')).find((n) => n !== null)
   if (number) out.push({ id: 'phone', label: S.connectedPhone, icon: 'phone', href: `tel:${number}` })
