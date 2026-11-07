@@ -18,7 +18,9 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
+import type { SharedNote } from './notes_outline'
 import type { ConnectRecord } from './connect_code'
+import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
 import type { SeenNonce } from './connect_freshness'
 import type { ShareSettings } from './contact_share'
@@ -399,6 +401,8 @@ export interface Person {
    * a provenance entry or any share or contact payload (test/unit/general_notes.test.mjs guards every place that names it). Absent: none.
    */
   generalNote?: string
+  /** Wave 31 (notes_outline.ts): outline notes shared with or received from this person, each with its provenance. Local record; leaves only in a link the owner makes. Absent: none. */
+  sharedNotes?: SharedNote[]
   /** Wave 6e: no longer chosen or shown; still read from older records and ignored. */
   signalProvider?: SignalProvider
   /**
@@ -968,6 +972,8 @@ export interface AppState {
   wantsToConnect?: WantsToConnect[]
   me: Me
   identity?: SerializedIdentityV1
+  /** Wave 32 (short_alias.ts): host-scoped short links, token -> {did, createdAt, succession?, registeredAt?}. Absent: none made yet. */
+  aliases?: Aliases
   people: Person[]
   /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
   shares?: import('./share_sink/share_lines').ShareLine[]
@@ -1039,7 +1045,7 @@ export interface AppState {
   matches?: Match[]
   matchFeedback?: MatchFeedback[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[] }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
