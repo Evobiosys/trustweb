@@ -35,7 +35,7 @@ describe('shouldOfferNotifications', () => {
 })
 
 describe('import sources', () => {
-  it('lists WhatsApp as the verified source today', () => expect(VERIFIED_SOURCES.map((x) => x.id)).toEqual(['whatsapp']))
+  it('lists WhatsApp and the contact-file sources as verified', () => expect(VERIFIED_SOURCES.map((x) => x.id)).toEqual(['whatsapp', 'vcard', 'google-csv', 'dex-csv', 'generic-csv']))
   it('never lists a source as both verified and coming', () => {
     const v = new Set(VERIFIED_SOURCES.map((x) => x.id))
     expect(COMING_SOURCES.filter((x) => v.has(x.id))).toEqual([])

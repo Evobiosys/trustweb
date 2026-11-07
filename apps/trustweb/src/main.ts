@@ -220,7 +220,8 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
-import { openServicesImport, servicesGroup } from './services_view'
+import { exportEntry, resumeGoogle } from './contacts_sync_view'
+import { offerContacts, openServicesImport, servicesGroup } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
@@ -932,6 +933,8 @@ const pages = createPages(phone)
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }
 mountOnboardingNotice(onboardHooks)
+// Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
+void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
@@ -6582,6 +6585,7 @@ function settingsSheet(): void {
         onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
       }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
       el('button', { class: 'conn-row', 'data-settings-sovereign': '', onclick: () => sovereign.open() }, [el('b', {}, [S.sov.entry]), el('em', {}, [S.sov.entryHint])]),
+      exportEntry({ state: st, toast: (msg) => toast(msg), pages }),
     ], true),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({

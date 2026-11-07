@@ -77,7 +77,8 @@ export function propose(list: readonly Candidate[], now: number): Proposal[] {
 /** Bulk accept is offered only for rows with no flags (F8). */
 export const bulkAcceptable = (p: Proposal): boolean => p.flags.length === 0
 
-export type Choice = { do: 'accept' } | { do: 'change'; ring: Ring } | { do: 'leave' }
+/** `confirm`: the owner confirmed that a same-name person is this person, so the row's e-mail and phone may be written into them. */
+export type Choice = { do: 'accept'; confirm?: boolean } | { do: 'change'; ring: Ring; confirm?: boolean } | { do: 'leave' }
 
 export interface ZoneWrite {
   ring: Ring
