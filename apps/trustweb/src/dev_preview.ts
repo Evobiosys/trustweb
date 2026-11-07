@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { APPLY_DELAY_MS, CALL_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
+import { APPLY_DELAY_MS, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -24,6 +24,7 @@ interface Preview {
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
   assembled: { sha: string; at: string; error: string | null; restart?: boolean; set?: string[] } | null
   pending?: boolean
+  queued?: number
   compat?: Compat
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean; head?: string; mergeCommit?: string } | null
   next?: { id: string; port: number }
@@ -97,9 +98,13 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEle
 
 class ApiError extends Error {}
 
+// Re-reads the state once a timed-out write has finished server-side (the queue empties); set by initDevPreview.
+let settle: () => void = () => {}
+
 async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Preview> {
-  // A hung request never leaves the panel waiting for good (wave 33): it ends in a readable error after CALL_TIMEOUT_MS.
-  const r = await fetch('/__tw/preview' + path, { method, signal: AbortSignal.timeout(CALL_TIMEOUT_MS), ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) }).catch((e: Error) => { throw new ApiError(callError(e)) })
+  // A hung request never leaves the panel waiting for good (wave 33): it ends in a readable error after CALL_TIMEOUT_MS (45 s for writes, which wait for a CLI run); the server keeps running it.
+  const ms = method === 'GET' ? CALL_TIMEOUT_MS : WRITE_TIMEOUT_MS
+  const r = await fetch('/__tw/preview' + path, { method, signal: AbortSignal.timeout(ms), ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) }).catch((e: Error) => { if (method === 'POST') settle(); throw new ApiError(callError(e, ms)) })
   const j = (await r.json().catch(() => { throw new ApiError('HTTP ' + r.status) })) as Preview & { error?: string }
   if (!r.ok) throw new ApiError(j.error ?? 'HTTP ' + r.status)
   return j
@@ -164,7 +169,20 @@ export function initDevPreview(): void {
   const loading = (): boolean => busy !== null || (prText !== '' && prStep !== 'ready' && prStep !== 'failed')
   const elapsed = (): number => Math.floor((Date.now() - since) / 1000)
   const begin = (): void => { since = Date.now() }
-  setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; const e = root.querySelector('.eta'); if (e && prEta) e.textContent = ciLine(prEta, prStarted, Date.now()); if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
+  let settling = false
+  settle = () => {
+    if (settling) return
+    settling = true
+    void (async () => {
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 3000))
+        const q = await call('GET', '').catch(() => null)
+        if (q && !q.queued) { if (busy === null && inflight === 0) { p = q; error = ''; render() } break }
+      }
+      settling = false
+    })()
+  }
+  setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; const e = root.querySelector('.eta'); if (e && prEta) e.textContent = ciLine(prEta, prStarted, Date.now()); if ((busy !== null || inflight > 0) && elapsed() === WORKING_AFTER_S) render(); if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
   const sync = (): void => {
     const { left, top } = root.getBoundingClientRect(), style = document.documentElement.style
     if (root.hidden) { for (const v of ['--twp-h', '--twp-l', '--twp-t']) style.removeProperty(v); return }
@@ -231,7 +249,7 @@ export function initDevPreview(): void {
   }
 
   function write(next: PreviewFeature[], send: () => Promise<Preview>): void {
-    p = { ...p!, features: next }; inflight++; error = ''; render()
+    p = { ...p!, features: next }; if (inflight++ === 0) begin(); error = ''; render()
     chain = chain.then(send).then((q) => { if (inflight === 1) p = q }, async (e: Error) => { error = e.message || 'not saved'; p = await call('GET', '').catch(() => p!) }).finally(() => {
       inflight--; render()
       if (autoApply(p!, applying, hold.get())) applyLater()
@@ -531,7 +549,7 @@ export function initDevPreview(): void {
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
       const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
-      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : busy ? 'saving...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), x, close)
       const hs = drag(root.appendChild(header))
       // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
