@@ -12,6 +12,14 @@ export const PLANS = {
 
 export type PlanId = keyof typeof PLANS
 
+/** Wave 37: the plan cards in display order (small, big, enterprise); enterprise has no price and no sign-up, it is a mail. */
+export const PLAN_CARDS = [
+  { id: 'light', euro: PLANS.light.euro },
+  { id: 'ai', euro: PLANS.ai.euro },
+  { id: 'enterprise', euro: null },
+] as const
+export const ENTERPRISE_MAIL = 'mailto:connect@evobiosys.org?subject=TrustWeb%20Enterprise'
+
 /** Dev/test only (VITE_TW_API_BASE); '' = same origin (app.trustweb.one/api/...). */
 export const apiBase = (): string => import.meta.env?.VITE_TW_API_BASE ?? ''
 

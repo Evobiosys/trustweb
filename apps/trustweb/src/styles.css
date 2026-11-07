@@ -1597,3 +1597,14 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .browser-only{margin:8px 12px; padding:8px 10px; font-size:var(--fs-1,12px); color:var(--ink-soft); background:var(--card,#F5F0E8); border-radius:var(--r-chip,8px); overflow-wrap:anywhere}
 .browser-only a,.browser-only-x{text-decoration:underline; color:inherit}
 .browser-only-x{background:none; border:0; padding:0 0 0 6px; font:inherit; cursor:pointer}
+/* wave 37 ai-button */
+.ai-plans-title{margin:var(--s-2) 0 0; font-family:var(--font-serif); font-size:var(--fs-4,20px)}
+.ai-plans{display:grid; grid-template-columns:1fr; gap:var(--s-3); min-width:0}
+@media (min-width:720px){.ai-plans{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.ai-plan{display:flex; flex-direction:column; gap:var(--s-1); min-width:0; padding:var(--s-4); border:1.5px solid var(--line); border-radius:16px; background:var(--card)}
+.ai-plan p{margin:0}
+.ai-plan-name{margin:0; font-family:var(--font-serif); font-size:26px; font-weight:600; color:var(--ink)}
+.ai-plan-price{font-family:var(--font-serif); font-size:30px; font-weight:600; color:var(--teal); overflow-wrap:anywhere}
+.ai-plan-btn{margin-top:auto; align-self:stretch; box-sizing:border-box; text-align:center; text-decoration:underline; background:var(--teal); color:#fff}
+.ai-byok-toggle{font-size:12px; color:var(--ink-soft); text-decoration:underline; cursor:pointer}
+.ai-byok[open] > .ai-byok-toggle{margin-bottom:var(--s-2)}
