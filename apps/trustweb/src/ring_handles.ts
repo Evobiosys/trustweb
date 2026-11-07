@@ -49,6 +49,9 @@ export function placeHandles(i: HandleInput): Handles {
   return { kind: 'tab', toggle: { left: lo, top: lo } }
 }
 
-/** Wave 33: the expand controls' ONE column: `count` centres on x = `centre`, the first at the bottom edge of the `size` square, each next one `HANDLE + 4` px higher (toward the centre). */
+/** Wave 33: a ring's expand button sits this far right of its diamond (same row). */
+export const EXPAND_DX = TAB_PITCH
+
+/** Wave 33: the diamonds' ONE column: `count` row centres on x = `centre`, the first at the bottom edge of the `size` square, each next one `HANDLE + 4` px higher (toward the centre). */
 export const chainPoints = (count: number, centre: number, size: number): Point[] =>
   Array.from({ length: count }, (_, i) => ({ left: centre, top: size - HANDLE / 2 - 2 - i * TAB_PITCH }))
