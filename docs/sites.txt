@@ -1,0 +1,12 @@
+The three TrustInTheWeb sites (wave 36, built from the design system, nothing deployed yet)
+
+trustintheweb.org  the project and its steward: what TrustWeb is, why, how it works, the game phases, use cases,
+                   community and source code, imprint, privacy, data policy. Skin: dark blue (design doc 5.5).
+trustintheweb.com  hosting and services for groups and organisations: hosted instances, support, pricing, a clear
+                   "run it yourself for free" line pointing to .org and the source. Skin: light blue.
+trustweb.one       the app's own home: one screen that opens, installs or demos the app at https://app.trustweb.one,
+                   a short explainer, links to .org and .com. Skin: teal (the app's own colours).
+
+Same voice (docs/design/voice.txt), same tokens, same wordmark family, same footer: each footer links the other two sites.
+Roles are an assumption of the orchestrator; Jakob can change them.
+Build: python3 -I scripts/tw-sites/build_sites.py --out <dir>. Deploy preparation: scripts/tw-sites/DEPLOY.txt.

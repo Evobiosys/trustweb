@@ -1,0 +1,83 @@
+TrustInTheWeb sites: deploy preparation (wave 36, slug sites-three)
+===================================================================
+Status: NOTHING of this has been applied. The orchestrator runs it only after Jakob's yes.
+Build: python3 -I scripts/tw-sites/build_sites.py --out <dir> [--indexable]
+  -> <dir>/trustintheweb-org/  <dir>/trustintheweb-com/  <dir>/trustweb-one/
+The build is noindex by default; the deploy script passes --indexable (decision for Jakob, see 7b).
+
+1. What is live today (questhub, Caddy; scripts/trustweb_domains_caddy.py SITES_BLOCK)
+   trustintheweb.org      root /srv/questhub-static/trustintheweb-org   (static, header set tw_site_headers)
+   trustintheweb.com      root /srv/questhub-static/trustintheweb-com   (static, same)
+   www.* of both          301 to the apex
+   trustweb.one, www.trustweb.one
+                          one block: username route (302 to app.trustweb.one/who/<name>, scripts/trustweb_user_caddy_edit.py),
+                          then `redir https://trustintheweb.org{uri} permanent`, then handle_errors.
+   app.trustweb.one       the app (unchanged by this work)
+   The old .org and .com folders hold the previous sites. rsync only adds or replaces, so files the new build does
+   not carry stay (e.g. an old terms.html). Take a copy first (step 5.0).
+
+2. DNS to confirm (Infomaniak zones, QUESTHUB_IP 83.228.207.220, TTL 300; `scripts/trustweb_domains.sh dns --dry-run` prints the diff)
+   trustintheweb.org   A apex + www      already pointing at questhub
+   trustintheweb.com   A apex + www      confirm they exist (the Caddy block already exists, so they should)
+   trustweb.one        A apex + www      already pointing at questhub (the 301 runs there today)
+   No new record is needed if the three answer today. Check: dig +short trustintheweb.com trustweb.one www.trustweb.one
+   No AAAA records (unchanged).
+
+3. Caddy change (NOT applied). Only the trustweb.one block changes; the .org and .com blocks keep their root and imports.
+   Before:
+     trustweb.one, www.trustweb.one {
+         <username route: @user ... redir @user https://app.trustweb.one/who/{re.user.1} 302>
+         redir https://trustintheweb.org{uri} permanent
+         <handle_errors block>
+     }
+   After:
+     trustweb.one {
+         <username route stays FIRST: a single path segment without a dot is a person, never a page>
+         <an /apk handler, if the live file has one: it must sit above the file server, see the notes>
+         root * /srv/questhub-static/trustweb-one
+         import tw_static_site
+         <handle_errors block stays>
+     }
+     www.trustweb.one {
+         redir https://trustweb.one{uri} permanent
+     }
+   Notes
+   - Every page of the new site has a dot (index.html, privacy.html, site.css ...), so the username pattern
+     (no dot) never swallows a page. "/" serves index.html through file_server.
+   - Today's links point at https://trustweb.one/apk (APK_URL in tw_site.py; the .one site's button uses it too). A bare
+     /apk matches the username pattern and would 302 to /who/apk unless the live file has an /apk handler above it. The
+     repo scripts show none: CONFIRM on the live Caddyfile before this step. If missing, add above the @user route:
+     `redir /apk <latest GitHub Release asset URL> 302` (check the real URL first).
+   - The existing handle_errors page says "Or go to trustintheweb.org": still true.
+   - Implementation: a new transform "site-trustweb-one" in scripts/trustweb_domains_caddy.py (exact-text, idempotent, same
+     pattern as the existing ones) with a test in scripts/test_trustweb_domains.py; the orchestrator writes it after the yes.
+     No hand edit of the live file.
+   - Install route: scripts/trustweb_domains.sh fetches the live file, applies the transform, runs `caddy validate` on
+     questhub, installs and reloads, and restores the backup on failure.
+
+4. rsync targets (what deploy_sites.sh pushes; rsync -a, additive)
+   <out>/trustintheweb-org/  -> questhub:/srv/questhub-static/trustintheweb-org/
+   <out>/trustintheweb-com/  -> questhub:/srv/questhub-static/trustintheweb-com/
+   <out>/trustweb-one/       -> questhub:/srv/questhub-static/trustweb-one/        (new folder)
+   afterwards chmod -R a+rX and chcon --reference=/srv/questhub-static/wot-app (SELinux), as build_tw_front_door.sh does.
+
+5. Commands the orchestrator runs after Jakob's yes (from the repo root of the merged branch)
+   0) backup of what is live:
+        ssh questhub 'tar -C /srv/questhub-static -czf /root/sites-backup-$(date +%Y%m%d_%H%M%S).tgz trustintheweb-org trustintheweb-com'
+   1) plan only, changes nothing:
+        scripts/tw-sites/deploy_sites.sh --dry
+   2) push the files (.org and .com change at once; the new trustweb-one folder is not served until step 3):
+        TW_SITES_APPROVED=1 scripts/tw-sites/deploy_sites.sh
+   3) the Caddy change of step 3 above, through scripts/trustweb_domains.sh with the new transform
+   4) checks (node, like the other scripts; curl and python are LuLu-blocked):
+        for h in trustintheweb.org trustintheweb.com trustweb.one; do node -e 'fetch("https://"+process.argv[1]+"/",{redirect:"manual"}).then(r=>console.log(process.argv[1],r.status))' $h; done
+        expect 200 200 200; https://trustweb.one/japossert still 302 to app.trustweb.one/who/japossert; https://www.trustweb.one/ 301.
+   Rollback: restore the tarball of 5.0 for .org and .com; for trustweb.one put the redirect block back (the installer keeps a
+   Caddyfile backup and restores it on a failed validate).
+
+6. Not done by this slug: Caddy edit, DNS change, any server contact, git push.
+
+7. Decisions for Jakob
+   a. Roles are the orchestrator's assumption: .org = project and steward, .com = hosting and services, .one = the app's home. Say so if they should differ.
+   b. Indexing: the previous sites served noindex on subpages. The deploy script builds with --indexable; drop that flag to keep noindex.
+   c. trustweb.one carries its own imprint and privacy pages (the shared legal fragments, "AI drafted, subject to review").
