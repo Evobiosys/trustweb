@@ -48,6 +48,14 @@ describe('testEndpoint', () => {
   it('401 keeps the status, the endpoint message and the body', async () => {
     expect(await testEndpoint(ai, fake(false, 401, { error: { message: 'bad key' } }))).toMatchObject({ ok: false, status: 401, message: 'bad key', raw: '{"error":{"message":"bad key"}}' })
   })
+  it('a body that is not JSON at all keeps its raw text (review)', async () => {
+    const html = async () => ({ ok: false, status: 502, json: async () => { throw new Error('x') }, text: async () => '<html>Bad gateway</html>' })
+    expect(await testEndpoint(ai, html)).toMatchObject({ ok: false, status: 502, message: 'HTTP 502', raw: '<html>Bad gateway</html>' })
+  })
+  it('the result words come from strings.ts (review)', () => {
+    expect(testResultLines({ ok: false, message: 'x', status: 401 }).at(-1).text).toBe(S.aiTestHintKey)
+    expect(testResultLines({ ok: true, ms: 1500, reply: 'r' })[0].text).toBe(S.aiTestOk(1500))
+  })
   it('a timeout is flagged', async () => {
     const hang = (_u, init) => new Promise((_r, rej) => init.signal.addEventListener('abort', () => rej(new Error('aborted'))))
     expect(await testEndpoint(ai, hang, 20)).toMatchObject({ ok: false, timedOut: true })

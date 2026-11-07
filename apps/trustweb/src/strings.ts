@@ -3156,4 +3156,9 @@ export const S = {
   mergeCountdownLead: (a: string, b: string) => `Merging ${a} into ${b} …`,
   keepCountdownLead: (b: string) => `Keeping ${b} in`,
   restoreDaysLeft: (n: number) => `${n === 1 ? '1 day' : `${n} days`} left to restore it`,
+  aiTestOk: (ms: number) => `Answered in ${(ms / 1000).toFixed(1)} s`,
+  aiTestFailed: 'Failed',
+  aiTestHintTimeout: 'No answer in 30 s',
+  aiTestHintKey: 'Key rejected',
+  aiTestHintJson: 'The endpoint answered, but not with JSON: check the model name',
 } as const

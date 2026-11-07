@@ -5,6 +5,7 @@
  */
 import type { AiEndpoint } from './model'
 import { TOGETHER_DRAFT_SHAPE } from './together_request'
+import { S } from './strings'
 
 export const AI_TIMEOUT_MS = 30_000
 
@@ -16,7 +17,7 @@ export const PRESETS = {
 } as const
 
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) =>
-  Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
+  Promise<{ ok: boolean; status: number; json: () => Promise<unknown>; text?: () => Promise<string> }>
 
 /** Drafting is on only with a base URL and a model. */
 export const configured = (ai: AiEndpoint | undefined): ai is AiEndpoint => Boolean(ai?.baseUrl.trim() && ai.model.trim())
@@ -79,6 +80,7 @@ export interface ResultLine { kind: 'status' | 'message' | 'raw' | 'hint'; text:
 
 const CUT = 200
 const asText = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v) ?? '')
+const jsonOrNull = (t: string): unknown => { try { return JSON.parse(t) as unknown } catch { return null } }
 
 /** The Test button's one call: never throws; keeps the status, the endpoint's own message and the raw text for the result block. */
 export async function testEndpoint(ai: AiEndpoint, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS): Promise<TestOutcome> {
@@ -88,10 +90,13 @@ export async function testEndpoint(ai: AiEndpoint, fetchFn: FetchLike = fetch as
   const t0 = Date.now()
   try {
     const res = await fetchFn(url, { ...init, signal: ctl.signal })
-    const body = await res.json().catch(() => null)
-    if (!res.ok) return { ok: false, status: res.status, message: (body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`, raw: body === null ? undefined : asText(body) }
+    // The raw text first, so a body that is not JSON at all (an HTML error page) still shows.
+    const text = res.text ? await res.text().catch(() => '') : undefined
+    const body = text === undefined ? await res.json().catch(() => null) : jsonOrNull(text)
+    const raw = body === null ? text || undefined : asText(body)
+    if (!res.ok) return { ok: false, status: res.status, message: (body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`, raw }
     const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
-    if (parseReply(body) === null) return { ok: false, message: 'not JSON', raw: typeof content === 'string' ? content : body === null ? undefined : asText(body) }
+    if (parseReply(body) === null) return { ok: false, message: 'not JSON', raw: typeof content === 'string' ? content : raw }
     return { ok: true, ms: Date.now() - t0, reply: asText(content) }
   } catch (e) {
     return { ok: false, message: (e as Error).message, timedOut: ctl.signal.aborted }
@@ -100,10 +105,10 @@ export async function testEndpoint(ai: AiEndpoint, fetchFn: FetchLike = fetch as
 
 /** The result block under the Test button: status, the endpoint's message, the first 200 characters of the reply or body, and a hint for the common causes. Never one line. */
 export function testResultLines(o: TestOutcome): ResultLine[] {
-  if (o.ok) return [{ kind: 'status', ok: true, text: `Answered in ${(o.ms / 1000).toFixed(1)} s` }, { kind: 'raw', text: o.reply.slice(0, CUT) }]
-  const hint = o.timedOut ? 'No answer in 30 s' : o.status === 401 ? 'Key rejected' : o.message === 'not JSON' ? 'The endpoint answered, but not with JSON: check the model name' : ''
+  if (o.ok) return [{ kind: 'status', ok: true, text: S.aiTestOk(o.ms) }, { kind: 'raw', text: o.reply.slice(0, CUT) }]
+  const hint = o.timedOut ? S.aiTestHintTimeout : o.status === 401 ? S.aiTestHintKey : o.message === 'not JSON' ? S.aiTestHintJson : ''
   return [
-    { kind: 'status', ok: false, text: 'Failed' },
+    { kind: 'status', ok: false, text: S.aiTestFailed },
     { kind: 'message', text: o.message },
     ...(o.raw ? [{ kind: 'raw' as const, text: o.raw.slice(0, CUT) }] : []),
     ...(hint ? [{ kind: 'hint' as const, text: hint }] : []),
