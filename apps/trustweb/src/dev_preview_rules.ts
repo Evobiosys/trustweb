@@ -392,7 +392,11 @@ export function pressPlan(features: PreviewFeature[], key: string, v: 'merge' | 
 
 /** A panel call gives up after this long (wave 33: a hung request kept every button disabled). */
 export const CALL_TIMEOUT_MS = 8000
-export const callError = (e: { name?: string; message?: string }): string => e.name === 'TimeoutError' || e.name === 'AbortError' ? `no answer after ${CALL_TIMEOUT_MS / 1000} s` : e.message || 'not saved'
+/** Verdict/toggle/approve calls wait for a CLI run behind the queue (a verdict takes ~6-8 s): 45 s. A timed-out call keeps running server-side. */
+export const WRITE_TIMEOUT_MS = 45000
+export const callError = (e: { name?: string; message?: string }, ms = CALL_TIMEOUT_MS): string => e.name === 'TimeoutError' || e.name === 'AbortError' ? `no answer after ${ms / 1000} s` : e.message || 'not saved'
+/** The panel shows "working…" with the elapsed seconds once a call takes longer than this. */
+export const WORKING_AFTER_S = 2
 /** Why the pills and boxes are disabled right now (their title). */
 export const loadingWhy = (busy: string | null, prText: string): string => busy !== null ? 'saving, one moment' : prText ? 'the PR is being created' : ''
 

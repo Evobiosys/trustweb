@@ -15,9 +15,11 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { matchesReply } from './vite_matches.mjs'
-import { approveMergeRoute, diagnosticsFor, ghBin, readyToGo } from './dev_preview_rules.mjs'
+import { approveMergeRoute, diagnosticsFor, ghBin, jobQueue, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+// execFile ignores `stdio`, so stdin stays an open pipe: close it, a command that reads stdin (a git/gh prompt) gets EOF instead of waiting out its timeout.
+const execClosed = (cmd, args, o) => { const pr = promisify(execFile)(cmd, args, o); pr.child.stdin?.end(); return pr }
 const repo = path.resolve(here, '../..')
 const crm = path.resolve(here, '../crm')
 
@@ -310,17 +312,14 @@ function previewApi() {
       if (!previewFile()) return
       const json = (res, o, code = 200) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
       // Async and one at a time (wave 33): the CLI calls used to block this server (execFileSync), so the panel's reads and the page itself hung while a verdict ran.
-      let queue = Promise.resolve()
-      const run = (args) => {
-        const job = queue.then(async () => {
-          try {
-            await promisify(execFile)(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000 })
-            return null
-          } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
-        })
-        queue = job
-        return job
-      }
+      // A client that timed out leaves its job running; an identical new request shares it (jobQueue), and GET reports `queued` so the panel re-reads when the queue empties.
+      const queue = jobQueue(async (args) => {
+        try {
+          await execClosed(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000 })
+          return null
+        } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
+      })
+      const run = queue.run
       server.middlewares.use('/__tw/wait', (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -340,13 +339,13 @@ function previewApi() {
         }
         const pr = /^pr=(\d+)$/.exec(query ?? '')?.[1]
         if (sub !== '/diagnostics' || !pr) { fail('bad request', 400); return }
-        const run = async (bin, a) => (await promisify(execFile)(bin, a, { encoding: 'utf8', maxBuffer: 50e6, timeout: 60000, env: { ...process.env, HOME: process.env.HOME || os.homedir() } })).stdout
+        const run = async (bin, a) => (await execClosed(bin, a, { encoding: 'utf8', maxBuffer: 50e6, timeout: 60000, env: { ...process.env, HOME: process.env.HOME || os.homedir() } })).stdout
         try { text(await diagnosticsFor(pr, ghBin(process.env, existsSync), run)) } catch (e) { fail(e.message, 500) }
       })
       server.middlewares.use('/__tw/preview', async (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
         const sub = (req.url ?? '/').split('?')[0]
-        if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted }); return }
+        if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted, queued: queue.size() }); return }
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
         if (sub === '/pr' || sub === '/test' || sub === '/apply') {   // /apply = `preview <id> apply`: assemble the approved set (the panel's "Reload with approved")
           spawn(bin(), [readPreview().id, sub.slice(1)], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
