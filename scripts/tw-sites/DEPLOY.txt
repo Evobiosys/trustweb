@@ -1,6 +1,11 @@
 TrustInTheWeb sites: deploy preparation (wave 36, slug sites-three)
 ===================================================================
-Status: NOTHING of this has been applied. The orchestrator runs it only after Jakob's yes.
+Status: APPLIED 2026-11-07 (sites-three-2, Jakob's yes). Steps done: DNS check (all seven names -> 83.228.207.220); 5.0 backup (copies of
+trustintheweb-org, trustintheweb-com and the live Caddyfile in questhub:/srv/questhub-static/_archive/2026-11-07_sites-three/);
+step 2 rsync of the three folders (--indexable); step 3 Caddy via transform site-trustweb-one (validated on questhub, reloaded);
+step 4 checks passed. The live file already had /apk and /slides in the trustweb.one block: both kept (the repo scripts did not show them).
+Rollback: ssh questhub 'B=/srv/questhub-static/_archive/2026-11-07_sites-three; sudo cp -p $B/Caddyfile.live /etc/caddy/Caddyfile && sudo systemctl reload caddy'
+  (.org/.com files: cp -a $B/trustintheweb-org/. /srv/questhub-static/trustintheweb-org/ and the same for .com; trustweb-one folder is harmless unserved.)
 Build: python3 -I scripts/tw-sites/build_sites.py --out <dir> [--indexable]
   -> <dir>/trustintheweb-org/  <dir>/trustintheweb-com/  <dir>/trustweb-one/
 The build is noindex by default; the deploy script passes --indexable (decision for Jakob, see 7b).
