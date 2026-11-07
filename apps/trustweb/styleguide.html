@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- boot:theme -->
+  <script>
+(function () {
+  var t = 'system';
+  try {
+    var v = localStorage.getItem('tw-theme');
+    if (v === 'light' || v === 'dark') t = v;
+  } catch (e) {}
+  document.documentElement.dataset.theme = t;
+  var m = 'on';
+  try {
+    var c = navigator.connection;
+    var slow = c && (c.saveData || c.effectiveType === 'slow-2g' || c.effectiveType === '2g' || c.effectiveType === '3g');
+    if (slow || matchMedia('(prefers-reduced-motion: reduce)').matches) m = 'off';
+  } catch (e) {}
+  document.documentElement.dataset.motion = m;
+})();
+  </script>
+  <!-- /boot:theme -->
+  <title>TrustWeb styleguide</title>
+</head>
+<body>
+  <main class="sg">
+    <h1>TrustWeb styleguide</h1>
+    <p class="sg-note">Fixture names only. Nothing on this page reads your record.</p>
+    <nav class="sg-nav" aria-label="Sections">
+      <a href="#tokens">Tokens</a> <a href="#type">Type</a> <a href="#shape">Shape</a> <a href="#rings">Rings</a>
+      <a href="#path">Trust path</a> <a href="#motion">Motion</a> <a href="#voice">Voice</a>
+    </nav>
+    <section aria-labelledby="h-theme">
+      <h2 id="h-theme">Theme</h2>
+      <div id="theme" class="sg-row" role="group" aria-label="Appearance"></div>
+    </section>
+    <section aria-labelledby="h-tokens"><h2 id="h-tokens">Tokens</h2><div id="tokens" class="sg-swatches"></div></section>
+    <section aria-labelledby="h-type"><h2 id="h-type">Type</h2><div id="type"></div></section>
+    <section aria-labelledby="h-shape"><h2 id="h-shape">Shape and space</h2><div id="shape" class="sg-row"></div></section>
+    <section aria-labelledby="h-rings"><h2 id="h-rings">Holarchic rings, six node states</h2><div id="rings"></div></section>
+    <section aria-labelledby="h-path"><h2 id="h-path">Trust path</h2><div id="path"></div></section>
+    <section aria-labelledby="h-motion">
+      <h2 id="h-motion">Motion</h2>
+      <div id="motion">
+        <output id="motion-out"></output>
+        <button type="button" id="simulate" class="btn-ghost" aria-pressed="false">Simulate a slow connection</button>
+      </div>
+    </section>
+    <section aria-labelledby="h-voice">
+      <h2 id="h-voice">Voice</h2>
+      <div id="voice"><button type="button" id="load-voice" class="btn-ghost">Load voice text</button><pre id="voice-text" hidden></pre></div>
+    </section>
+  </main>
+  <script type="module" src="/src/styleguide.ts"></script>
+</body>
+</html>
