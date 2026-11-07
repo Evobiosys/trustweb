@@ -1743,7 +1743,8 @@ const friendsFade = fadeHost(friendsEl, () => { friendsEl.hidden = true })
 function hideNotice(): void { friendsFade.close() }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
-  friendsEl.classList.remove('stack', 'line')
+  friendsEl.classList.remove('stack', 'line', 'tap-close')
+  friendsEl.onclick = null
   friendsEl.replaceChildren(
     el('b', {}, [title]),
     el('span', {}, [body]),
@@ -2852,14 +2853,14 @@ function chatNewSheet(): void {
 }
 
 /** Wave 27 (D2): once after the upgrade, an honest line that the pass-on default narrowed; drawn once, then marked dismissed. */
-function passOnNotice(): HTMLElement | null {
+function passOnNotice(): null {
   if (!passOnDefaultNoticeDue(st())) return null
   dismissNotice(st(), PASS_ON_DEFAULT_NOTICE); save()
-  const note = el('p', { class: 'meta', role: 'status', 'data-pass-on-notice': '' }, [
-    S.passOnDefaultNotice,
-    el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.noticeDismiss, 'data-notice-dismiss': '', onclick: () => note.remove() }, ['×']),
-  ])
-  return note
+  // Wave 36b: the top notice layer (above the Tools panel, wraps, x and a tap on the text close it), not a line inside the zoomed rings.
+  showNotice(S.passOnDefaultNotice, '', [], 30000)
+  friendsEl.classList.add('tap-close')
+  friendsEl.onclick = hideNotice
+  return null
 }
 
 function screenWeb(): Node[] {
@@ -3481,20 +3482,12 @@ function blockRow(p: Person): HTMLElement {
   }, [on ? S.unblockPerson(p.name) : S.blockPerson(p.name)])
 }
 
-/** Archive (the default) or, quieter, Delete for good after an in-place "Delete for good?" (Jakob 2026-10-19). */
+/** Archive (the default) or Delete: since wave 36b Delete is the 30-day reversible one (deleted_people.ts), no question, the toast carries Undo. The old "Delete for good?" strings (personDeleteAsk/Yes/No) stay in strings.ts, unused (DEVLOG/wave36b/archive/notices-2). */
 function archiveRow(p: Person): HTMLElement {
-  const row = el('div', { class: 'archive-row' })
-  const draw = (): void => row.replaceChildren(
+  return el('div', { class: 'archive-row' }, [
     el('button', { class: 'btn btn-ghost', 'data-archive-person': p.id, onclick: () => { closeSheet(); void web.hideOnRings(p).then(archivedNotice) } }, [S.personArchive]),
-    el('button', { class: 'btn btn-ghost btn-sm quiet', 'data-delete-person': p.id, onclick: ask }, [S.personDelete]),
-  )
-  const ask = (): void => row.replaceChildren(
-    el('span', { class: 'meta' }, [S.personDeleteAsk]),
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-yes': p.id, onclick: () => deletePerson(p.id) }, [S.personDeleteYes]),
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-no': '', onclick: draw }, [S.personDeleteNo]),
-  )
-  draw()
-  return row
+    el('button', { class: 'btn btn-ghost btn-sm quiet', 'data-delete-person': p.id, onclick: () => deletePerson(p.id) }, [S.personDelete]),
+  ])
 }
 
 /** Wave 36: people deleted more than 30 days ago go for good (deleted_people.ts); the Recently deleted list was their only way back. */
@@ -3506,12 +3499,11 @@ function purgeDeleted(): void {
   save()
 }
 
+/** Person page and Desk delete: the 30-day tombstone and the same Undo toast as the dustbin (web_view removeNow). */
 function deletePerson(personId: string): void {
-  const s = st()
-  s.people = s.people.filter((x) => x.id !== personId)
-  save()
+  const p = st().people.find((x) => x.id === personId)
   closeSheet()
-  render()
+  if (p) web.deleteReversibly([p])
 }
 
 /** Wave 8: how this connection began, when it began as a reach-out through a public link. */
@@ -4618,6 +4610,11 @@ const curator = createCurator({
     state.people = state.people.filter((x) => x.id !== id)
     save()
     if (screen === Screen.Web) render()
+  },
+  softDeletePerson: (person) => {
+    if (!state) return
+    if (!state.people.some((x) => x.id === person.id)) state.people.push(person)
+    web.deleteReversibly([state.people.find((x) => x.id === person.id)!])
   },
   restorePerson: (person) => {
     if (!state) return

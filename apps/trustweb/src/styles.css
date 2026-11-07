@@ -1502,3 +1502,15 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 
 /* wave 36 drag-overlays */
 .zone-title{position:absolute; transform:translate(-50%,-50%); z-index:4; pointer-events:none; max-width:90%; padding:2px var(--s-2); border:1.5px solid var(--line-strong); border-radius:var(--r-chip); background:var(--surface-0); color:var(--ink); font-size:var(--fs-1); line-height:var(--lh-tight); text-align:center}
+/* wave 36b notices-2 */
+.countdown-num{color:var(--teal); font-weight:700; font-variant-numeric:tabular-nums}
+[data-merge-countdown].countdown-num{color:var(--teal)}
+.demo-friends{left:12px; right:12px; max-width:calc(100% - 24px); box-sizing:border-box; overflow-wrap:anywhere; z-index:60}
+.demo-friends.tap-close{pointer-events:auto; cursor:pointer}
+.ai-test-result{display:grid; gap:4px; margin-top:6px; min-width:0}
+.ai-test-result p{margin:0; overflow-wrap:anywhere}
+.ai-test-status{font-weight:700}
+.ai-test-status.ok{color:var(--teal)}
+.ai-test-status.bad{color:var(--warm-deep)}
+.ai-test-raw{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; white-space:pre-wrap; background:var(--tint-teal); border-radius:8px; padding:6px 8px}
+.ai-test-hint{font-size:12.5px; color:var(--ink-soft)}

@@ -71,3 +71,41 @@ export async function askEndpointText(ai: AiEndpoint, system: string, text: stri
     return content.trim()
   } finally { clearTimeout(timer) }
 }
+
+export type TestOutcome =
+  | { ok: true; ms: number; reply: string }
+  | { ok: false; message: string; status?: number; raw?: string; timedOut?: boolean }
+export interface ResultLine { kind: 'status' | 'message' | 'raw' | 'hint'; text: string; ok?: boolean }
+
+const CUT = 200
+const asText = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v) ?? '')
+
+/** The Test button's one call: never throws; keeps the status, the endpoint's own message and the raw text for the result block. */
+export async function testEndpoint(ai: AiEndpoint, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS): Promise<TestOutcome> {
+  const { url, init } = buildRequest(ai, 'I want to play padel')
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), timeoutMs)
+  const t0 = Date.now()
+  try {
+    const res = await fetchFn(url, { ...init, signal: ctl.signal })
+    const body = await res.json().catch(() => null)
+    if (!res.ok) return { ok: false, status: res.status, message: (body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`, raw: body === null ? undefined : asText(body) }
+    const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
+    if (parseReply(body) === null) return { ok: false, message: 'not JSON', raw: typeof content === 'string' ? content : body === null ? undefined : asText(body) }
+    return { ok: true, ms: Date.now() - t0, reply: asText(content) }
+  } catch (e) {
+    return { ok: false, message: (e as Error).message, timedOut: ctl.signal.aborted }
+  } finally { clearTimeout(timer) }
+}
+
+/** The result block under the Test button: status, the endpoint's message, the first 200 characters of the reply or body, and a hint for the common causes. Never one line. */
+export function testResultLines(o: TestOutcome): ResultLine[] {
+  if (o.ok) return [{ kind: 'status', ok: true, text: `Answered in ${(o.ms / 1000).toFixed(1)} s` }, { kind: 'raw', text: o.reply.slice(0, CUT) }]
+  const hint = o.timedOut ? 'No answer in 30 s' : o.status === 401 ? 'Key rejected' : o.message === 'not JSON' ? 'The endpoint answered, but not with JSON: check the model name' : ''
+  return [
+    { kind: 'status', ok: false, text: 'Failed' },
+    { kind: 'message', text: o.message },
+    ...(o.raw ? [{ kind: 'raw' as const, text: o.raw.slice(0, CUT) }] : []),
+    ...(hint ? [{ kind: 'hint' as const, text: hint }] : []),
+  ]
+}

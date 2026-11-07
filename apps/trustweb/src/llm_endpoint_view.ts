@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Settings > Advanced > Your AI: provider preset, base URL, key, model and a Test button. Kept on this phone and in the sealed record. */
 import { el } from '../../demo/src/ui/dom'
-import { askEndpoint, configured, PRESETS } from './llm_endpoint'
+import { configured, PRESETS, testEndpoint, testResultLines } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
 
@@ -30,7 +30,7 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
       class: 'radio' + (ai().preset === p ? ' on' : ''), 'aria-pressed': String(ai().preset === p), 'data-ai-preset': p,
       onclick: () => { Object.assign(ai(), { preset: p, ...(p === 'custom' ? {} : PRESETS[p]) }); h.save(); draw() },
     }, [el('b', {}, [S.aiPreset[p]])]))
-    const result = el('p', { class: 'meta', 'data-ai-result': '' })
+    const result = el('div', { class: 'ai-test-result', 'data-ai-test-result': '', role: 'status' })
     box.replaceChildren(
       el('h4', { class: 'eyebrow' }, [S.aiTitle]),
       ...presets,
@@ -38,9 +38,9 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
       el('button', {
         class: 'btn btn-ghost btn-sm', 'data-ai-test': '1',
         onclick: async () => {
-          if (!configured(h.state().advanced?.ai)) { result.textContent = S.aiNotSet; return }
-          result.textContent = S.aiTesting
-          try { await askEndpoint(ai(), 'I want to play padel'); result.textContent = S.aiOk } catch (e) { result.textContent = S.aiError((e as Error).message) }
+          if (!configured(h.state().advanced?.ai)) { result.replaceChildren(el('p', { class: 'meta' }, [S.aiNotSet])); return }
+          result.replaceChildren(el('p', { class: 'meta' }, [S.aiTesting]))
+          result.replaceChildren(...testResultLines(await testEndpoint(ai())).map((l) => el('p', { class: `ai-test-${l.kind}${l.ok === undefined ? '' : l.ok ? ' ok' : ' bad'}`, 'data-ai-test-line': l.kind }, [(l.kind === 'status' ? (l.ok ? '✓ ' : '✗ ') : '') + l.text])))
         },
       }, [S.aiTest]),
       result,

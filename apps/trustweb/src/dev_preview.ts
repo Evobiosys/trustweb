@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
+import { approveBoxVisible, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -547,6 +547,9 @@ export function initDevPreview(): void {
     const pill = collapsed()
     root.className = 'twp' + (pill ? ' pill' : '')
     root.replaceChildren()
+    // The Approve box (dev_feature.ts) hides while this panel is a pill or shows a single row (wave 36b).
+    const boxOn = (focused: boolean): void => { document.documentElement.classList.toggle('twp-compact', !approveBoxVisible({ collapsed: pill, focused })) }
+    boxOn(false)
     if (pill) {
       const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand · double-click copies the id' }))
       const state = drag(tag)
@@ -581,6 +584,7 @@ export function initDevPreview(): void {
       assembleNow.dataset.assembleNow = ''
       assembleNow.addEventListener('click', () => { void apply() })
       const fs = focusSplit(shown, focus.get())
+      boxOn(fs !== null)
       // One toggle with arrows both ways: focus -> the full list; full list -> back to the last focused row (wave 33).
       const ft = focusToggle(shown, focus.get(), lastFocus.get())
       const toggle = ft ? h('button', { className: 'toggle', textContent: '⇅ ' + (ft.to === 'full' ? S.panelShowAll : S.panelBackToRow(ft.row.title)) }) : null

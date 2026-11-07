@@ -152,6 +152,8 @@ export interface WebView {
   openExpanse(): void
   /** Wave 36: the sheet of the deleted people (Put back, days left). */
   openDeleted(): void
+  /** Wave 36b: delete with the 30-day tombstone and the Undo toast (person page, Desk, dustbin). */
+  deleteReversibly(ps: readonly Person[]): void
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
@@ -780,8 +782,8 @@ export function createWebView(deps: WebViewDeps): WebView {
   function offerMerge(p: Person, otherId: string, n: number): void {
     const other = st().people.find((x) => x.id === otherId)
     if (!other || !mergeSheet) return
-    showNotice(S.mergeCountdown(displayName(p.name).text, displayName(other.name).text, n), '', [
-      el('span', { 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
+    showNotice(S.mergeCountdownLead(displayName(p.name).text, displayName(other.name).text), '', [
+      el('span', { class: 'countdown-num', 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
     ], 20000)
   }
 
@@ -794,7 +796,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       el('h3', {}, [S.recentlyDeletedTitle]),
       el('p', { class: 'meta' }, [S.recentlyDeletedHint]),
       ...people.map((p) => el('div', { class: 'expanse-row', 'data-deleted-row': p.id }, [
-        el('span', {}, [displayName(p.name).text, ' ', el('small', { class: 'meta' }, [S.daysLeft(daysLeft(p, now))])]),
+        el('span', {}, [displayName(p.name).text, ' ', el('small', { class: 'meta' }, [S.restoreDaysLeft(daysLeft(p, now))])]),
         el('button', { class: 'btn btn-ghost btn-sm', 'data-put-back': p.id, onclick: () => back(p) }, [S.putBack]),
       ])),
     ])
@@ -940,5 +942,6 @@ export function createWebView(deps: WebViewDeps): WebView {
     spaceOutWeb,
     openExpanse: expanseSheet,
     openDeleted: deletedSheet,
+    deleteReversibly: removeNow,
   }
 }
