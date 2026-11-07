@@ -715,6 +715,19 @@ export function createWebView(deps: WebViewDeps): WebView {
     ], 30000)
   }
 
+  /** The bubble "Merge A into B?"; Merge opens the Same person sheet, which asks again before anything merges. */
+  function offerMerge(p: Person, otherId: string): void {
+    const other = st().people.find((x) => x.id === otherId)
+    if (!other || !mergeSheet) return
+    const close = (): void => hideNotice()
+    showNotice(S.dmOffer(displayName(p.name).text, displayName(other.name).text), '', [
+      el('span', { 'data-merge-offer': '1' }, [
+        el('button', { class: 'btn btn-electric btn-sm', onclick: () => { close(); mergeSheet(other.id, p.id) } }, [S.dmMerge]),
+        el('button', { class: 'btn btn-ghost btn-sm', onclick: close }, [S.dvCancel]),
+      ]),
+    ], 20000)
+  }
+
   /** "Recently deleted": the deleted people of the last 30 days, each with Put back and the days left. */
   function deletedSheet(): void {
     const now = Date.now()
@@ -728,19 +741,6 @@ export function createWebView(deps: WebViewDeps): WebView {
         el('button', { class: 'btn btn-ghost btn-sm', 'data-put-back': p.id, onclick: () => back(p) }, [S.putBack]),
       ])),
     ])
-  }
-
-  /** The bubble "Merge A into B?"; Merge opens the Same person sheet, which asks again before anything merges. */
-  function offerMerge(p: Person, otherId: string): void {
-    const other = st().people.find((x) => x.id === otherId)
-    if (!other || !mergeSheet) return
-    const close = (): void => hideNotice()
-    showNotice(S.dmOffer(displayName(p.name).text, displayName(other.name).text), '', [
-      el('span', { 'data-merge-offer': '1' }, [
-        el('button', { class: 'btn btn-electric btn-sm', onclick: () => { close(); mergeSheet(other.id, p.id) } }, [S.dmMerge]),
-        el('button', { class: 'btn btn-ghost btn-sm', onclick: close }, [S.dvCancel]),
-      ]),
-    ], 20000)
   }
 
   /** Right click, or a 500 ms hold that moved under 6 px, on empty web space or a ring line: a small menu to space the dots out equally. */
