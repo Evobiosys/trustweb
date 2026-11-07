@@ -1,34 +1,16 @@
-/* TrustWeb. Tokens, phone frame, tab bar, rings, sheet and cosmic register
-   ported from apps/mobile-ui/src/styles.css; the notes-flow pieces follow the
-   owner's note-taking mockup (teal call-to-action, tag pills). */
+@import './design/tokens.css';
+/* TrustWeb. Tokens now come from src/design/tokens.css (generated from tokens.json); the
+   phone frame, tab bar, rings, sheet and cosmic register were ported from apps/mobile-ui/src/styles.css;
+   the notes-flow pieces follow the owner's note-taking mockup (teal call-to-action, tag pills). */
 :root{
   --font-pinned:ui-monospace,Menlo,monospace;
-  --violet:#2F6F74; --electric:#1A9AA6; --coral:#C2573A; --mint:#3FBFA0; --teal:#13867E;
-  --mist:#ECE7DC; --linen:#F5F0E8; --ink:#1F2A28; --ink-soft:#5A6B66;
-  --page-bg:#FAFAF7; --page-ink:#1F2A28; --panel:#fff;
-  --violet-deep:#174A4F; --electric-deep:#0E5A63; --warm-deep:#B58A2E;
-  /* surface tokens: --linen is the screen, --card the raised panels */
-  --card:#fff; --line:rgba(31,42,40,.14); --tab-bg:rgba(255,255,255,.94);
-  --tint-teal:#E3F4F1; --tint-ok:#DDF3EA; --tint-warn:#FBE6DD; --tint-violet:#E1EFEF;
   /* Wave 28 (trustzones.ts TONE_ORDER): the orange of a rung, strongest inside, the outermost grey. */
   --ring-0:#A63A00; --ring-1:#D2570A; --ring-2:#EE7A1C; --ring-3:#F6A24F; --ring-4:#FAC98F; --ring-5:#9E9E9E;
   --pin-edge:#F2A0A0;
-  --tint-blue:#E0F2F4; --tint-sand:#F5EEDC; --ok-ink:#0E6B55; --warn-ink:#9C3B2E;
 }
-/* Dark is the default (light only with data-theme="light" on <html>). A deep teal night instead of a darkened beige, with the same accents.
-   Real tokens, so the app never depends on a browser's forced dark mode. */
-@media all{
-  :root:not([data-theme="light"]){
-    --page-bg:#1C1B17; --page-ink:#F1EEE6;
-    --linen:#26241F; --card:#312E28; --mist:#3D3932; --ink:#F1EEE6; --ink-soft:#BDB6A8;
-    --line:rgba(241,238,230,.13); --tab-bg:rgba(38,36,31,.94);
-    --tint-teal:#12383A; --tint-ok:#153A30; --tint-warn:#3F2A1E; --tint-violet:#1A3A3F;
-    --tint-blue:#143A44; --tint-sand:#33301F; --ok-ink:#7BE0B0; --warn-ink:#FFB38F;
-    --electric-deep:#7ED9CF; --violet-deep:#8FD0D0; --warm-deep:#FFB36B;
-    --start-end:#1E3A3C;
-    color-scheme:dark;
-  }
-}
+/* Until Task 5 moves it into the tokens: the start screen's dark ground. */
+:root[data-theme="dark"]{--start-end:#1E3A3C}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--start-end:#1E3A3C}}
 *{box-sizing:border-box; margin:0}
 html,body{height:100%}
 body{

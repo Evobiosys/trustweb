@@ -3068,4 +3068,8 @@ export const S = {
   binRemoveAria: 'Drop here to remove',
   panelChangedSince: (old: string, now: string) => `changed since your approval (${old} → ${now})`,
   panelApproveChanges: 'Approve changes',
+  themeLabel: 'Appearance',
+  themeSystem: 'Follow the system',
+  themeLight: 'Light',
+  themeDark: 'Dark',
 } as const

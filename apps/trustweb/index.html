@@ -6,16 +6,29 @@
   <!-- review-wave2: the web-search links (and fediverse links) must not even be resolved before a tap (Safari prefetches link hosts' DNS) -->
   <meta http-equiv="x-dns-prefetch-control" content="off" />
   <meta name="description" content="TrustWeb: ask the people you have met, and the people they trust. A question travels, the data stays." />
+  <!-- boot:theme -->
+  <script>
+(function () {
+  var t = 'system';
+  try {
+    var v = localStorage.getItem('tw-theme');
+    if (v === 'light' || v === 'dark') t = v;
+  } catch (e) {}
+  document.documentElement.dataset.theme = t;
+})();
+  </script>
+  <!-- /boot:theme -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%239A37F0'/%3E%3Ccircle cx='50' cy='50' r='26' fill='none' stroke='white' stroke-width='6' stroke-dasharray='8 8'/%3E%3C/svg%3E" />
   <title>TrustWeb</title>
   <style>
     /* Wave 16: what shows before the bundle runs; the start screen's colours, so the swap is quiet. */
-    [data-loading]{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#26241F;color:#F1EEE6;font-family:Inter,Seravek,"Avenir Next","Segoe UI",system-ui,sans-serif}
+    [data-loading]{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#F5F0E8;color:#1F2A28;font-family:Inter,Seravek,"Avenir Next","Segoe UI",system-ui,sans-serif}
     [data-loading] .logo{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:34px;color:#fff;background:linear-gradient(135deg,#C2573A,#2F6F74)}
     [data-loading] b{font-size:34px;font-weight:600}
-    [data-loading] span{color:#BDB6A8;font-size:14px}
-    /* Dark is the app's default; light only when the person chose it (html[data-theme="light"], set by main.ts). */
-    html[data-theme="light"] [data-loading]{background:#F5F0E8;color:#1F2A28} html[data-theme="light"] [data-loading] span{color:#5A6B66}
+    [data-loading] span{color:#5A6B66;font-size:14px}
+    /* Light is the default; dark when the person chose it (html[data-theme="dark"], set by the boot block) or follows the system. */
+    html[data-theme="dark"] [data-loading]{background:#26241F;color:#F1EEE6} html[data-theme="dark"] [data-loading] span{color:#BDB6A8}
+    @media (prefers-color-scheme:dark){html[data-theme="system"] [data-loading]{background:#26241F;color:#F1EEE6} html[data-theme="system"] [data-loading] span{color:#BDB6A8}}
   </style>
 </head>
 <body>

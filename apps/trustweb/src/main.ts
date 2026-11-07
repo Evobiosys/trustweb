@@ -22,6 +22,7 @@ import { createViaCard } from './via_card'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
+import { applyTheme, readTheme, type Theme } from './theme'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
@@ -6520,6 +6521,13 @@ function settingsSheet(): void {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),
       onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
+    el('div', { class: 'radio', 'data-theme-setting': '' }, [
+      el('b', {}, [S.themeLabel]),
+      ...([['system', S.themeSystem], ['light', S.themeLight], ['dark', S.themeDark]] as const).map(([v, label]) => el('button', {
+        class: 'btn btn-ghost btn-sm' + (readTheme(localStorage) === v ? ' on' : ''), 'aria-pressed': String(readTheme(localStorage) === v), 'data-theme-choice': v,
+        onclick: () => { applyTheme(v as Theme, document.documentElement, localStorage); settingsSheet() },
+      }, [label])),
+    ]),
     el('button', {
       class: 'radio' + (s.showRingNames ? ' on' : ''),
       'aria-pressed': String(s.showRingNames === true),
