@@ -1428,3 +1428,6 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .web-default-select{font:inherit; text-decoration:underline; background:none; color:inherit; border:0; max-width:100%}
 .view-in-bar{display:flex; align-items:center; gap:8px; cursor:pointer}
 .view-in-bar b{font-weight:600; text-decoration:underline}
+/* wave 36 merge-countdown */
+[data-merge-countdown]{display:inline-block; min-width:1.5em; text-align:center; font-weight:700; font-size:1.25em; color:var(--ink); font-variant-numeric:tabular-nums}
+.keep-countdown{font-weight:600; color:var(--ink)}

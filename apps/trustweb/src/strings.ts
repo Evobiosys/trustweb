@@ -3084,4 +3084,6 @@ export const S = {
   viewPinned: 'Default view of Web ✓',
   viewInBar: 'Also show in the bottom row',
   webDefaultLabel: 'Default view',
+  mergeCountdown: (a: string, b: string, n: number) => `Merging ${a} into ${b} … ${n}`,
+  keepCountdown: (b: string, n: number) => `Keeping ${b} in ${n}…`,
 } as const
