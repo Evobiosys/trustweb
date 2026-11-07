@@ -4,7 +4,7 @@ import { MERGE_DONE } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; flag?: string; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; flag?: string; merged?: boolean; verdict?: Verdict; updated?: boolean; approvedRef?: string; changedFrom?: string; walkOk?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 /** The registry's compat record (written by preview_compat.mjs): the base and row refs it was computed for, each row alone, every pair and the full set merged in a scratch tree. */
 export interface Compat { at?: string; state: 'running' | 'ok' | 'conflict'; baseSha?: string; refs?: Record<string, string | null>; singles?: Record<string, string>; pairs?: Record<string, string>; full?: string }
@@ -309,6 +309,11 @@ export const approvedKeys = (features: PreviewFeature[]): string[] => visible(fe
 
 /** Loaded rows still waiting for the approval, and the panel's reminder line for them (empty when none waits). Mirror of unapproved / reminderText in the ops repo. */
 export const unapproved = (features: PreviewFeature[]): PreviewFeature[] => visible(features).filter((f) => f.checked && f.verdict !== 'merge')
+/** An approved row whose ref moved after the approval (the registry keeps verdict merge + approvedRef and marks it updated): the two short shas, else null. */
+export const changedSinceApproval = (f: PreviewFeature): { from: string; to: string } | null =>
+  f.verdict === 'merge' && f.updated && f.approvedRef && f.ref && f.approvedRef !== f.ref ? { from: f.approvedRef.slice(0, 7), to: f.ref.slice(0, 7) } : null
+/** How many visible loaded rows carry changes the owner has not approved yet. */
+export const changesToApprove = (features: PreviewFeature[]): number => visible(features).filter((f) => f.checked && changedSinceApproval(f)).length
 export function reminderText(features: PreviewFeature[]): string {
   const open = unapproved(features)
   return open.length ? `${open.length} loaded, not yet approved: ${open.map((f) => f.title).join(', ')}` : ''

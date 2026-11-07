@@ -3066,4 +3066,6 @@ export const S = {
   binRemove: 'Remove',
   binArchiveAria: 'Drop here to archive',
   binRemoveAria: 'Drop here to remove',
+  panelChangedSince: (old: string, now: string) => `changed since your approval (${old} → ${now})`,
+  panelApproveChanges: 'Approve changes',
 } as const

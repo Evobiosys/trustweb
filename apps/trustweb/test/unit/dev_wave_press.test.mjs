@@ -80,3 +80,13 @@ describe('wave 33: the unapproved count is by verdict (item 12)', () => {
     expect(unapprovedNote(rows)).toBe('2 unapproved items open')
   })
 })
+
+describe('wave 34: unapprovedNote adds the rows with changes to approve', () => {
+  const r = (key, over = {}) => ({ key, branch: 'w/' + key, title: key, requires: [], checked: true, ...over })
+  const c = { verdict: 'merge', updated: true, approvedRef: 'aaaaaaaa1', ref: 'bbbbbbbb2' }
+  it('with unapproved rows: ", N with changes to approve" is appended; with only changes: the clause alone; with neither: empty', () => {
+    expect(unapprovedNote([r('a'), r('b', c), r('c', c)])).toBe('1 unapproved items open, 2 with changes to approve')
+    expect(unapprovedNote([r('b', c)])).toBe('1 with changes to approve')
+    expect(unapprovedNote([r('b', { verdict: 'merge' })])).toBe('')
+  })
+})
