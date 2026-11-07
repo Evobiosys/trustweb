@@ -4,7 +4,7 @@ import { MERGE_DONE } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; flag?: string; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 /** The registry's compat record (written by preview_compat.mjs): the base and row refs it was computed for, each row alone, every pair and the full set merged in a scratch tree. */
 export interface Compat { at?: string; state: 'running' | 'ok' | 'conflict'; baseSha?: string; refs?: Record<string, string | null>; singles?: Record<string, string>; pairs?: Record<string, string>; full?: string }
