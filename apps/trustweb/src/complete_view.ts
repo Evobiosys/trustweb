@@ -9,12 +9,11 @@ import type { AppState, Person, Ring } from './model'
 import { ringColor } from './model'
 import type { ColourTag } from './colour_tags'
 import { archivePerson } from './archived_people'
-import { deletePersonSoft, putBack } from './deleted_people'
 import { BULK_RINGS, clearSelection, restoreSnapshot, snapshot, toggle } from './multi_select'
 import type { Selection } from './multi_select'
-import { CADENCE_CHOICES } from './cadence'
+import { CADENCE_CHOICES, setCadence } from './cadence'
 import { activeFilters } from './filter_active'
-import { addTagToPeople, completeRows, DEFAULT_SORT, groupsOf, setPersonTag, sortRows, toggleSort, visibleWindow } from './complete_view_model'
+import { addTagToPeople, completeRows, DEFAULT_SORT, deletePeople, groupsOf, setPersonTag, sortRows, toggleSort, visibleWindow } from './complete_view_model'
 import type { CompleteRow, SortKey } from './complete_view_model'
 import { EXPORT_FILES, peopleCsv, timelineCsv, updatesCsv } from './complete_export'
 import { download } from './contacts_sync_view'
@@ -39,7 +38,6 @@ const WINDOW_FROM = 500
 const OVERSCAN = 8
 const ROW_TABLE = 44
 const ROW_CARD = 116
-const CHANNEL_SHORT: Record<string, string> = { signal: 'Sig', whatsapp: 'WA', matrix: 'Mx', delta: 'Dc', telegram: 'Tg', messenger: 'Ms', consensual: 'Cn' }
 
 let query = ''
 let sort = DEFAULT_SORT
@@ -66,7 +64,7 @@ const dateText = (ms: number): string => new Date(ms).toLocaleDateString(undefin
 
 export function completeView(io: CompleteIo): HTMLElement {
   const wide = window.matchMedia('(min-width: 900px)')
-  const root = el('div', { class: 'cv', 'data-complete': '' })
+  const root = el('div', { class: 'cv', 'data-complete-view': '' })
   const bar = el('div', { class: 'cv-bar' })
   const head = el('div', { class: 'cv-head', role: 'row' })
   const sortPick = el('select', { class: 'field cv-sort', 'data-cv-sort-select': '', 'aria-label': S.completeSortAria(''), onchange: (e: Event) => { sort = { key: (e.target as HTMLSelectElement).value as SortKey, dir: 1 }; refresh() } })
@@ -85,7 +83,7 @@ export function completeView(io: CompleteIo): HTMLElement {
       const p = people().find((x) => x.id === r.id)
       const n = Number((e.target as HTMLSelectElement).value)
       if (!p) return
-      if (n) p.cadenceDays = n; else delete p.cadenceDays
+      setCadence(p, n)
       changed()
     },
   }, [el('option', { value: '0' }, [S.completeCadenceOff]), ...CADENCE_CHOICES.map((d) => el('option', { value: String(d), ...(d === r.cadence ? { selected: '' } : {}) }, [S.completeCadenceEvery(d)]))])
@@ -121,7 +119,7 @@ export function completeView(io: CompleteIo): HTMLElement {
       el('span', { class: 'cv-c cv-c-cadence' }, [cadenceSelect(r)]),
       tagCell(r),
       dim(r.groups.join(', '), 'groups'),
-      dim(r.channels.map((c) => CHANNEL_SHORT[c] ?? c).join(' '), 'channels'),
+      dim(r.channels.map((c) => S.completeChannelShort[c] ?? c).join(' '), 'channels'),
       dim(r.notes ? String(r.notes) : '', 'notes'),
       dim(r.affil, 'affil'),
     ])
@@ -162,7 +160,7 @@ export function completeView(io: CompleteIo): HTMLElement {
     head.replaceChildren(el('span', { class: 'cv-c cv-c-check' }), ...COLS.map((k) => el('button', {
       class: `cv-c cv-c-${k} cv-th linkbtn`, role: 'columnheader', 'data-cv-sort': k, 'aria-label': S.completeSortAria(S.completeCols[k]), 'aria-sort': sort.key === k ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none',
       onclick: () => { sort = toggleSort(sort, k); refresh() },
-    }, [S.completeCols[k] + (sort.key === k ? (sort.dir === 1 ? ' ▲' : ' ▼') : '')])))
+    }, [S.completeCols[k] + (sort.key === k ? S.completeSortMark[sort.dir === 1 ? 0 : 1] : '')])))
     sortPick.replaceChildren(...COLS.map((k) => el('option', { value: k, ...(k === sort.key ? { selected: '' } : {}) }, [S.completeCols[k]])))
   }
 
@@ -217,9 +215,9 @@ export function completeView(io: CompleteIo): HTMLElement {
       } }, [S.selectArchive]),
       el('button', { class: 'row-tool linkbtn', 'data-select-delete': '', onclick: () => {
         const list = chosen()
-        for (const p of list) deletePersonSoft(p, Date.now())
+        const undo = deletePeople(people(), selected, Date.now())
         done()
-        io.toast((list.length === 1 ? S.deletedToast(list[0].name) : S.deletedToastMany(list.length)) + S.completeTapUndo, () => { for (const p of list) putBack(p); changed() })
+        io.toast((list.length === 1 ? S.deletedToast(list[0].name) : S.deletedToastMany(list.length)) + S.completeTapUndo, () => { undo(); changed() })
       } }, [S.completeDelete]),
       el('button', { class: 'row-tool linkbtn', 'data-select-done': '', onclick: () => { selected = clearSelection(); refreshBulk(); redrawRows(true) } }, [S.selectDone]),
     )

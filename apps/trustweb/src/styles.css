@@ -1446,7 +1446,6 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .cv-row{height:var(--row-h,44px); padding:0 8px; border-bottom:1px solid var(--line); box-sizing:border-box; background:var(--surface-0)}
 .cv-row.sel{background:var(--tint-blue,var(--surface-1))}
 .cv-row.focus{box-shadow:inset 3px 0 0 var(--electric,#12a8e3)}
-.cv-row:before{content:""; display:none}
 .cv-c{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .cv-c-name{font-weight:600}
 .cv-c-ring{color:var(--ink-soft)}

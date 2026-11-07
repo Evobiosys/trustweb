@@ -26,7 +26,7 @@ try {
     const people = Array.from({ length: 12 }, (_, i) => mk(i, i === 1 ? { cadenceDays: 7 } : i === 2 ? { cadenceDays: 365 } : {}))
     const { ctx, page, errors } = await open(browser, { viewport: vp }, people)
     await page.locator('button[data-view="complete"]').click(); await page.waitForTimeout(500)
-    check(`${name}: the Web view toggle opens the complete view`, (await page.locator('[data-complete]').count()) === 1)
+    check(`${name}: the Web view toggle opens the complete view`, (await page.locator('[data-complete-view]').count()) === 1)
     check(`${name}: 12 rows`, (await page.locator('[data-cv-row]').count()) === 12)
     check(`${name}: default sort = last contact ascending (most drifted first)`, (await page.locator('[data-cv-row]').first().getAttribute('data-cv-row')) === 'p11')
     check(`${name}: header (table) ${name === '1280' ? 'visible' : 'hidden'} `, (await page.locator('.cv-head').isVisible()) === (name === '1280'))
@@ -80,7 +80,7 @@ try {
     check(`${name}: pinned as default view of Web`, (await stored(page)).uiViews?.webDefault === 'complete')
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
     await page.locator('[data-go="web"]').first().click(); await page.waitForTimeout(500)
-    check(`${name}: Web tab opens the complete view`, (await page.locator('[data-complete]').count()) === 1)
+    check(`${name}: Web tab opens the complete view`, (await page.locator('[data-complete-view]').count()) === 1)
     await page.screenshot({ path: `${SHOTS}/complete-view-${name}-pinned.png` })
 
     check(`${name}: no horizontal scrolling`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))

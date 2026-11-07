@@ -396,7 +396,7 @@ export interface Person {
   prevRing?: Ring
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
-  /** wave 36 complete-view: keep-in-touch every N days; absent = off; local only. */
+  /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
   cadenceDays?: number
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]

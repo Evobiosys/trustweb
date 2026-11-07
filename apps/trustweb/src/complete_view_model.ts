@@ -9,8 +9,9 @@ import { WEB_RINGS, webSlot } from './rings_layout'
 import { lastContact } from './people_list'
 import { generalNoteOf } from './general_notes'
 import { isOverdue, nextReminder } from './cadence'
-import { isDeleted } from './deleted_people'
+import { deletePersonSoft, isDeleted, putBack } from './deleted_people'
 import { isArchived } from './trustzones'
+import { restoreSnapshot, snapshot } from './multi_select'
 import type { Selection } from './multi_select'
 
 export interface RowTag { id: string; label: string; /** A tag set on the person (can be removed here); false = inherited from their ring. */ own: boolean }
@@ -118,4 +119,12 @@ export function addTagToPeople(people: readonly Person[], ids: Selection, tags: 
   const hit = people.filter((p) => ids.has(p.id) && String(p.fields?.[tag.id]) !== 'true')
   for (const p of hit) setPersonTag(p, tag.id, true)
   return { tags: list, undo: () => { for (const p of hit) setPersonTag(p, tag.id, false) } }
+}
+
+/** Deletes the selected people (30 days, deleted_people.ts); the undo puts each back exactly: ring and remembered ring as before. */
+export function deletePeople(people: Person[], ids: Selection, now: number): () => void {
+  const snaps = snapshot(people, ids)
+  const hit = people.filter((p) => ids.has(p.id))
+  for (const p of hit) deletePersonSoft(p, now)
+  return () => { for (const p of hit) putBack(p); restoreSnapshot(people, snaps) }
 }

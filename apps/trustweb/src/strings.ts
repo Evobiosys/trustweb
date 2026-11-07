@@ -3116,4 +3116,6 @@ export const S = {
   completeBulkTagPh: 'Tag for them',
   completeTapUndo: '. Tap to undo.',
   completeSelectRow: (name: string) => `Select ${name}`,
+  completeChannelShort: { signal: 'Sig', whatsapp: 'WA', matrix: 'Mx', delta: 'Dc', telegram: 'Tg', messenger: 'Ms', consensual: 'Cn' } as Record<string, string>,
+  completeSortMark: [' ▲', ' ▼'],
 } as const

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { CADENCE_CHOICES, nextReminder, isOverdue } from '../../src/cadence.ts'
+import { CADENCE_CHOICES, nextReminder, isOverdue, setCadence } from '../../src/cadence.ts'
+import { unitePerson } from '../../src/same_person.ts'
 
 const DAY = 86_400_000
 const p = (o = {}) => ({ id: 'a', name: 'A', metAt: 1000 * DAY, ...o })
@@ -23,5 +24,14 @@ describe('cadence', () => {
     const q = p({ cadenceDays: 14 })
     expect(isOverdue(q, 2000 * DAY, 2013 * DAY)).toBe(false)
     expect(isOverdue(q, 2000 * DAY, 2014 * DAY)).toBe(true)
+  })
+  it('stores Off as 0, so a sync with an older device does not bring the cadence back', () => {
+    const mine = p({ cadenceDays: 30, lines: [] })
+    setCadence(mine, 0)
+    expect(mine.cadenceDays).toBe(0)
+    expect(nextReminder(mine, 2000 * DAY, 3000 * DAY)).toBeUndefined()
+    expect(unitePerson(mine, p({ cadenceDays: 30, lines: [] })).cadenceDays).toBe(0)
+    setCadence(mine, 14)
+    expect(mine.cadenceDays).toBe(14)
   })
 })

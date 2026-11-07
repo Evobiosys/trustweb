@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { completeRows, sortRows, toggleSort, DEFAULT_SORT, visibleWindow, addTagToPeople, setPersonTag, tagLabel } from '../../src/complete_view_model.ts'
+import { completeRows, sortRows, toggleSort, DEFAULT_SORT, visibleWindow, addTagToPeople, setPersonTag, tagLabel, deletePeople } from '../../src/complete_view_model.ts'
 import { Ring } from '../../src/model.ts'
 
 const DAY = 86_400_000
@@ -111,5 +111,15 @@ describe('tags on people', () => {
     const tags = [{ id: 'choir', colour: '#123456', label: 'Choir' }]
     const out = addTagToPeople([person('a')], new Set(['a']), tags, ' choir ')
     expect(out.tags).toBe(tags)
+  })
+})
+
+describe('delete with undo', () => {
+  it('soft-deletes the selected people and the undo puts back ring and remembered ring as they were', () => {
+    const people = [person('a', { ring: Ring.Close, prevRing: Ring.Closest }), person('b'), person('c')]
+    const undo = deletePeople(people, new Set(['a', 'b']), NOW)
+    expect(people.map((p) => !!p.deleted_at)).toEqual([true, true, false])
+    undo()
+    expect(people.map((p) => [p.ring, p.prevRing, p.deleted_at])).toEqual([[Ring.Close, Ring.Closest, undefined], [Ring.Friend, undefined, undefined], [Ring.Friend, undefined, undefined]])
   })
 })
