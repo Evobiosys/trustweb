@@ -309,11 +309,17 @@ function previewApi() {
     configureServer(server) {
       if (!previewFile()) return
       const json = (res, o, code = 200) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
+      // Async and one at a time (wave 33): the CLI calls used to block this server (execFileSync), so the panel's reads and the page itself hung while a verdict ran.
+      let queue = Promise.resolve()
       const run = (args) => {
-        try {
-          execFileSync(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] })
-          return null
-        } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
+        const job = queue.then(async () => {
+          try {
+            await promisify(execFile)(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000 })
+            return null
+          } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
+        })
+        queue = job
+        return job
       }
       server.middlewares.use('/__tw/wait', (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
@@ -355,7 +361,7 @@ function previewApi() {
         if (sub === '/verdict' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature) && [null, 'merge', 'needs-work'].includes(b.verdict)) args = ['verdict', b.feature, b.verdict ?? 'clear']
         if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
         if (!args) { json(res, { error: 'bad request' }, 400); return }
-        const error = run(args)
+        const error = await run(args)
         if (error !== null) json(res, { error }, 500)
         else json(res, readPreview())
       })

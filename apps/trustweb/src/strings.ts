@@ -2955,6 +2955,7 @@ export const S = {
   panelAssembleNowTip: 'Assemble the checked rows now',
   panelShowAll: 'show all rows',
   askModeSupport: 'Ask for support',
+  panelBackToRow: (title: string) => `back to ${title}`,
   closest150: 'Show only the 150 people closest to you',
   closest150Active: 'Only the 150 closest',
 } as const
