@@ -31,6 +31,7 @@ export function fadeHost(host: HTMLElement, onGone: () => void): { start: (ms?: 
       const b = document.createElement('button')
       b.type = 'button'
       b.className = 'fade-x'
+      b.setAttribute('data-notice-close', '')
       b.textContent = '×'
       b.setAttribute('aria-label', label)
       b.title = label

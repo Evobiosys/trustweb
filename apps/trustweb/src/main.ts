@@ -195,6 +195,7 @@ import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
 import { mergeIncoming } from './matches'
 import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
+import { liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
@@ -247,7 +248,10 @@ import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_t
 import { communityOf, isArchived, zoneFor } from './trustzones'
 import { archivedPeopleView } from './archived_people_view'
 import { purgeDue, recentlyDeleted } from './deleted_people'
-import { zoneSidebar } from './trustzones_view'
+import { trustZonesGroup, zoneSidebar } from './trustzones_view'
+import { ringShown } from './rings_filter'
+import { ownProfilePage } from './own_profile_view'
+import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
@@ -284,7 +288,11 @@ import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
-import { aiSettings } from './llm_endpoint_view'
+import { aiSettings, bootAi } from './llm_endpoint_view'
+import { aiButtonVisible, piConnected } from './ai_button'
+import { agentSettings } from './agent_view'
+import { ownChannels } from './channel_readers'
+import { readersBlock } from './channel_readers_view'
 import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
@@ -498,6 +506,8 @@ let autoBackup: BackupView | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
 if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
+// A personal preview takes the record another preview shared when it is newer (dev_record_live.ts, 2026-11-07).
+if (!solo) void seedLiveDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
 // The demo's carry-over (demo_to_live.ts): the demo page's Install button left
 // the person's own content for the live app. Applied to the live app's own
 // record only; at once where nothing would be overwritten, else after asking.
@@ -533,6 +543,8 @@ try {
 } catch {
   state = loadState(persona, storeCtx)
 }
+// Wave 36 ai-subscription: legacy pc24 -> Custom, Jakob's dev record seeds pc24 as Custom, a pending sign-up is polled once.
+if (state && !solo) bootAi({ state: st, save, dev: Boolean(devRecordFile()) })
 // The field repairs of waves 6b to 7 (connect code, share modes, general notes, profile, agreements) run in the migrate() chain above (schema_version.ts).
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
 // A real phone's own record only (not the side-by-side demo, not a demo account's view). Never throws; a failure changes nothing.
@@ -560,6 +572,7 @@ function save(): void {
   if (state && !superseded) {
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
+    if (!solo) pushLiveDevRecord(persona, state)
     mirrorPushBundle(state)
     autoBackup?.changed()
   }
@@ -1505,6 +1518,9 @@ function mountHeaderControls(): void {
   gear.dataset.settingsGear = '1'
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
+  const ai = screen === Screen.Web && aiButtonVisible({ configured: configured(st().advanced?.ai), piConnected: piConnected(st().agent, Date.now()) })
+    ? iconButton('sparkle', S.aiButton, openQuery, 'ai-btn') : null
+  if (ai) ai.setAttribute('data-ai-button', '')
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
@@ -1515,7 +1531,7 @@ function mountHeaderControls(): void {
   })
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
-  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
+  const parts: Record<string, (Node | null)[]> = { search: [find, ai], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
@@ -1743,7 +1759,8 @@ const friendsFade = fadeHost(friendsEl, () => { friendsEl.hidden = true })
 function hideNotice(): void { friendsFade.close() }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
-  friendsEl.classList.remove('stack', 'line')
+  friendsEl.classList.remove('stack', 'line', 'tap-close')
+  friendsEl.onclick = null
   friendsEl.replaceChildren(
     el('b', {}, [title]),
     el('span', {}, [body]),
@@ -2432,7 +2449,7 @@ const activePeople = (): Person[] => shown(st(), curatorHiddenIds()).people
 let tagFilter: string | null = null
 
 /** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
-type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView }
+type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView } | { kind: 'me' }
 let webPage: WebPage | null = null
 /** Wave 27: the small card page is expanded in place (card_sections.ts order); Back collapses it first, a second Back leaves. */
 let cardExpanded = false
@@ -2482,6 +2499,12 @@ function webPageScreen(page: WebPage): Node[] {
   const s = shown(st(), curatorHiddenIds())
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
+  if (page.kind === 'me') {
+    return [header(S.ownProfileTitle, { back }), ownProfilePage({
+      profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl), name: () => st().me.displayName,
+      editProfile: profileSheet, editName: () => editNameSheet(true),
+    })]
+  }
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && !isArchived(p) && zoneFor(p, communityOf(s)) === page.ring)
     const zone = S.ringLabel[page.ring]
@@ -2852,14 +2875,14 @@ function chatNewSheet(): void {
 }
 
 /** Wave 27 (D2): once after the upgrade, an honest line that the pass-on default narrowed; drawn once, then marked dismissed. */
-function passOnNotice(): HTMLElement | null {
+function passOnNotice(): null {
   if (!passOnDefaultNoticeDue(st())) return null
   dismissNotice(st(), PASS_ON_DEFAULT_NOTICE); save()
-  const note = el('p', { class: 'meta', role: 'status', 'data-pass-on-notice': '' }, [
-    S.passOnDefaultNotice,
-    el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.noticeDismiss, 'data-notice-dismiss': '', onclick: () => note.remove() }, ['×']),
-  ])
-  return note
+  // Wave 36b: the top notice layer (above the Tools panel, wraps, x and a tap on the text close it), not a line inside the zoomed rings.
+  showNotice(S.passOnDefaultNotice, '', [], 30000)
+  friendsEl.classList.add('tap-close')
+  friendsEl.onclick = hideNotice
+  return null
 }
 
 function screenWeb(): Node[] {
@@ -2891,13 +2914,14 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people.filter((p) => ringShown(st(), webSlot(p))), openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
     : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
     header(S.webTitle),
     webViewRow(view),
+    ...(ringFilterShown(view) ? [trustZonesGroup({ s: st(), onChange: () => { save(); render() } })] : []),
     ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
@@ -2914,7 +2938,10 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
+  const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, 'expand-btn select-tool')
+  select.setAttribute('data-tool', 'select')
+  select.setAttribute('aria-pressed', String(web.selectOn()))
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -3482,20 +3509,12 @@ function blockRow(p: Person): HTMLElement {
   }, [on ? S.unblockPerson(p.name) : S.blockPerson(p.name)])
 }
 
-/** Archive (the default) or, quieter, Delete for good after an in-place "Delete for good?" (Jakob 2026-10-19). */
+/** Archive (the default) or Delete: since wave 36b Delete is the 30-day reversible one (deleted_people.ts), no question, the toast carries Undo. The old "Delete for good?" strings (personDeleteAsk/Yes/No) stay in strings.ts, unused (DEVLOG/wave36b/archive/notices-2). */
 function archiveRow(p: Person): HTMLElement {
-  const row = el('div', { class: 'archive-row' })
-  const draw = (): void => row.replaceChildren(
+  return el('div', { class: 'archive-row' }, [
     el('button', { class: 'btn btn-ghost', 'data-archive-person': p.id, onclick: () => { closeSheet(); void web.hideOnRings(p).then(archivedNotice) } }, [S.personArchive]),
-    el('button', { class: 'btn btn-ghost btn-sm quiet', 'data-delete-person': p.id, onclick: ask }, [S.personDelete]),
-  )
-  const ask = (): void => row.replaceChildren(
-    el('span', { class: 'meta' }, [S.personDeleteAsk]),
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-yes': p.id, onclick: () => deletePerson(p.id) }, [S.personDeleteYes]),
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-no': '', onclick: draw }, [S.personDeleteNo]),
-  )
-  draw()
-  return row
+    el('button', { class: 'btn btn-ghost btn-sm quiet', 'data-delete-person': p.id, onclick: () => deletePerson(p.id) }, [S.personDelete]),
+  ])
 }
 
 /** Wave 36: people deleted more than 30 days ago go for good (deleted_people.ts); the Recently deleted list was their only way back. */
@@ -3507,12 +3526,11 @@ function purgeDeleted(): void {
   save()
 }
 
+/** Person page and Desk delete: the 30-day tombstone and the same Undo toast as the dustbin (web_view removeNow). */
 function deletePerson(personId: string): void {
-  const s = st()
-  s.people = s.people.filter((x) => x.id !== personId)
-  save()
+  const p = st().people.find((x) => x.id === personId)
   closeSheet()
-  render()
+  if (p) web.deleteReversibly([p])
 }
 
 /** Wave 8: how this connection began, when it began as a reach-out through a public link. */
@@ -4619,6 +4637,11 @@ const curator = createCurator({
     state.people = state.people.filter((x) => x.id !== id)
     save()
     if (screen === Screen.Web) render()
+  },
+  softDeletePerson: (person) => {
+    if (!state) return
+    if (!state.people.some((x) => x.id === person.id)) state.people.push(person)
+    web.deleteReversibly([state.people.find((x) => x.id === person.id)!])
   },
   restorePerson: (person) => {
     if (!state) return
@@ -6799,8 +6822,10 @@ function settingsSheet(): void {
       el('input', { type: 'checkbox', ...(s.qrProfileOption ? { checked: '' } : {}), onchange: () => { s.qrProfileOption = !s.qrProfileOption; save() } }),
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
-    ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
+    ...aiSettings({ state: st, save, toast, openSheet, backToSettings: () => { sheet.dataset.kind = 'settings'; settingsSheet() } }),
+    ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
+    ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),
@@ -6835,6 +6860,7 @@ function settingsSheet(): void {
       onclick: () => { removeDemoContent(); settingsSheet() },
     }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
+    readersBlock({ state: st, save, redraw: settingsSheet, openSheet: (c) => openSheet(c), toast }),
     el('div', { 'data-blocked-list': '1' }, [
       el('b', {}, [S.blockedTitle]),
       ...(s.people.some(isBlocked)
@@ -7144,7 +7170,7 @@ async function sendFromDock(text: string): Promise<void> {
   }
   // Drafting only through the person's own endpoint (Settings > Advanced > Your AI); any error falls back to the plain reading.
   const ai = st().advanced?.ai
-  const read = await draftOrPlain(text, now, (t) => askEndpoint(ai!, t), configured(ai))
+  const read = await draftOrPlain(text, now, (t) => askEndpoint(ai!, t, undefined, undefined, ownChannels(st())), configured(ai))
   if (!read) { void runAsk(text); return }
   const req = togetherPlace?.label && !read.area ? { ...read, area: togetherPlace.label } : read
   const filled = fillFromPrefs(req, st().togetherPrefs, now)

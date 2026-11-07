@@ -13,6 +13,8 @@ export interface Host {
   /** A person hidden in the Curator leaves the host's record too (and comes back with `restorePerson`), so the Web view drops them at once. */
   removePerson(personId: string): void
   restorePerson(person: Person): void
+  /** Wave 36b: Delete in the Archive: the host keeps the person as a 30-day tombstone (Settings > Recently deleted) and shows the Undo toast. Absent standalone: the entry just goes. */
+  softDeletePerson?(person: Person): void
   /** Leave the Curator and show TrustWeb's rings web ("Trust membranes"). Absent standalone. */
   showRings?(): void
   /** The Curator's current face, so the host can give the Desk the whole window. Absent standalone. */

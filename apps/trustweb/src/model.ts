@@ -798,6 +798,8 @@ export interface Me {
   displayName: string
   /** Wave 33: the owner's own mail address; local only, never in the connect link. */
   primaryEmail?: { provider: string; address: string }
+  /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
+  otherEmails?: string[]
 }
 
 /**
@@ -1096,13 +1098,15 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent' }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
   myChannels?: Partial<Record<Channel, string>>
+  /** Wave 36b (channel_readers.ts): who may read each own channel, keyed 'email:<address>' or the messenger id. Absent: humans only. This device only. */
+  channelReaders?: Record<string, { readers?: 'humans' | 'private-ai' | 'all-ai'; aiAllow?: string[]; aiDeny?: string[] }>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
   /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. Travels to the owner's own linked devices with the other settings (sync_core settingsOf). Absent: none, Chat opens the first linked service. */
@@ -1309,6 +1313,8 @@ export interface AppState {
   features?: { events?: false; inventory?: false }
   /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
+  /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
+  agent?: AgentLink
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
   askSets?: AskSet[]
   /** Wave 31, Ask your web: your own "also search online" engine, https with {q} for the words. Absent: none (the engine chips only). */
@@ -1331,8 +1337,29 @@ export interface AskSet {
   tags: string[]
 }
 
+/** The pi agent: its loopback address and when /health last answered (ISO). */
+export interface AgentLink {
+  baseUrl: string
+  connectedAt?: string
+}
+
+/** Wave 36 ai-subscription: the TrustInTheWeb.com sign-up. The claim stays on the device (synced with the sealed record like apiKey). */
+export interface AiSubscription {
+  plan: 'ai' | 'light'
+  ref: string
+  email: string
+  claim: string
+  state: 'pending' | 'active' | 'revoked'
+  /** The token once delivered (the server hands it out once): lets the person switch to a key of their own and back. */
+  token?: string
+}
+
 export interface AiEndpoint {
-  preset: 'openai' | 'ollama' | 'pc24' | 'custom'
+  /** 'pc24' is a legacy read value only: ai_subscription.ts migrateAi turns it into custom + name 'pc24'. */
+  preset: 'tw-subscription' | 'openai' | 'claude' | 'ollama' | 'pc24' | 'custom'
+  /** Label of a custom endpoint (Jakob's: 'pc24'). */
+  name?: string
+  sub?: AiSubscription
   /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
   baseUrl: string
   /** Empty: no Authorization header. */

@@ -6,6 +6,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { ALL_SCOPE, SUMMARY_SYSTEM, askScopes, matchWeb, searchEngineUrl, summaryPrompt } from './ask_web_search'
 import { ENGINES, engineById, engineUrl, isAdvanced, type OnlineEngine } from './search_engines'
+import { ownChannels } from './channel_readers'
 import { askEndpointText, configured } from './llm_endpoint'
 import type { AppState } from './model'
 import { S } from './strings'
@@ -64,7 +65,7 @@ export function askWebPanel(h: AskWebHooks, query: string): { el: HTMLElement; u
         class: 'btn btn-ghost btn-sm', type: 'button', 'data-ask-summarise': '1', title: S.askWebSummaryHint,
         onclick: async () => {
           out.textContent = S.askWebSummarising
-          try { summary = await askEndpointText(ai, SUMMARY_SYSTEM, summaryPrompt(q, matches.slice(0, 8))); out.textContent = summary }
+          try { summary = await askEndpointText(ai, SUMMARY_SYSTEM, summaryPrompt(q, matches.slice(0, 8)), undefined, undefined, ownChannels(s)); out.textContent = summary }
           catch (e) { out.textContent = S.askWebSummaryError((e as Error).message) }
         },
       }, [S.askWebSummarise])] : []),
