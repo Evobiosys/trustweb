@@ -113,6 +113,7 @@ export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchSc
     // Events and their tags on people are local only (events.ts, I1).
     events: undefined,
     tasks: undefined,
+    invitations: undefined,
     // My own profile, links and conversations never ride along into an ask's matching.
     profile: undefined,
     myChannels: undefined,

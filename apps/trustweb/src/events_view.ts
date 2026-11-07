@@ -10,7 +10,8 @@ import type { EventError, EventFields } from './events'
 import { dragEvent, dragPerson } from './drag_payload'
 import { PERSON_GREEN } from './colour_tags'
 import { ringColor } from './model'
-import type { AppState, Person, TwEvent } from './model'
+import type { AppState, Invitation, Person, TwEvent } from './model'
+import { invitationEventRows } from './invitations'
 import { S } from './strings'
 
 export interface EventsViewHooks {
@@ -36,6 +37,8 @@ export interface EventsViewHooks {
   by: () => EventBy | undefined
   /** Extension modules' sections on the event page (ext/registry.ts), drawn above Advanced. */
   extra?: (ev: TwEvent) => Node[]
+  /** Wave 33: opens the edit sheet of an invitation shown among the events. */
+  openInvitation?: (i: Invitation) => void
   /** Wave 27: the QR page of an event (qr_modes.ts): the event and my connect code in one code. */
   showQr?: (ev: TwEvent) => void
 }
@@ -79,6 +82,13 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     ])
   }
 
+  /** Wave 33: an invitation among the events, tagged; a tap opens its edit sheet. */
+  function invitationRow(r: { id: string; name: string; from: string; where: string }): HTMLElement {
+    return el('button', { class: 'prow', 'data-event-invitation': r.id, onclick: () => { const i = h.state().invitations?.find((x) => x.id === r.id); if (i) h.openInvitation?.(i) } }, [
+      el('span', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [[r.from || S.invitedUndated, r.where].filter(Boolean).join(' · ')]), el('span', { class: 'tagpill', 'data-invitation-tag': '' }, [S.invitedTag])]),
+    ])
+  }
+
   /** A pasted link opens the same join sheet as the address bar does. */
   function pasteRow(): HTMLElement {
     const error = el('p', { class: 'warn', 'data-event-paste-error': '', hidden: true })
@@ -97,17 +107,19 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   function list(): Node[] {
     const { upcoming, past } = eventsSorted(h.state(), Date.now())
     const add = el('button', { class: 'btn btn-electric wide', 'data-event-add': '', onclick: () => show({ kind: 'form' }) }, [S.eventsAdd])
-    if (!upcoming.length && !past.length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [el('p', { class: 'empty' }, [S.eventsEmpty]), add, pasteRow()])]
+    const invited = (): HTMLElement[] => invitationEventRows(h.state(), '').map(invitationRow)
+    if (!upcoming.length && !past.length && !invited().length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [el('p', { class: 'empty' }, [S.eventsEmpty]), add, pasteRow()])]
     const rows = el('div', {}, [])
     const draw = (q: string): void => {
       const [up, pa] = [upcoming, past].map((l) => l.filter((e) => eventMatches(e, q)))
       rows.replaceChildren(...[
         up.length ? el('h3', {}, [S.eventsUpcoming]) : null, ...up.map(row),
         pa.length ? el('h3', {}, [S.eventsPast]) : null, ...pa.map(row),
+        ...invitationEventRows(h.state(), q).map(invitationRow),
       ].filter((n): n is HTMLElement => n !== null))
     }
     draw('')
-    const filter = upcoming.length + past.length > 0
+    const filter = upcoming.length + past.length + invited().length > 0
       ? el('input', { class: 'field', placeholder: S.eventsFilter, 'aria-label': S.eventsFilter, 'data-event-filter': '', oninput: (e: Event) => draw((e.target as HTMLInputElement).value) })
       : null
     return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [filter, rows, add, pasteRow()])]

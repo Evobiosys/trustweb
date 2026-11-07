@@ -32,6 +32,8 @@ import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
 import type { IntroLink } from './intro_link'
 import { introAskText } from './intro_ask'
+import { cardInvitationsRow, invitationSheet, invitationsSection } from './invitations_view'
+import type { InvitationIo } from './invitations_view'
 import { addSupportIn, supportCards, supportForm, supportLine } from './support_ask_view'
 import type { SupportIo } from './support_ask_view'
 import { ASK_MODES, AskMode, nextAskMode, parseHereText, parseSupportText, recordHere } from './support_ask'
@@ -3121,6 +3123,8 @@ function personQr(p: Person): void {
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
+const invitationIo = (): InvitationIo => ({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), newId: () => randomId(8) })
+
 function cardMore(p: Person): Node[] {
   const cons = chatOnConsensual(p, st().preferConsensual)
   const rows: Record<string, () => (Node | null)[]> = {
@@ -3132,6 +3136,7 @@ function cardMore(p: Person): Node[] {
     askLinks: () => [askLinksRow(p)],
     passOn: () => [passOnRowFor(p)],
     knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace)],
+    invitations: () => [cardInvitationsRow(invitationIo(), p)],
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
@@ -4543,6 +4548,7 @@ const eventsView = createEventsView({
   by: eventsBy,
   showQr: (ev) => eventQr(ev),
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
+  openInvitation: (i) => invitationSheet(invitationIo(), i),
 })
 const extHooks: ExtHooks = {
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
@@ -6875,6 +6881,7 @@ function screenInventory(): Node[] {
           onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
         ]),
       ])),
+      ...invitationsSection(invitationIo()),
       ...(cal?.resourcesSection?.() ?? []),
       backup.card(),
     ])

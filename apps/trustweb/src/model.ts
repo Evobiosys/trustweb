@@ -293,6 +293,22 @@ export interface AvailSnap { name: string; tz: string; windows: Availability['wi
 
 export interface HeldAvail { personId?: string; name: string; snap: AvailSnap; at: number }
 
+/** An invitation I received (wave 33, invitations.ts). Local plus my own devices (sync_core.ts, sealed): never in a share, pack, answer or cascade. date is "YYYY-MM-DD". */
+export interface Invitation {
+  id: string
+  kind: 'invitation'
+  event?: string
+  /** The Person.id of who invited me. */
+  host?: string
+  place?: string
+  date?: string
+  link?: string
+  note?: string
+  /** Where it was imported from (Tana workspace and node). Local only. */
+  source?: { workspace: string; nodeId: string }
+  status: 'open' | 'accepted' | 'declined' | 'past'
+}
+
 /**
  * A light task (wave 24, cal3; feature shape inspired by tasks.org, no code taken). Local plus my own devices (sync_core.ts, sealed): never in a
  * share, pack, answer or cascade (cascade.ts askSources strips it). due is "YYYY-MM-DD", optionally with "THH:MM"; remindAt is ms.
@@ -1029,6 +1045,8 @@ export interface AppState {
   signalImport?: SignalImport
   /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
   tasks?: TwTask[]
+  /** Invitations (wave 33, invitations.ts). Absent = none; no schema migration. Travels only between the owner's own devices, sealed. */
+  invitations?: Invitation[]
   /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
   atEvent?: { eventId: string; since: number; bell?: boolean }
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
