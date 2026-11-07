@@ -190,6 +190,10 @@ export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'on
     ' ', S.perRingBefore, numEdit(m, 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) setPerRingLimit(d.s, n); d.onChange() }), ' ',
     el('button', { type: 'button', class: 'num-edit', 'data-recent-mode': '', onclick: (e: Event) => { e.preventDefault(); setUi(d.s, 'rankBy', d.s.uiRings?.rankBy === 'frequent' ? undefined : 'frequent'); d.onChange() } }, [d.s.uiRings?.rankBy === 'frequent' ? S.perRingFrequent : S.perRingRecent]), S.perRingAfter,
   ])
+  const autoAdjust = el('label', { class: 'zone-check zone-row', title: S.ringsAutoAdjustHint }, [
+    el('input', { type: 'checkbox', 'data-rings-auto-adjust': '', ...(d.s.uiRings?.autoAdjust ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'autoAdjust', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
+    ' ', S.ringsAutoAdjust,
+  ])
   const closest = el(moot ? 'div' : 'label', { class: 'zone-check zone-row' + (moot ? ' moot' : ''), ...(moot ? { 'aria-disabled': 'true', 'data-closest-moot': '1', title: S.closestMootHint(m * rings) } : {}) }, [
     el('input', { type: 'checkbox', 'data-closest150': '', ...(moot ? { disabled: '' } : {}), ...(d.s.uiRings?.closest150 ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'closest150', (e.target as HTMLInputElement).checked); d.onChange() } }),
     ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
@@ -197,7 +201,7 @@ export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'on
   ])
   return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneSidebarTitle, () => { setUi(d.s, 'sidebarOpen', !open); d.onChange() }, { 'data-zone-side-toggle': '' }), el('b', {}, [S.zoneSidebarTitle])]),
-    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add, d.select]), connections, perRing, closest, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
+    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add, d.select]), connections, perRing, autoAdjust, closest, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
     ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted), tagFilters(d)] : []),

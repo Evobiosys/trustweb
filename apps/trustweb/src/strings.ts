@@ -3282,4 +3282,6 @@ export const S = {
     aiMade: 'AI-made',
     combineSystem: 'Combine everyone\'s wishes below into one plan for the event. For every point of the plan, say whose wishes it honours and how. Name tensions between wishes plainly. Do not invent new wishes: use only what the people wrote. Use short plain words, one point per line.',
   },
+  ringsAutoAdjust: 'Rings adjust themselves after a move',
+  ringsAutoAdjustHint: 'Off: moving a dot changes only that dot. On: dots slowly fade in or out so each ring keeps its most recent ones.',
 } as const
