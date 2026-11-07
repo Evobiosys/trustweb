@@ -8,3 +8,4 @@ export function approveMergeRoute(o: {
   loopback: (req: unknown) => boolean; branch: () => string; cache: string; ops: string; wt: string
   exists: (file: string) => boolean; read: (file: string) => string; spawn: (cmd: string, args: string[]) => void; now?: () => number
 }): (req: { method?: string }, res: { statusCode: number; setHeader(k: string, v: string): void; end(body?: string): void }) => void
+export function jobQueue<T>(exec: (args: string[]) => Promise<T>): { run(args: string[]): Promise<T>; size(): number }
