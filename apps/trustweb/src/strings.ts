@@ -1529,8 +1529,7 @@ export const S = {
   viewMenuAria: 'Choose a view',
   // unused since wave27 review, archive candidate
   viewMenuTitle: 'View',
-  viewNames: { rings: 'Web', network: 'Network', people: 'People', complete: 'Complete', notes: 'Notes', map: 'Map', dex: 'Dex', compact: 'Contacts compact' } as Record<string, string>,
-  viewNames: { rings: 'Web', network: 'Network', people: 'People', notes: 'Notes', map: 'Map', dex: 'Dex', compact: 'Contacts compact', groups: 'Groups I could join or help' } as Record<string, string>,
+  viewNames: { rings: 'Web', network: 'Network', people: 'People', complete: 'Complete', notes: 'Notes', map: 'Map', dex: 'Dex', compact: 'Contacts compact', groups: 'Groups I could join or help' } as Record<string, string>,
   viewOther: 'Other views',
   viewAlt: 'Alternative UI (beta)',
   viewSolar: 'Solar calendar',
