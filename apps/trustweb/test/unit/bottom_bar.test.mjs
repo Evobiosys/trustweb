@@ -5,12 +5,17 @@ import { DEFAULT_ORDER, PHONE_MAX, addBar, barChoices, barLayout, moveBar, resol
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 
 describe('bottom_bar', () => {
-  it('defaults to Ask, Resources, Web, Record, Chat, Events (no Feed)', () => {
-    expect(DEFAULT_ORDER).toEqual(['ask', 'inventory', 'web', 'record', 'chat', 'events'])
+  it('defaults to Web, Chat, Record, Events, Resources (no Ask, no Feed)', () => {
+    expect(DEFAULT_ORDER).toEqual(['web', 'chat', 'record', 'events', 'inventory'])
     expect(resolveBar(undefined, all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(undefined, all).primary).toBe('record')
+  })
+  it('Ask is optional: offered in the sheet, off by default, joins at the end', () => {
+    expect(barChoices(undefined, all).find((x) => x.id === 'ask').on).toBe(false)
+    expect(resolveBar(toggleBar(undefined, 'ask', all), all).ids.at(-1)).toBe('ask')
   })
   it('leaves out views whose feature is off', () => {
-    expect(resolveBar(undefined, { ...all, feed: false, events: false }).ids).toEqual(['ask', 'inventory', 'web', 'record', 'chat'])
+    expect(resolveBar(undefined, { ...all, feed: false, events: false }).ids).toEqual(['web', 'chat', 'record', 'inventory'])
   })
   it('hidden views drop out, Record cannot be hidden, unknown ids are skipped', () => {
     const r = resolveBar({ order: ['web', 'zzz', 'web', 'chat'], hidden: ['chat', 'record'] }, all)
@@ -44,9 +49,9 @@ describe('bottom_bar', () => {
     expect(resolveBar(b, all).primary).toBe('record')
   })
   it('move swaps with the neighbour and stops at the ends', () => {
-    expect(resolveBar(moveBar(undefined, 'web', -1, all), all).ids.slice(0, 3)).toEqual(['ask', 'web', 'inventory'])
-    expect(resolveBar(moveBar(undefined, 'ask', -1, all), all).ids).toEqual(DEFAULT_ORDER)
-    expect(resolveBar(moveBar(undefined, 'events', 1, all), all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(moveBar(undefined, 'chat', -1, all), all).ids.slice(0, 3)).toEqual(['chat', 'web', 'record'])
+    expect(resolveBar(moveBar(undefined, 'web', -1, all), all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(moveBar(undefined, 'inventory', 1, all), all).ids).toEqual(DEFAULT_ORDER)
   })
   it('setPrimary refuses a view that is not shown', () => {
     expect(setPrimary(undefined, 'map', all)).toEqual(undefined)
@@ -55,12 +60,12 @@ describe('bottom_bar', () => {
   it('layout: at most PHONE_MAX shown, the rest in the sheet', () => {
     expect(PHONE_MAX).toBe(6)
     const l = barLayout(resolveBar(undefined, all).ids, 'record', PHONE_MAX)
-    expect(l.shown).toHaveLength(6)
+    expect(l.shown).toHaveLength(5)
     expect(l.overflow).toEqual([])
-    const seven = barLayout(resolveBar(addBar(undefined, 'feed', 'web', 'right', all), all).ids, 'record', PHONE_MAX)
+    const seven = barLayout(resolveBar(addBar(addBar(undefined, 'feed', 'web', 'right', all), 'ask', 'web', 'left', all), all).ids, 'record', PHONE_MAX)
     expect(seven.shown).toHaveLength(6)
     expect(seven.shown).toContain('record')
-    expect(seven.overflow).toEqual(['events'])
+    expect(seven.overflow).toEqual(['inventory'])
     expect(barLayout(['web', 'chat'], 'record', 6)).toEqual({ shown: ['web', 'chat'], overflow: [] })
   })
   it('choices list every available view with its state', () => {
@@ -72,17 +77,50 @@ describe('bottom_bar', () => {
   })
   it('addBar puts a view left or right of a shown view and persists it in order', () => {
     const r = addBar(undefined, 'feed', 'web', 'right', all)
-    expect(resolveBar(r, all).ids).toEqual(['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events'])
-    expect(r.order).toEqual(['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events'])
-    expect(resolveBar(addBar(undefined, 'feed', 'ask', 'left', all), all).ids[0]).toBe('feed')
+    expect(resolveBar(r, all).ids).toEqual(['web', 'feed', 'chat', 'record', 'events', 'inventory'])
+    expect(r.order).toEqual(['web', 'feed', 'chat', 'record', 'events', 'inventory'])
+    expect(resolveBar(addBar(undefined, 'feed', 'web', 'left', all), all).ids[0]).toBe('feed')
   })
   it('addBar moves an already shown view, un-hides a hidden one, keeps primary, ignores bad input', () => {
-    expect(resolveBar(addBar(undefined, 'events', 'ask', 'left', all), all).ids[0]).toBe('events')
+    expect(resolveBar(addBar(undefined, 'events', 'web', 'left', all), all).ids[0]).toBe('events')
     const hid = toggleBar(undefined, 'chat', all)
-    expect(resolveBar(addBar(hid, 'chat', 'ask', 'left', all), all).ids[0]).toBe('chat')
-    expect(addBar({ primary: 'web' }, 'feed', 'ask', 'left', all).primary).toBe('web')
-    expect(addBar(undefined, 'zzz', 'ask', 'left', all)).toEqual(undefined)
+    expect(resolveBar(addBar(hid, 'chat', 'web', 'left', all), all).ids[0]).toBe('chat')
+    expect(addBar({ primary: 'web' }, 'feed', 'web', 'left', all).primary).toBe('web')
+    expect(addBar(undefined, 'zzz', 'web', 'left', all)).toEqual(undefined)
     expect(addBar(undefined, 'feed', 'map', 'left', all)).toEqual(undefined)
     expect(addBar(undefined, 'feed', 'feed', 'left', all)).toEqual(undefined)
+  })
+})
+
+describe('bottom_bar profiles (wave 33)', () => {
+  it('has four presets of five slots, centre = primary', async () => {
+    const { PROFILES } = await import('../../src/bottom_bar.ts')
+    expect(PROFILES.map((p) => p.id)).toEqual(['connector', 'up_to_date', 'note_taker', 'communicator'])
+    for (const p of PROFILES) { expect(p.order).toHaveLength(5); expect(p.order[2]).toBe(p.primary) }
+    expect(PROFILES.find((p) => p.id === 'note_taker').order).toEqual(DEFAULT_ORDER)
+    expect(new Set(PROFILES.map((p) => p.order.join()))).toHaveProperty('size', 4)
+  })
+  it('applyProfile sets order, primary, marker, profile and clears hidden', async () => {
+    const { applyProfile, BAR_ORDER_VERSION } = await import('../../src/bottom_bar.ts')
+    const r = applyProfile({ order: ['web'], hidden: ['chat'], primary: 'web' }, 'communicator')
+    expect(r).toEqual({ order: ['web', 'feed', 'chat', 'events', 'inventory'], hidden: [], primary: 'chat', orderVersion: BAR_ORDER_VERSION, profile: 'communicator' })
+    expect(applyProfile(undefined, 'nope')).toBeUndefined()
+    // Record cannot leave the row: presets without it get it mid-row (six buttons).
+    expect(resolveBar(r, all).ids).toEqual(['web', 'feed', 'chat', 'record', 'events', 'inventory'])
+    expect(resolveBar(applyProfile(undefined, 'connector'), all).ids).toEqual(['web', 'record', 'chat', 'events', 'inventory'])
+  })
+  it('manual edits set profile custom', async () => {
+    const { applyProfile } = await import('../../src/bottom_bar.ts')
+    const p = applyProfile(undefined, 'connector')
+    expect(toggleBar(p, 'events', all).profile).toBe('custom')
+    expect(moveBar(p, 'web', 1, all).profile).toBe('custom')
+    expect(addBar(p, 'ask', 'web', 'left', all).profile).toBe('custom')
+    expect(setPrimary(p, 'web', all).profile).toBe('custom')
+  })
+  it('activeProfile: stored id, else the matching preset, else custom', async () => {
+    const { activeProfile, applyProfile } = await import('../../src/bottom_bar.ts')
+    expect(activeProfile(applyProfile(undefined, 'up_to_date'), all)).toBe('up_to_date')
+    expect(activeProfile(undefined, all)).toBe('note_taker')
+    expect(activeProfile({ order: ['chat', 'record', 'web'] }, all)).toBe('custom')
   })
 })

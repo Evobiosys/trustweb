@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 // The record's schema version and the one ordered chain of its stored-data repairs (wave 21).
 import type { AppState } from './model'
+import { resetBarOrder } from './bottom_bar'
 import { repairAgreements } from './agreements'
 import { migrateChats } from './chat'
 import { repairConnectRecord } from './connect_code'
@@ -33,6 +34,7 @@ export function migrate(s: AppState): boolean {
   const ran = [
     migrateSources(s), normaliseNoteFields(s), migrateChats(s),
     repairConnectRecord(s), repairOtherCodes(s), repairShareFields(s), repairGeneralNotes(s), repairProfile(s), repairAgreements(s), repairPinned(s),
+    resetBarOrder(s),
   ]
   const stamped = s.schemaVersion !== SCHEMA_VERSION
   s.schemaVersion = SCHEMA_VERSION
