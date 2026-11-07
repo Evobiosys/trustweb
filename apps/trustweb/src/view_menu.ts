@@ -6,6 +6,9 @@ export type WebView = 'rings' | 'network' | 'map'
 export type ViewKey = WebView | 'people' | 'complete' | 'map' | 'dex' | 'compact'
 const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact']
 const OTHER: readonly ViewKey[] = ['dex', 'compact']
+export type ViewKey = WebView | 'people' | 'map' | 'dex' | 'compact' | 'groups'
+const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'map', 'dex', 'compact', 'groups']
+const OTHER: readonly ViewKey[] = ['dex', 'compact', 'groups']
 /** Wave 28: Dex is the one view that sits in the "Alternative UI (beta)" part of Other views; new unique views join Other views. */
 const ALT: readonly ViewKey[] = ['dex']
 

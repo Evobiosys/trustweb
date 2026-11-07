@@ -12,6 +12,7 @@ import { Channel } from './model'
 import type { AppState, Person } from './model'
 import { matchPeople } from './events'
 import { mergePersons, possibleDuplicates } from './same_person'
+import { createCountdown, suggestKeep } from './merge_countdown'
 import type { SnapshotView } from './snapshot_view'
 import { storageKey } from './store'
 import { heldNames, namesOf } from './names_sync'
@@ -72,6 +73,8 @@ export interface SyncView {
   samePersonPicker(personId: string): void
   /** The "Which one do you keep?" sheet for two persons; `aId` is the preselected one to keep (Enter), `bId` the duplicate. */
   mergeSheet(aId: string, bId: string): void
+  /** Wave 36: the countdown ran out on a dot dropped on another: `dropId` becomes one with `keepId` (b keeps its name), snapshot first. */
+  mergeNow(keepId: string, dropId: string): void
 }
 
 const SHEET_KIND = 'devices'
@@ -464,32 +467,50 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     ])
   }
 
+  /** Snapshot, then `dropId` becomes one with `keepId`; the toast names the kept one. */
+  async function mergeNow(keepId: string, dropId: string): Promise<void> {
+    await h.snapshots.take(S.snReasonSame)
+    const s = h.state()
+    const kept = s.people.find((p) => p.id === keepId)
+    if (kept && mergePersons(s, keepId, dropId)) {
+      h.save()
+      h.changed()
+      h.toast([S.dvSameDone(kept.name), h.snapshots.note()].filter(Boolean).join(' '))
+    }
+  }
+
   /** Both summaries, the person picks which entry to keep; a snapshot first, then the two become one. */
   function samePersonSheet(aId: string, bId: string, back: () => void): void {
     const people = h.peek()?.people ?? []
     const pair = [people.find((p) => p.id === aId), people.find((p) => p.id === bId)]
     if (!pair[0] || !pair[1]) { back(); return }
     const [a, b] = pair as [Person, Person]
-    const keep = async (kept: Person, dropped: Person): Promise<void> => {
-      await h.snapshots.take(S.snReasonSame)
-      const s = h.state()
-      if (mergePersons(s, kept.id, dropped.id)) {
-        h.save()
-        h.changed()
-        h.toast([S.dvSameDone(kept.name), h.snapshots.note()].filter(Boolean).join(' '))
-      }
-      back()
-    }
+    const keep = (kept: Person, dropped: Person): Promise<void> => mergeNow(kept.id, dropped.id).then(back)
+    // Wave 36: optional choice. The suggestion is pre-selected and applies by itself after 3-2-1; tapping a row applies that one at once.
+    const suggested = suggestKeep(a, b)
+    const counter = el('p', { class: 'meta keep-countdown', 'data-keep-countdown': '3', 'aria-live': 'polite' }, [S.keepCountdown(suggested.name, 3)])
+    const countdown = createCountdown()
+    let ticker: number | undefined
+    const stop = (): void => { clearInterval(ticker); countdown.cancel() }
     open('devices-same', [
       el('h3', {}, [S.dvSameTitle]),
       el('p', { class: 'meta' }, [S.dvSameLead]),
-      ...[[a, b], [b, a]].map(([kept, dropped], i) => el('button', { class: 'radio', 'data-same-keep': kept.id, ...(i === 0 ? { 'data-merge-approve': '1' } : {}), onclick: () => void keep(kept, dropped) }, [
+      counter,
+      ...[[a, b], [b, a]].map(([kept, dropped]) => el('button', { class: `radio${kept === suggested ? ' on' : ''}`, 'data-same-keep': kept.id, ...(kept === suggested ? { 'data-merge-approve': '1', 'aria-pressed': 'true' } : {}), onclick: () => { stop(); void keep(kept, dropped) } }, [
         el('b', {}, [S.dvSameSummary(kept.name, kept.lines.length, !!kept.peerId)]),
         el('small', {}, [`${S.dvSameKeep}${kept.context ? ' · ' + kept.context : ''}`]),
       ])),
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: back }, [S.dvCancel]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { stop(); back() } }, [S.dvCancel]),
     ])
     h.sheet.querySelector<HTMLElement>('[data-merge-approve]')?.focus()
+    countdown.start(performance.now())
+    ticker = window.setInterval(() => {
+      if (!counter.isConnected) { stop(); return }
+      const t = countdown.tick(performance.now())
+      if (t.fire) { stop(); void keep(suggested, suggested === a ? b : a); return }
+      counter.setAttribute('data-keep-countdown', String(t.secondsLeft))
+      counter.textContent = S.keepCountdown(suggested.name, t.secondsLeft)
+    }, 200)
   }
 
   function samePersonPicker(personId: string): void {
@@ -528,5 +549,6 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     open: openDevices,
     samePersonPicker,
     mergeSheet: (aId, bId) => samePersonSheet(aId, bId, h.closeSheet),
+    mergeNow: (keepId, dropId) => { void mergeNow(keepId, dropId) },
   }
 }
