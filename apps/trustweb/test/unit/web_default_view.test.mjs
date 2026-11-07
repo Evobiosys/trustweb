@@ -21,6 +21,11 @@ describe('web_default_view', () => {
     expect(setWebDefault(undefined, 'network')).toEqual({ webDefault: 'network' })
     expect(setWebDefault({ webDefault: 'network' }, 'rings')).toBeUndefined()
   })
+  it('the complete view can be the default of Web and names the tab', () => {
+    expect(setWebDefault(undefined, 'complete')).toEqual({ webDefault: 'complete' })
+    expect(webDefaultOf({ uiViews: { webDefault: 'complete' } })).toBe('complete')
+    expect(webTabLabel({ uiViews: { webDefault: 'complete' } }, { ...names, complete: 'Complete' })).toBe('Complete')
+  })
   it('advanced mode = the Advanced pin is on', () => {
     expect(isAdvanced({})).toBe(false)
     expect(isAdvanced({ uiPins: { views: [], header: ['advanced'] } })).toBe(true)

@@ -55,5 +55,6 @@ export const ICONS: Record<string, string> = {
   telegram: '<svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 6 3-4 5 4L21 4Z"/><path d="m8 13 9-6"/></svg>',
   matrix: '<svg viewBox="0 0 24 24"><path d="M6 3H4v18h2M18 3h2v18h-2"/><path d="M9 8v8M9 9.5a2.5 2.5 0 0 1 5 0V16M14 9.5a2.5 2.5 0 0 1 3 .5"/></svg>',
   zoom: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
+  table: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>',
   list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
 }
