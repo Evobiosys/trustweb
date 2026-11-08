@@ -38,7 +38,7 @@ describe('pwa/manifest.json', () => {
   const m = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf8'))
   it('is TrustWeb, standalone, scoped to wherever the app is served', () => {
     expect(m).toMatchObject({ name: 'TrustWeb', short_name: 'TrustWeb', display: 'standalone', start_url: './', scope: './', id: './' })
-    expect(m.theme_color).toBe('#3B1163')
+    expect(m.theme_color).toBe('#13867E')
   })
   it('names 192 and 512 icons that exist, one of them maskable', () => {
     const sizes = m.icons.map((i) => i.sizes)

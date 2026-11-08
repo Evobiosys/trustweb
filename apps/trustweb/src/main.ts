@@ -278,6 +278,7 @@ import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
+import { BRAND_MARK_SVG } from './brand_mark'
 import { askWebIcon, recordIcon } from './icons/ask_web'
 import { RECORD_TAB_GLYPH, recordTabGlyph } from './record_glyph'
 import { PULSE_IDLE_PX, pulseSpreadPx } from './audio_level'
@@ -1461,6 +1462,14 @@ function go(s: Screen): void {
   render()
 }
 
+/** Wave 37: the logo family's one-ring mark: top-left of every header that has no Back button, and the start screens' logo. */
+function brandMark(cls = 'brand-mark'): HTMLElement {
+  const m = el('span', { class: cls })
+  m.dataset.brandMark = ''
+  m.innerHTML = BRAND_MARK_SVG
+  return m
+}
+
 /**
  * Every header: title left; right, the screen's own button and then the
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
@@ -1474,7 +1483,7 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
-      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
+      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : brandMark(),
       el('h2', {}, [title]),
       opts.glyph ?? null,
     ]),
@@ -2380,7 +2389,7 @@ function screenStart(): Node[] {
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
-    el('div', { class: 'logo' }, ['◎']),
+    brandMark('logo logo-mark'),
     el('h1', {}, [S.appName]),
     el('p', { class: 'tagline' }, [S.tagline]),
     recordKeptAside ? el('p', { class: 'warn', 'data-record-kept-aside': '1' }, [S.recordKeptAside]) : null,
@@ -2446,7 +2455,7 @@ function takeOverScreen(h: HandoverLink): Node[] {
   }
   const btn = el('button', { class: 'btn btn-electric', onclick: () => void take() }, [S.takeButton(h.account)])
   return [el('div', { class: 'start' }, [
-    el('div', { class: 'logo' }, ['◎']),
+    brandMark('logo logo-mark'),
     el('h1', {}, [S.appName]),
     el('p', { class: 'tagline' }, [S.tagline]),
     el('div', { class: 'invite test-invite' }, [

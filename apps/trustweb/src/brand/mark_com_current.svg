@@ -1,0 +1,14 @@
+<!-- SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 124 124" role="img" aria-label="trustintheweb.com mark">
+  <path d="M60 25.5 A34.5 34.5 0 1 1 25.5 60" fill="none" stroke="currentColor" stroke-width="5.1" stroke-linecap="round"/>
+  <path d="M111 60 A51 51 0 1 1 60 9" fill="none" stroke="currentColor" stroke-width="5.1" stroke-linecap="round"/>
+  <circle cx="60" cy="25.5" r="6.2" fill="currentColor"/>
+  <circle cx="84.4" cy="84.4" r="6.2" fill="currentColor"/>
+  <circle cx="25.5" cy="60" r="6.2" fill="currentColor"/>
+  <circle cx="111" cy="60" r="5.6" fill="currentColor"/>
+  <circle cx="79.52" cy="107.12" r="5.6" fill="currentColor"/>
+  <circle cx="23.94" cy="96.06" r="5.6" fill="currentColor"/>
+  <circle cx="12.88" cy="40.48" r="5.6" fill="currentColor"/>
+  <circle cx="60" cy="9" r="6.9" fill="currentColor"/>
+  <g transform="translate(60 60) scale(1.15) translate(-60 -60)"><polygon points="64.5,43.5 49.5,63 59,63 55.5,76.5 70.5,56.5 61,56.5" fill="currentColor" stroke-linejoin="round"/></g>
+</svg>

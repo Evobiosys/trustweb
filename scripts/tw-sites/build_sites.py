@@ -141,22 +141,15 @@ def render(text: str, spec: SiteSpec, active_site: str | None = None) -> str:
 
 def wordmark(spec: SiteSpec) -> str:
     svg = re.sub(r"<!--.*?-->\s*", "", read(BRAND / f"wordmark_{spec.key}.svg"), flags=re.DOTALL)
-    svg = re.sub(r'(<circle cx="20" cy="20" r="5.5"[^>]*?)stroke="#[0-9A-Fa-f]{6}"', r'\1stroke="var(--mark)"', svg, count=1)
-    if "var(--mark)" not in svg:
+    if "var(--mark" not in svg:
         raise BuildError(f"wordmark_{spec.key}.svg: mark colour not found")
-    if spec.key == "one":  # wordmark_one.svg is 160 wide and clips the "b" of TrustWeb; widened here, the brand file stays
-        svg = svg.replace('viewBox="0 0 160 40"', 'viewBox="0 0 180 40"', 1)
     label = "Trust in the Web" if spec.key != "one" else "TrustWeb"
     return svg.replace("<svg ", f'<svg class="wordmark" role="img" aria-label="{label}" ', 1).strip()
 
 
-def favicon(spec: SiteSpec, dark_mark: str) -> str:
-    ring = read(BRAND / "holarchic_ring.svg")
-    body = re.sub(r"<!--.*?-->\s*", "", ring, flags=re.DOTALL)
-    body = body.replace('stroke="currentColor"', 'class="m"').replace('stroke="var(--ink, #1F2A28)"', 'class="i"').replace('fill="var(--ink, #1F2A28)"', 'class="f"')
-    style = (f"<style>.m{{stroke:{spec.mark}}}.i{{stroke:#1F2A28}}.f{{fill:#1F2A28}}"
-             f"@media (prefers-color-scheme:dark){{.m{{stroke:{dark_mark}}}.i{{stroke:#F1EEE6}}.f{{fill:#F1EEE6}}}}</style>")
-    return body.replace('fill="none">', f'fill="none">{style}', 1)
+def favicon(spec: SiteSpec) -> str:
+    """The family's small-size mark of this site (src/brand/favicon_<key>.svg): its colour, lighter in dark mode."""
+    return read(BRAND / f"favicon_{spec.key}.svg")
 
 
 def skin_css(key: str) -> str:
@@ -347,7 +340,7 @@ def build_all(out: Path, *, indexable: bool = False) -> dict[str, Path]:
         for file, text in html[key].items():
             (target / file).write_text(fix_links(text, spec, ids, file), encoding="utf-8")
         (target / "site.css").write_text(site_css(key), encoding="utf-8")
-        (target / "favicon.svg").write_text(favicon(spec, SKINS[key][1]["--mark"] if key in SKINS else "#2BA59B"), encoding="utf-8")
+        (target / "favicon.svg").write_text(favicon(spec), encoding="utf-8")
         (target / "site.webmanifest").write_text(manifest(spec), encoding="utf-8")
         for icon in (HERE / "assets" / key).glob("*.png"):
             shutil.copy2(icon, target / icon.name)

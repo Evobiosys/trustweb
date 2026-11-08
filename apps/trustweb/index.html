@@ -25,12 +25,12 @@
 })();
   </script>
   <!-- /boot:theme -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40' fill='none' stroke='%2313867E'%3E%3Ccircle cx='20' cy='20' r='5.5' stroke-width='3'/%3E%3Cpath d='M20 8.5 A11.5 11.5 0 1 1 8.5 20' stroke-width='1.7' stroke-linecap='round'/%3E%3Cpath d='M37 20 A17 17 0 1 1 20 3' stroke-width='1.7' stroke-linecap='round'/%3E%3Ccircle cx='20' cy='3' r='2.3' fill='%2313867E' stroke='none'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%22-2 -2 124 124%22 color=%22%2313867E%22%3E%3Cstyle%3E@media (prefers-color-scheme:dark)%7Bsvg%7Bcolor:%232BA59B%7D%7D%3C/style%3E%3Cpath d=%22M60 24 A36 36 0 1 1 24 60%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%229%22 stroke-linecap=%22round%22/%3E%3Cpath d=%22M113 60 A53 53 0 1 1 60 7%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%229%22 stroke-linecap=%22round%22/%3E%3Ccircle cx=%2260%22 cy=%227%22 r=%228.5%22 fill=%22currentColor%22/%3E%3Ccircle cx=%2260%22 cy=%2224%22 r=%228%22 fill=%22currentColor%22/%3E%3Ccircle cx=%2260%22 cy=%2260%22 r=%2215%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%2212%22/%3E%3C/svg%3E" />
   <title>TrustWeb</title>
   <style>
     /* Wave 16: what shows before the bundle runs; the start screen's colours, so the swap is quiet. */
     [data-loading]{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#F5F0E8;color:#1F2A28;font-family:Inter,Seravek,"Avenir Next","Segoe UI",system-ui,sans-serif}
-    [data-loading] .logo{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:34px;color:#fff;background:linear-gradient(135deg,#C2573A,#2F6F74)}
+    [data-loading] .logo{width:64px;height:64px}[data-loading] .logo svg{width:100%;height:100%;display:block}
     [data-loading] b{font-size:34px;font-weight:600}
     [data-loading] span{color:#5A6B66;font-size:14px}
     /* Light is the default; dark when the person chose it (html[data-theme="dark"], set by the boot block) or follows the system. */
@@ -40,7 +40,19 @@
 </head>
 <body>
   <div id="app"><div data-loading>
-    <div class="logo">◎</div>
+    <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 124 124" aria-hidden="true">
+  <path d="M60 25.5 A34.5 34.5 0 1 1 25.5 60" fill="none" stroke="#13867E" stroke-width="5.1" stroke-linecap="round"/>
+  <path d="M111 60 A51 51 0 1 1 60 9" fill="none" stroke="#13867E" stroke-width="5.1" stroke-linecap="round"/>
+  <circle cx="60" cy="25.5" r="6.2" fill="#13867E"/>
+  <circle cx="84.4" cy="84.4" r="6.2" fill="#13867E"/>
+  <circle cx="25.5" cy="60" r="6.2" fill="#13867E"/>
+  <circle cx="111" cy="60" r="5.6" fill="#13867E"/>
+  <circle cx="79.52" cy="107.12" r="5.6" fill="#13867E"/>
+  <circle cx="23.94" cy="96.06" r="5.6" fill="#13867E"/>
+  <circle cx="12.88" cy="40.48" r="5.6" fill="#13867E"/>
+  <circle cx="60" cy="9" r="6.9" fill="#13867E"/>
+  <circle cx="60" cy="60" r="16.5" fill="none" stroke="#13867E" stroke-width="9"/>
+</svg></div>
     <b>TrustWeb</b>
     <span>Loading…</span>
   </div></div>
