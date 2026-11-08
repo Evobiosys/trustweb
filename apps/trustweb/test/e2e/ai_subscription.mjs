@@ -8,6 +8,7 @@
  * Env: TW_OPS_DIR (controller worktree; default the sibling wave36-ai-subscription-ops), TW_SHOTS (screenshot dir; default none).
  */
 import { spawn, execFileSync } from 'node:child_process'
+import http from 'node:http'
 import { mkdtempSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -33,11 +34,18 @@ const smtpLog = path.join(tmp, 'smtp.jsonl'); const upLog = path.join(tmp, 'upst
 const [vitePort, ctlPort] = nextPorts(2)
 const ctl = `http://127.0.0.1:${ctlPort}`
 
-let vite, browser, smtp, upstream
+let vite, browser, smtp, upstream, wakerSrv
+const waker = { wakes: 0, state: 'idle' }
 try {
   smtp = await (await import(pathToFileURL(path.join(OPS, 'test/fakes/fake_smtp.mjs')))).start(0, smtpLog)
   upstream = await (await import(pathToFileURL(path.join(OPS, 'test/fakes/fake_upstream.mjs')))).start(0, upLog)
-  ports.push(smtp.port, upstream.port)
+  // Fake pc24 waker: POST /wake flips it to "waking"; GET /state reports it (the real one lives in trustweb-ops controller/pc24_waker.mjs).
+  wakerSrv = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/wake') { waker.wakes++; waker.state = 'waking' }
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ state: waker.state, since: Date.now() }))
+  })
+  await new Promise((r) => wakerSrv.listen(0, '127.0.0.1', r))
+  ports.push(smtp.port, upstream.port, wakerSrv.address().port)
   const opsEnv = { ...process.env, TWREL_ROOT: ROOT, TWREL_PORT: String(ctlPort), TWREL_STATIC: STATIC }
   const server = spawn(process.execPath, [path.join(OPS, 'controller/server.mjs')], {
     cwd: OPS, stdio: 'ignore',
@@ -45,7 +53,7 @@ try {
       ...opsEnv, TWREL_NO_POLL: '1', TW_API_EXTRA_HOSTS: '127.0.0.1',
       TW_API_EXTRA_ORIGINS: `http://localhost:${vitePort},http://127.0.0.1:${vitePort}`,
       TW_SMTP_HOST: '127.0.0.1', TW_SMTP_PORT: String(smtp.port), TW_SMTP_SECURE: 'plain', TW_SMTP_FROM: 'noreply@e2e.example',
-      TW_AI_UPSTREAM: `http://127.0.0.1:${upstream.port}/v1`,
+      TW_AI_UPSTREAM: `http://127.0.0.1:${upstream.port}/v1`, TW_WAKER_URL: `http://127.0.0.1:${wakerSrv.address().port}`,
     },
   })
   children.push(server)
@@ -135,6 +143,22 @@ try {
     c.ok(`${w}: upstream saw model qwen3.6:35b`, jsonLines(upLog).at(-1)?.model === 'qwen3.6:35b', JSON.stringify(jsonLines(upLog).at(-1)))
     const listed = JSON.parse(execFileSync(process.execPath, [path.join(OPS, 'controller/cli.mjs'), 'subs'], { env: opsEnv, encoding: 'utf8' }).replace(/^[^{]*/, ''))
     c.ok(`${w}: controller list shows used_this_month 1`, listed.rows.find((r) => r.ref === sub.ref)?.used_this_month === 1, JSON.stringify(listed.rows.find((r) => r.ref === sub.ref)))
+
+    // 6b the AI computer sleeps: loading window, wake requested, the question goes through by itself once it is up
+    const upPort = upstream.port
+    await upstream.close()
+    waker.wakes = 0; waker.state = 'idle'
+    await page.locator('[data-ask-summarise]').click()
+    await page.locator('[data-ai-wake]').waitFor({ timeout: 10_000 })
+    const win = await page.locator('[data-ai-wake]').innerText()
+    c.ok(`${w}: loading window names the AI computer and the wait`, /Starting TrustInTheWeb's AI computer/.test(win) && /about 2 minutes/.test(win), win.replace(/\n/g, ' | '))
+    c.ok(`${w}: loading window fits the screen`, await page.locator('.ai-wake-panel').evaluate((n) => { const r = n.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight }))
+    c.ok(`${w}: the server asked to wake pc24 exactly once`, waker.wakes === 1, String(waker.wakes))
+    await shot(page, w, 'waking')
+    upstream = await (await import(pathToFileURL(path.join(OPS, 'test/fakes/fake_upstream.mjs')))).start(upPort, upLog)
+    await page.locator('[data-ai-wake]').waitFor({ state: 'detached', timeout: 30_000 })
+    await page.locator('[data-ask-summary]').getByText('fake answer').waitFor({ timeout: 15_000 })
+    c.ok(`${w}: window closed by itself and the answer arrived`, /fake answer/.test(await page.locator('[data-ask-summary]').innerText()))
     await page.context().close()
   }
 
@@ -150,6 +174,8 @@ try {
   vite?.stop()
   await smtp?.close().catch(() => {})
   await upstream?.close().catch(() => {})
+  await new Promise((r) => (wakerSrv ? wakerSrv.close(r) : r())).catch(() => {})
+  wakerSrv?.closeAllConnections?.()
   for (const ch of children) ch.kill('SIGTERM')
   await new Promise((r) => setTimeout(r, 800))
   const busy = ports.filter((p) => !portFree(p))
