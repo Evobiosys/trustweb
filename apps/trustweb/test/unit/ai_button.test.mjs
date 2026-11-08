@@ -64,3 +64,12 @@ describe('checkAgent', () => {
     expect(await checkAgent('http://127.0.0.1:7391', f, 20)).toBe(false)
   })
 })
+
+describe('aiButtonTarget (wave 37)', () => {
+  it('opens Ask with an endpoint, else the plan choice in Settings', async () => {
+    const { aiButtonTarget, AI_PLAN_ANCHOR } = await import('../../src/ai_button.ts')
+    expect(aiButtonTarget(true)).toEqual({ kind: 'ask' })
+    expect(aiButtonTarget(false)).toEqual({ kind: 'settings', anchor: AI_PLAN_ANCHOR })
+    expect(AI_PLAN_ANCHOR).toBe('[data-ai-group="sub"]')
+  })
+})

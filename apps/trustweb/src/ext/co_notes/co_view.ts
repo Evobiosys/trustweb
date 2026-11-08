@@ -8,6 +8,11 @@ import { isPast } from '../../events'
 import { desiresDoc, ensureMine, type EventKind } from './co_desires'
 import { newDoc, type CoDoc, type CoPerson } from './co_doc'
 import { openCoNote, type CoCtx } from './co_editor'
+import { acceptMsg, addMsg, newMsg, pollChat, sendMsg } from './co_chat'
+import { arrive, guestBody, startLine } from './co_guest_view'
+import { guestShell } from './co_invite'
+import { createLinker } from './co_link'
+import { openShare } from './co_share_view'
 import { audit, pollDocs, receive, sendDoc } from './co_sync'
 
 const SEND_DELAY_MS = 3000
@@ -53,10 +58,47 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
       changed++
     }
     if (changed) { h.save(); h.toast(S_.arrived(changed)) }
-    return changed > 0
+    const said = await pollMessages()
+    return changed > 0 || said || (await linker.refresh())
   }
 
-  const ctx: CoCtx = { h, me, get: (id) => docs().find((d) => d.id === id), put, poll, log }
+  /** Wave 37: group-chat messages from participants (in their own name, I8) join the note's chat. */
+  const pollMessages = async (): Promise<boolean> => {
+    const r = h.relay()
+    if (!r) return false
+    let got = 0
+    for (const { from, msg } of await pollChat(r.deps, r.identity, known)) {
+      if (!acceptMsg(docs().find((d) => d.id === msg.note), from, msg)) continue
+      const book = (st().coChats ??= {})
+      book[msg.note] = addMsg(book[msg.note] ?? [], msg)
+      got++
+    }
+    if (got) { log(`Received ${got} chat ${got === 1 ? 'message' : 'messages'}`); h.save() }
+    return got > 0
+  }
+
+  const chat: NonNullable<CoCtx['chat']> = {
+    msgs: (id) => st().coChats?.[id] ?? [],
+    say: async (id, text) => {
+      const m = newMsg(id, me(), text, Date.now())
+      const d = docs().find((x) => x.id === id)
+      if (!m || !d) return
+      const book = (st().coChats ??= {})
+      book[id] = addMsg(book[id] ?? [], m)
+      h.save()
+      const r = h.relay()
+      const n = r ? await sendMsg(r.deps, d, m, r.identity, known) : 0
+      log(`Sent a chat message in "${d.title}" to ${n} ${n === 1 ? 'person' : 'people'}`)
+    },
+  }
+
+  const ctx: CoCtx = {
+    h, me, get: (id) => docs().find((d) => d.id === id), put, poll, log, chat,
+    share: (id) => openShare(ctx, linker, id),
+    canShare: (id) => st().coGuest?.noteId !== id,
+    readOnly: (id) => st().coGuest?.noteId === id && st().coGuest?.anonymous === true,
+  }
+  const linker = createLinker(ctx)
 
   const create = (): void => {
     const d = newDoc({ id: h.newId() + Date.now().toString(36), title: S_.untitled, me: me(), at: Date.now() })
@@ -99,7 +141,14 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
         onclick: () => { if (on()) delete st().coNotesOn; else st().coNotesOn = true; h.save(); h.redraw() },
       }, [el('b', {}, [S_.label]), el('small', {}, [S_.hint])]),
     ],
-    start: () => { if (on()) void poll().then((changed) => { if (changed) h.redraw() }) },
+    start: () => {
+      void arrive(ctx, linker).then(() => { if (on()) void poll().then((changed) => { if (changed) h.redraw() }) })
+    },
     poll,
+    guest: () => {
+      const g = st().coGuest
+      return g && on() ? { ...guestShell(Boolean(g.eventId)), ...(g.eventId ? { eventId: g.eventId } : {}), body: () => guestBody(ctx) } : null
+    },
+    startLine: () => startLine(linker),
   }
 }

@@ -327,26 +327,104 @@ class ThreeSites(unittest.TestCase):
                         self.assertIn(f'href="{url}"', footer)
             self.assertEqual(html.count("with love from Vienna"), 1)
 
-    def test_org_keeps_the_ecosystem_and_no_site_has_the_lineage(self) -> None:
-        org = (self.tmp / "trustintheweb-org" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('id="ecosystem"', org)
-        section = org.split('id="ecosystem"', 1)[1].split("</section>", 1)[0]
-        self.assertEqual(section.count('class="ecocard"'), 5)
+    def page(self, d: str, name: str = "index.html") -> str:
+        return (self.tmp / d / name).read_text(encoding="utf-8")
+
+    def test_no_site_has_the_lineage_the_ea_pilot_or_the_words_sister_sites(self) -> None:
         for d, p, html in self.pages():
             with self.subTest(site=d, page=p.name):
                 self.assertNotIn('id="lineage"', html)
+                low = html.lower()
+                for banned in ("sister site", "ea groups", "april 2027", "ea-groups"):
+                    self.assertNotIn(banned, low)
+
+    def test_org_is_only_the_organisation(self) -> None:
+        org = self.page("trustintheweb-org")
+        self.assertIn('class="orgmark"', org)
+        self.assertLess(org.index('class="orgmark"'), org.index("<h1"))
+        for hid in ("stewardship", "governance", "source-code", "team", "contact"):
+            self.assertIn(f'id="{hid}"', org)
+        for gone in ("features", "use-cases", "how-it-works", "phases", "ecosystem", "ea-groups", "name"):
+            self.assertNotIn(f'id="{gone}"', org)
+        self.assertIn(">The app: trustweb.one</a>", org)
+        self.assertNotIn("Try the demo", org)
+        self.assertIn("AGPL", org)
+        self.assertIn("mailto:connect@evobiosys.org", org)
+        self.assertEqual(sorted(p.name for p in (self.tmp / "trustintheweb-org").glob("*.html")),
+                         ["data-policy.html", "feedback.html", "imprint.html", "index.html", "privacy.html"])
+
+    def test_com_is_only_subscription_and_hosting(self) -> None:
+        com = self.page("trustintheweb-com")
+        for needle in ("Small", "5 € per month", "Big", "18 € per month", "Enterprise", "mailto:connect@evobiosys.org", "Ask your web"):
+            self.assertIn(needle, com)
+        self.assertIn("starting soon", com.lower())
+        for hid in ("hosting", "plans", "sync", "privacy-summary", "contact"):
+            self.assertIn(f'id="{hid}"', com)
+        self.assertIn('href="https://trustweb.one/"', com)
+        self.assertIn('href="https://trustintheweb.org/"', com)
+        self.assertNotIn("Run it yourself", com)
+        self.assertNotIn("pilot", com.lower())
+
+    def test_one_is_the_app_home_with_open_hosted_and_self_hosted(self) -> None:
+        one = self.page("trustweb-one")
+        self.assertIn("<h1>Find people and things through people you trust.</h1>", one)
+        self.assertIn("TrustWeb lets you ask the people you have met, and the people they trust, without posting to a crowd. A question travels, the data stays on each phone.", one)
+        for title in ("More scalable", "More discreet", "More targeted"):
+            self.assertIn(f"<h3>{title}</h3>", one)
+        for hid in ("use-cases", "features", "hosting", "self-host", "stewards"):
+            self.assertIn(f'id="{hid}"', one)
+        uc = one.split('id="use-cases"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(uc.count('class="ucard"'), 3)
+        for dropped in ("Ask for support", "Cohort feed"):
+            self.assertNotIn(dropped, one)
+        script = one.split('id="self-host"', 1)[1].split("</pre>", 1)[0]
+        for line in ("git clone ", "pnpm install", "vite build", "serve dist"):
+            self.assertIn(line, script)
+        self.assertNotIn("| sh", one)
+        self.assertRegex(one, r'<a class="[^"]*nav-open[^"]*" href="https://app\.trustweb\.one/">Open</a>')
+        self.assertNotIn("Sign up", one)
+        self.assertRegex(one, r'Want to know who stewards the code\? <a href="https://trustintheweb\.org/">TrustInTheWeb\.org</a>')
+        for hid in ("f-web", "f-ask", "f-record", "f-inventory", "name"):
+            self.assertIn(f'id="{hid}"', one)
+        self.assertTrue((self.tmp / "trustweb-one" / "why.html").is_file())
+
+    def test_review_org_and_com_footers_carry_no_app_demo_or_install(self) -> None:
+        for d in ("trustintheweb-org", "trustintheweb-com"):
+            for p in (self.tmp / d).glob("*.html"):
+                footer = p.read_text(encoding="utf-8").split('class="sitefooter"', 1)[1]
+                with self.subTest(site=d, page=p.name):
+                    self.assertNotIn("app.trustweb.one/demo/", footer)
+                    self.assertNotIn("?install=1", footer)
+                    self.assertIn('href="https://trustweb.one/"', footer)
+
+    def test_review_one_hero_has_the_demo_cta_and_the_script_builds_like_ci(self) -> None:
+        one = self.page("trustweb-one")
+        hero = one.split('class="hero"', 1)[1].split("</header>", 1)[0]
+        self.assertIn('href="https://app.trustweb.one/demo/">See TrustWeb in action</a>', hero)
+        card = one.split('id="self-host"', 1)[1].split("</div>", 1)[0]
+        self.assertIn("../crm/node_modules/.bin/vite build", card)  # .github/workflows/ci.yml builds with apps/crm's Vite 8
+        self.assertNotIn("../demo/node_modules/.bin/vite", card)
+        self.assertIn("mailto:connect@evobiosys.org", card)  # the public copy does not hold apps/trustweb yet
+
+    def test_review_one_open_button_sits_top_right_outside_the_wrapping_nav(self) -> None:
+        topbar = self.page("trustweb-one").split('class="topbar"', 1)[1].split("</div></div>", 1)[0]
+        self.assertIn('</nav><a class="nav-open" href="https://app.trustweb.one/">Open</a>', topbar)
+        css = (self.tmp / "trustweb-one" / "site.css").read_text(encoding="utf-8")
+        self.assertRegex(css, r"@media \(max-width:\s*\d+px\)\{[^}]*\.nav-open\{[^}]*order:1")
+
+    def test_review_sync_is_never_claimed_as_live(self) -> None:
+        for d in ("trustweb-one", "trustintheweb-com"):
+            for para in re.findall(r"<p[ >].*?</p>", self.page(d), re.DOTALL):
+                if "sync" in para.lower():
+                    with self.subTest(site=d, para=para[:80]):
+                        self.assertIn("soon", para.lower())
 
     def test_roles(self) -> None:
-        one = (self.tmp / "trustweb-one" / "index.html").read_text(encoding="utf-8")
-        for needle in ('href="https://app.trustweb.one/"', 'href="https://app.trustweb.one/?install=1"', 'href="https://app.trustweb.one/demo/"'):
+        one = self.page("trustweb-one")
+        for needle in ('href="https://app.trustweb.one/"', 'href="https://app.trustweb.one/demo/"'):
             self.assertIn(needle, one)
-        com = (self.tmp / "trustintheweb-com" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("run it yourself", com.lower())
-        self.assertIn("https://trustintheweb.org/#source-code", com)
         self.assertTrue((self.tmp / "trustintheweb-com" / "pricing.html").is_file())
-        org = (self.tmp / "trustintheweb-org" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('id="phases"', org)
-        self.assertIn('id="source-code"', org)
+        self.assertIn("Small", self.page("trustintheweb-com", "pricing.html"))
 
     def test_css_has_theme_motion_and_underlined_links(self) -> None:
         css = (self.tmp / "trustweb-one" / "site.css").read_text(encoding="utf-8")

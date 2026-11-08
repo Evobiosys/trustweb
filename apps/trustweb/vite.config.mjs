@@ -15,7 +15,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { matchesReply } from './vite_matches.mjs'
-import { liveRecordReply } from './vite_dev_record.mjs'
+import { editStreamReply, liveRecordReply } from './vite_dev_record.mjs'
 import { approveMergeRoute, diagnosticsFor, ghBin, jobQueue, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -213,6 +213,12 @@ function devRecordLiveApi() {
     configureServer(server) {
       if (devLive('serve') !== 'true') return
       const file = process.env.TW_DEV_LIVE ?? path.join(os.homedir(), '.cache/trustweb-dev/dev-record.live.json')
+      server.middlewares.use('/__tw/dev-edits', (req, res) => {
+        const r = editStreamReply(file, req.method ?? '', req.headers, { remote: req.socket.remoteAddress })
+        res.statusCode = r.code
+        if (r.body) res.setHeader('Content-Type', 'application/json')
+        res.end(r.body)
+      })
       server.middlewares.use('/__tw/dev-record', (req, res) => {
         let text = ''
         req.on('data', (c) => { text += c })

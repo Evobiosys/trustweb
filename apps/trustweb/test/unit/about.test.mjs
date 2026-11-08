@@ -8,7 +8,7 @@ describe('about links', () => {
   it('point at the website pages the contract names, in this order', () => {
     expect(ABOUT_PAGES.map(aboutUrl)).toEqual([
       'https://trustintheweb.org/faq.html',
-      'mailto:connect@trustweb.one?subject=TrustWeb%20help',
+      'mailto:connect@evobiosys.org?subject=TrustWeb%20help',
       'https://trustintheweb.org/privacy.html',
       'https://trustintheweb.org/imprint.html',
     ])

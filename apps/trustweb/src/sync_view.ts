@@ -269,7 +269,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     }
     const mouse = (e: Event): boolean => (e as PointerEvent).pointerType === 'mouse'
     return el('button', {
-      class: 'btn-ghost', type: 'button', 'data-un-lock': name, 'aria-label': S.unLockedWhy, 'aria-expanded': 'false',
+      class: 'btn-ghost', type: 'button', 'data-un-lock': name, 'aria-label': S.unLockedWhy, title: S.unLockedWhy, 'data-lock-explain': '', 'aria-expanded': 'false',
       onpointerenter: (e) => { if (mouse(e)) show(e, true) },
       onpointerleave: (e) => { if (mouse(e) && !pinned) show(e, false) },
       onclick: (e) => { pinned = !pinned; (e.currentTarget as HTMLElement).setAttribute('aria-expanded', String(pinned)); show(e, pinned) },

@@ -4,14 +4,13 @@
  * Ollama, Custom), each with base URL, key, model and a Test button. Kept on this phone and in the sealed record.
  */
 import { el } from '../../demo/src/ui/dom'
-import { activeEndpoint, apiBase, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
+import { activeEndpoint, apiBase, ENTERPRISE_MAIL, PLAN_CARDS, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
 import { configured, switchPreset, testEndpoint, testResultLines } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
 
 const net: Parameters<typeof signUp>[0] = (url, init) => fetch(url, init)
 const BYOK = ['openai', 'claude', 'ollama', 'custom'] as const
-const PLAN_IDS = Object.keys(PLANS) as PlanId[]
 /** One poll per open, not a timer: a draw within this window of the last poll does not ask again. */
 const POLL_GAP_MS = 30_000
 let lastPoll = 0
@@ -58,7 +57,7 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
     const a = h.state()
     return (a.advanced ??= {}).ai = migrateAi(a.advanced.ai) ?? { preset: 'custom', baseUrl: '', apiKey: '', model: '' }
   }
-  let plan: PlanId | null = h.state().advanced?.ai?.sub?.plan ?? null
+  let byokOpen = configured(h.state().advanced?.ai) && h.state().advanced?.ai?.preset !== 'tw-subscription'
   const field = (key: 'baseUrl' | 'apiKey' | 'model' | 'name', label: string, type: string): HTMLElement => {
     const input = el('input', { class: 'field', type, placeholder: label, 'aria-label': label, value: ai()[key] ?? '', autocomplete: 'off', 'data-ai-field': key }) as HTMLInputElement
     input.addEventListener('change', () => { ai()[key] = input.value.trim(); h.save(); if (key === 'name') draw() })
@@ -96,10 +95,21 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
 
   const subGroup = (): HTMLElement => {
     const sub = ai().sub
-    const pick = (id: PlanId): HTMLElement => el('button', {
-      class: 'radio' + (plan === id ? ' on' : ''), 'aria-pressed': String(plan === id), 'data-ai-plan': id,
-      onclick: () => { plan = id; draw() },
-    }, [el('b', {}, [S.aiSubPlans[id]])])
+    const canSignUp = !sub || sub.state === 'revoked'
+    const card = (c: (typeof PLAN_CARDS)[number]): HTMLElement => {
+      const text = S.aiPlanCards[c.id]
+      const action = c.id === 'enterprise'
+        ? el('a', { class: 'btn btn-sm ai-plan-btn', href: ENTERPRISE_MAIL, 'data-ai-enterprise': '' }, [text.button!])
+        : canSignUp ? el('button', { class: 'btn btn-sm ai-plan-btn', 'data-ai-signup': c.id, onclick: () => signUpSheet(c.id as PlanId) }, [S.aiPlanChoose(text.name)]) : null
+      return el('div', { class: 'ai-plan', 'data-ai-plan': c.id }, [
+        el('h6', { class: 'ai-plan-name' }, [text.name]),
+        el('p', { class: 'ai-plan-price' }, [text.price]),
+        ...(c.euro === null ? [] : [el('p', { class: 'meta' }, [S.aiPlanPerMonth])]),
+        ...text.lines.map((l) => el('p', { class: 'meta' }, [l])),
+        ...(c.euro === null ? [] : [el('p', { class: 'meta' }, [S.aiSubQuota(PLANS[c.id as PlanId].quota)])]),
+        action,
+      ])
+    }
     const state = sub && sub.state !== 'revoked' ? el('div', { 'data-ai-sub-state': sub.state }, [
       el('p', { class: 'meta' }, [sub.state === 'pending' ? S.aiSubPending : S.aiSubActive(quota?.used, quota?.quota ?? PLANS[sub.plan].quota)]),
       ...(sub.state === 'pending' ? [
@@ -114,11 +124,9 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
     ]) : sub ? el('p', { class: 'meta', 'data-ai-sub-state': 'revoked' }, [S.aiSubRevoked]) : null
     return el('div', { class: 'ai-group', 'data-ai-group': 'sub' }, [
       el('h5', { class: 'eyebrow' }, [S.aiSubTitle]),
-      ...PLAN_IDS.map(pick),
-      ...(plan ? [
-        el('p', { class: 'meta', 'data-ai-plan-text': plan }, [`${S.aiSubUses} ${S.aiSubQuota(PLANS[plan].quota)} ${S.aiSubPrivacy}`]),
-        ...(!sub || sub.state === 'revoked' ? [el('button', { class: 'btn btn-sm', 'data-ai-signup': '', onclick: () => signUpSheet(plan!) }, [S.aiSubSignUp])] : []),
-      ] : []),
+      el('h4', { class: 'ai-plans-title' }, [S.aiPlansTitle]),
+      el('div', { class: 'ai-plans' }, PLAN_CARDS.map(card)),
+      el('p', { class: 'meta', 'data-ai-plan-text': '' }, [`${S.aiSubUses} ${S.aiSubPrivacy}`]),
       state,
     ])
   }
@@ -126,8 +134,8 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
   const byokGroup = (): HTMLElement => {
     const cur = ai().preset
     const result = el('div', { class: 'ai-test-result', 'data-ai-test-result': '', role: 'status' })
-    return el('div', { class: 'ai-group', 'data-ai-group': 'byok' }, [
-      el('h5', { class: 'eyebrow' }, [S.aiByokTitle]),
+    const d = el('details', { class: 'ai-group ai-byok', 'data-ai-group': 'byok' }, [
+      el('summary', { class: 'ai-byok-toggle' }, [S.aiByokTitle]),
       ...BYOK.map((p) => el('button', {
         class: 'radio' + (cur === p ? ' on' : ''), 'aria-pressed': String(cur === p), 'data-ai-preset': p,
         onclick: () => { h.state().advanced!.ai = switchPreset(ai(), p); h.save(); draw() },
@@ -145,7 +153,10 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
         }, [S.aiTest]),
         result,
       ]),
-    ])
+    ]) as HTMLDetailsElement
+    d.open = byokOpen
+    d.addEventListener('toggle', () => { byokOpen = d.open })
+    return d
   }
 
   const draw = (): void => {

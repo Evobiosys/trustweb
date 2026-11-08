@@ -23,7 +23,8 @@ import type { Curator, LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { bringAllBack, bringBack, expanseList, hideInExpanse, hitControls, visibleIn } from './expanse'
 import { shortLabel } from './short_label'
-import { closest150, closestLimit, drawnLimit, effectiveLimit, keepPinned, rankedBy, withTag } from './membranes_five'
+import { closest150, closestLimit, drawnLimit, effectiveLimit, keepPinned, limitOf, rankedBy, withTag } from './membranes_five'
+import { shownAfterMove, shownKey, stickyCut, type RankedDot } from './ring_shown'
 import { communityOf, isArchived, inZones, setUi, toneVar, zoneFor } from './trustzones'
 import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
@@ -45,7 +46,9 @@ import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
 import { createCountdown } from './merge_countdown'
-import { HOLD_MS, type HoldEvent, hitDot, holdStart, holdStep } from './dot_merge'
+import { HOLD_MS, type HoldEvent, hitDot, holdEnabled, holdStart, holdStep } from './dot_merge'
+import { onRingLine, ringStrokeOpacity, ringStrokeWidth } from './ring_hit'
+import { makeResizable } from './overlay_resize'
 
 /** The rings' own layout size (px): the viewBox, and the box a pointer is read against. */
 export const RINGS_SIZE = 352
@@ -168,6 +171,12 @@ export function createWebView(deps: WebViewDeps): WebView {
   let ringsK = 1
   /** Wave 36: the diamond / expand column (relative to the rings centre): dots keep out of it, whether the expand buttons show or not. */
   let ringsColumn: Column | undefined
+  /** Wave 37: ids of the dots the last render drew in the per-ring cut (null: everyone was drawn); a manual move saves them so only the moved dot changes. */
+  let shownNow: Set<string> | null = null
+  /** Wave 37: "Rings adjust themselves" is on and a dot was just moved: the next renders diff against `prev`, fading dots in and out for ~1.2 s. */
+  let fade: { prev: Set<string>; moved: string } | null = null
+  let fadeTimer: ReturnType<typeof setTimeout> | undefined
+  const fadeOf = new Map<string, 'in' | 'out'>()
   const keepOutColumn = (radius: number, pad: number): [number, number] | null => (ringsColumn ? columnSector(radius, ringsColumn, pad) : null)
 
   /** `desk`: the rings lent to the Desk's Web page (curator.ts LentRings): a tap picks the person there, no phone sheets, no add-someone tap or space-out menu. */
@@ -190,12 +199,32 @@ export function createWebView(deps: WebViewDeps): WebView {
     const members: Partial<Record<Ring, Person[]>> = {}
     const rest: Partial<Record<Ring, Person[]>> = {}
     const filled = s.uiRings?.filled ?? [] // wave 35: only a fill the user set; the old default (acquaintances drawn in full) bypassed the per-ring cut
+    // Wave 37: a manual move keeps every ring's shown dots (sticky) unless "Rings adjust themselves" is on.
+    const sticky = !s.uiRings?.autoAdjust && s.uiRings?.shown?.key === shownKey(limitOf(s), s.uiRings?.rankBy, s.uiRings?.perRingLimitOff, filled) ? new Set(s.uiRings.shown.ids) : null
+    const stickyAt = s.uiRings?.shown?.at // review: people added after the move still show
+    const rankedAll: RankedDot[] = []
+    const ranks: Partial<Record<Ring, Person[]>> = {}
+    shownNow = complete ? null : new Set()
+    fadeOf.clear()
     for (const [r, ps] of Object.entries(everyone) as [Ring, Person[]][]) {
       if (complete) { members[r] = ps; continue }
       // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
-      const f = keepPinned(rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), drawnLimit(s, s, r), Date.now()), s.uiRings?.pinnedId) // wave 36b: a dragged dot stays
+      const lim = drawnLimit(s, s, r)
+      const cut = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), lim, Date.now())
+      if (Number.isFinite(lim)) { ranks[r] = [...cut.shown, ...cut.rest]; rankedAll.push(...ranks[r]!.map((p) => ({ id: p.id, ring: r }))) }
+      const f = keepPinned(sticky && Number.isFinite(lim) ? stickyCut([...cut.shown, ...cut.rest], sticky, stickyAt) : cut, s.uiRings?.pinnedId) // wave 36b: a dragged dot stays
       members[r] = f.shown; rest[r] = f.rest
     }
+    if (fade && !complete && rankedAll.length) { // wave 37: the recent-N rule after a move, shown slowly: appearing dots fade in, leaving dots stay drawn while they fade out
+      const change = shownAfterMove(fade.prev, rankedAll, fade.moved, limitOf(s), true)
+      for (const id of change.appear) fadeOf.set(id, 'in')
+      for (const id of change.disappear) fadeOf.set(id, 'out')
+      for (const [r, all] of Object.entries(ranks) as [Ring, Person[]][]) {
+        members[r] = all.filter((p) => change.shown.has(p.id) || fadeOf.get(p.id) === 'out')
+        rest[r] = all.filter((p) => !members[r]!.includes(p))
+      }
+    }
+    if (shownNow) for (const ps of Object.values(members)) for (const p of ps ?? []) if (fadeOf.get(p.id) !== 'out') shownNow.add(p.id)
     // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
     const angleOfP = (p: Person): number => angleOf(p)
     const quiet = new Map(desk ? [] : dueMoves(s, Date.now()).map((m) => [m.person.id, m.to] as const))
@@ -227,8 +256,8 @@ export function createWebView(deps: WebViewDeps): WebView {
     for (const r of ringsGeo.rings) {
       const c = document.createElementNS(NS, 'circle')
       c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(ringsGeo.radius[r] * k)); c.setAttribute('data-ring', r)
-      c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', r === Ring.Unsorted ? '.35' : '.55')
-      c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : r === Ring.Intending ? '1' : '1.4')
+      c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', String(ringStrokeOpacity(r)))
+      c.setAttribute('stroke-width', String(ringStrokeWidth(r)))
       if (guideDimmed(hidden.has(r), false)) c.style.opacity = HIDDEN_GUIDE_OPACITY
       c.setAttribute('stroke-dasharray', r === Ring.Intending ? '1 6' : r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
       svg.appendChild(c)
@@ -285,7 +314,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         pictured(face, p.theirProfile?.picture)
         const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
         const b = el('button', {
-          class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
+          class: 'node' + (fadeOf.has(p.id) ? ' fade-' + fadeOf.get(p.id) : '') + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
           onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
         }, [
           face,
@@ -386,6 +415,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       box.addEventListener('pointerenter', () => step({ type: 'enter-card' }))
       box.addEventListener('pointerleave', () => step({ type: 'leave' }))
       wrap.appendChild(box)
+      makeResizable(box, r, wrap.getBoundingClientRect().width / RINGS_SIZE)
       cardShown(true)
       document.addEventListener('keydown', onEsc)
     }
@@ -406,13 +436,12 @@ export function createWebView(deps: WebViewDeps): WebView {
       const since = performance.now()
       dwellTimer = setTimeout(() => { if (overlayAllowed({ dragging: dragged, dwellMs: performance.now() - since })) step({ type: 'enter-ring', ring }, { clientX: dwellAt.x, clientY: dwellAt.y }) }, OVERLAY_DWELL_MS)
     }
-    if (!desk) { // the band: the pointer within RING_LINE_HIT of a ring's line (nodes, handles and the card keep their own hover)
+    if (!desk) { // the band: the pointer on a ring's stroke (nodes, handles and the card keep their own hover)
       let onBand: Ring | null = null
       wrap.addEventListener('pointermove', (e) => {
         const over = e.target as HTMLElement
         if (!mouse(e) || over.closest('[data-ring-card], .ring-toggle')) return
-        const t = menuTarget(localPoint(e, wrap.getBoundingClientRect()), ringsGeo, k)
-        const band = t.onLine && !over.closest('.node, .ring-more') ? t.near : null
+        const band = over.closest('.node, .ring-more') ? null : onRingLine(ringsGeo, localPoint(e, wrap.getBoundingClientRect()), k) // wave 37: the stroke itself, not the whole annulus
         if (band === onBand) { if (band && !restedAt(dwellAt, { x: e.clientX, y: e.clientY }) && hover.open !== band) dwell(band, e); return }
         clearTimeout(dwellTimer)
         if (band) dwell(band, e); else if (onBand) step({ type: 'leave' })
@@ -696,7 +725,7 @@ export function createWebView(deps: WebViewDeps): WebView {
           const step = (): void => {
             const t = countdown.tick(performance.now())
             if (t.fire) { stopCount(); mergeDrop(over); return }
-            if (t.secondsLeft !== shown) { shown = t.secondsLeft; offerMerge(p, over, shown) }
+            if (t.secondsLeft !== shown) { shown = t.secondsLeft; offerMerge(p, over, shown, () => { stopCount(); mergeDrop(over) }, () => { cancelled = true; holdApply({ type: 'leave' }) }) }
           }
           step()
           countTimer = window.setInterval(step, 200)
@@ -713,7 +742,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       const onEscape = (e: KeyboardEvent): void => { if (e.key === 'Escape' && hold.phase !== 'none') { cancelled = true; holdApply({ type: 'leave' }) } }
       window.addEventListener('keydown', onEscape)
       const holdMove = (e: PointerEvent): void => {
-        if (!mergeSheet || selectMode) return
+        if (!holdEnabled({ canMerge: Boolean(mergeSheet), groupSize: selectMode && chosen.has(p.id) ? chosen.size : 1 })) return
         const dots = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')].map((n) => { const r = n.getBoundingClientRect(); return { id: n.dataset.pid ?? '', left: r.left, top: r.top, right: r.right, bottom: r.bottom } })
         const now = performance.now()
         clearTimeout(holdTimer)
@@ -769,7 +798,15 @@ export function createWebView(deps: WebViewDeps): WebView {
         setTimeout(() => setDragged(false), 0)
         if (!was) return
         s.uiRings = { ...s.uiRings, pinnedId: p.id } // wave 36b: the dropped dot stays drawn beside the cut
-        if (selectMode) {
+        if (s.uiRings?.autoAdjust) { // wave 37: opted in: the cut re-applies, dots fade in and out
+          if (shownNow) {
+            fade = { prev: new Set(shownNow), moved: p.id }
+            clearTimeout(fadeTimer)
+            const settle = (): void => { if (lifted) { fadeTimer = setTimeout(settle, 500); return } fade = null; render() }
+            fadeTimer = setTimeout(settle, 1300)
+          }
+        } else if (shownNow) s.uiRings = { ...s.uiRings, shown: { key: shownKey(limitOf(s), s.uiRings?.rankBy, s.uiRings?.perRingLimitOff, s.uiRings?.filled ?? []), ids: [...shownNow, p.id], at: Date.now() } } // wave 37: nothing else moves
+        if (selectMode && !offered) {
           const ids = new Set(dragIds(chosen, p.id))
           const group: Person[] = []
           applyAll(s.people, ids, (q) => group.push(q))
@@ -850,12 +887,14 @@ export function createWebView(deps: WebViewDeps): WebView {
   }
 
   /** The bubble "Merging A into B … n" (wave 36): nobody presses Yes; staying put merges at 0, the major dot B keeps its name. */
-  function offerMerge(p: Person, otherId: string, n: number): void {
+  function offerMerge(p: Person, otherId: string, n: number, yes: () => void, cancel: () => void): void {
     const other = st().people.find((x) => x.id === otherId)
     if (!other || !mergeSheet) return
-    showNotice(S.mergeCountdownLead(displayName(p.name).text, displayName(other.name).text), '', [
+    showNotice(S.mergeCountdownLead(displayName(p.name).text, displayName(other.name).text), '', [el('span', { class: 'merge-actions' }, [
       el('span', { class: 'countdown-num', 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
-    ], 20000)
+      el('button', { class: 'btn btn-ghost btn-sm merge-btn', 'data-merge-yes': '', 'aria-label': S.mergeYes, title: S.mergeYes, onclick: yes }, ['✓']),
+      el('button', { class: 'btn btn-ghost btn-sm merge-btn', 'data-merge-cancel': '', 'aria-label': S.mergeCancel, title: S.mergeCancel, onclick: cancel }, ['✕']),
+    ])], 20000)
   }
 
   /** "Recently deleted": the deleted people of the last 30 days, each with Put back and the days left. */

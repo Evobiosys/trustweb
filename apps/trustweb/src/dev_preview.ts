@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { approveBoxVisible, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
+import { approveBoxVisible, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -77,8 +77,19 @@ const CSS = `
 /* wave 33 panel */
 .twp header{position:sticky;top:0;z-index:2;background:#241b2e}
 .twp .toggle{display:block;width:calc(100% - 20px);margin:2px 10px;text-align:left;background:none;color:#fff;text-decoration:underline;padding:3px 0}
+/* wave 37 panel-2: dev/stock preview = inverse colours on the preview's overlays */
+.twp .x svg{display:block}
+.twp-devmode .twp,.twp-devmode .twp header,.twp-devmode .twp-pre,.twp-devmode .twp-toast,.twp-devmode .twf,.twp-devmode .twf-dot{background:#f4f1f8;color:#241b2e}
+.twp-devmode .twp .x,.twp-devmode .twp .srchbtn,.twp-devmode .twp .loadhead,.twp-devmode .twp .toggle,.twp-devmode .twf .twf-x{color:#241b2e}
+.twp-devmode .twp header b,.twp-devmode .twp .tag,.twp-devmode .twp a{color:#0a7a54}
+.twp-devmode .twp .srch{background:#fff;color:#241b2e}.twp-devmode .twp .bar,.twp-devmode .twp .ask{background:#e4dded}
+.twp-devmode .twp .pill,.twp-devmode .twp .mini.alt,.twp-devmode .twp .adv summary{color:#4a3d5c}
+.twp-devmode .twp button{background:#241b2e;color:#f4f1f8}.twp-devmode .twp button.alt{background:none;color:#241b2e;border-color:#241b2e}
+.twp-devmode .twp .x,.twp-devmode .twp .srchbtn,.twp-devmode .twp .loadhead,.twp-devmode .twp .toggle,.twp-devmode .twp .pill{background:none}
+.twp-devmode .twp .pill.on.merge{background:#4fd7a0;color:#241b2e}
 ${DEVICE2_CSS}`
 
+const EXPAND_SVG = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 1.5h3v3M10.5 1.5 7 5M4.5 10.5h-3v-3M1.5 10.5 5 7"/></svg>'
 const POS = 'twp-pos'
 const folded = (id: string): string[] => foldStore(sessionStorage, id).get()
 const setFolded = (id: string, keys: string[]): void => { foldStore(sessionStorage, id).set(keys) }
@@ -258,7 +269,7 @@ export function initDevPreview(): void {
   }
   // A box or pill writes the registry (the CLI cascades requires/dependants). Approve and needs work only mark what gets pushed; the boxes assemble.
   const press = (key: string, v: 'merge' | 'needs-work'): void => {
-    focus.set(null)
+    focus.set(focusAfterPress(focus.get(), key))
     const plan = pressPlan(p!.features, key, v)   // approve on an unticked row ticks it for the owner, but never assembles (the reload hid the preview)
     const { loadFirst } = plan
     const base = v === 'merge' ? ensureLoaded(p!.features, key) : p!.features
@@ -375,7 +386,7 @@ export function initDevPreview(): void {
     const note = h('button', { className: 'pill note', textContent: '📝', title: loading() ? loadingWhy(busy, prText) : 'Approve, and copy the reference to this feature to paste into the pi session', disabled: loading() })
     note.addEventListener('click', (e) => {
       e.stopPropagation()
-      focus.set(null)
+      focus.set(focusAfterPress(focus.get(), f.key))
       void copy(noteText(p!.id, f), 'reference copied')
       glim = f.key; setTimeout(() => { glim = null; render() }, 900)
       if (shownVerdict(f) !== 'merge') press(f.key, 'merge')
@@ -546,6 +557,7 @@ export function initDevPreview(): void {
     root.hidden = tab.hidden()
     const pill = collapsed()
     root.className = 'twp' + (pill ? ' pill' : '')
+    document.documentElement.classList.toggle('twp-devmode', mode !== 'personal')   // stock/dev: the overlays use inverse colours
     root.replaceChildren()
     // The Approve box (dev_feature.ts) hides while this panel is a pill or shows a single row (wave 36b).
     const boxOn = (focused: boolean): void => { document.documentElement.classList.toggle('twp-compact', !approveBoxVisible({ collapsed: pill, focused })) }
@@ -560,8 +572,16 @@ export function initDevPreview(): void {
       const close = h('button', { className: 'x', textContent: '×', title: 'Hide for this tab' })
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
-      const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
-      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), x, close)
+      const idEl = h('b', { textContent: panelTitle(q.id, q.features), title: 'Double-click copies the id' })
+      const ftHead = focusToggle(q.features, focus.get(), lastFocus.get())
+      const expand = ftHead ? h('button', { className: 'x', title: ftHead.to === 'full' ? S.panelExpandAll : S.panelBackToRow(ftHead.row.title) }) : null
+      if (expand) {
+        expand.dataset.panelExpand = ''
+        expand.setAttribute('aria-label', expand.title)
+        expand.innerHTML = EXPAND_SVG
+        expand.addEventListener('click', () => { lastFocus.set(ftHead!.last); focus.set(ftHead!.focus); if (ftHead!.to === 'full') loadOpen.set(true); render() })
+      }
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : '', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), ...(expand ? [expand] : []), x, close)
       const hs = drag(root.appendChild(header))
       // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
@@ -611,8 +631,8 @@ export function initDevPreview(): void {
         ...(q.assembled?.error ? [h('div', { className: 'row warn' }, hintParts('Fix the conflict first: ' + q.assembled.error).head, h('details', {}, h('summary', { textContent: 'details' }), h('div', {}, ...conflictNodes(q.assembled.error))))] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
       ]
-      // Focus mode: the focused row, the toggle and the compat line; everything beneath the toggle stays hidden. Each row shows once, in the list.
-      if (fs) { root.append(h('div', { className: 'row focus' }, h('b', { textContent: fs.wave }), row({ feature: fs.row, depth: 0, children: [] }, shown), ...(toggle ? [toggle] : [])), ...(compat ? [compat] : []), ...tail, ...(prStatusEl ? [prStatusEl] : []), ...(bar ? [bar] : [])) } else root.append(
+      // Focus mode (wave 37): only the focused row; the compat line and the toggle belong to the full list (the header's expand button leaves). Each row shows once, in the list.
+      if (fs) { root.append(h('div', { className: 'row focus' }, row({ feature: fs.row, depth: 0, children: [] }, shown)), ...tail, ...(prStatusEl ? [prStatusEl] : []), ...(bar ? [bar] : [])) } else root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` }), searchBtn),
         ...(searching ? [searchBox] : []),
         ...(compat ? [compat] : []),

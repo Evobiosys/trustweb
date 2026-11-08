@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 32: dragging one dot onto another and holding there offers a merge (dot_merge.ts); nothing merges without a tap on Merge. */
-import { HOLD_MS, holdStart, holdStep, hitDot } from '../../src/dot_merge.ts'
+import { HOLD_MS, holdEnabled, holdStart, holdStep, hitDot } from '../../src/dot_merge.ts'
 
 describe('dot merge hold', () => {
   it('starts with nothing', () => {
@@ -40,4 +40,13 @@ describe('dot merge hold', () => {
     expect(hitDot(dots, 'a', 10, 20)).toBeNull()
     expect(hitDot(dots, 'a', 200, 200)).toBeNull()
   })
+})
+
+describe('merge offer while the select tool is on (wave 37 regression)', () => {
+  it('a plain drag of one dot still offers a merge when select mode is on with nothing ticked', () => {
+    expect(holdEnabled({ canMerge: true, groupSize: 1 })).toBe(true)
+  })
+  it('select mode off: offered', () => expect(holdEnabled({ canMerge: true, groupSize: 1 })).toBe(true))
+  it('a drag that carries several ticked dots never merges', () => expect(holdEnabled({ canMerge: true, groupSize: 3 })).toBe(false))
+  it('without a merge route (solo) never', () => expect(holdEnabled({ canMerge: false, groupSize: 1 })).toBe(false))
 })

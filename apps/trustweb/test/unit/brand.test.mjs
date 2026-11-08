@@ -15,11 +15,11 @@ describe('brand', () => {
     })
   it('favicon is the mark, not the purple disc', () => {
     const html = read('../../index.html')
-    expect(html).not.toContain('%239A37F0'); expect(html).toMatch(/rel="icon" href="data:image\/svg\+xml,[^"]*r='5\.5'/)
+    expect(html).not.toContain('%239A37F0'); expect(html).toMatch(/rel="icon" href="data:image\/svg\+xml,[^"]*r=%2215%22/)
   })
   it('render_icons draws the mark, not the purple disc', () => {
     const js = read('../../pwa/render_icons.mjs')
-    expect(js).not.toContain('9A37F0'); expect(js).toContain('13867E')
+    expect(js).not.toContain('9A37F0'); expect(js).toContain('mark_one.svg')
   })
   it('voice text exists and defers to the UX log', () => {
     expect(existsSync(new URL('../../../../docs/design/voice.txt', import.meta.url))).toBe(true)

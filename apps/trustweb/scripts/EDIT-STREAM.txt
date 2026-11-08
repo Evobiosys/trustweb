@@ -1,0 +1,19 @@
+EDIT STREAM (personal previews, dev only)
+
+What: every edit a personal preview saves is appended as one JSON line to dev-edits.jsonl, beside the live record
+(~/.cache/trustweb-dev/dev-record.live.json; the file sits next to whatever TW_DEV_LIVE points at). The dev server
+(vite_dev_record.mjs) diffs the stored record against the posted one (src/record_diff.ts). Never truncated, never rewritten.
+Past 5 MB the whole file moves to dev-edits.<date>[-n].jsonl (append-only archive) and a fresh one starts.
+
+Line: {at, previewId, kind, ids, before, after}
+  kind: merge | archive | unarchive | delete | restore | ring-move | rename | note | field | add
+  person edits: after = changed keys (new values), before = the same keys (old values); a key only in before was removed
+  merge: ids [dropped, kept], before = dropped person, after = merged kept person
+  add: before null, after = whole person; hard removal: before = person, after null
+
+Replay (rebuilds a record from a base plus the stream, in file order; the base is never written):
+  export PATH=/opt/homebrew/opt/node@22/bin:$PATH
+  node apps/trustweb/scripts/replay_edits.mjs ~/.cache/trustweb-dev/dev-edits.jsonl <base-record.json> /tmp/rebuilt.json
+Rotated files: cat them oldest first into one file, then replay.
+
+Count: Settings > Advanced (personal preview) shows "Edits kept: N (since <date>)" [data-edit-stream-count]; GET /__tw/dev-edits.

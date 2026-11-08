@@ -19,7 +19,9 @@ import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { SharedNote } from './notes_outline'
+import type { CoMsg } from './ext/co_notes/co_chat'
 import type { CoDoc } from './ext/co_notes/co_doc'
+import type { CoGuest, CoInvite } from './ext/co_notes/co_invite'
 import type { ConnectRecord } from './connect_code'
 import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
@@ -390,6 +392,10 @@ export interface Person {
   metAt: number
   /** Wave 24b: when an expired tie was undone; counts as contact (engagement.ts). Absent: never. */
   engagementKept?: number
+  /** Wave 37 people-fields (thought_of.ts): the local days (YYYY-MM-DD, oldest first) I wrote to or about this person; how it is told to them; the day the daily line last went. */
+  thoughtOf?: string[]
+  thoughtShare?: 'passive' | 'active' | 'off'
+  thoughtSentDay?: string
   lines: NoteLine[]
   /** 'legacy-code': connected through a link without a freshness stamp (an older app); accepted for now. Local only. */
   connectedVia?: 'legacy-code'
@@ -1063,6 +1069,11 @@ export interface AppState {
   engagementNoticeDay?: string
   /** Wave 36 keep-in-touch: the local day (YYYY-MM-DD) the "Time to get in touch" notice last went out. */
   keepNoticeDay?: string
+  /** Wave 37 (browser_only_notice.ts): the person dismissed the "your data lives only in this browser" line. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
+  browserOnlyDismissed?: boolean
+  /** Wave 37 people-fields: Birthday reminders; absent = on (birthdays.ts). Rides the device sync. The day the banner last showed stays on this device. */
+  birthdayReminders?: boolean
+  birthdayNoticeDay?: string
   /** Wave 24b: when the engagement check first ran here; counts as contact for everybody (engagement.ts). Local only. */
   engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
@@ -1100,7 +1111,7 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
@@ -1329,6 +1340,11 @@ export interface AppState {
   coNotes?: CoDoc[]
   /** Wave 36 (ext/co_notes): the last 100 sends and merges of co-created notes, one readable line each (I6). Absent: none. */
   coNotesLog?: string[]
+  /** Wave 37 (co-notes-link), this phone only: the invitations I made to my co-notes (co_invite.ts), the shell of a guest who arrived by one, the note chats and this device's read secret. */
+  coInvites?: CoInvite[]
+  coGuest?: CoGuest
+  coChats?: Record<string, CoMsg[]>
+  coDevice?: string
 }
 
 /** A named list of people (and tags) an ask can be narrowed to. */

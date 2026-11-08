@@ -25,8 +25,8 @@ try {
   for (const [name, vp] of [['1280', { width: 1280, height: 900 }], ['360', { width: 360, height: 780 }]]) {
     const people = Array.from({ length: 12 }, (_, i) => mk(i, i === 1 ? { cadenceDays: 7 } : i === 2 ? { cadenceDays: 365 } : {}))
     const { ctx, page, errors } = await open(browser, { viewport: vp }, people)
-    await page.locator('button[data-view="complete"]').click(); await page.waitForTimeout(500)
-    check(`${name}: the Web view toggle opens the complete view`, (await page.locator('[data-complete-view]').count()) === 1)
+    await page.locator('.view-menu-btn').click(); await page.waitForTimeout(300); await page.locator('[data-view-drop] [data-view="complete"]').click(); await page.waitForTimeout(500)
+    check(`${name}: eye > Table opens the table`, (await page.locator('[data-complete-view]').count()) === 1)
     check(`${name}: 12 rows`, (await page.locator('[data-cv-row]').count()) === 12)
     check(`${name}: default sort = last contact ascending (most drifted first)`, (await page.locator('[data-cv-row]').first().getAttribute('data-cv-row')) === 'p11')
     check(`${name}: header (table) ${name === '1280' ? 'visible' : 'hidden'} `, (await page.locator('.cv-head').isVisible()) === (name === '1280'))
@@ -91,7 +91,7 @@ try {
   // 600 people: the table draws a window, not 600 rows
   const many = Array.from({ length: 600 }, (_, i) => mk(i))
   const { ctx, page, errors } = await open(browser, { viewport: { width: 1280, height: 900 } }, many)
-  await page.locator('button[data-view="complete"]').click(); await page.waitForTimeout(600)
+  await page.locator('.view-menu-btn').click(); await page.waitForTimeout(300); await page.locator('[data-view-drop] [data-view="complete"]').click(); await page.waitForTimeout(600)
   const n0 = await page.locator('[data-cv-row]').count()
   check(`600 people: ${n0} DOM rows (< 120)`, n0 > 0 && n0 < 120)
   await page.locator('.cv-body').evaluate((b) => { b.scrollTop = 10000 }); await page.waitForTimeout(400)

@@ -14,6 +14,7 @@ import { isArchived } from './trustzones'
 import { restoreSnapshot, snapshot } from './multi_select'
 import { goneQuiet } from './keep_in_touch'
 import type { Selection } from './multi_select'
+import { upcoming } from './birthdays'
 
 export interface RowTag { id: string; label: string; /** A tag set on the person (can be removed here); false = inherited from their ring. */ own: boolean }
 
@@ -40,7 +41,7 @@ export interface Sort { key: SortKey; dir: 1 | -1 }
 export const DEFAULT_SORT: Sort = { key: 'last', dir: 1 }
 
 export interface RowCtx { s: Pick<AppState, 'people'> & Partial<Pick<AppState, 'chats' | 'shareProfiles' | 'zoneTags' | 'uiRings'>>; tags: readonly ColourTag[]; now: number }
-export interface RowOpts { query: string; overdueOnly: boolean; quietOnly?: boolean }
+export interface RowOpts { query: string; overdueOnly: boolean; quietOnly?: boolean; birthdayOnly?: boolean }
 
 export const tagLabel = (t: ColourTag): string => t.label ?? t.id
 const fold = (v: string): string => v.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase()
@@ -78,7 +79,8 @@ export function completeRows(c: RowCtx, o: RowOpts): CompleteRow[] {
     }
   })
   const quiet = o.quietOnly ? new Set(goneQuiet(s, now).map((p) => p.id)) : null
-  return rows.filter((r) => (!o.overdueOnly || r.overdue) && (!quiet || quiet.has(r.id)) && (!q || fold([r.name, r.affil, ...r.tags.map((t) => t.label)].join(' ')).includes(q) || fold(s.people.find((p) => p.id === r.id)?.context ?? '').includes(q)))
+  const birthdays = o.birthdayOnly ? new Set(upcoming(shown, new Date(now), 30).map((u) => u.person.id)) : null
+  return rows.filter((r) => (!o.overdueOnly || r.overdue) && (!quiet || quiet.has(r.id)) && (!birthdays || birthdays.has(r.id)) && (!q || fold([r.name, r.affil, ...r.tags.map((t) => t.label)].join(' ')).includes(q) || fold(s.people.find((p) => p.id === r.id)?.context ?? '').includes(q)))
 }
 
 const text = (r: CompleteRow, key: SortKey): string => (key === 'name' ? r.name : key === 'affil' ? r.affil : (key === 'tags' ? r.tags.map((t) => t.label) : key === 'groups' ? r.groups : r.channels).join(', '))

@@ -76,7 +76,9 @@ import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
 import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
 import { inviteText, sendInvite } from './invite'
 import { PASS_ON_DEFAULT_NOTICE, dismissNotice, namePreviousId, noticeShown, noticesOff, passOnDefaultNoticeDue, setNoticesOff } from './notices'
-import { cardPopAction } from './page_stack'
+import { cardPopAction, webTabAction } from './page_stack'
+import { shouldShowBrowserOnly } from './browser_only_notice'
+import { filterSettings } from './settings_search'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit } from './card_view'
@@ -102,7 +104,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, reachOutLegendShown, ringColor, ServerJobState, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, LEANS, LineStatus, LogOutcome, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, reachOutLegendShown, ringColor, ServerJobState, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle, waLink } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
@@ -115,6 +117,7 @@ import { parsePersonShare, personShareLink } from './person_share_link'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
 import { pollRelay, postNote, readRelayOn, type RelayDeps } from './notes_relay'
+import { guestShell } from './ext/co_notes/co_invite'
 import { deserializeIdentity } from '../../demo/src/did'
 import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
@@ -154,6 +157,10 @@ import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList, peopleQuery, setPeopleQuery } from './people_list_view'
 import { keepNoticeDue, noticeText, overduePeople } from './keep_in_touch'
 import { keepInTouchRow } from './keep_in_touch_view'
+import { birthdayNoticeDue, birthdayRemindersOn, dismissAction, notifyBirthdays, upcoming } from './birthdays'
+import { birthdayRow, thoughtRow } from './people_fields_view'
+import { touchFromSync } from './touch_sync'
+import { activeLineDue, recordThought } from './thought_of'
 import { completeQuery, completeView, resetComplete, setCompleteQuery } from './complete_view'
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
@@ -195,7 +202,7 @@ import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
 import { mergeIncoming } from './matches'
 import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
-import { liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
+import { fetchEditStream, liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
@@ -272,6 +279,7 @@ import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
+import { BRAND_MARK_SVG } from './brand_mark'
 import { askWebIcon, recordIcon } from './icons/ask_web'
 import { RECORD_TAB_GLYPH, recordTabGlyph } from './record_glyph'
 import { PULSE_IDLE_PX, pulseSpreadPx } from './audio_level'
@@ -289,7 +297,7 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
 import { aiSettings, bootAi } from './llm_endpoint_view'
-import { aiButtonVisible, piConnected } from './ai_button'
+import { aiButtonTarget } from './ai_button'
 import { agentSettings } from './agent_view'
 import { ownChannels } from './channel_readers'
 import { readersBlock } from './channel_readers_view'
@@ -875,6 +883,7 @@ function checkEngagement(): void {
   if (state.engagementSince === undefined) { ensureBaseline(state, now); save() }
   // Wave 28 (Jakob 2026-11-01): nothing moves by itself any more; a quiet tie gets a zzz marker on the TrustZones and moves on a tap (zzzAccept).
   checkKeepInTouch(now)
+  checkBirthdays(now)
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
   const { names, more } = soonNames(soon)
@@ -891,6 +900,38 @@ function checkKeepInTouch(now: number): void {
   const stamp = (): void => { if (state) { state.keepNoticeDay = localDay(new Date(now)); save() } }
   if (late.length === 0) stamp()
   else notifyKind('reminder', noticeText(late.map((p) => p.name)), S.keepNoticeOpen, () => openComplete(true), stamp)
+}
+
+const BIRTHDAY_RETRY_MS = 5_000
+let birthdayRetry: ReturnType<typeof setTimeout> | undefined
+/** Wave 37 people-fields: once a day, at the first check, an in-app line for birthdays today and this week (notifyBirthdays is the hook a later browser push goes through). */
+function checkBirthdays(now: number): void {
+  if (!state || !birthdayRemindersOn(state) || !birthdayNoticeDue(state, new Date(now))) return
+  // Review: another notice is up (keep in touch, the demo offer): the birthday line waits until the slot is free instead of covering it.
+  if (!friendsEl.hidden) { clearTimeout(birthdayRetry); birthdayRetry = setTimeout(() => checkBirthdays(Date.now()), BIRTHDAY_RETRY_MS); return }
+  const list = upcoming(state.people, new Date(now), 7)
+  state.birthdayNoticeDay = localDay(new Date(now))
+  save()
+  const shown = notifyBirthdays(list, (text) => showNotice(text, '', [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-birthday-open': '', onclick: () => { hideNotice(); openComplete(false, true) } }, [S.birthdayOpen]),
+    el('button', { class: 'notice-dismiss', 'data-birthday-never': '', onclick: () => { hideNotice(); dismissAction(st()); save() } }, [S.birthdayNever]),
+    el('small', { class: 'meta' }, [S.birthdayNeverHint]),
+  ]))
+  if (shown) friendsEl.setAttribute('data-birthday-notice', '') // review: only when the birthday line is what shows
+}
+
+/** Wave 37 people-fields (thought_of.ts): the owner wrote to or about this person today; 'active' tells them once a day. */
+function thoughtOf(p: Person): void {
+  const now = new Date()
+  if (!recordThought(p, now)) return
+  save()
+  if (!p.peerId || !activeLineDue(p, now, true)) return
+  void submitText(chatIo(), p.peerId, S.thoughtLine).then((ok) => {
+    if (!ok) return
+    p.thoughtSentDay = localDay(now)
+    st().log.unshift({ id: randomId(8), at: Date.now(), from: p.name, text: S.thoughtLine, outcome: LogOutcome.Shared, peerId: p.peerId })
+    save()
+  })
 }
 
 function dismissCard(card: StackCard): void {
@@ -1078,8 +1119,9 @@ function barOpen(id: BarId): void {
   const view = viewOfBar(id) // wave 35: a view pinned into the row
   if (view) { chooseView(view as ViewKey); return }
   switch (id) {
-    case 'web': if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
-    case 'events': openEvents(); break
+    case 'web': if (webTabAction(webPage) === 'leave-page') { cardExpanded = false; webPage = null } // wave 37: Web from a card lands on the main Web view
+      if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
+    case 'events': openEvents(state?.coGuest?.eventId); break
     case 'ask': openQuery(); break
     case 'network': case 'people': case 'map': chooseView(id); break
     case 'record': onRecordTap(); break
@@ -1126,10 +1168,13 @@ function barMax(): number {
 
 function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
-  const { ids, primary } = resolveBar(state?.uiBar, barFlags())
-  const { shown } = barLayout(ids, primary, barMax())
+  // Wave 37 (co-notes-link): a guest of a co-note link gets the nested shell instead (Web, Chat in the centre, Resources; Events too for an event note).
+  const guest = state?.coGuest && state.coNotesOn ? guestShell(Boolean(state.coGuest.eventId)) : null
+  const { ids, primary } = guest ? { ids: guest.tabs, primary: guest.primary } : resolveBar(state?.uiBar, barFlags())
+  const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
-  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), more)
+  tabs.toggleAttribute('data-guest-shell', guest !== null)
+  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), ...(guest ? [] : [more]))
   tabs.classList.toggle('four', shown.length > 3)
   tabs.classList.toggle('many', shown.length > 5)
   phone.classList.toggle('ask-in-bar', shown.includes('ask'))
@@ -1315,9 +1360,9 @@ let peoplePage = false
 let pageBack = Screen.Web
 /** Wave 30: the header magnifier's filter field under the People header; it filters the list as you type, Escape clears and closes it. */
 let peopleSearchOpen = false
-function openPeople(query = '', complete = false, overdue = false): void {
+function openPeople(query = '', complete = false, overdue = false, birthdays = false): void {
   completeMode = complete
-  if (complete) resetComplete('', overdue)
+  if (complete) resetComplete('', overdue, false, birthdays)
   resetPeopleList(query)
   peopleSearchOpen = query !== ''
   peoplePage = true
@@ -1327,8 +1372,8 @@ function openPeople(query = '', complete = false, overdue = false): void {
 }
 /** Wave 36 complete-view: the People page showing everyone as a table (the 'complete' view). */
 let completeMode = false
-function openComplete(overdue = false): void {
-  openPeople('', true, overdue)
+function openComplete(overdue = false, birthdays = false): void {
+  openPeople('', true, overdue, birthdays)
 }
 /** The header search field feeds whichever list the People page shows. */
 const peopleSearchQuery = (): string => (completeMode ? completeQuery() : peopleQuery())
@@ -1425,6 +1470,14 @@ function go(s: Screen): void {
   render()
 }
 
+/** Wave 37: the logo family's one-ring mark: top-left of every header that has no Back button, and the start screens' logo. */
+function brandMark(cls = 'brand-mark'): HTMLElement {
+  const m = el('span', { class: cls })
+  m.dataset.brandMark = ''
+  m.innerHTML = BRAND_MARK_SVG
+  return m
+}
+
 /**
  * Every header: title left; right, the screen's own button and then the
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
@@ -1438,7 +1491,7 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
-      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
+      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : brandMark(),
       el('h2', {}, [title]),
       opts.glyph ?? null,
     ]),
@@ -1502,6 +1555,17 @@ function openAdvancedSettings(): void {
   settingsSheet()
 }
 
+/** Wave 37: the Web header's AI button: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
+function openAiButton(): void {
+  const to = aiButtonTarget(configured(st().advanced?.ai))
+  if (to.kind === 'ask') { openQuery(); return }
+  try { localStorage.setItem('trustweb.ui.settings.advanced', '1') } catch { /* not remembered */ }
+  settingsSheet()
+  const at = sheet.querySelector(to.anchor)
+  for (let d = at?.closest('details'); d; d = d.parentElement?.closest('details')) { d.open = true; if (d.dataset.settingsGroup) settingsOpen.add(d.dataset.settingsGroup) }
+  at?.scrollIntoView({ block: 'start' })
+}
+
 const PIN_ACTIONS: Record<HeaderPin, { icon: string; run: () => void }> = {
   dnd: { icon: 'dnd', run: () => undefined },
   advanced: { icon: 'more', run: openAdvancedSettings },
@@ -1518,8 +1582,7 @@ function mountHeaderControls(): void {
   gear.dataset.settingsGear = '1'
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
-  const ai = screen === Screen.Web && aiButtonVisible({ configured: configured(st().advanced?.ai), piConnected: piConnected(st().agent, Date.now()) })
-    ? iconButton('sparkle', S.aiButton, openQuery, 'ai-btn') : null
+  const ai = screen === Screen.Web ? iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn') : null
   if (ai) ai.setAttribute('data-ai-button', '')
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')
@@ -1760,6 +1823,7 @@ function hideNotice(): void { friendsFade.close() }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
   friendsEl.classList.remove('stack', 'line', 'tap-close')
+  friendsEl.removeAttribute('data-birthday-notice') // review: the birthday line marks the box only while it shows
   friendsEl.onclick = null
   friendsEl.replaceChildren(
     el('b', {}, [title]),
@@ -2327,6 +2391,7 @@ function screenStart(): Node[] {
     void net.start().then(announceLink).then(() => refreshPush()).then(pollNotesRelay)
     if (invite && !solo && !demo) offerPendingConnect()
     else void completePendingConnect()
+    coNotes?.start?.()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
     maybeOpenPendingIntro()
@@ -2334,7 +2399,7 @@ function screenStart(): Node[] {
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
-    el('div', { class: 'logo' }, ['◎']),
+    brandMark('logo logo-mark'),
     el('h1', {}, [S.appName]),
     el('p', { class: 'tagline' }, [S.tagline]),
     recordKeptAside ? el('p', { class: 'warn', 'data-record-kept-aside': '1' }, [S.recordKeptAside]) : null,
@@ -2351,7 +2416,7 @@ function screenStart(): Node[] {
             noteShare ? el('p', { class: 'meta', 'data-note-share-in': '' }, [S.noteShareIn(inviter, noteShare.title)]) : null,
             zoneShare || personShare ? personShareBox(inviter, (zoneShare ?? personShare) as NonNullable<typeof personShare>, zoneShare) : null,
           ])
-        : el('p', { class: 'lead' }, [S.startLead]),
+        : coNotes?.startLine?.() ?? el('p', { class: 'lead' }, [S.startLead]),
     !invite && window.top === window
       ? el('a', { class: 'solo-card', href: APP_URL + 'demo/' }, [
           el('b', {}, [S.startSolo]),
@@ -2400,7 +2465,7 @@ function takeOverScreen(h: HandoverLink): Node[] {
   }
   const btn = el('button', { class: 'btn btn-electric', onclick: () => void take() }, [S.takeButton(h.account)])
   return [el('div', { class: 'start' }, [
-    el('div', { class: 'logo' }, ['◎']),
+    brandMark('logo logo-mark'),
     el('h1', {}, [S.appName]),
     el('p', { class: 'tagline' }, [S.tagline]),
     el('div', { class: 'invite test-invite' }, [
@@ -2669,7 +2734,7 @@ function webViewRow(view: WebView): HTMLElement {
     })
     : el('span', { class: 'web-view' }, [heading ? S.viewNames[heading] : ''])
   if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
-  return el('div', { class: 'web-view-row' }, [mid, view === 'rings' && !webSearchOpen ? el('button', { class: 'cv-open', 'data-view': 'complete', onclick: () => chooseView('complete') }, [S.completeOpen]) : null])
+  return el('div', { class: 'web-view-row' }, [mid])
 }
 
 /** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
@@ -2842,6 +2907,8 @@ const supportIo: SupportIo = {
 
 function screenChat(): Node[] {
   const s = st()
+  const guest = coNotes?.guest?.()
+  if (guest) return guest.body()
   const view = chatView({ sources: messengers, trustweb: trustwebThreads, openTrustweb: chatSheet, dndSince, redraw: () => go(Screen.Chat) })
   const body = el('div', { class: 'chat-body' }, chatListBody())
   const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
@@ -2885,6 +2952,21 @@ function passOnNotice(): null {
   return null
 }
 
+/** Wave 37: the visit began here; hidden once = the person left and came back (browser_only_notice.ts). */
+const visitOpenedAt = Date.now()
+let visitWasHidden = document.visibilityState === 'hidden'
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') visitWasHidden = true; else if (visitWasHidden && screen === Screen.Web) render() })
+setTimeout(() => { if (screen === Screen.Web) render() }, 5 * 60_000 + 1000)
+function browserOnlyNotice(): HTMLElement | null {
+  if (!state || !shouldShowBrowserOnly({ dismissed: Boolean(state.browserOnlyDismissed), demo: demoPhone(), openedAt: visitOpenedAt, wasHidden: visitWasHidden }, Date.now())) return null
+  return el('p', { class: 'browser-only', 'data-browser-only-notice': '' }, [
+    S.browserOnlyNotice + ' ',
+    el('a', { href: 'https://trustintheweb.com/', target: '_blank', rel: 'noopener noreferrer' }, [S.browserOnlyLink]),
+    ' ' + S.browserOnlyNoticeEnd + ' ',
+    el('button', { class: 'browser-only-x', type: 'button', 'data-browser-only-dismiss': '', onclick: () => { st().browserOnlyDismissed = true; save(); render() } }, [S.browserOnlyDismiss]),
+  ])
+}
+
 function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
@@ -2911,6 +2993,7 @@ function screenWeb(): Node[] {
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
+    browserOnlyNotice(),
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
@@ -3270,6 +3353,11 @@ function personQr(p: Person): void {
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
 const invitationIo = (): InvitationIo => ({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), newId: () => randomId(8) })
 
+const logThought = (p: Person) => (line: string): void => {
+  st().log.unshift({ id: randomId(8), at: Date.now(), from: p.name, text: line, outcome: LogOutcome.Shared, peerId: p.peerId })
+  save()
+}
+
 function cardMore(p: Person): Node[] {
   const cons = chatOnConsensual(p, st().preferConsensual)
   const rows: Record<string, () => (Node | null)[]> = {
@@ -3285,6 +3373,8 @@ function cardMore(p: Person): Node[] {
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       keepInTouchRow({ state: st, save, redraw: render, toast: (msg, undo) => toast(msg, { onClick: undo }) }, p),
+      birthdayRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
+      thoughtRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
@@ -3313,6 +3403,26 @@ function notesHooks(): Parameters<typeof sharedNotesSection>[1] {
 
 // Wave 32 (notes_relay.ts): shared notes above ~100 items travel sealed through the backup server.
 const relayDeps = (): RelayDeps => ({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() })
+/** Wave 37: the relay is on and there is one here (a dev server stands in for it, so a preview can be tried without the live host). */
+const relayOn = (): boolean => readRelayOn() && (canRegister(SERVER_ORIGIN) || import.meta.env.DEV)
+
+/** Wave 37 (co-notes-link): the guest accepted to connect with the owner of a shared note: the existing connect flow, the owner lands in my Intending ring. */
+async function connectToNoteOwner(who: { did: string; id: string; name: string }): Promise<string | null> {
+  try {
+    await net.start()
+    const peer = await net.completeConnect({ did: who.did, from: { id: who.id, displayName: who.name } }, Ring.Intending)
+    const s = st()
+    let person = s.people.find((p) => p.peerId === peer.id)
+    if (!person) { person = { id: randomId(8), name: peer.displayName, context: '', ring: Ring.Intending, metAt: Date.now(), lines: [], peerId: peer.id }; s.people.push(person) }
+    save()
+    render()
+    return person.id
+  } catch (e) {
+    console.warn('connect to the note owner', e)
+    return null
+  }
+}
+
 /** The relay DID this person is reached by: the paired peer's, else the one an event link told me. */
 const relayDidOf = (p: Person): string | undefined => st().peers.find((x) => x.id === p.peerId)?.did ?? p.did
 
@@ -3560,7 +3670,7 @@ function leanRow(p: Person): HTMLElement | null {
   const note = (): HTMLElement => {
     const area = el('textarea', { class: 'field', rows: '4', maxlength: String(GENERAL_NOTE_MAX), placeholder: S.generalNotePh(p.name), 'aria-label': S.generalNoteTitle, 'data-lean-note': '' })
     area.value = generalNoteOf(p)
-    const saver = createAutosaver({ commit: (text) => { if (setGeneralNote(p, text)) save() } })
+    const saver = createAutosaver({ commit: (text) => { if (setGeneralNote(p, text)) { save(); thoughtOf(p) } } })
     area.addEventListener('input', () => saver.input(area.value))
     area.addEventListener('blur', () => saver.flush())
     const saveBtn = el('button', { class: 'btn btn-electric btn-sm', 'data-lean-note-save': '', onclick: () => { saver.flush(); toast(S.noteSaved) } }, [S.noteSave])
@@ -3947,7 +4057,7 @@ function chatSheet(personId: string, open: StackOpen = {}): void {
   const handle = renderChat({
     ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p), theirChannels: p.theirChannels }, S: chatStrings(),
     copy: (text) => copyLink(text, S.chatCopied), open: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
-    isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo,
+    isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo, onDraft: () => thoughtOf(p),
   })
   openSheet([handle.el])
   if (p.peerId) openChat = { peerId: p.peerId, refresh: handle.refresh }
@@ -4091,6 +4201,8 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   const r = receiveText(s.chats ?? NO_CHATS, peer.id, text, ts, now, bindRe(re, s.sentAsks, peer.id, now))
   if (!r.message) return
   s.chats = r.book
+  const who = personOf(s.people, peer.id)
+  if (who) touchFromSync(s, { personId: who.id, at: r.message.sentAt }, now)
   save()
   if (isBlocked(personOf(s.people, peer.id))) return
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
@@ -4726,7 +4838,12 @@ const extHooks: ExtHooks = {
   backupNow: () => backup.backUpNow(),
   openPerson: openCardPage,
   didOf: (id) => { const p = st().people.find((x) => x.id === id); return p ? relayDidOf(p) : undefined },
-  relay: () => (state?.identity && readRelayOn() && canRegister(SERVER_ORIGIN) ? { deps: relayDeps(), identity: deserializeIdentity(state.identity) } : null),
+  relay: () => (state?.identity && relayOn() ? { deps: relayDeps(), identity: deserializeIdentity(state.identity) } : null),
+  relayDeps: () => (relayOn() ? relayDeps() : null),
+  connectTo: connectToNoteOwner,
+  joinEventLink: (link) => { const ev = decodeEventLink(link.slice(Math.max(0, link.indexOf('#')))); if (!ev) return null; const id = joinEvent(st(), ev, Date.now()); save(); return id },
+  openChat: (personId) => chatSheet(personId),
+  guestChanged: (show) => { renderTabs(); if (!show) go(Screen.Web); else if (st().coGuest?.eventId) openEvents(st().coGuest?.eventId); else go(Screen.Chat) },
 }
 const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
 const coNotes = EXT_MODULES.find((m) => m.id === 'co-notes')?.screen(extHooks)
@@ -6593,6 +6710,8 @@ function settingsSection(key: string, title: string, children: (Node | null)[], 
 
 /** Group ids that stay open across the redraws a toggle causes; reset to the lead group whenever Settings opens afresh. */
 const settingsOpen = new Set<string>()
+/** Wave 37: what the Settings search field holds; kept over the redraws a toggle causes. */
+let settingsQuery = ''
 
 /** Wave 27: the groups in `order`; the first opens, the rest are folded. An empty group is not drawn. */
 function settingsGroups(groups: Record<SettingsSection, (Node | null)[]>, order: SettingsSection[]): (Node | null)[] {
@@ -6622,6 +6741,13 @@ function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, 
   }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
+/** Dev only (Settings > Advanced): "Edits kept: N (since <date>)", filled once the dev server answers. */
+function editStreamLine(): HTMLElement {
+  const p = el('p', { class: 'meta', 'data-edit-stream-count': '' }, [S.editsKept(0, null)])
+  void fetchEditStream().then((i) => { if (i) p.textContent = S.editsKept(i.count, i.since ? new Date(i.since).toLocaleDateString('sv') : null) })
+  return p
+}
+
 /** Settings > Bottom row: one button into the ⋮ sheet, where the row is arranged (wave 31; the old per-slot pickers are archived in DEVLOG/wave31/archive/bottom-bar). */
 function tabRowSettings(): (Node | null)[] {
   return [el('button', { class: 'btn btn-ghost', 'data-settings-bar': '', onclick: barSheet }, [S.barOpenSettings])]
@@ -6629,6 +6755,7 @@ function tabRowSettings(): (Node | null)[] {
 
 function settingsSheet(): void {
   const s = st()
+  if (sheet.dataset.kind !== 'settings') settingsQuery = ''
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
   if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
@@ -6826,6 +6953,7 @@ function settingsSheet(): void {
     ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
     ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
+    ...(liveDevActive() ? [editStreamLine()] : []),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),
@@ -6861,6 +6989,10 @@ function settingsSheet(): void {
     }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     readersBlock({ state: st, save, redraw: settingsSheet, openSheet: (c) => openSheet(c), toast }),
+    el('button', {
+      class: 'radio' + (birthdayRemindersOn(s) ? ' on' : ''), 'aria-pressed': String(birthdayRemindersOn(s)), 'data-birthday-reminders': '1',
+      onclick: () => { s.birthdayReminders = !birthdayRemindersOn(s); save(); settingsSheet() },
+    }, [el('b', {}, [S.birthdayRemindersLabel]), el('small', {}, [S.birthdayRemindersHint])]),
     el('div', { 'data-blocked-list': '1' }, [
       el('b', {}, [S.blockedTitle]),
       ...(s.people.some(isBlocked)
@@ -6900,6 +7032,10 @@ function settingsSheet(): void {
   }
   openSheet([
     el('h3', {}, [S.setTitle]),
+    el('input', {
+      class: 'field', type: 'search', 'data-settings-search': '', placeholder: S.setSearchPh, 'aria-label': S.setSearchAria, autocomplete: 'off', value: settingsQuery,
+      oninput: (e) => { settingsQuery = (e.target as HTMLInputElement).value; filterSettings(sheet, settingsQuery) },
+    }),
     viewRow(),
     apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
@@ -6909,6 +7045,7 @@ function settingsSheet(): void {
     ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
   ])
   sheet.dataset.kind = 'settings'
+  if (settingsQuery) filterSettings(sheet, settingsQuery)
 }
 
 /**

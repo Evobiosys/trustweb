@@ -14,3 +14,8 @@ export function cardPopAction(state: unknown, expanded: boolean): 'collapse' | '
   if (t === 'card-expanded' || typeof t === 'number') return 'none'
   return 'leave'
 }
+
+/** Wave 37: the Web press in the bottom bar. A page over the Web (a person's card, more, the Curator) closes first, so the press lands on the main Web view. */
+export function webTabAction(page: unknown): 'leave-page' | 'tab' {
+  return page ? 'leave-page' : 'tab'
+}

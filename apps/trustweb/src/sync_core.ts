@@ -61,7 +61,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
-  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'engagementSince', 'awayAsks', 'sentAsks',
+  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'birthdayNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
   'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
@@ -69,6 +69,8 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', 'agent',
   // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
   'groups',
+  // wave 37 co-notes-link: invites, guest shell, note chats and this device's secret belong to this phone only
+  'coInvites', 'coGuest', 'coChats', 'coDevice',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */

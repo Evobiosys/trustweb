@@ -1586,3 +1586,55 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .co-share-plain{margin-left:auto; font-size:var(--fs-1)}
 .co-ai{font-size:var(--fs-1); color:var(--ink-2); border:1px solid var(--line); border-radius:var(--r-chip); padding:0 6px}
 .co-head{font-weight:600}
+
+/* wave 37 ring-rule */
+.node.fade-in{animation:ring-fade-in 1200ms ease-out both}
+.node.fade-out{animation:ring-fade-out 1200ms ease-in both;pointer-events:none}
+@keyframes ring-fade-in{from{opacity:0;transform:translate(-50%,-50%) scale(.4)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes ring-fade-out{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-50%) scale(.4)}}
+@media (prefers-reduced-motion:reduce){ .node.fade-in,.node.fade-out{animation:none} }
+/* wave 37 renames */
+.browser-only{margin:8px 12px; padding:8px 10px; font-size:var(--fs-1,12px); color:var(--ink-soft); background:var(--card,#F5F0E8); border-radius:var(--r-chip,8px); overflow-wrap:anywhere}
+.browser-only a,.browser-only-x{text-decoration:underline; color:inherit}
+.browser-only-x{background:none; border:0; padding:0 0 0 6px; font:inherit; cursor:pointer}
+[data-birthday-notice] .notice-dismiss,[data-birthday-notice] [data-birthday-open]{text-decoration:underline}
+/* wave 37 ai-button */
+.ai-plans-title{margin:var(--s-2) 0 0; font-family:var(--font-serif); font-size:var(--fs-4,20px)}
+.ai-plans{display:grid; grid-template-columns:1fr; gap:var(--s-3); min-width:0}
+@media (min-width:720px){.ai-plans{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.ai-plan{display:flex; flex-direction:column; gap:var(--s-1); min-width:0; padding:var(--s-4); border:1.5px solid var(--line); border-radius:16px; background:var(--card)}
+.ai-plan p{margin:0}
+.ai-plan-name{margin:0; font-family:var(--font-serif); font-size:26px; font-weight:600; color:var(--ink)}
+.ai-plan-price{font-family:var(--font-serif); font-size:30px; font-weight:600; color:var(--teal); overflow-wrap:anywhere}
+.ai-plan-btn{margin-top:auto; align-self:stretch; box-sizing:border-box; text-align:center; text-decoration:underline; background:var(--teal); color:#fff}
+.ai-byok-toggle{font-size:12px; color:var(--ink-soft); text-decoration:underline; cursor:pointer}
+.ai-byok[open] > .ai-byok-toggle{margin-bottom:var(--s-2)}
+/* wave 37 people-fields */
+.keep-row .field{max-width:100%; min-width:0}
+[data-birthday-notice] .notice-dismiss{text-decoration:underline}
+[data-birthday-notice] small.meta{color:var(--muted,#6F7C75); font-size:.75em; flex-basis:100%}
+.cv-chip[data-cv-birthdays]{text-decoration:underline}
+/* wave 37 logos */
+.brand-mark{display:inline-flex; flex-shrink:0; color:var(--teal)}
+.brand-mark svg{width:28px; height:28px; display:block}
+.logo.logo-mark{background:none; border-radius:0; color:var(--teal)}
+.logo-mark svg{width:100%; height:100%; display:block}
+/* wave 37 overlay-fixes */
+.ring-card-grip{position:sticky; bottom:0; align-self:flex-end; flex:none; width:18px; height:18px; margin:-6px -8px -4px 0; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg,transparent 55%,var(--line-strong) 55%,var(--line-strong) 65%,transparent 65%,transparent 78%,var(--line-strong) 78%,var(--line-strong) 88%,transparent 88%)}
+.merge-btn{min-width:32px; min-height:32px; padding:0 6px; text-decoration:underline; font-size:16px}
+.merge-actions{display:inline-flex; flex-wrap:nowrap; align-items:center; gap:6px}
+/* wave 37 co-notes-link */
+.co-share-sheet,.co-chat,.co-access,.co-general{display:flex; flex-direction:column; gap:var(--s-3); min-width:0; max-width:100%}
+.co-share-sheet{padding-top:var(--s-3)}
+.co-share-sheet button,.co-chat button,.co-share-sheet summary{text-decoration:underline}
+.co-ring-row{display:flex; flex-wrap:wrap; align-items:center; gap:var(--s-2); min-width:0}
+.co-ring-row .btn.on{border-color:var(--trust); color:var(--trust-strong); background:var(--trust-tint)}
+.co-access-row{display:flex; flex-wrap:wrap; align-items:center; gap:var(--s-2); min-width:0; padding:var(--s-2) 0; border-bottom:1px solid var(--line)}
+.co-access-who{display:flex; flex-direction:column; flex:1 1 10em; min-width:0; overflow-wrap:anywhere}
+.co-advanced{display:flex; flex-direction:column; gap:var(--s-2)}
+.co-msgs{display:flex; flex-direction:column; gap:var(--s-2); min-width:0; max-height:40vh; overflow-y:auto; overflow-wrap:anywhere}
+.co-msg{padding:var(--s-2) var(--s-3); border-radius:var(--r-chip); background:var(--surface-2, rgba(0,0,0,.04)); max-width:90%; align-self:flex-start}
+.co-msg.mine{align-self:flex-end; background:var(--trust-tint)}
+.co-chat-send{display:flex; gap:var(--s-2); min-width:0}
+.co-chat-send .field{flex:1 1 8em; min-width:0}
+[data-guest-shell] .bar-more{display:none}
