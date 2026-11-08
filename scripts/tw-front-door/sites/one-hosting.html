@@ -1,0 +1,32 @@
+<!-- SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later -->
+<hr class="rule">
+
+<section class="block" id="hosting">
+  <div class="sechead">
+    <p class="chnum">Hosted or your own</p>
+    <h2>Use it the way you like</h2>
+  </div>
+  <div class="featgrid">
+    <div class="fcard">
+      <h3>Hosted, the default</h3>
+      <p>Open the app at app.trustweb.one. It works in your browser and your data stays there. An optional account at <a href="{{COM}}">TrustInTheWeb.com</a> will sync it between your devices (starting soon).</p>
+      <div class="btnrow"><a class="btn-primary" href="{{APP}}/">Open the app</a></div>
+    </div>
+    <div class="fcard" id="self-host">
+      <h3>Run it yourself</h3>
+      <p>Build it and serve the files from any web server. The public copy of the code is <a href="https://github.com/evobiosys/web-of-trust" rel="noopener">on GitHub</a>; it is paused and does not hold this app yet. Until it does, ask us for the current code at <a href="mailto:connect@evobiosys.org">connect@evobiosys.org</a>; the script below builds it.</p>
+      <pre class="script" id="self-host-script"><code>git clone https://github.com/evobiosys/web-of-trust.git
+cd web-of-trust
+pnpm install --frozen-lockfile
+cd apps/trustweb
+TW_BASE=/ ../crm/node_modules/.bin/vite build
+npx serve dist</code></pre>
+      <button type="button" class="btn-ghost copy-btn" data-copy="self-host-script">Copy the script</button>
+    </div>
+  </div>
+  <p>Switching away from Big Tech without losing your devices: <a href="https://sovswitch.com">SovSwitch</a>.</p>
+</section>
+
+<section class="block" id="stewards">
+  <p class="small">Want to know who stewards the code? <a href="{{ORG}}">TrustInTheWeb.org</a></p>
+</section>

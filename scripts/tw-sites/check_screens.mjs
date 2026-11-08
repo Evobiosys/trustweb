@@ -41,7 +41,7 @@ try {
         const { scroll, inner } = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: window.innerWidth }))
         if (scroll > inner) bad.push(`${key}/${name} @${width} ${scheme}: scrollWidth ${scroll} > ${inner}`)
         if (name === 'index.html') {
-          const file = `sites-three-${key}-${width}${scheme === 'dark' ? '-dark' : ''}.png`
+          const file = `${process.env.SHOT_PREFIX || 'sites-three'}-${key}-${width}${scheme === 'dark' ? '-dark' : ''}.png`
           await page.screenshot({ path: path.join(shotsDir, file), fullPage: true })
         }
       }
