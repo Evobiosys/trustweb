@@ -12,6 +12,11 @@ export const AGENT_TIMEOUT_MS = 2_000
 
 export const aiButtonVisible = (on: { configured: boolean; piConnected: boolean }): boolean => on.configured && on.piConnected
 
+/** Wave 37: the button always sits in the Web header; with an endpoint it opens Ask, without one it leads to the plan choice in Settings > Advanced > Your AI. */
+export const AI_PLAN_ANCHOR = '[data-ai-group="sub"]'
+export const aiButtonTarget = (configured: boolean): { kind: 'ask' } | { kind: 'settings'; anchor: string } =>
+  configured ? { kind: 'ask' } : { kind: 'settings', anchor: AI_PLAN_ANCHOR }
+
 export function piConnected(agent: AgentLink | undefined, nowMs: number): boolean {
   const at = agent?.connectedAt ? Date.parse(agent.connectedAt) : NaN
   return Number.isFinite(at) && at <= nowMs && nowMs - at < AGENT_TTL_MS

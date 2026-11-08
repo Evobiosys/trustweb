@@ -128,3 +128,13 @@ describe('pollsOnOpen', () => {
     expect(pollsOnOpen(undefined)).toBe(false)
   })
 })
+
+describe('PLAN_CARDS (wave 37)', () => {
+  it('lists small 5, big 18, enterprise in that order', async () => {
+    const { PLAN_CARDS, PLANS } = await import('../../src/ai_subscription.ts')
+    expect(PLAN_CARDS.map((c) => c.id)).toEqual(['light', 'ai', 'enterprise'])
+    expect(PLAN_CARDS.map((c) => c.euro)).toEqual([5, 18, null])
+    expect(PLAN_CARDS[0].euro).toBe(PLANS.light.euro)
+    expect(PLAN_CARDS[1].euro).toBe(PLANS.ai.euro)
+  })
+})

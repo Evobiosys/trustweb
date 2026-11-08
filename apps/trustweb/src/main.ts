@@ -291,7 +291,7 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
 import { aiSettings, bootAi } from './llm_endpoint_view'
-import { aiButtonVisible, piConnected } from './ai_button'
+import { aiButtonTarget } from './ai_button'
 import { agentSettings } from './agent_view'
 import { ownChannels } from './channel_readers'
 import { readersBlock } from './channel_readers_view'
@@ -1505,6 +1505,17 @@ function openAdvancedSettings(): void {
   settingsSheet()
 }
 
+/** Wave 37: the Web header's AI button: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
+function openAiButton(): void {
+  const to = aiButtonTarget(configured(st().advanced?.ai))
+  if (to.kind === 'ask') { openQuery(); return }
+  try { localStorage.setItem('trustweb.ui.settings.advanced', '1') } catch { /* not remembered */ }
+  settingsSheet()
+  const at = sheet.querySelector(to.anchor)
+  for (let d = at?.closest('details'); d; d = d.parentElement?.closest('details')) { d.open = true; if (d.dataset.settingsGroup) settingsOpen.add(d.dataset.settingsGroup) }
+  at?.scrollIntoView({ block: 'start' })
+}
+
 const PIN_ACTIONS: Record<HeaderPin, { icon: string; run: () => void }> = {
   dnd: { icon: 'dnd', run: () => undefined },
   advanced: { icon: 'more', run: openAdvancedSettings },
@@ -1521,8 +1532,7 @@ function mountHeaderControls(): void {
   gear.dataset.settingsGear = '1'
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
-  const ai = screen === Screen.Web && aiButtonVisible({ configured: configured(st().advanced?.ai), piConnected: piConnected(st().agent, Date.now()) })
-    ? iconButton('sparkle', S.aiButton, openQuery, 'ai-btn') : null
+  const ai = screen === Screen.Web ? iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn') : null
   if (ai) ai.setAttribute('data-ai-button', '')
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')

@@ -350,7 +350,7 @@ export const S = {
   youReachedOut: 'You reached out',
   ringReachedOut: 'Reached out',
   storageEphemeral: 'This browser blocks storage, so this visit is not saved.',
-  recordKeptAside: 'TrustWeb on this device holds a saved web this version cannot read. It is kept aside, untouched: starting again here does not replace it. Write to connect@trustweb.one and we help you get it back.',
+  recordKeptAside: 'TrustWeb on this device holds a saved web this version cannot read. It is kept aside, untouched: starting again here does not replace it. Write to connect@evobiosys.org and we help you get it back.',
 
   navWeb: 'Web',
   navInventory: 'Resources',
@@ -3197,7 +3197,7 @@ export const S = {
   agentHint: 'Optional. The Your AI button shows only with an endpoint above and a connected agent; a check holds for 10 minutes.',
   // wave 36 ai-subscription
   aiSubTitle: 'TrustInTheWeb.com subscription',
-  aiSubPlans: { ai: 'AI 18 € per month incl. tax', light: 'Light 5 € per month incl. tax' } as Record<string, string>,
+  aiSubPlans: { ai: 'Big 18 € per month incl. tax', light: 'Small 5 € per month incl. tax' } as Record<string, string>,
   aiSubUses: 'Powers the Ask your web summaries and the reading of the requests you type.',
   aiSubQuota: (n: number) => `Up to ${n} asks a month.`,
   aiSubPrivacy: 'What is sent: the request you type, or for a summary your question with the matches shown (names and items from your web). It goes through trustweb.one to a computer run by TrustInTheWeb, is answered there and is not stored.',
@@ -3291,4 +3291,13 @@ export const S = {
   // wave 37 renames: Settings search
   setSearchPh: 'Search settings',
   setSearchAria: 'Search settings',
+  // wave 37 ai-button
+  aiPlansTitle: 'Choose your AI plan',
+  aiPlanPerMonth: 'per month, tax included',
+  aiPlanCards: {
+    light: { name: 'Small', price: '5 €', lines: ['For now and then.', 'Powers Ask your web and the reading of the requests you type.'] },
+    ai: { name: 'Big', price: '18 €', lines: ['For every day.', 'The same, with five times more asks.'] },
+    enterprise: { name: 'Enterprise', price: 'Talk with us', lines: ['For teams and organisations.', 'Your own set-up, size and support.'], button: 'Write to us' },
+  } as Record<string, { name: string; price: string; lines: string[]; button?: string }>,
+  aiPlanChoose: (name: string) => `Choose ${name}`,
 } as const
