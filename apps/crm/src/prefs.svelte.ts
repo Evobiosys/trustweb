@@ -133,7 +133,8 @@ export const prefs: Prefs = $state(load())
 export function applyTheme(): void {
   (host.root ?? document.documentElement).dataset.theme = prefs.light ? 'light' : 'dark'
 }
-applyTheme()
+// Wave 37: only inside the Curator's own element. Loaded lazily by TrustWeb (a dot moved to a ring) with no element yet, this wrote data-theme="dark" on the whole page; the standalone entry (main.ts) applies it itself.
+if (host.root) applyTheme()
 
 export function savePrefs(): void {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)) } catch { /* browser refused: kept in memory */ }

@@ -1618,3 +1618,7 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .brand-mark svg{width:28px; height:28px; display:block}
 .logo.logo-mark{background:none; border-radius:0; color:var(--teal)}
 .logo-mark svg{width:100%; height:100%; display:block}
+/* wave 37 overlay-fixes */
+.ring-card-grip{position:sticky; bottom:0; align-self:flex-end; flex:none; width:18px; height:18px; margin:-6px -8px -4px 0; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg,transparent 55%,var(--line-strong) 55%,var(--line-strong) 65%,transparent 65%,transparent 78%,var(--line-strong) 78%,var(--line-strong) 88%,transparent 88%)}
+.merge-btn{min-width:32px; min-height:32px; padding:0 6px; text-decoration:underline; font-size:16px}
+.merge-actions{display:inline-flex; flex-wrap:nowrap; align-items:center; gap:6px}

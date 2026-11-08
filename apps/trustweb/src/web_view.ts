@@ -46,7 +46,9 @@ import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
 import { createCountdown } from './merge_countdown'
-import { HOLD_MS, type HoldEvent, hitDot, holdStart, holdStep } from './dot_merge'
+import { HOLD_MS, type HoldEvent, hitDot, holdEnabled, holdStart, holdStep } from './dot_merge'
+import { onRingLine, ringStrokeOpacity, ringStrokeWidth } from './ring_hit'
+import { makeResizable } from './overlay_resize'
 
 /** The rings' own layout size (px): the viewBox, and the box a pointer is read against. */
 export const RINGS_SIZE = 352
@@ -253,8 +255,8 @@ export function createWebView(deps: WebViewDeps): WebView {
     for (const r of ringsGeo.rings) {
       const c = document.createElementNS(NS, 'circle')
       c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(ringsGeo.radius[r] * k)); c.setAttribute('data-ring', r)
-      c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', r === Ring.Unsorted ? '.35' : '.55')
-      c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : r === Ring.Intending ? '1' : '1.4')
+      c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', String(ringStrokeOpacity(r)))
+      c.setAttribute('stroke-width', String(ringStrokeWidth(r)))
       if (guideDimmed(hidden.has(r), false)) c.style.opacity = HIDDEN_GUIDE_OPACITY
       c.setAttribute('stroke-dasharray', r === Ring.Intending ? '1 6' : r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
       svg.appendChild(c)
@@ -412,6 +414,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       box.addEventListener('pointerenter', () => step({ type: 'enter-card' }))
       box.addEventListener('pointerleave', () => step({ type: 'leave' }))
       wrap.appendChild(box)
+      makeResizable(box, r, wrap.getBoundingClientRect().width / RINGS_SIZE)
       cardShown(true)
       document.addEventListener('keydown', onEsc)
     }
@@ -432,13 +435,12 @@ export function createWebView(deps: WebViewDeps): WebView {
       const since = performance.now()
       dwellTimer = setTimeout(() => { if (overlayAllowed({ dragging: dragged, dwellMs: performance.now() - since })) step({ type: 'enter-ring', ring }, { clientX: dwellAt.x, clientY: dwellAt.y }) }, OVERLAY_DWELL_MS)
     }
-    if (!desk) { // the band: the pointer within RING_LINE_HIT of a ring's line (nodes, handles and the card keep their own hover)
+    if (!desk) { // the band: the pointer on a ring's stroke (nodes, handles and the card keep their own hover)
       let onBand: Ring | null = null
       wrap.addEventListener('pointermove', (e) => {
         const over = e.target as HTMLElement
         if (!mouse(e) || over.closest('[data-ring-card], .ring-toggle')) return
-        const t = menuTarget(localPoint(e, wrap.getBoundingClientRect()), ringsGeo, k)
-        const band = t.onLine && !over.closest('.node, .ring-more') ? t.near : null
+        const band = over.closest('.node, .ring-more') ? null : onRingLine(ringsGeo, localPoint(e, wrap.getBoundingClientRect()), k) // wave 37: the stroke itself, not the whole annulus
         if (band === onBand) { if (band && !restedAt(dwellAt, { x: e.clientX, y: e.clientY }) && hover.open !== band) dwell(band, e); return }
         clearTimeout(dwellTimer)
         if (band) dwell(band, e); else if (onBand) step({ type: 'leave' })
@@ -722,7 +724,7 @@ export function createWebView(deps: WebViewDeps): WebView {
           const step = (): void => {
             const t = countdown.tick(performance.now())
             if (t.fire) { stopCount(); mergeDrop(over); return }
-            if (t.secondsLeft !== shown) { shown = t.secondsLeft; offerMerge(p, over, shown) }
+            if (t.secondsLeft !== shown) { shown = t.secondsLeft; offerMerge(p, over, shown, () => { stopCount(); mergeDrop(over) }, () => { cancelled = true; holdApply({ type: 'leave' }) }) }
           }
           step()
           countTimer = window.setInterval(step, 200)
@@ -739,7 +741,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       const onEscape = (e: KeyboardEvent): void => { if (e.key === 'Escape' && hold.phase !== 'none') { cancelled = true; holdApply({ type: 'leave' }) } }
       window.addEventListener('keydown', onEscape)
       const holdMove = (e: PointerEvent): void => {
-        if (!mergeSheet || selectMode) return
+        if (!holdEnabled({ canMerge: Boolean(mergeSheet), groupSize: selectMode && chosen.has(p.id) ? chosen.size : 1 })) return
         const dots = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')].map((n) => { const r = n.getBoundingClientRect(); return { id: n.dataset.pid ?? '', left: r.left, top: r.top, right: r.right, bottom: r.bottom } })
         const now = performance.now()
         clearTimeout(holdTimer)
@@ -803,7 +805,7 @@ export function createWebView(deps: WebViewDeps): WebView {
             fadeTimer = setTimeout(settle, 1300)
           }
         } else if (shownNow) s.uiRings = { ...s.uiRings, shown: { key: shownKey(limitOf(s), s.uiRings?.rankBy, s.uiRings?.perRingLimitOff, s.uiRings?.filled ?? []), ids: [...shownNow, p.id] } } // wave 37: nothing else moves
-        if (selectMode) {
+        if (selectMode && !offered) {
           const ids = new Set(dragIds(chosen, p.id))
           const group: Person[] = []
           applyAll(s.people, ids, (q) => group.push(q))
@@ -884,12 +886,14 @@ export function createWebView(deps: WebViewDeps): WebView {
   }
 
   /** The bubble "Merging A into B … n" (wave 36): nobody presses Yes; staying put merges at 0, the major dot B keeps its name. */
-  function offerMerge(p: Person, otherId: string, n: number): void {
+  function offerMerge(p: Person, otherId: string, n: number, yes: () => void, cancel: () => void): void {
     const other = st().people.find((x) => x.id === otherId)
     if (!other || !mergeSheet) return
-    showNotice(S.mergeCountdownLead(displayName(p.name).text, displayName(other.name).text), '', [
+    showNotice(S.mergeCountdownLead(displayName(p.name).text, displayName(other.name).text), '', [el('span', { class: 'merge-actions' }, [
       el('span', { class: 'countdown-num', 'data-merge-offer': '1', 'data-merge-countdown': String(n) }, [String(n)]),
-    ], 20000)
+      el('button', { class: 'btn btn-ghost btn-sm merge-btn', 'data-merge-yes': '', 'aria-label': S.mergeYes, title: S.mergeYes, onclick: yes }, ['✓']),
+      el('button', { class: 'btn btn-ghost btn-sm merge-btn', 'data-merge-cancel': '', 'aria-label': S.mergeCancel, title: S.mergeCancel, onclick: cancel }, ['✕']),
+    ])], 20000)
   }
 
   /** "Recently deleted": the deleted people of the last 30 days, each with Put back and the days left. */
