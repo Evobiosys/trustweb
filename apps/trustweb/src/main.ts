@@ -104,7 +104,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, reachOutLegendShown, ringColor, ServerJobState, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, LEANS, LineStatus, LogOutcome, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, reachOutLegendShown, ringColor, ServerJobState, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle, waLink } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
@@ -156,6 +156,10 @@ import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList, peopleQuery, setPeopleQuery } from './people_list_view'
 import { keepNoticeDue, noticeText, overduePeople } from './keep_in_touch'
 import { keepInTouchRow } from './keep_in_touch_view'
+import { birthdayNoticeDue, birthdayRemindersOn, dismissAction, notifyBirthdays, upcoming } from './birthdays'
+import { birthdayRow, thoughtRow } from './people_fields_view'
+import { touchFromSync } from './touch_sync'
+import { activeLineDue, recordThought } from './thought_of'
 import { completeQuery, completeView, resetComplete, setCompleteQuery } from './complete_view'
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
@@ -877,6 +881,7 @@ function checkEngagement(): void {
   if (state.engagementSince === undefined) { ensureBaseline(state, now); save() }
   // Wave 28 (Jakob 2026-11-01): nothing moves by itself any more; a quiet tie gets a zzz marker on the TrustZones and moves on a tap (zzzAccept).
   checkKeepInTouch(now)
+  checkBirthdays(now)
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
   const { names, more } = soonNames(soon)
@@ -893,6 +898,34 @@ function checkKeepInTouch(now: number): void {
   const stamp = (): void => { if (state) { state.keepNoticeDay = localDay(new Date(now)); save() } }
   if (late.length === 0) stamp()
   else notifyKind('reminder', noticeText(late.map((p) => p.name)), S.keepNoticeOpen, () => openComplete(true), stamp)
+}
+
+/** Wave 37 people-fields: once a day, at the first check, an in-app line for birthdays today and this week (notifyBirthdays is the hook a later browser push goes through). */
+function checkBirthdays(now: number): void {
+  if (!state || !birthdayRemindersOn(state) || !birthdayNoticeDue(state, new Date(now))) return
+  const list = upcoming(state.people, new Date(now), 7)
+  state.birthdayNoticeDay = localDay(new Date(now))
+  save()
+  notifyBirthdays(list, (text) => showNotice(text, '', [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-birthday-open': '', onclick: () => { hideNotice(); openComplete(false, true) } }, [S.birthdayOpen]),
+    el('button', { class: 'notice-dismiss', 'data-birthday-never': '', onclick: () => { hideNotice(); dismissAction(st()); save() } }, [S.birthdayNever]),
+    el('small', { class: 'meta' }, [S.birthdayNeverHint]),
+  ]))
+  friendsEl.setAttribute('data-birthday-notice', '')
+}
+
+/** Wave 37 people-fields (thought_of.ts): the owner wrote to or about this person today; 'active' tells them once a day. */
+function thoughtOf(p: Person): void {
+  const now = new Date()
+  if (!recordThought(p, now)) return
+  save()
+  if (!p.peerId || !activeLineDue(p, now, true)) return
+  void submitText(chatIo(), p.peerId, S.thoughtLine).then((ok) => {
+    if (!ok) return
+    p.thoughtSentDay = localDay(now)
+    st().log.unshift({ id: randomId(8), at: Date.now(), from: p.name, text: S.thoughtLine, outcome: LogOutcome.Shared, peerId: p.peerId })
+    save()
+  })
 }
 
 function dismissCard(card: StackCard): void {
@@ -1318,9 +1351,9 @@ let peoplePage = false
 let pageBack = Screen.Web
 /** Wave 30: the header magnifier's filter field under the People header; it filters the list as you type, Escape clears and closes it. */
 let peopleSearchOpen = false
-function openPeople(query = '', complete = false, overdue = false): void {
+function openPeople(query = '', complete = false, overdue = false, birthdays = false): void {
   completeMode = complete
-  if (complete) resetComplete('', overdue)
+  if (complete) resetComplete('', overdue, false, birthdays)
   resetPeopleList(query)
   peopleSearchOpen = query !== ''
   peoplePage = true
@@ -1330,8 +1363,8 @@ function openPeople(query = '', complete = false, overdue = false): void {
 }
 /** Wave 36 complete-view: the People page showing everyone as a table (the 'complete' view). */
 let completeMode = false
-function openComplete(overdue = false): void {
-  openPeople('', true, overdue)
+function openComplete(overdue = false, birthdays = false): void {
+  openPeople('', true, overdue, birthdays)
 }
 /** The header search field feeds whichever list the People page shows. */
 const peopleSearchQuery = (): string => (completeMode ? completeQuery() : peopleQuery())
@@ -3299,6 +3332,11 @@ function personQr(p: Person): void {
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
 const invitationIo = (): InvitationIo => ({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), newId: () => randomId(8) })
 
+const logThought = (p: Person) => (line: string): void => {
+  st().log.unshift({ id: randomId(8), at: Date.now(), from: p.name, text: line, outcome: LogOutcome.Shared, peerId: p.peerId })
+  save()
+}
+
 function cardMore(p: Person): Node[] {
   const cons = chatOnConsensual(p, st().preferConsensual)
   const rows: Record<string, () => (Node | null)[]> = {
@@ -3314,6 +3352,8 @@ function cardMore(p: Person): Node[] {
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       keepInTouchRow({ state: st, save, redraw: render, toast: (msg, undo) => toast(msg, { onClick: undo }) }, p),
+      birthdayRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
+      thoughtRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
@@ -3589,7 +3629,7 @@ function leanRow(p: Person): HTMLElement | null {
   const note = (): HTMLElement => {
     const area = el('textarea', { class: 'field', rows: '4', maxlength: String(GENERAL_NOTE_MAX), placeholder: S.generalNotePh(p.name), 'aria-label': S.generalNoteTitle, 'data-lean-note': '' })
     area.value = generalNoteOf(p)
-    const saver = createAutosaver({ commit: (text) => { if (setGeneralNote(p, text)) save() } })
+    const saver = createAutosaver({ commit: (text) => { if (setGeneralNote(p, text)) { save(); thoughtOf(p) } } })
     area.addEventListener('input', () => saver.input(area.value))
     area.addEventListener('blur', () => saver.flush())
     const saveBtn = el('button', { class: 'btn btn-electric btn-sm', 'data-lean-note-save': '', onclick: () => { saver.flush(); toast(S.noteSaved) } }, [S.noteSave])
@@ -3976,7 +4016,7 @@ function chatSheet(personId: string, open: StackOpen = {}): void {
   const handle = renderChat({
     ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p), theirChannels: p.theirChannels }, S: chatStrings(),
     copy: (text) => copyLink(text, S.chatCopied), open: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
-    isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo,
+    isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo, onDraft: () => thoughtOf(p),
   })
   openSheet([handle.el])
   if (p.peerId) openChat = { peerId: p.peerId, refresh: handle.refresh }
@@ -4120,6 +4160,8 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   const r = receiveText(s.chats ?? NO_CHATS, peer.id, text, ts, now, bindRe(re, s.sentAsks, peer.id, now))
   if (!r.message) return
   s.chats = r.book
+  const who = personOf(s.people, peer.id)
+  if (who) touchFromSync(s, { personId: who.id, at: r.message.sentAt }, now)
   save()
   if (isBlocked(personOf(s.people, peer.id))) return
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
@@ -6893,6 +6935,10 @@ function settingsSheet(): void {
     }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     readersBlock({ state: st, save, redraw: settingsSheet, openSheet: (c) => openSheet(c), toast }),
+    el('button', {
+      class: 'radio' + (birthdayRemindersOn(s) ? ' on' : ''), 'aria-pressed': String(birthdayRemindersOn(s)), 'data-birthday-reminders': '1',
+      onclick: () => { s.birthdayReminders = !birthdayRemindersOn(s); save(); settingsSheet() },
+    }, [el('b', {}, [S.birthdayRemindersLabel]), el('small', {}, [S.birthdayRemindersHint])]),
     el('div', { 'data-blocked-list': '1' }, [
       el('b', {}, [S.blockedTitle]),
       ...(s.people.some(isBlocked)

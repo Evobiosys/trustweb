@@ -390,6 +390,10 @@ export interface Person {
   metAt: number
   /** Wave 24b: when an expired tie was undone; counts as contact (engagement.ts). Absent: never. */
   engagementKept?: number
+  /** Wave 37 people-fields (thought_of.ts): the local days (YYYY-MM-DD, oldest first) I wrote to or about this person; how it is told to them; the day the daily line last went. */
+  thoughtOf?: string[]
+  thoughtShare?: 'passive' | 'active' | 'off'
+  thoughtSentDay?: string
   lines: NoteLine[]
   /** 'legacy-code': connected through a link without a freshness stamp (an older app); accepted for now. Local only. */
   connectedVia?: 'legacy-code'
@@ -1065,6 +1069,9 @@ export interface AppState {
   keepNoticeDay?: string
   /** Wave 37 (browser_only_notice.ts): the person dismissed the "your data lives only in this browser" line. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
   browserOnlyDismissed?: boolean
+  /** Wave 37 people-fields: Birthday reminders; absent = on (birthdays.ts). Rides the device sync. The day the banner last showed stays on this device. */
+  birthdayReminders?: boolean
+  birthdayNoticeDay?: string
   /** Wave 24b: when the engagement check first ran here; counts as contact for everybody (engagement.ts). Local only. */
   engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
