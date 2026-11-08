@@ -230,6 +230,7 @@ describe('PRIVACY: the General note is Only me', () => {
       'main.ts', // the hook: setGeneralNote / generalNoteOf
       'strings.ts', // copy
       'same_person.ts', // joins the two notes when the owner declares two persons one (nothing leaves the device)
+      'record_diff.ts', // dev-only edit stream: labels a note edit as kind "note" in the local dev-edits.jsonl (loopback dev server, never shipped)
       'demo_to_live.ts', // carries a demo person's whole record to the live phone of the same owner, on this device (no network)
     ])
     const hits = []

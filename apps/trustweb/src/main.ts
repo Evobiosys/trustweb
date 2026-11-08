@@ -201,7 +201,7 @@ import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
 import { mergeIncoming } from './matches'
 import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
-import { liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
+import { fetchEditStream, liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
@@ -6695,6 +6695,13 @@ function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, 
   }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
+/** Dev only (Settings > Advanced): "Edits kept: N (since <date>)", filled once the dev server answers. */
+function editStreamLine(): HTMLElement {
+  const p = el('p', { class: 'meta', 'data-edit-stream-count': '' }, [S.editsKept(0, null)])
+  void fetchEditStream().then((i) => { if (i) p.textContent = S.editsKept(i.count, i.since ? new Date(i.since).toLocaleDateString('sv') : null) })
+  return p
+}
+
 /** Settings > Bottom row: one button into the ⋮ sheet, where the row is arranged (wave 31; the old per-slot pickers are archived in DEVLOG/wave31/archive/bottom-bar). */
 function tabRowSettings(): (Node | null)[] {
   return [el('button', { class: 'btn btn-ghost', 'data-settings-bar': '', onclick: barSheet }, [S.barOpenSettings])]
@@ -6900,6 +6907,7 @@ function settingsSheet(): void {
     ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
     ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
+    ...(liveDevActive() ? [editStreamLine()] : []),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),

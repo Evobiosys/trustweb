@@ -12,6 +12,7 @@ import { parseRecord, storageKey } from './store'
 declare const __TW_DEV_LIVE__: boolean | null | undefined
 
 const PATH = '/__tw/dev-record'
+const EDITS_PATH = '/__tw/dev-edits'
 const AT_HEADER = 'X-TW-Live-At'
 const BASE_HEADER = 'X-TW-Live-Base'
 const DEBOUNCE_MS = 2000
@@ -89,4 +90,13 @@ export function pushLiveDevRecord(persona: string, s: AppState): void {
       warned = true
     })
   }, DEBOUNCE_MS)
+}
+
+/** Settings > Advanced: how many edits the dev server kept in dev-edits.jsonl and since when; null when not a personal preview or unreachable. */
+export async function fetchEditStream(deps: { fetch: typeof fetch } = { fetch: (...a) => fetch(...a) }): Promise<{ count: number; since: string | null } | null> {
+  if (!liveDevActive()) return null
+  try {
+    const r = await deps.fetch(EDITS_PATH, { cache: 'no-store' })
+    return r.ok ? await r.json() : null
+  } catch { return null }
 }
