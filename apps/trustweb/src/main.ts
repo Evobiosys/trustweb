@@ -117,6 +117,7 @@ import { parsePersonShare, personShareLink } from './person_share_link'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
 import { pollRelay, postNote, readRelayOn, type RelayDeps } from './notes_relay'
+import { guestShell } from './ext/co_notes/co_invite'
 import { deserializeIdentity } from '../../demo/src/did'
 import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
@@ -1116,7 +1117,7 @@ function barOpen(id: BarId): void {
   switch (id) {
     case 'web': if (webTabAction(webPage) === 'leave-page') { cardExpanded = false; webPage = null } // wave 37: Web from a card lands on the main Web view
       if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
-    case 'events': openEvents(); break
+    case 'events': openEvents(state?.coGuest?.eventId); break
     case 'ask': openQuery(); break
     case 'network': case 'people': case 'map': chooseView(id); break
     case 'record': onRecordTap(); break
@@ -1163,10 +1164,13 @@ function barMax(): number {
 
 function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
-  const { ids, primary } = resolveBar(state?.uiBar, barFlags())
-  const { shown } = barLayout(ids, primary, barMax())
+  // Wave 37 (co-notes-link): a guest of a co-note link gets the nested shell instead (Web, Chat in the centre, Resources; Events too for an event note).
+  const guest = state?.coGuest && state.coNotesOn ? guestShell(Boolean(state.coGuest.eventId)) : null
+  const { ids, primary } = guest ? { ids: guest.tabs, primary: guest.primary } : resolveBar(state?.uiBar, barFlags())
+  const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
-  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), more)
+  tabs.toggleAttribute('data-guest-shell', guest !== null)
+  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), ...(guest ? [] : [more]))
   tabs.classList.toggle('four', shown.length > 3)
   tabs.classList.toggle('many', shown.length > 5)
   phone.classList.toggle('ask-in-bar', shown.includes('ask'))
@@ -2382,6 +2386,7 @@ function screenStart(): Node[] {
     void net.start().then(announceLink).then(() => refreshPush()).then(pollNotesRelay)
     if (invite && !solo && !demo) offerPendingConnect()
     else void completePendingConnect()
+    coNotes?.start?.()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
     maybeOpenPendingIntro()
@@ -2406,7 +2411,7 @@ function screenStart(): Node[] {
             noteShare ? el('p', { class: 'meta', 'data-note-share-in': '' }, [S.noteShareIn(inviter, noteShare.title)]) : null,
             zoneShare || personShare ? personShareBox(inviter, (zoneShare ?? personShare) as NonNullable<typeof personShare>, zoneShare) : null,
           ])
-        : el('p', { class: 'lead' }, [S.startLead]),
+        : coNotes?.startLine?.() ?? el('p', { class: 'lead' }, [S.startLead]),
     !invite && window.top === window
       ? el('a', { class: 'solo-card', href: APP_URL + 'demo/' }, [
           el('b', {}, [S.startSolo]),
@@ -2897,6 +2902,8 @@ const supportIo: SupportIo = {
 
 function screenChat(): Node[] {
   const s = st()
+  const guest = coNotes?.guest?.()
+  if (guest) return guest.body()
   const view = chatView({ sources: messengers, trustweb: trustwebThreads, openTrustweb: chatSheet, dndSince, redraw: () => go(Screen.Chat) })
   const body = el('div', { class: 'chat-body' }, chatListBody())
   const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
@@ -3391,6 +3398,26 @@ function notesHooks(): Parameters<typeof sharedNotesSection>[1] {
 
 // Wave 32 (notes_relay.ts): shared notes above ~100 items travel sealed through the backup server.
 const relayDeps = (): RelayDeps => ({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() })
+/** Wave 37: the relay is on and there is one here (a dev server stands in for it, so a preview can be tried without the live host). */
+const relayOn = (): boolean => readRelayOn() && (canRegister(SERVER_ORIGIN) || import.meta.env.DEV)
+
+/** Wave 37 (co-notes-link): the guest accepted to connect with the owner of a shared note: the existing connect flow, the owner lands in my Intending ring. */
+async function connectToNoteOwner(who: { did: string; id: string; name: string }): Promise<string | null> {
+  try {
+    await net.start()
+    const peer = await net.completeConnect({ did: who.did, from: { id: who.id, displayName: who.name } }, Ring.Intending)
+    const s = st()
+    let person = s.people.find((p) => p.peerId === peer.id)
+    if (!person) { person = { id: randomId(8), name: peer.displayName, context: '', ring: Ring.Intending, metAt: Date.now(), lines: [], peerId: peer.id }; s.people.push(person) }
+    save()
+    render()
+    return person.id
+  } catch (e) {
+    console.warn('connect to the note owner', e)
+    return null
+  }
+}
+
 /** The relay DID this person is reached by: the paired peer's, else the one an event link told me. */
 const relayDidOf = (p: Person): string | undefined => st().peers.find((x) => x.id === p.peerId)?.did ?? p.did
 
@@ -4806,7 +4833,12 @@ const extHooks: ExtHooks = {
   backupNow: () => backup.backUpNow(),
   openPerson: openCardPage,
   didOf: (id) => { const p = st().people.find((x) => x.id === id); return p ? relayDidOf(p) : undefined },
-  relay: () => (state?.identity && readRelayOn() && canRegister(SERVER_ORIGIN) ? { deps: relayDeps(), identity: deserializeIdentity(state.identity) } : null),
+  relay: () => (state?.identity && relayOn() ? { deps: relayDeps(), identity: deserializeIdentity(state.identity) } : null),
+  relayDeps: () => (relayOn() ? relayDeps() : null),
+  connectTo: connectToNoteOwner,
+  joinEventLink: (link) => { const ev = decodeEventLink(link.slice(Math.max(0, link.indexOf('#')))); if (!ev) return null; const id = joinEvent(st(), ev, Date.now()); save(); return id },
+  openChat: (personId) => chatSheet(personId),
+  guestChanged: (show) => { renderTabs(); if (!show) go(Screen.Web); else if (st().coGuest?.eventId) openEvents(st().coGuest?.eventId); else go(Screen.Chat) },
 }
 const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
 const coNotes = EXT_MODULES.find((m) => m.id === 'co-notes')?.screen(extHooks)

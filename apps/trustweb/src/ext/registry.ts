@@ -2,6 +2,7 @@
 /** Extension modules (wave 24): everything beyond contacts and what we share. Deleting a module's folder and its line here removes it. */
 import type { Identity } from '../../../demo/src/did'
 import type { AppState, InventoryItem, TwEvent } from '../model'
+import type { BarId } from '../bottom_bar'
 import type { RelayDeps } from '../notes_relay'
 import { calendarModule } from './calendar'
 import { signalLinkModule } from './signal-link'
@@ -56,6 +57,16 @@ export interface ExtHooks {
   didOf: (personId: string) => string | undefined
   /** Wave 36: the relay and my key, or null when there is no relay, no identity or the relay is switched off. */
   relay: () => { deps: RelayDeps; identity: Identity } | null
+  /** Wave 37: the relay without my key (the invite mailboxes need none), or null when there is no relay or it is switched off. */
+  relayDeps: () => RelayDeps | null
+  /** Wave 37: the existing connect flow to the person a note invite names, ring Intending to connect; the new person's id, or null when it failed. */
+  connectTo: (who: { did: string; id: string; name: string }) => Promise<string | null>
+  /** Wave 37: joins the event an event link carries; its id, or null. */
+  joinEventLink: (link: string) => string | null
+  /** Wave 37: opens my 1:1 chat with that person. */
+  openChat: (personId: string) => void
+  /** Wave 37: the guest shell changed (entered or left): redraws the bottom row and shows the Chat screen when `show`. */
+  guestChanged: (show: boolean) => void
 }
 
 /** Wave 27: one conversation in an extended messenger, as the Chat screen lists it. */
@@ -113,6 +124,9 @@ export interface ExtModule {
     notesSection?: () => Node[]
     /** Wave 36: fetch what others left for me on the relay; true when something changed. */
     poll?: () => Promise<boolean>
+    /** Wave 37: the guest of a co-note link: the nested shell's bottom row, the note + group chat as the Chat screen, the start screen line for a new visitor. Null / absent when this device is no guest. */
+    guest?: () => { tabs: BarId[]; primary: BarId; eventId?: string; body: () => Node[] } | null
+    startLine?: () => Node | null
   }
   /** Wave 28: a link the host is about to open in a new tab; true = the module opened it itself (WhatsApp Web beside TrustWeb). */
   openExternal?: (url: string) => boolean

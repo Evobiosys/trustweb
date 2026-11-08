@@ -19,7 +19,9 @@ import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { SharedNote } from './notes_outline'
+import type { CoMsg } from './ext/co_notes/co_chat'
 import type { CoDoc } from './ext/co_notes/co_doc'
+import type { CoGuest, CoInvite } from './ext/co_notes/co_invite'
 import type { ConnectRecord } from './connect_code'
 import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
@@ -1338,6 +1340,11 @@ export interface AppState {
   coNotes?: CoDoc[]
   /** Wave 36 (ext/co_notes): the last 100 sends and merges of co-created notes, one readable line each (I6). Absent: none. */
   coNotesLog?: string[]
+  /** Wave 37 (co-notes-link), this phone only: the invitations I made to my co-notes (co_invite.ts), the shell of a guest who arrived by one, the note chats and this device's read secret. */
+  coInvites?: CoInvite[]
+  coGuest?: CoGuest
+  coChats?: Record<string, CoMsg[]>
+  coDevice?: string
 }
 
 /** A named list of people (and tags) an ask can be narrowed to. */

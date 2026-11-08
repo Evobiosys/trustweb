@@ -9,6 +9,8 @@ import { S } from '../../strings'
 import type { ExtHooks } from '../registry'
 import { canEdit, combine, cycleShare, isEventDoc, mineId, SHARE_LABELS } from './co_desires'
 import { editText, fromText, indent, insertAfter, merge, moveDown, moveUp, outdent, remove, setLogseq, setShare, setTitle, textOver, toText, tree, type CoDoc, type CoPerson } from './co_doc'
+import { chatPanel } from './co_chat_view'
+import type { CoMsg } from './co_chat'
 import { chipToken, fromEdit, fromLogseq, logseqUrl, parseChips, parseLogseqRef, refsOf, toEdit, toLogseq } from './co_links'
 
 export interface CoCtx {
@@ -21,6 +23,14 @@ export interface CoCtx {
   poll: () => Promise<boolean>
   /** One line for the local log (I6). */
   log: (line: string) => void
+  /** Wave 37 (co-notes-link): opens the share sheet of a note. */
+  share?: (id: string) => void
+  /** Wave 37: the note's group chat (messages in, one out). */
+  chat?: { msgs: (id: string) => CoMsg[]; say: (id: string, text: string) => Promise<void> }
+  /** Wave 37: false for a guest, who cannot pass the note on; the owner decides who gets in. */
+  canShare?: (id: string) => boolean
+  /** Wave 37: an anonymous guest holds a read-only copy. */
+  readOnly?: (id: string) => boolean
 }
 
 const POLL_MS = 10_000
@@ -39,6 +49,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
   const refs = refsOf(c.get(id) as CoDoc)
   let editing = ''
   let adding = false
+  const chatDraft = { text: '' }
   /** The copy the plain-text box shows; typing applies against it, so lines others added meanwhile are not taken for deleted. */
   let base: CoDoc | null = null
   const doc = (): CoDoc => c.get(id) as CoDoc
@@ -69,7 +80,8 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
   }
   /** Desires and memories: the top level is each person's chip, and only the author edits a line. New lines start at 'me' (I9). */
   const evDoc = (): boolean => isEventDoc(doc())
-  const editable = (bid: string, depth: number): boolean => canEdit(doc(), bid, c.me()) && !(evDoc() && depth === 0)
+  const ro = (): boolean => c.readOnly?.(id) === true
+  const editable = (bid: string, depth: number): boolean => !ro() && canEdit(doc(), bid, c.me()) && !(evDoc() && depth === 0)
   const newOpts = (): { share?: 'me' } => (evDoc() ? { share: 'me' } : {})
   const start = (bid: string): void => { commit(); editing = bid; draw() }
 
@@ -151,7 +163,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
       if (evDoc() && r.id === mineId(c.me()) && !r.hasKids) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-add-wish': '', onclick: () => act((x) => { const n = insertAfter(x, r.id, '', c.me(), Date.now(), newOpts()); editing = n.id; return indent(n.doc, n.id, c.me()) }) }, [D_.addWish]))
       if (isEditing) list.append(el('div', { class: 'co-under', style: `padding-left:${r.depth * 16 + 22}px` }, [mention(text as HTMLInputElement), tools(r.id)]))
     }
-    if (!rows.length && !evDoc()) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-first': '', onclick: () => act((x) => { const r = insertAfter(x, null, '', c.me(), Date.now()); editing = r.id; return r.doc }) }, [S_.firstLine]))
+    if (!rows.length && !evDoc() && !ro()) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-first': '', onclick: () => act((x) => { const r = insertAfter(x, null, '', c.me(), Date.now()); editing = r.id; return r.doc }) }, [S_.firstLine]))
     return list
   }
 
@@ -172,7 +184,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     const names = others.map((p) => {
       const person = people().find((x) => c.h.didOf(x.id) === p.did)
       return person
-        ? el('button', { class: 'co-chip', 'data-co-chip': p.did, onclick: () => c.h.openPerson(person.id) }, [p.name])
+        ? el('button', { class: 'co-chip', 'data-co-chip': p.did, 'aria-label': S.coLink.chatWith(p.name), onclick: () => c.h.openChat(person.id) }, [p.name])
         : el('span', { class: 'co-chip-plain' }, [p.name])
     })
     const free = people().filter((p) => c.h.didOf(p.id) && !d.people.some((q) => q.did === c.h.didOf(p.id)))
@@ -184,7 +196,8 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
       : null
     return el('div', { class: 'co-people', 'data-co-people': '' }, [
       el('span', { class: 'meta' }, [`${S_.people}: `]), ...(names.length ? names : [el('span', { class: 'meta' }, [S_.onlyYou])]),
-      el('button', { class: 'btn btn-ghost btn-sm', 'data-co-add-people': '', onclick: () => { adding = !adding; draw(); root.querySelector<HTMLInputElement>('[data-co-people-input]')?.focus() } }, [S_.addPeople]),
+      ro() ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-co-add-people': '', onclick: () => { adding = !adding; draw(); root.querySelector<HTMLInputElement>('[data-co-people-input]')?.focus() } }, [S_.addPeople]),
+      ro() || !c.share || c.canShare?.(id) === false ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-co-share-open': '', onclick: () => { commit(); c.share?.(id) } }, [S.coLink.share]),
       picker ? el('div', {}, [picker.input, picker.hits]) : null,
       adding && !free.length ? el('p', { class: 'meta' }, [S_.addPeopleNone]) : null,
     ])
@@ -254,10 +267,11 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     root.replaceChildren(
       title,
       el('p', { class: 'meta', 'data-co-honest': '' }, [S_.honest]), presence(d) ?? '',
-      participants(d), evDoc() ? '' : modeButtons(d),
+      participants(d), evDoc() || ro() ? '' : modeButtons(d),
       d.mode === 'text' && !evDoc() ? plain(d) : outline(d),
       d.kind === 'desires' ? combineRow() : '',
-      el('button', { class: 'btn btn-ghost btn-sm co-more', 'data-co-more': '', 'aria-label': S_.more, onclick: morePage }, ['…']),
+      c.chat && !ro() ? chatPanel(c, id, chatDraft) : '',
+      ro() ? '' : el('button', { class: 'btn btn-ghost btn-sm co-more', 'data-co-more': '', 'aria-label': S_.more, onclick: morePage }, ['…']),
     )
     const live = editing ? root.querySelector<HTMLInputElement>(`[data-co-input="${CSS.escape(editing)}"]`) : null
     live?.focus()
