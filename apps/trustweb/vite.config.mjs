@@ -460,6 +460,8 @@ export default ({ command }) => ({
     fs: { allow: [repo] },
     // Dev/test proxies, all same-origin so no CORS and no Origin exception:
     //   /relay     -> a RelayServer (TW_RELAY_PROXY; see test/e2e/acceptance.mjs)
+    //   /api       -> the live AI-subscription API (TW_API_PROXY, e.g. https://app.trustweb.one): the sign-up screen and the AI relay work
+    //                 from a local preview; Origin is set to the target's own, so questhub's allowlist stays unchanged.
     //   /backup    -> services/trustweb-backup (TW_BACKUP_PROXY, e.g. http://127.0.0.1:8960)
     //   /talkweave -> a local TalkWeave (TW_TALKWEAVE_PROXY, e.g. http://127.0.0.1:8990),
     //                 prefix stripped and Origin dropped, so TalkWeave's own
@@ -467,6 +469,9 @@ export default ({ command }) => ({
     proxy: {
       ...(process.env.TW_RELAY_PROXY
         ? { '/relay': { target: process.env.TW_RELAY_PROXY, ws: true, changeOrigin: true } }
+        : {}),
+      ...(process.env.TW_API_PROXY
+        ? { '^/api/(subscribe|ai/)': { target: process.env.TW_API_PROXY, changeOrigin: true, secure: true, configure: (proxy) => { proxy.on('proxyReq', (req) => req.setHeader('origin', process.env.TW_API_PROXY)) } } }
         : {}),
       // The same server answers the hosted recordings, transcription and feedback (wave 1733 round B),
       // same-origin as on app.idea2.site, so the app sends no Origin the server would refuse.

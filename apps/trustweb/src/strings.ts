@@ -3219,6 +3219,11 @@ export const S = {
   aiSubSending: 'Sending …',
   aiByokTitle: 'Bring your own keys',
   aiName: 'Name',
+  aiWakeTitle: "Starting TrustInTheWeb's AI computer",
+  aiWakeBody: "It rests when nobody asks. Waking it takes about 2 minutes; your question goes through by itself as soon as it is ready.",
+  aiWakeWaited: (s: number) => (s < 60 ? `${s} s so far` : `${Math.floor(s / 60)} min ${s % 60} s so far`),
+  aiWakeFailed: "The AI computer did not wake up in time. Please try again in a few minutes.",
+  aiWakeHide: 'Hide',
   // wave 36 co-notes-core
   coNotes: {
     label: 'Co-created notes',
