@@ -36,7 +36,7 @@ function snapshot(file, gapMs) {
 const editsName = (file) => path.join(path.dirname(file), 'dev-edits.jsonl')
 const rotated = (editsFile) => {
   const dir = path.dirname(editsFile)
-  return readdirSync(dir).filter((n) => /^dev-edits\.\d{4}-\d{2}-\d{2}.*\.jsonl$/.test(n)).sort().map((n) => path.join(dir, n))
+  return readdirSync(dir).filter((n) => /^dev-edits\.\d{4}-\d{2}-\d{2}.*\.jsonl$/.test(n)).map((n) => path.join(dir, n)).sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs) // review: by age (a name sort puts -2 before the day's first file)
 }
 
 /** Edit stream (src/record_diff.ts): appends one line per edit between the stored record and the posted one. Past maxBytes the file moves, whole, to dev-edits.<date>[-n].jsonl first; lines are never rewritten. A failure never blocks the record write. */

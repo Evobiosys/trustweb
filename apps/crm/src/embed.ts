@@ -36,7 +36,8 @@ function shadowTarget(el: HTMLElement): HTMLElement {
 
 export async function mountCurator(el: HTMLElement, lent: Omit<Host, 'root'>): Promise<void> {
   Object.assign(host, lent, { root: el })
-  const { default: App } = await import('./app.svelte')
+  const [{ default: App }, { applyTheme }] = await Promise.all([import('./app.svelte'), import('./prefs.svelte')])
+  applyTheme() // review: prefs may have loaded before (a dot moved to a ring) while there was no element; the Curator's theme goes on its element now
   mount(App, { target: shadowTarget(el) })
 }
 

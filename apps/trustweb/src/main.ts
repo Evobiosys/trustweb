@@ -902,18 +902,22 @@ function checkKeepInTouch(now: number): void {
   else notifyKind('reminder', noticeText(late.map((p) => p.name)), S.keepNoticeOpen, () => openComplete(true), stamp)
 }
 
+const BIRTHDAY_RETRY_MS = 5_000
+let birthdayRetry: ReturnType<typeof setTimeout> | undefined
 /** Wave 37 people-fields: once a day, at the first check, an in-app line for birthdays today and this week (notifyBirthdays is the hook a later browser push goes through). */
 function checkBirthdays(now: number): void {
   if (!state || !birthdayRemindersOn(state) || !birthdayNoticeDue(state, new Date(now))) return
+  // Review: another notice is up (keep in touch, the demo offer): the birthday line waits until the slot is free instead of covering it.
+  if (!friendsEl.hidden) { clearTimeout(birthdayRetry); birthdayRetry = setTimeout(() => checkBirthdays(Date.now()), BIRTHDAY_RETRY_MS); return }
   const list = upcoming(state.people, new Date(now), 7)
   state.birthdayNoticeDay = localDay(new Date(now))
   save()
-  notifyBirthdays(list, (text) => showNotice(text, '', [
+  const shown = notifyBirthdays(list, (text) => showNotice(text, '', [
     el('button', { class: 'btn btn-ghost btn-sm', 'data-birthday-open': '', onclick: () => { hideNotice(); openComplete(false, true) } }, [S.birthdayOpen]),
     el('button', { class: 'notice-dismiss', 'data-birthday-never': '', onclick: () => { hideNotice(); dismissAction(st()); save() } }, [S.birthdayNever]),
     el('small', { class: 'meta' }, [S.birthdayNeverHint]),
   ]))
-  friendsEl.setAttribute('data-birthday-notice', '')
+  if (shown) friendsEl.setAttribute('data-birthday-notice', '') // review: only when the birthday line is what shows
 }
 
 /** Wave 37 people-fields (thought_of.ts): the owner wrote to or about this person today; 'active' tells them once a day. */
@@ -1819,6 +1823,7 @@ function hideNotice(): void { friendsFade.close() }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
   friendsEl.classList.remove('stack', 'line', 'tap-close')
+  friendsEl.removeAttribute('data-birthday-notice') // review: the birthday line marks the box only while it shows
   friendsEl.onclick = null
   friendsEl.replaceChildren(
     el('b', {}, [title]),

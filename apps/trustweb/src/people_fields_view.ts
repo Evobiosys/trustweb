@@ -2,7 +2,7 @@
 /** Wave 37 people-fields: the Birthday field and the "thought of you" row of a person's card. Local until the owner tells the person (I1). */
 import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
-import { birthdayOf, birthdayText, parseBirthday } from './birthdays'
+import { birthdayOf, birthdayText, parseBirthday, turnsAge } from './birthdays'
 import { cardText, shareModeOf, thoughtAnswer, thoughtsThisMonth, type ThoughtShare } from './thought_of'
 import { S } from './strings'
 
@@ -35,7 +35,7 @@ export function birthdayRow(io: FieldsIo, p: Person): HTMLElement {
   return el('div', { class: 'keep-row', 'data-birthday-row': p.id }, [
     el('h4', { class: 'eyebrow' }, [S.birthdayTitle]),
     input, bad,
-    b?.year ? el('p', { class: 'meta' }, [S.birthdayAge(new Date().getFullYear() - b.year + (new Date(new Date().getFullYear(), b.month - 1, b.day) < new Date() ? 1 : 0))]) : null,
+    b?.year ? el('p', { class: 'meta' }, [S.birthdayAge(turnsAge(b, new Date())!)]) : null,
   ])
 }
 

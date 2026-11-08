@@ -581,7 +581,7 @@ export function initDevPreview(): void {
         expand.innerHTML = EXPAND_SVG
         expand.addEventListener('click', () => { lastFocus.set(ftHead!.last); focus.set(ftHead!.focus); if (ftHead!.to === 'full') loadOpen.set(true); render() })
       }
-      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : links().length ? '' : '', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), ...(expand ? [expand] : []), x, close)
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : '', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), ...(expand ? [expand] : []), x, close)
       const hs = drag(root.appendChild(header))
       // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))

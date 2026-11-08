@@ -1597,6 +1597,7 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .browser-only{margin:8px 12px; padding:8px 10px; font-size:var(--fs-1,12px); color:var(--ink-soft); background:var(--card,#F5F0E8); border-radius:var(--r-chip,8px); overflow-wrap:anywhere}
 .browser-only a,.browser-only-x{text-decoration:underline; color:inherit}
 .browser-only-x{background:none; border:0; padding:0 0 0 6px; font:inherit; cursor:pointer}
+[data-birthday-notice] .notice-dismiss,[data-birthday-notice] [data-birthday-open]{text-decoration:underline}
 /* wave 37 ai-button */
 .ai-plans-title{margin:var(--s-2) 0 0; font-family:var(--font-serif); font-size:var(--fs-4,20px)}
 .ai-plans{display:grid; grid-template-columns:1fr; gap:var(--s-3); min-width:0}
