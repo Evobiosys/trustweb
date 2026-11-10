@@ -15,6 +15,10 @@
     if (v === 'light' || v === 'dark') t = v;
   } catch (e) {}
   document.documentElement.dataset.theme = t;
+  try {
+    var l = localStorage.getItem('tw-look');
+    if (l === 'sleek' || l === 'dex') document.documentElement.dataset.look = l;
+  } catch (e) {}
   var m = 'on';
   try {
     var c = navigator.connection;

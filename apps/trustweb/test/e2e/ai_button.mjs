@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Wave 37 ai-button: the AI button always sits in the Web header between the search and the eye; without an endpoint it leads to the plan
+ * Wave 37 ai-button (wave 39: at the far right of every header, after Settings): the AI button; without an endpoint it leads to the plan
  * choice (Small 5 €, Big 18 €, Enterprise) in Settings > Advanced > Your AI; with one it opens the Ask sheet.
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> CHROMIUM_PATH=<chrome> TW_PORT=5431 TW_SHOTS=<dir> node ../trustweb/test/e2e/ai_button.mjs
  */
@@ -23,7 +23,7 @@ try {
     await startPhone(page, vite.base, 'Ana')
     const labels = await row(page)
     const i = labels.indexOf('ai')
-    c.ok(`${w}: button sits between search and eye`, i > 0 && labels[i - 1] === 'search' && /view/i.test(labels[i + 1] ?? ''), JSON.stringify(labels))
+    c.ok(`${w}: button sits at the far right, after Settings (wave 39)`, i === labels.length - 1 && /settings/i.test(labels[i - 1] ?? ''), JSON.stringify(labels))
     await shot(page, `${w}-header`)
 
     await page.locator('[data-ai-button]').click()
