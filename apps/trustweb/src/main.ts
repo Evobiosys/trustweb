@@ -278,6 +278,7 @@ import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaselin
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { createModeShell } from './ext/community_mode/shell'
+import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createActions } from './actions'
 import { defineAppActions, PLACE_TARGET, type Place as AppPlace } from './app_actions'
@@ -374,7 +375,7 @@ let extViewId: string | null = null
 const extViews = createViewHost(() => twCtx())
 /** Wave 41 (ext/community_mode): the Personal | Community interface; its callbacks run later, so the many things they name may be declared further down. */
 const modeShell = createModeShell({
-  state: () => state, save: () => save(), ctx: twCtx, newId: () => randomId(8),
+  state: () => state, save: () => save(), newId: () => randomId(8), guest: () => Boolean(state?.coGuest && state.coNotesOn), toast: (m) => toast(m),
   overview: () => (screen === Screen.Web && !webPage) || screen === Screen.People || (screen === Screen.Ext && extViewId === 'community'),
   tabButton: (target, label, iconSvg, onclick) => { const b = tabButton(target, label, 'web', onclick); b.querySelector('svg')!.outerHTML = iconSvg; return b },
   tabsEl: () => tabs, changed: () => { renderTabs(); render() }, settings: () => settingsSheet(),
@@ -1238,7 +1239,7 @@ function renderTabs(): void {
   tabs.classList.toggle('four', (community ?? shown).length > 3)
   tabs.classList.toggle('many', (community ?? shown).length > 5)
   tabs.classList.toggle('pair', !community && pair.length > 0)
-  phone.classList.toggle('ask-in-bar', shown.includes('ask'))
+  phone.classList.toggle('ask-in-bar', !community && shown.includes('ask'))
   updateChatBadge()
 }
 renderTabs()
@@ -1406,7 +1407,7 @@ function barSheet(): void {
 
 /** The unread count on the Chat tab: filled in the tab's own colour, never red. */
 function updateChatBadge(): void {
-  const chat = tabs.querySelector<HTMLElement>('[data-go="chat"]')
+  const chat = tabs.querySelector<HTMLElement>('[data-go="chat"], [data-go="community:chat"]')
   if (!chat) return
   const n = state && !state.chatsHidden ? unreadTotal(state.chats ?? {}) : 0
   chat.querySelector('.tab-badge')?.remove()
@@ -7105,12 +7106,13 @@ function twChanged(after: () => void = settingsSheet): void {
   const s = st()
   if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
   if (screen === Screen.Ext && !twRegistry.views().some((v) => v.id === extViewId)) screen = Screen.Web
+  modeShell.settle() // wave 41: Community switched off underneath = back to Personal
   renderTabs(); render(); after()
   if (twRegistry.needsReload().length) toast(S.ext.reload)
 }
 
 function chooseProfile(id: ProfileId, after?: () => void): void {
-  void twRegistry.setProfile(id).then(() => {
+  void twRegistry.setProfile(id).then(() => modeShell.profileChanged()).then(() => {
     const preset = profileDef(id, st().twSettings).barPreset
     if (preset) { st().uiBar = applyProfile(st().uiBar, preset); save() }
     twChanged(after)
@@ -8089,6 +8091,7 @@ document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redr
 document.body.dataset.twProfile = profileOf(state?.twSettings)
 applyVariation()
 applyImageMode()
+bindModeShell((ctx) => modeShell.attach(ctx.bus))
 void twRegistry.start().then(() => { modeShell.start(); renderTabs(); render() }) // wave 39 (+ wave 41 mode shell): a heavy module's view joins the row once it has loaded
 // Wave 40: a connection link may suggest a Variation (#tp=<id>); it applies only on a tap.
 if (linkProfile && profileOf(state?.twSettings) !== linkProfile) toast(S.w40.linkVarOffer(S.var.names[linkProfile]), { onClick: () => chooseProfile(linkProfile, () => undefined) })
