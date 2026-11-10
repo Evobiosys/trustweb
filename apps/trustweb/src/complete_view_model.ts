@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 36 complete-view: the rows of the all-people table (one per person), their sort, filters, the render window and tags set on people. Owner-only, local. Pure, DOM-free. */
 import type { AppState, Person } from './model'
-import { tagsOf, type ColourTag } from './colour_tags'
+import { memberIds, tagsOf, type ColourTag } from './colour_tags'
 import { zoneTagIds, tagNamed } from './zone_tags'
 import { filterByChips } from './tag_filter'
 import { ringShown } from './rings_filter'
@@ -63,11 +63,13 @@ export function completeRows(c: RowCtx, o: RowOpts): CompleteRow[] {
   const ui = s.uiRings
   const shown = filterByChips(s.people.filter((p) => !isDeleted(p) && !isArchived(p) && ringShown({ uiRings: ui }, webSlot(p))), tags, ui?.show ?? [], ui?.hide ?? [])
   const q = fold(o.query.trim())
+  // Wave 40: the groups (tags with children) a person resolves into, worked out once per list, shown as inherited tags.
+  const groups = tags.filter((g) => tags.some((t) => t.parents?.includes(g.id))).map((g) => ({ g, ids: new Set(memberIds(s.people, tags, g.id)) }))
   const rows = shown.map((p): CompleteRow => {
     const last = lastContact(s, p)
     const slot = webSlot(p)
     const own = tagsOf(p, tags)
-    const inherited = zoneTagIds({ zoneTags: s.zoneTags }, slot).flatMap((id) => tags.filter((t) => t.id === id && !own.includes(t)))
+    const inherited = [...zoneTagIds({ zoneTags: s.zoneTags }, slot).flatMap((id) => tags.filter((t) => t.id === id && !own.includes(t))), ...groups.filter(({ g, ids }) => ids.has(p.id) && !own.includes(g)).map(({ g }) => g)]
     return {
       id: p.id, name: p.name, ring: slot, ringRank: WEB_RINGS.indexOf(slot), last,
       next: nextReminder(p, last, now), cadence: p.cadenceDays, overdue: isOverdue(p, last, now),

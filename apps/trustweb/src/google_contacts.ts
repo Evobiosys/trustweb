@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Connect Google (wave 33): OAuth 2.0 authorization code + PKCE in the browser, no server.
- * A client secret is optional (Google web clients usually need it); it stays in this browser tab. Reads contacts through the People API (read-only scopes) into ImportedContact[].
+ * Scope: contacts.readonly only; the owner's contact groups become labels. A client secret is optional (Google web clients usually need it); it stays in this browser tab. Reads contacts through the People API (read-only scopes) into ImportedContact[].
  * Fetch, randomness and hashing are injected, so nothing here touches the DOM or the network
  * by itself. The access token lives in sessionStorage only and never enters the exported record (I1).
  */
@@ -15,13 +15,10 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
 const PEOPLE = 'https://people.googleapis.com/v1'
-const SCOPES = [
-  'https://www.googleapis.com/auth/contacts.readonly',
-  'https://www.googleapis.com/auth/contacts.other.readonly',
-]
+const SCOPES = ['https://www.googleapis.com/auth/contacts.readonly']
 const TOKEN_KEY = 'tw_google_token'
 const SECRET_KEY = 'tw_google_client_secret'
-const CLIENT_ID_KEY = 'tw_google_client_id'
+export const CLIENT_ID_KEY = 'tw_google_client_id'
 const FILE = 'Google contacts'
 
 const b64url = (b: Uint8Array): string => {
@@ -104,7 +101,8 @@ function birthdayOf(p: any): string | undefined {
   return undefined
 }
 
-export function mapPerson(p: any, file: string, n: number): ImportedContact | null {
+/** `groupName` turns a contact group resource name (contactGroups/abc) into its label; unknown groups and system groups give undefined. */
+export function mapPerson(p: any, file: string, n: number, groupName: (resourceName: string) => string | undefined = () => undefined): ImportedContact | null {
   const emails = uniq((p.emailAddresses ?? []).map((e: any) => e?.value), true)
   const phones = uniq((p.phoneNumbers ?? []).map((e: any) => e?.value))
   const nm = p.names?.[0] ?? {}
@@ -119,7 +117,7 @@ export function mapPerson(p: any, file: string, n: number): ImportedContact | nu
     name,
     phones,
     emails,
-    labels: [],
+    labels: uniq((p.memberships ?? []).map((m: any) => groupName(m?.contactGroupMembership?.contactGroupResourceName ?? ''))),
   }
   if (nm.givenName) c.given = nm.givenName
   if (nm.familyName) c.family = nm.familyName
@@ -147,34 +145,37 @@ async function listAll(fetchFn: FetchFn, token: string, base: string, key: strin
   return out
 }
 
-export async function fetchAllContacts(
-  fetchFn: FetchFn,
-  token: string,
-): Promise<{ contacts: ImportedContact[]; otherSkipped: boolean }> {
+/** Resource name -> label for the owner's own contact groups; Google's system groups ("My Contacts", "Starred") are no labels. */
+async function groupLabels(fetchFn: FetchFn, token: string): Promise<(resourceName: string) => string | undefined> {
+  const names = new Map<string, string>()
+  try {
+    for (const g of await listAll(fetchFn, token, `${PEOPLE}/contactGroups?groupFields=name&pageSize=1000`, 'contactGroups')) {
+      if (g?.groupType === 'USER_CONTACT_GROUP' && g.resourceName && (g.formattedName || g.name)) names.set(g.resourceName, g.formattedName || g.name)
+    }
+  } catch { /* labels are a bonus: the people still come through */ }
+  return (r) => names.get(r)
+}
+
+export async function fetchAllContacts(fetchFn: FetchFn, token: string): Promise<{ contacts: ImportedContact[] }> {
+  const label = await groupLabels(fetchFn, token)
   const people = await listAll(
     fetchFn, token,
     `${PEOPLE}/people/me/connections?personFields=names,emailAddresses,phoneNumbers,organizations,birthdays,biographies,memberships&pageSize=1000`,
     'connections',
   )
-  let others: any[] = []
-  let otherSkipped = false
-  try {
-    others = await listAll(fetchFn, token, `${PEOPLE}/otherContacts?readMask=names,emailAddresses,phoneNumbers&pageSize=1000`, 'otherContacts')
-  } catch {
-    otherSkipped = true
-  }
   const contacts: ImportedContact[] = []
-  ;[...people, ...others].forEach((p, i) => {
-    const c = mapPerson(p, FILE, i)
+  people.forEach((p, i) => {
+    const c = mapPerson(p, FILE, i, label)
     if (c) contacts.push(c)
   })
-  return { contacts, otherSkipped }
+  return { contacts }
 }
 
 /** Best effort: a failed revoke must never block disconnecting. */
 export async function revokeToken(fetchFn: FetchFn, token: string): Promise<void> {
   try {
-    await fetchFn(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' })
+    // Review wave 40: the token travels in the body, never in the address (proxies and logs keep addresses).
+    await fetchFn(REVOKE_URL, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token }).toString() })
   } catch { /* ignore */ }
 }
 

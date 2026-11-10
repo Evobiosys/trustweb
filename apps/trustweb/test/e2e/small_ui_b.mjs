@@ -28,6 +28,14 @@ async function open(browser, name, w, rec) {
   await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
   return { ctx, page, errors }
 }
+/** Wave 40: the sparkle opens the assistant; with no AI set up its "Choose your AI plan" leads to Settings > Your AI (the old direct path). */
+async function aiOpen(page) {
+  await page.locator('[data-ai-button]').click(); await page.waitForTimeout(300)
+  if (await page.locator('[data-ai-group="sub"]').isVisible()) return   // wave 41: no AI set up -> the sparkle opens the Your AI sheet
+  if (await page.locator('[data-assistant-plans]').isVisible()) { await page.locator('[data-assistant-plans]').click(); return }
+  // an AI is set up (the pc24 preset above): the sparkle is the chat now, Settings is the gear
+  await page.locator('[data-assistant-close]').click(); await page.locator('[data-settings-gear]').first().click()
+}
 const shot = (page, n, w) => page.screenshot({ path: `${SHOTS}/small-ui-b-${n}-${w}.png` })
 const hdrOrder = (page) => page.locator('.hdr .hdr-right > *').evaluateAll((bs) => bs.map((b) => (b.querySelector('[data-ai-button]') || b.hasAttribute('data-ai-button') ? 'ai' : b.hasAttribute('data-settings-gear') ? 'gear' : b.classList.contains('select-tool') ? 'select' : b.className.split(' ')[1] || b.tagName)))
 
@@ -38,7 +46,7 @@ try {
     // 1 + 9: AI sparkle last on every view; select tool a pin; favicon
     const order = await hdrOrder(page)
     check(`${w}: Web header ends gear, AI (${order.join(',')})`, order.at(-1) === 'ai' && order.at(-2) === 'gear')
-    check(`${w}: select tool sits in the header, not in the Tools column`, order.includes('select') && (await page.locator('[data-zone-side] .select-tool').count()) === 0)
+    check(`${w}: select tool is not in the header (wave 40: it sits in the Tools column)`, !order.includes('select'))
     check(`${w}: AI icon is a sparkle (two paths, filled)`, (await page.locator('[data-ai-button] svg path').count()) === 2)
     check(`${w}: favicon is the TrustWeb mark`, (await page.locator('link[rel=icon]').getAttribute('href')).includes('r=%2215%22'))
     await shot(page, 'header', w)
@@ -48,7 +56,7 @@ try {
       check(`${w}: ${s}: AI last`, o.at(-1) === 'ai', o.join(','))
     }
     await page.locator('.tabs [data-go="web"]').click(); await page.waitForTimeout(400)
-    await page.locator('[data-ai-button]').click(); await page.waitForTimeout(500)
+    await aiOpen(page); await page.waitForTimeout(500)
     check(`${w}: no endpoint -> Your AI plan cards`, await page.locator('[data-ai-group="sub"]').isVisible())
 
     // 2: Your AI
@@ -76,6 +84,8 @@ try {
     check(`${w}: view picker offers only Dex and TrustWeb (${views})`, views.join() === 'dex,trustweb')
     await shot(page, 'view-picker', w)
     await page.locator('[data-view-pill]').click()
+    check(`${w}: Theme is folded under a dropdown (wave 40)`, !(await page.locator('[data-look-choice="sleek"]').first().isVisible()))
+    await page.locator('[data-theme-pill]').click()
     const looks = await page.locator('[data-look-choice]').evaluateAll((b) => b.map((x) => x.dataset.lookChoice))
     check(`${w}: Theme offers default, sleek, dex`, looks.join() === 'default,sleek,dex')
     await page.locator('[data-theme-row]').scrollIntoViewIfNeeded(); await shot(page, 'theme-default', w)
@@ -84,7 +94,7 @@ try {
     check(`${w}: Sleek applies (13px, stored) ${JSON.stringify(sleek)}`, sleek.look === 'sleek' && sleek.fs === '13px' && sleek.stored === 'sleek')
     await shot(page, 'theme-sleek-settings', w)
     check(`${w}: no horizontal scroll in Sleek settings`, await noOverflow(page))
-    await page.locator('[data-look-choice="dex"]').click(); await page.waitForTimeout(300)
+    await page.locator('[data-theme-pill]').click(); await page.locator('[data-look-choice="dex"]').click(); await page.waitForTimeout(300)
     check(`${w}: Dex-like applies`, (await page.evaluate(() => document.documentElement.dataset.look)) === 'dex')
     await shot(page, 'theme-dex-settings', w)
     await page.keyboard.press('Escape'); await page.waitForTimeout(300)

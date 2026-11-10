@@ -493,8 +493,9 @@ export function conflictParts(text: string): Array<string | ConflictName> {
 }
 
 /** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve wave opens with no test run going, every loaded row approved (>= 1 row) and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
-export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean; baseSha?: string; compat?: Compat }): { ok: boolean; hint: string } {
-  const hint = p.tested?.running ? 'Tests are running'
+export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean; baseSha?: string; compat?: Compat; blocked?: string | null }): { ok: boolean; hint: string } {
+  const hint = p.blocked ? p.blocked   // ops `preview <id> guard`: base behind origin/main, a row's branch moved, or a row already merged
+    : p.tested?.running ? 'Tests are running'
     : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
     : unapproved(p.features).length ? `Approve first: ${unapproved(p.features).map((f) => f.title).join(', ')}`
     : approvedKeys(p.features).length === 0 ? 'Approve at least one feature'
@@ -591,3 +592,6 @@ export function typedValue(text: string): string | null {
 
 /** The "Personal preview / Approve wave" box (bottom right) shows only while the left panel is expanded with all rows: a pill or a single focused row hides it (Jakob 2026-11-07). */
 export const approveBoxVisible = (panel: { collapsed: boolean; focused: boolean }): boolean => !panel.collapsed && !panel.focused
+
+/** Wave 40: the focused row's background alternates (0/1) after each approve that jumps to another row, so the next one reads as a different item. */
+export const approveTone = (tone: 0 | 1, pressed: string, focusAfter: string | null): 0 | 1 => (focusAfter !== null && focusAfter !== pressed ? (tone === 0 ? 1 : 0) : tone)

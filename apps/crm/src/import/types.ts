@@ -22,6 +22,8 @@ export enum ContactSource {
   GenericCsv = 'generic-csv',
   /** Google People API (Connect Google, OAuth in the browser; wave 33). */
   GoogleApi = 'google-api',
+  /** People read through another service's MCP server (wave 40, ext/mcp-local). */
+  Mcp = 'mcp',
 }
 
 export interface ImportedContact {

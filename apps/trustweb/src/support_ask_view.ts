@@ -3,11 +3,15 @@
 import { randomId } from '../../demo/src/crypto'
 import { el } from '../../demo/src/ui/dom'
 import { Ring } from './model'
-import type { AppState, Peer } from './model'
+import type { AppState, Peer, Person } from './model'
 import { askPeers } from './non_responsive'
-import { hasColourTag, loadColourTags } from './colour_tags'
+import { loadColourTags, memberIds, type ColourTag } from './colour_tags'
+import { tagPill } from './components/tag_pill'
 import { foldText } from './settings_search'
 import { S } from './strings'
+import { deliveryPanel } from './support_delivery_view'
+import type { DeliveryIo } from './support_delivery_view'
+import { planDelivery, sentVia } from './support_delivery'
 import {
   SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, audience, buildSupport, emergencyNumber, hereText, isOpen, openAsks, supportText,
 } from './support_ask'
@@ -23,17 +27,32 @@ export interface SupportIo {
   send: (peer: Peer, text: string) => Promise<void>
   openChat: (personId: string) => void
   appUrl: string
+  /** How a messenger or mail link opens on this device (messenger_links.ts browserOpenEnv). */
+  env: DeliveryIo['env']
 }
 
 /** The zones the dropdown offers, narrowest first (the ask is never wider than Friends); tags follow. */
 const ZONES: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Friend]
 
 /** The people the ask would reach: connected, in the chosen zone or tag, Closest few always (unless left out), filtered in and out; not blocked or silent. */
-function recipients(io: SupportIo, a: AudienceChoice): { peer: Peer; name: string }[] {
+function recipients(io: SupportIo, a: AudienceChoice): { peer: Peer; name: string; person: Person }[] {
   const s = io.st()
   const open = new Set(askPeers(s).map((p) => p.id))
-  return audience(s.people.filter((p) => p.peerId && open.has(p.peerId)), a, hasColourTag)
-    .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name }))
+  // Wave 40: a tag means its resolved members (a group holds its children's people).
+  const tags = loadColourTags()
+  const members = new Map<string, Set<string>>()
+  const hasTag = (p: { id: string }, id: string): boolean => {
+    if (!members.has(id)) members.set(id, new Set(memberIds(s.people, tags, id)))
+    return members.get(id)?.has(p.id) === true
+  }
+  return audience(s.people.filter((p) => p.peerId && open.has(p.peerId)), a, hasTag)
+    .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name, person: p }))
+}
+
+/** Review wave 40: how many members of a tag an ask to it really reaches (connected, open to asks, Friends and closer), for its dropdown line. */
+function tagReach(io: SupportIo, tags: readonly ColourTag[], id: string): number {
+  const members = new Set(memberIds(io.st().people, tags, id))
+  return recipients(io, { zone: `tag:${id}` }).filter((r) => members.has(r.person.id)).length
 }
 
 /** The send form: the sheet and the Ask dock both show it; `sent` runs after a send. */
@@ -70,14 +89,17 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
     pick.include = [...include]
     pick.exclude = [...exclude]
     const to = recipients(io, pick)
+    const tags = loadColourTags()
+    const chosenTag = pick.zone.startsWith('tag:') ? tags.find((t) => t.id === pick.zone.slice(4)) : undefined
     const num = emergencyNumber(navigator.language)
     body.replaceChildren(...[
       el('p', { class: 'chips-lbl' }, [S.supportWho]),
       // One audience control: a zone or a tag; Closest few are always in unless the advanced switch says otherwise.
       el('select', { class: 'field', 'aria-label': S.supportZoneAria, 'data-support-zone': '', onchange: (e) => { pick.zone = (e.target as HTMLSelectElement).value; draw() } }, [
         ...ZONES.map((r) => el('option', { value: `ring:${r}`, ...(pick.zone === `ring:${r}` ? { selected: '' } : {}) }, [S.ringLabel[r]])),
-        ...loadColourTags().map((t) => el('option', { value: `tag:${t.id}`, ...(pick.zone === `tag:${t.id}` ? { selected: '' } : {}) }, [S.supportTag(t.label ?? t.id)])),
+        ...tags.map((t) => el('option', { value: `tag:${t.id}`, ...(pick.zone === `tag:${t.id}` ? { selected: '' } : {}) }, [t.kind && t.kind !== 'personal' ? S.supportGroupTag(t.label ?? t.id, tagReach(io, tags, t.id)) : S.supportTag(t.label ?? t.id)])),
       ]),
+      chosenTag ? el('div', { class: 'chips', 'data-support-zone-pill': '' }, [tagPill(chosenTag)]) : null,
       pick.notClosest ? null : el('div', { class: 'chips' }, [el('span', { class: 'chip on support-closest', 'data-support-closest-always': '' }, [S.supportClosestAlways])]),
       find,
       found,
@@ -106,7 +128,7 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
       el('p', { class: 'hint', 'data-support-danger': '' }, [num === '112' ? S.supportDangerEu(num) : S.supportDanger(num)]),
     ].filter((n): n is HTMLElement => n !== null))
   }
-  const send = (to: { peer: Peer }[]): void => {
+  const send = (to: { peer: Peer; person: Person }[]): void => {
     const s = io.st()
     const ask = buildSupport({ chips: [...chosen], note: note.value, window, ids: to.map((t) => t.peer.id) }, Date.now(), randomId(12))
     s.supportAsks = [ask, ...openAsks(s.supportAsks, Date.now())]
@@ -116,6 +138,9 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
     sent()
     io.toast(S.supportSent(to.length))
     io.render()
+    // Wave 40: the app entry has gone; the linked messengers and the e-mail fallback wait as one tap each.
+    const plan = planDelivery(to.map((t) => t.person))
+    if (plan.groups.length) io.openSheet([deliveryPanel(io, ask, plan, io.closeSheet)])
   }
   draw()
   return body
@@ -135,6 +160,10 @@ export function supportLine(io: SupportIo): HTMLElement | null {
   return el('p', { class: 'hint support-line', 'data-support-line': '', 'data-support-mine': mine.id }, [
     S.supportOpenUntil(new Date(mine.until).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })) + ' ',
     mine.here.length ? S.supportHereNames(mine.here.map(name).filter(Boolean).join(', ')) : S.supportNobodyYet,
+    // Wave 40: "who saw it" is the app only; the messengers and mail only say when they were opened.
+    ...sentVia(mine).map((v) => el('span', { class: 'support-via', 'data-support-via': v.via }, [
+      ' ' + S.supportSentVia(S.supportViaLabel[v.via], new Date(v.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }), v.peerIds.map(name).filter(Boolean).join(', ')),
+    ])),
   ])
 }
 

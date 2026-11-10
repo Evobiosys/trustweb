@@ -26,7 +26,9 @@ import { shortLabel } from './short_label'
 import { closest150, closestLimit, drawnLimit, effectiveLimit, keepPinned, limitOf, rankedBy, withTag } from './membranes_five'
 import { shownAfterMove, shownKey, stickyCut, type RankedDot } from './ring_shown'
 import { communityOf, isArchived, inZones, setUi, toneVar, zoneFor } from './trustzones'
-import { connectionsShown, contactPairs } from './zone_connections'
+import { connectionsShown } from './zone_connections'
+import { LINE_DASH, clearStated, setStated } from './relations_model'
+import { relationCard, relationsOf } from './relations_view'
 import { filterByChips } from './tag_filter'
 import { dueMoves, releaseTies } from './engagement'
 import { ringCard } from './membranes_five_view'
@@ -111,7 +113,7 @@ export interface WebViewDeps {
   st(): AppState
   save(): void
   render(): void
-  toast(msg: string): void
+  toast(msg: string, o?: { onClick?: () => void }): void
   showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void
   hideNotice(): void
   curator: Pick<Curator, 'hide' | 'unhide' | 'ring'>
@@ -211,7 +213,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       if (complete) { members[r] = ps; continue }
       // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
       const lim = drawnLimit(s, s, r)
-      const cut = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), lim, Date.now())
+      const cut = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter(), loadColourTags()), lim, Date.now())
       if (Number.isFinite(lim)) { ranks[r] = [...cut.shown, ...cut.rest]; rankedAll.push(...ranks[r]!.map((p) => ({ id: p.id, ring: r }))) }
       const f = keepPinned(sticky && Number.isFinite(lim) ? stickyCut([...cut.shown, ...cut.rest], sticky, stickyAt) : cut, s.uiRings?.pinnedId) // wave 36b: a dragged dot stays
       members[r] = f.shown; rest[r] = f.rest
@@ -353,14 +355,20 @@ export function createWebView(deps: WebViewDeps): WebView {
       })
     }
     // Wave 29: thin dashed lines between contacts who know each other (never to me); dragOnRings moves them with the dot.
+    // Wave 40: the stroke follows how they relate (close friends = short dashes, fainter when less sure); a wider invisible line on top opens the "why" card.
     if (!desk && connectionsShown(s)) {
-      for (const [a, b] of contactPairs(s.me.id, s.people)) {
-        const from = at.get(a), to = at.get(b)
-        if (!from || !to) continue
-        const line = document.createElementNS(NS, 'line')
-        line.setAttribute('x1', String(from.x)); line.setAttribute('y1', String(from.y)); line.setAttribute('x2', String(to.x)); line.setAttribute('y2', String(to.y))
-        line.setAttribute('data-conn', `${a}|${b}`); line.setAttribute('stroke', 'currentColor'); line.setAttribute('stroke-width', '0.7'); line.setAttribute('stroke-dasharray', '2 3'); line.setAttribute('opacity', '0.5')
-        svg.appendChild(line)
+      const rel = relationsOf(s, s.people)
+      for (const [a, b] of rel.pairs()) {
+        const from = at.get(a), to = at.get(b), r = rel.relation(a, b)
+        if (!from || !to || !r) continue
+        for (const hit of [false, true]) {
+          const line = document.createElementNS(NS, 'line')
+          line.setAttribute('x1', String(from.x)); line.setAttribute('y1', String(from.y)); line.setAttribute('x2', String(to.x)); line.setAttribute('y2', String(to.y))
+          line.setAttribute('data-conn', `${a}|${b}`)
+          if (hit) { line.setAttribute('data-conn-hit', ''); line.setAttribute('stroke', 'transparent'); line.setAttribute('stroke-width', '12') }
+          else { line.setAttribute('data-kind', r.kind); line.setAttribute('stroke', 'currentColor'); line.setAttribute('stroke-width', '0.7'); line.setAttribute('stroke-dasharray', LINE_DASH[r.kind]); line.setAttribute('opacity', String(0.3 + 0.4 * r.confidence)) }
+          svg.appendChild(line)
+        }
       }
     }
     const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) openWebPage({ kind: 'me' }) } }, [pictured(avatar(s.me.displayName, s.me.id), deps.ownPictureUrl())])
@@ -403,9 +411,14 @@ export function createWebView(deps: WebViewDeps): WebView {
     // The grey "Tap empty space…" hint (native title, touch "i") stays away while a card is open.
     const hintTitle = wrap.title
     const cardShown = (on: boolean): void => { wrap.classList.toggle('card-open', on); wrap.title = on ? '' : hintTitle }
+    let relTimer: ReturnType<typeof setTimeout> | undefined
+    const relOpen = (): HTMLElement | null => wrap.querySelector('[data-rel-card]')
+    const relEsc = (e: KeyboardEvent): void => { if (e.key === 'Escape') relClose() }
+    const relClose = (): void => { clearTimeout(relTimer); relOpen()?.remove(); document.removeEventListener('keydown', relEsc) }
     const hideAll = (): void => {
       clearTimeout(graceTimer); hover = HOVER_IDLE
       wrap.querySelector('[data-ring-card]')?.remove()
+      relClose()
       cardShown(false)
       document.removeEventListener('keydown', onEsc)
       picked = clearSelection()
@@ -448,6 +461,40 @@ export function createWebView(deps: WebViewDeps): WebView {
       if (hover.open && e && (ev.type === 'enter-handle' || ev.type === 'enter-ring') && (before !== hover.open || !wrap.querySelector('[data-ring-card]'))) showAll(hover.open, e)
     }
     const mouse = (e: Event): boolean => (e as PointerEvent).pointerType === 'mouse'
+    // Wave 40: a dashed line between two contacts opens "Y and Z: friends (we think, 0.7)" with the reasons, Correct this and Not related (hover with the mouse, tap on a phone).
+    if (!desk) {
+      const showRel = (a: string, b: string, e: { clientX: number; clientY: number }): void => {
+        const ppl = st().people
+        const r = relationsOf(st(), ppl).relation(a, b)
+        relClose()
+        if (!r) return
+        const save2 = (): void => { s.relations = st().relations; save(); relClose(); render() }
+        const box = relationCard(r, (id) => ppl.find((x) => x.id === id)?.name ?? id, {
+          // Review wave 40: "Not related" from the line card can be undone from its toast (the line is gone, the person card is far).
+          set: (x, y, kind) => {
+            const prev = st().relations?.find((q) => (q.a === x && q.b === y) || (q.a === y && q.b === x))
+            setStated(st(), x, y, kind, Date.now()); save2()
+            if (kind === 'none') toast(S.relations.toastNone, { onClick: () => { if (prev) setStated(st(), x, y, prev.kind, prev.at); else clearStated(st(), x, y); save2() } })
+          },
+          clear: (x, y) => { clearStated(st(), x, y); save2() },
+        })
+        const pt = localPoint(e, wrap.getBoundingClientRect())
+        box.style.left = Math.min(pt.x + 12, RINGS_SIZE - 90) + 'px'
+        box.style.top = Math.min(pt.y + 12, RINGS_SIZE - 40) + 'px'
+        for (const t of ['pointerdown', 'click']) box.addEventListener(t, (ev) => ev.stopPropagation())
+        box.addEventListener('pointerenter', () => clearTimeout(relTimer))
+        box.addEventListener('pointerleave', () => { relTimer = setTimeout(relClose, GRACE_MS) })
+        wrap.appendChild(box)
+        document.addEventListener('keydown', relEsc)
+      }
+      svg.querySelectorAll<SVGLineElement>('[data-conn-hit]').forEach((hit) => {
+        const [a, b] = (hit.getAttribute('data-conn') ?? '').split('|')
+        hit.addEventListener('pointerenter', (e) => { if (mouse(e) && !dragged) { clearTimeout(relTimer); const at0 = { clientX: e.clientX, clientY: e.clientY }; relTimer = setTimeout(() => showRel(a, b, at0), OVERLAY_DWELL_MS) } })
+        hit.addEventListener('pointerleave', (e) => { if (mouse(e)) { clearTimeout(relTimer); if (relOpen()) relTimer = setTimeout(relClose, GRACE_MS) } })
+        hit.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); if (!dragged) showRel(a, b, e) })
+      })
+      wrap.addEventListener('pointermove', (e) => { const c = relOpen(); if (c && mouse(e) && nearCard({ x: e.clientX, y: e.clientY }, c.getBoundingClientRect())) clearTimeout(relTimer) })
+    }
     // Wave 36: a card opens only after the pointer rested OVERLAY_DWELL_MS on the line (moves of 6 px restart it) and never while a dot is lifted.
     let dwellTimer: ReturnType<typeof setTimeout> | undefined
     let dwellAt = { x: 0, y: 0 }
@@ -467,8 +514,8 @@ export function createWebView(deps: WebViewDeps): WebView {
         const card = hover.open ? wrap.querySelector('[data-ring-card]') : null
         if (card && nearCard({ x: e.clientX, y: e.clientY }, card.getBoundingClientRect())) { clearTimeout(dwellTimer); bridged = true; step({ type: 'enter-card' }); return }
         if (bridged) { bridged = false; step({ type: 'leave' }) }
-        if (over.closest('[data-ring-card], .ring-toggle')) return
-        const band = over.closest('.node, .ring-more') ? null : onRingLine(ringsGeo, localPoint(e, wrap.getBoundingClientRect()), k) // wave 37: the stroke itself, not the whole annulus
+        if (over.closest('[data-ring-card], [data-rel-card], .ring-toggle')) return
+        const band = over.closest('.node, .ring-more, [data-conn-hit]') ? null : onRingLine(ringsGeo, localPoint(e, wrap.getBoundingClientRect()), k) // wave 37: the stroke itself, not the whole annulus
         wrap.classList.toggle('on-ring-line', band !== null)
         if (band === onBand) { if (band && !restedAt(dwellAt, { x: e.clientX, y: e.clientY }) && hover.open !== band) dwell(band, e); return }
         clearTimeout(dwellTimer)
@@ -478,7 +525,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       wrap.addEventListener('pointerleave', () => { clearTimeout(dwellTimer); bridged = false; if (onBand) { onBand = null; step({ type: 'leave' }) } })
       // Wave 39: a drag on a ring's stroke (mouse at once, touch after a 300 ms hold) moves that ring; rings outside or inside it make room. Dots keep their rings (no dot changes).
       wrap.addEventListener('pointerdown', (down) => {
-        if ((down.target as HTMLElement).closest('.node, button, a, input, [data-ring-card], .ring-toggle, .ring-more')) return
+        if ((down.target as HTMLElement).closest('.node, button, a, input, [data-ring-card], [data-rel-card], [data-conn-hit], .ring-toggle, .ring-more')) return
         const at0 = localPoint(down, wrap.getBoundingClientRect())
         const ring = onRingLine(ringsGeo, at0, k)
         if (!ring) return
@@ -1100,7 +1147,7 @@ export function createWebView(deps: WebViewDeps): WebView {
    * scaled for the query dock, because it measures the rendered box.
    */
   function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
-    if ((e.target as HTMLElement).closest('.node, .ctx-menu')) return
+    if ((e.target as HTMLElement).closest('.node, .ctx-menu, [data-conn-hit], [data-rel-card]')) return
     ripple(e)
     const at = localPoint(e, wrap.getBoundingClientRect())
     const dx = at.x - RINGS_SIZE / 2

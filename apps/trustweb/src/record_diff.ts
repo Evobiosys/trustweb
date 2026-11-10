@@ -7,8 +7,9 @@
  * Person edits are patches: `after` holds the changed keys with their new values, `before` the same keys with the old ones; a key in
  * `before` but not in `after` was removed. `add`: before null, after the whole person. Hard removal (purge): before the person, after null.
  * `merge`: ids [dropped, kept], before the dropped person, after the merged kept person.
+ * `adopted-from-device` (wave 40): no ids; after = { device, people, notes, settings }, the state taken over from a linked device; replaying it changes nothing.
  */
-export type EditKind = 'merge' | 'archive' | 'unarchive' | 'delete' | 'restore' | 'ring-move' | 'rename' | 'note' | 'field' | 'add'
+export type EditKind = 'merge' | 'archive' | 'unarchive' | 'delete' | 'restore' | 'ring-move' | 'rename' | 'note' | 'field' | 'add' | 'adopted-from-device'
 type Obj = Record<string, unknown>
 export interface Edit { at: string; previewId: string; kind: EditKind; ids: string[]; before: Obj | null; after: Obj | null }
 interface Rec { people: Obj[]; sameAs?: Record<string, string>; meetings?: Obj[]; demo?: { people: string[] } }
@@ -24,6 +25,12 @@ function personKind(before: Obj, after: Obj, keys: string[]): EditKind {
   if (keys.length === 1 && keys[0] === 'name') return 'rename'
   if (keys.length === 1 && keys[0] === 'generalNote') return 'note'
   return 'field'
+}
+
+/** Wave 40: the one edit-stream line for state taken from a linked device (device_adopt.ts), written instead of the per-person lines the swap would produce. */
+export function adoptedEdit(meta: { at: string; previewId: string }, device: string, d: { people: number; notes: number; settings: number }): Edit {
+  // Review wave 40: the four counted fields only (the header comes from any local client), a short device name.
+  return { ...meta, kind: 'adopted-from-device', ids: [], before: null, after: { device: String(device).slice(0, 80), people: d.people, notes: d.notes, settings: d.settings } }
 }
 
 /** One Edit per user change between two records of the same person list; empty when nothing changed. */

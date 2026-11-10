@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 37 ai-button (wave 39: at the far right of every header, after Settings): the AI button; without an endpoint it leads to the plan
- * choice (Small 5 €, Big 18 €, Enterprise) in Settings > Advanced > Your AI; with one it opens the Ask sheet.
+ * choice (Small 5 €, Big 18 €, Enterprise) in Settings > Advanced > Your AI; with one it opens the Ask sheet. Wave 40: it opens the
+ * assistant, whose "Choose your AI plan" leads to the plans; with an endpoint the assistant chat.
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> CHROMIUM_PATH=<chrome> TW_PORT=5431 TW_SHOTS=<dir> node ../trustweb/test/e2e/ai_button.mjs
  */
 import path from 'node:path'
@@ -27,6 +28,9 @@ try {
     await shot(page, `${w}-header`)
 
     await page.locator('[data-ai-button]').click()
+    // Wave 40: the sparkle opens the assistant; with no AI it explains and its link leads to the plan choice.
+    c.ok(`${w}: no endpoint -> the assistant explains and links to the plans`, await page.locator('[data-assistant-plans]').isVisible())
+    await page.locator('[data-assistant-plans]').click()
     await page.locator('[data-ai-group="sub"]').waitFor()
     c.ok(`${w}: no endpoint -> Your AI plan choice`, await page.locator('[data-ai-group="sub"]').isVisible())
     const plans = await page.locator('[data-ai-plan]').allInnerTexts()
@@ -52,7 +56,7 @@ try {
     })
     await page.reload(); await page.getByRole('heading', { name: 'TrustZones' }).waitFor()
     await page.locator('[data-ai-button]').click()
-    c.ok(`${w}: with an endpoint the press still opens the Your AI sheet (wave 41)`, (await page.locator('[data-ai-group="sub"]').count()) > 0 && (await page.locator('[data-ask-input]').count()) === 0)
+    c.ok(`${w}: with an endpoint the press opens the assistant chat (wave 40)`, await page.locator('[data-assistant-input]').isVisible())
     await shot(page, `${w}-ask`)
     await page.context().close()
   }

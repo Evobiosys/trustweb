@@ -109,9 +109,15 @@ try {
     await ctx.close()
   }
   {
-    const { ctx, page } = await open(1280, 800, record({ advanced: { ai: { preset: 'custom', baseUrl: 'http://localhost:11434/v1', apiKey: '', model: 'm' } } }))
+    // merge with wave 40 ai-edit-chat: an AI set up + the assistant on -> its chat; the assistant off -> the same sheet
+    const ai = { advanced: { ai: { preset: 'custom', baseUrl: 'http://localhost:11434/v1', apiKey: '', model: 'm' } } }
+    const on = await open(1280, 800, record(ai))
+    await on.page.locator('[data-ai-button]').click(); await on.page.waitForTimeout(1200)
+    check('with an endpoint and the assistant on the sparkle opens the assistant chat', await on.page.locator('[data-assistant-input]').isVisible())
+    await on.ctx.close()
+    const { ctx, page } = await open(1280, 800, record({ ...ai, twSettings: { extensions: { assistant: false } } }))
     await page.locator('[data-ai-button]').click(); await page.waitForTimeout(500)
-    check('with an endpoint the sparkle opens the same sheet', (await page.locator('.sheet [data-ai-plan]').count()) === 3 && (await page.locator('[data-ask-input]').count()) === 0)
+    check('with an endpoint and the assistant off the sparkle opens the same sheet', (await page.locator('.sheet [data-ai-plan]').count()) === 3 && (await page.locator('[data-ask-input]').count()) === 0)
     await ctx.close()
   }
 } finally { await browser.close() }
