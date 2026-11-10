@@ -29,7 +29,7 @@ export interface ProfileDef {
 
 export const TW_PROFILES: readonly ProfileDef[] = [
   { id: 'full', modules: {}, alpha: true },
-  { id: 'iyg-support', modules: { resources: false, feed: false, events: false, matches: false, 'support-ask': true, 'ai-button': true }, webPrimary: 'support', alpha: true },
+  { id: 'iyg-support', modules: { resources: false, feed: false, events: false, matches: false, 'feed-view': false, 'events-view': false, 'support-ask': true, 'ai-button': true }, webPrimary: 'support', alpha: true },
   { id: 'reader', modules: { 'support-ask': false }, readOnly: true, alpha: true },
   { id: 'note-taker', modules: {}, barPreset: 'note_taker', alpha: true },
 ]
