@@ -28,6 +28,13 @@ async function open(browser, name, w, rec) {
   await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
   return { ctx, page, errors }
 }
+/** Wave 40: the sparkle opens the assistant; with no AI set up its "Choose your AI plan" leads to Settings > Your AI (the old direct path). */
+async function aiOpen(page) {
+  await page.locator('[data-ai-button]').click(); await page.waitForTimeout(300)
+  if (await page.locator('[data-assistant-plans]').isVisible()) { await page.locator('[data-assistant-plans]').click(); return }
+  // an AI is set up (the pc24 preset above): the sparkle is the chat now, Settings is the gear
+  await page.locator('[data-assistant-close]').click(); await page.locator('[data-settings-gear]').first().click()
+}
 const shot = (page, n, w) => page.screenshot({ path: `${SHOTS}/small-ui-b-${n}-${w}.png` })
 const hdrOrder = (page) => page.locator('.hdr .hdr-right > *').evaluateAll((bs) => bs.map((b) => (b.querySelector('[data-ai-button]') || b.hasAttribute('data-ai-button') ? 'ai' : b.hasAttribute('data-settings-gear') ? 'gear' : b.classList.contains('select-tool') ? 'select' : b.className.split(' ')[1] || b.tagName)))
 
@@ -38,7 +45,7 @@ try {
     // 1 + 9: AI sparkle last on every view; select tool a pin; favicon
     const order = await hdrOrder(page)
     check(`${w}: Web header ends gear, AI (${order.join(',')})`, order.at(-1) === 'ai' && order.at(-2) === 'gear')
-    check(`${w}: select tool sits in the header, not in the Tools column`, order.includes('select') && (await page.locator('[data-zone-side] .select-tool').count()) === 0)
+    check(`${w}: select tool is not in the header (wave 40: it sits in the Tools column)`, !order.includes('select'))
     check(`${w}: AI icon is a sparkle (two paths, filled)`, (await page.locator('[data-ai-button] svg path').count()) === 2)
     check(`${w}: favicon is the TrustWeb mark`, (await page.locator('link[rel=icon]').getAttribute('href')).includes('r=%2215%22'))
     await shot(page, 'header', w)
@@ -48,7 +55,7 @@ try {
       check(`${w}: ${s}: AI last`, o.at(-1) === 'ai', o.join(','))
     }
     await page.locator('.tabs [data-go="web"]').click(); await page.waitForTimeout(400)
-    await page.locator('[data-ai-button]').click(); await page.waitForTimeout(500)
+    await aiOpen(page); await page.waitForTimeout(500)
     check(`${w}: no endpoint -> Your AI plan cards`, await page.locator('[data-ai-group="sub"]').isVisible())
 
     // 2: Your AI
@@ -92,7 +99,7 @@ try {
     await shot(page, 'theme-dex-web', w)
     await page.evaluate(() => { document.documentElement.dataset.look = 'sleek' }); await page.waitForTimeout(200)
     await shot(page, 'theme-sleek-web', w)
-    await page.locator('[data-ai-button]').click(); await page.waitForTimeout(400)
+    await aiOpen(page); await page.waitForTimeout(400)
     await page.locator('[data-look-choice="default"]').evaluate((e) => e.click()); await page.waitForTimeout(300)
     check(`${w}: Default clears the look`, (await page.evaluate(() => document.documentElement.dataset.look)) === undefined && (await page.evaluate(() => localStorage.getItem('tw-look'))) === null)
     check(`${w}: no page errors (${errors.join(' | ')})`, errors.length === 0)
@@ -127,7 +134,7 @@ try {
     await shot(stock.page, 'dock-before', w); await stock.ctx.close()
     const big = await open(browser, 'big', w, record({}, 80))
     check('own data (80 people): the dock is hidden from the main flow', (await big.page.locator('.page-dock').evaluate((d) => d.hidden)))
-    await big.page.locator('[data-ai-button]').click(); await big.page.waitForTimeout(400)
+    await aiOpen(big.page); await big.page.waitForTimeout(400)
     await big.page.locator('[data-settings-group="general"] > summary, [data-settings-group="advanced"] > summary').first().click().catch(() => {})
     await big.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true }); await big.page.waitForTimeout(300)
     check('own data: Settings > Advanced holds Add a device and See TrustWeb in action', (await big.page.locator('[data-add-device]').count()) === 1 && (await big.page.locator('[data-see-action]').count()) === 1)
@@ -137,12 +144,12 @@ try {
   // 4 + 6: export-mail watcher under Services, only after an export was asked; paste a mail
   for (const w of [360, 1280]) {
     const none = await open(browser, 'sov0', w, record())
-    await none.page.locator('[data-ai-button]').click(); await none.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
+    await aiOpen(none.page); await none.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
     await none.page.locator('[data-settings-sovereign]').click(); await none.page.waitForTimeout(500)
     check(`${w}: nothing asked yet -> no watcher`, (await none.page.locator('[data-sov-section="watch"]').count()) === 0)
     await none.ctx.close()
     const asked = await open(browser, 'sov1', w, record({ sovereign: { services: { google: { exportAt: Date.now() } } } }))
-    await asked.page.locator('[data-ai-button]').click(); await asked.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
+    await aiOpen(asked.page); await asked.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
     await asked.page.locator('[data-settings-sovereign]').click(); await asked.page.waitForTimeout(500)
     check(`${w}: export asked -> watcher appears under Services`, (await asked.page.locator('[data-sov-section="services"] [data-sov-section="watch"]').count()) === 1)
     check(`${w}: heading carries "untested alpha feature"`, /untested alpha feature/.test(await asked.page.locator('[data-sov-section="watch"] > summary').innerText()))

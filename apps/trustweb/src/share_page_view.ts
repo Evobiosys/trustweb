@@ -104,7 +104,7 @@ export function sharingSettings(s: AppState, save: () => void, redraw: () => voi
 export function seenLine(s: AppState, personId: string): HTMLElement | null {
   const ids = seenBy(basisOf(s), personId, new Date())
   if (!s.shares?.length) return null
-  const text = (id: string): string => s.inventory.find((i) => i.id === id)?.text ?? id
+  const text = (id: string): string => s.inventory.find((i) => i.id === id)?.text ?? (id.startsWith('photos:') ? S.photos.sharedLine : id)   // wave 40: a photo share has no inventory text
   return el('details', { class: 'meta card-seen', 'data-card-seen': personId }, [
     el('summary', {}, [S.cardSeen(ids.length) + ' (i)']),
     el('p', { class: 'meta' }, [S.cardSeenInfo]),
