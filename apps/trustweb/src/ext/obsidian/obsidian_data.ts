@@ -6,22 +6,55 @@
  */
 export const MODULE_ID = 'obsidian'
 
-export interface ObsidianData { vault?: string; syncedAt?: number }
+/** localStorage keys of this module (opt-in for complete ingestion, hosts the owner confirmed): per device, cleared by Reset this phone. */
+export const INGEST_KEY = 'trustweb.v1.obsidian.ingest'
+export const HOSTS_KEY = 'trustweb.v1.obsidian.hosts'
+export const PREF_KEYS = [INGEST_KEY, HOSTS_KEY] as const
+
+/** One database per record on this device (obsidian_cache.ts). */
+export const obsidianDbName = (meId: string): string => `trustweb-obsidian.${meId}`
+
+/** `forgotAt`: the tombstone of "Forget this vault", so the other device's vault name does not come back on the next sync. */
+export interface ObsidianData { vault?: string; syncedAt?: number; forgotAt?: number }
 
 export function parseObsidian(raw: unknown): ObsidianData {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const o = raw as Record<string, unknown>
-  return { ...(typeof o.vault === 'string' && o.vault ? { vault: o.vault } : {}), ...(typeof o.syncedAt === 'number' ? { syncedAt: o.syncedAt } : {}) }
+  return {
+    ...(typeof o.vault === 'string' && o.vault ? { vault: o.vault } : {}),
+    ...(typeof o.syncedAt === 'number' ? { syncedAt: o.syncedAt } : {}),
+    ...(typeof o.forgotAt === 'number' ? { forgotAt: o.forgotAt } : {}),
+  }
 }
 
-/** The side with the later sync decides the vault's name. */
+/** The side with the later sync decides the vault's name (a tie: the larger name, the same on both devices); a sync older than a Forget does not bring the vault back. */
 export function mergeObsidian(mine: unknown, theirs: unknown): ObsidianData {
   const a = parseObsidian(mine)
   const b = parseObsidian(theirs)
-  const newer = (b.syncedAt ?? 0) > (a.syncedAt ?? 0) ? b : a
+  const at = a.syncedAt ?? 0
+  const bt = b.syncedAt ?? 0
+  const newer = bt > at ? b : bt < at ? a : (b.vault ?? '') > (a.vault ?? '') ? b : a
   const vault = newer.vault ?? a.vault ?? b.vault
-  const syncedAt = Math.max(a.syncedAt ?? 0, b.syncedAt ?? 0)
-  return { ...(vault ? { vault } : {}), ...(syncedAt ? { syncedAt } : {}) }
+  const syncedAt = Math.max(at, bt)
+  const forgotAt = Math.max(a.forgotAt ?? 0, b.forgotAt ?? 0)
+  if (forgotAt && syncedAt <= forgotAt) return { forgotAt }
+  return { ...(vault ? { vault } : {}), ...(syncedAt ? { syncedAt } : {}), ...(forgotAt ? { forgotAt } : {}) }
+}
+
+/** Reset this phone: the record's database and the module's preference keys go. Settles whatever IndexedDB does (blocked, silent). */
+export function clearObsidianData(
+  meId: string,
+  idb: Pick<IDBFactory, 'deleteDatabase'> | undefined = typeof indexedDB === 'undefined' ? undefined : indexedDB,
+  storage: Pick<Storage, 'removeItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage,
+  timeoutMs = 3_000,
+): Promise<void> {
+  for (const k of PREF_KEYS) { try { storage?.removeItem(k) } catch { /* not kept anyway */ } }
+  if (!idb) return Promise.resolve()
+  const work = new Promise<void>((resolve) => {
+    const r = idb.deleteDatabase(obsidianDbName(meId))
+    r.onsuccess = r.onerror = r.onblocked = (): void => resolve()
+  })
+  return Promise.race([work, new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))])
 }
 
 /** obsidian://open?vault=<name>&file=<note path without .md>; null when either is missing. */

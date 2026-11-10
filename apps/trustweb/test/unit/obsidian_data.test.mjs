@@ -13,3 +13,52 @@ describe('the extData slice', () => {
     expect(mergeObsidian({ vault: 'Mine' }, {})).toEqual({ vault: 'Mine' })
   })
 })
+
+import { clearObsidianData, obsidianDbName, PREF_KEYS } from '../../src/ext/obsidian/obsidian_data.ts'
+
+describe('B17 merge ties are deterministic and commutative', () => {
+  it('equal sync time, different vault: both devices pick the same one', () => {
+    const a = { vault: 'Alpha', syncedAt: 5 }
+    const b = { vault: 'Beta', syncedAt: 5 }
+    expect(mergeObsidian(a, b)).toEqual(mergeObsidian(b, a))
+    expect(mergeObsidian(a, b).vault).toBe('Beta')
+  })
+})
+
+describe('B15 a forgotten vault stays forgotten across the device sync', () => {
+  it('the tombstone beats an older vault from the other device', () => {
+    const r = mergeObsidian({ forgotAt: 10 }, { vault: 'Old', syncedAt: 4 })
+    expect(r).toEqual({ forgotAt: 10 })
+    expect(mergeObsidian({ vault: 'Old', syncedAt: 4 }, { forgotAt: 10 })).toEqual({ forgotAt: 10 })
+  })
+  it('a sync after the Forget wins and keeps the tombstone time', () => {
+    expect(mergeObsidian({ forgotAt: 10 }, { vault: 'New', syncedAt: 12 })).toEqual({ vault: 'New', syncedAt: 12, forgotAt: 10 })
+  })
+  it('parseObsidian keeps forgotAt', () => {
+    expect(parseObsidian({ forgotAt: 3, junk: 1 })).toEqual({ forgotAt: 3 })
+  })
+})
+
+describe('B1 Reset this phone clears what the module remembers', () => {
+  const fakeIdb = () => {
+    const deleted = []
+    return { deleted, idb: { deleteDatabase: (name) => { deleted.push(name); const r = {}; setTimeout(() => r.onsuccess?.(), 0); return r } } }
+  }
+  const fakeStorage = (init) => {
+    const m = new Map(Object.entries(init))
+    return { m, storage: { removeItem: (k) => { m.delete(k) }, getItem: (k) => m.get(k) ?? null } }
+  }
+  it('deletes the per-record database and every module preference key', async () => {
+    const { deleted, idb } = fakeIdb()
+    const { m, storage } = fakeStorage(Object.fromEntries(PREF_KEYS.map((k) => [k, '1']).concat([['other', 'keep']])))
+    await clearObsidianData('me42', idb, storage)
+    expect(deleted).toEqual([obsidianDbName('me42')])
+    expect(obsidianDbName('me42')).toBe('trustweb-obsidian.me42')
+    expect([...m.keys()]).toEqual(['other'])
+  })
+  it('settles when IndexedDB never answers (blocked) and without IndexedDB', async () => {
+    const hang = { deleteDatabase: () => ({}) }
+    await clearObsidianData('me42', hang, { removeItem: () => undefined }, 20)
+    await clearObsidianData('me42', undefined, { removeItem: () => undefined })
+  })
+})

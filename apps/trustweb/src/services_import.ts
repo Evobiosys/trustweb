@@ -287,9 +287,12 @@ function rebaseSnaps(s: State, personId: string, from: string, to: string): void
   for (const b of s.serviceImports ?? []) for (const d of Object.values(b.done)) if (d.personId === personId && d.snap === from) d.snap = to
 }
 
+/** A pending row a bulk accept may take: no flags, and not found by a model (wave 41: those wait for the owner's own look, row by row). */
+export const bulkOk = (x: { row: ServiceRow; proposal: Proposal }): boolean => bulkAcceptable(x.proposal) && !x.row.ai
+
 /** Accepts every pending row with no flag; returns how many. */
 export function bulkAccept(s: State, now: number, newId: () => string, tagOf?: (label: string) => string): number {
-  const list = pendingProposals(s, now).filter((x) => bulkAcceptable(x.proposal))
+  const list = pendingProposals(s, now).filter(bulkOk)
   for (const x of list) decide(s, x.batchId, x.row.key, { do: 'accept' }, now, newId, tagOf)
   return list.length
 }

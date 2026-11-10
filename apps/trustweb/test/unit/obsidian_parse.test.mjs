@@ -76,3 +76,51 @@ describe('parseNote', () => {
     }
   })
 })
+
+describe('B2 a line of spaces inside the frontmatter cannot freeze the reader', () => {
+  it('900,000 spaces after a key, inside the fences, in under 200 ms', () => {
+    for (const line of ['a' + ' '.repeat(900_000), 'a' + ' '.repeat(900_000) + ':', ' '.repeat(900_000) + 'a: b', 'a: ' + 'b '.repeat(450_000)]) {
+      const t0 = performance.now()
+      const { data } = parseFrontmatter(`---\n${line}\nname: Z\n---\nbody`)
+      expect(performance.now() - t0).toBeLessThan(200)
+      expect(data.name).toBe('Z')
+    }
+  })
+  it('a normal key with spaces still reads; an over-long key or line is skipped', () => {
+    expect(parseFrontmatter('---\nfirst name : Zed\n---\n').data['first name']).toBe('Zed')
+    expect(parseFrontmatter(`---\n${'k'.repeat(70)}: v\nok: 1\n---\n`).data).toEqual({ ok: '1' })
+    expect(parseFrontmatter(`---\nbig: ${'v'.repeat(2500)}\nok: 1\n---\n`).data).toEqual({ ok: '1' })
+  })
+  it('a value with colons keeps everything after the first colon', () => {
+    expect(parseFrontmatter('---\nurl: https://example.org/a\n---\n').data.url).toBe('https://example.org/a')
+  })
+})
+
+describe('B12 empty frontmatter is no body text', () => {
+  it('--- fences with nothing between (LF and CRLF)', () => {
+    expect(parseFrontmatter('---\n---\nbody')).toEqual({ data: {}, body: 'body' })
+    expect(parseFrontmatter('---\r\n---\r\nbody')).toEqual({ data: {}, body: 'body' })
+    expect(parseNote('x.md', '---\n---\nbody').excerpt).toBe('body')
+  })
+})
+
+describe('B13 e-mails from the body only when they are unambiguous', () => {
+  it('frontmatter e-mail wins; body addresses are not added', () => {
+    expect(parseNote('P/x.md', '---\nemail: a@example.org\n---\ncc b@example.org').emails).toEqual(['a@example.org'])
+  })
+  it('no frontmatter e-mail and exactly one address in the body: used', () => {
+    expect(parseNote('P/x.md', 'Write to a@example.org or a@example.org').emails).toEqual(['a@example.org'])
+  })
+  it('two different addresses in the body: none', () => {
+    expect(parseNote('P/x.md', 'a@example.org, cc b@example.org').emails).toEqual([])
+  })
+})
+
+describe('B14 wikilinks', () => {
+  it('a table-escaped alias keeps the name without the backslash', () => {
+    expect(parseNote('x.md', '| [[Alma Brandt\\|Alma]] |').links).toEqual(['Alma Brandt'])
+  })
+  it('names with a dot are kept; real attachments are skipped', () => {
+    expect(parseNote('x.md', '[[Mary.Jones]] [[J.Smith]] [[Folder/Dr. Who]] [[pic.png]] [[doc.PDF]] [[note.md]] [[sheet.xlsx]]').links).toEqual(['Mary.Jones', 'J.Smith', 'Dr. Who', 'note'])
+  })
+})

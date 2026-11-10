@@ -6,7 +6,10 @@
  */
 import type { ImportedContact } from '../../../../crm/src/import/types'
 import { ContactSource } from '../../../../crm/src/import/types'
+import { S } from '../../strings'
 import type { ParsedNote } from './obsidian_parse'
+
+const T = S.obsidian
 
 export const MENTIONS_SHOWN = 5
 const PEOPLE_FOLDERS = new Set(['people', 'persons', 'person', 'personen', 'contacts', 'contact', 'kontakte', 'kontakt', 'leute', 'menschen'])
@@ -46,9 +49,9 @@ export function buildContacts(notes: readonly ParsedNote[]): VaultContacts {
     const said = [...(mentions.get(p.path) ?? [])].sort()
     const note = [
       p.excerpt,
-      p.aliases.length ? `Also known as: ${p.aliases.join(', ')}` : '',
-      said.length ? `Mentioned in: ${said.slice(0, MENTIONS_SHOWN).join(', ')}${said.length > MENTIONS_SHOWN ? ` (+${said.length - MENTIONS_SHOWN})` : ''}` : '',
-      `Source: ${p.path}`,
+      p.aliases.length ? `${T.noteAlias}: ${p.aliases.join(', ')}` : '',
+      said.length ? `${T.noteMentioned}: ${said.slice(0, MENTIONS_SHOWN).join(', ')}${said.length > MENTIONS_SHOWN ? ` (+${said.length - MENTIONS_SHOWN})` : ''}` : '',
+      `${T.noteSource}: ${p.path}`,
     ].filter(Boolean).join('\n')
     return { source: ContactSource.Obsidian, file: p.path, sourceRef: p.path, name: p.name, phones: p.phones, emails: p.emails, labels: labelsOf(p), note, ...(p.org ? { org: p.org } : {}) }
   })

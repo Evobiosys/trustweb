@@ -16,10 +16,9 @@ import type { DupePair } from './import_curate'
 import { Ring } from './model'
 import type { AppState, ServiceRow } from './model'
 import type { Pages } from './page_view'
-import { bulkAccept, decide, pendingProposals } from './services_import'
+import { bulkAccept, bulkOk, decide, pendingProposals } from './services_import'
 import type { Pending } from './services_import'
 import { S } from './strings'
-import { bulkAcceptable } from './zone_proposals'
 import { alphaSub } from './alpha_heading'
 import type { Actions } from './actions'
 import { obsidianLink } from './ext/obsidian/obsidian_card'
@@ -124,7 +123,7 @@ export function curatePage(h: CurateHooks): void {
     const { useful, unnamed } = sortPending(filtered)
     const shownRows = [...useful, ...(ui.unnamedOpen ? unnamed : [])]
     const tags = tagCounts(all)
-    const acq = all.filter((x) => bulkAcceptable(x.proposal) && !isUnnamed(x.row))
+    const acq = all.filter((x) => bulkOk(x) && !isUnnamed(x.row))
     const free = acq.length
     const anyHistory = all.some((x) => hasHistory(x.row))
     const selRows = rowsOf(ui.sel, all)
@@ -142,7 +141,7 @@ export function curatePage(h: CurateHooks): void {
         ]),
         el('div', { class: 'cur-bar' }, [
           free ? el('button', { class: 'btn btn-electric', 'data-svc-bulk': String(free), onclick: () => { const n = acceptAllAsAcquaintances(h.state(), Date.now(), () => randomId(8), ensureTags(h, acq)); accepted(n); draw() } }, [T.acceptAcq(free)]) : null,
-          anyHistory ? el('button', { class: 'btn btn-ghost', 'data-svc-bulk-flags': '', onclick: () => { const n = bulkAccept(h.state(), Date.now(), () => randomId(8), ensureTags(h, all.filter((x) => bulkAcceptable(x.proposal)))); accepted(n); draw() } }, [S.svcAcceptAll(all.filter((x) => bulkAcceptable(x.proposal)).length)]) : null,
+          anyHistory ? el('button', { class: 'btn btn-ghost', 'data-svc-bulk-flags': '', onclick: () => { const n = bulkAccept(h.state(), Date.now(), () => randomId(8), ensureTags(h, all.filter(bulkOk))); accepted(n); draw() } }, [S.svcAcceptAll(all.filter(bulkOk).length)]) : null,
         ]),
         el('p', { class: 'meta' }, [T.acceptAcqHint]),
         el('div', { class: 'cur-bar' }, [
