@@ -251,3 +251,82 @@ describe('relay acks (2026-10-19: the "Receive from Phone?" sheet came back on e
     expect(await macSink('did:peer:2.stranger', toMac[0].payload)).toBe(false)
   })
 })
+
+describe('take another device\'s state (wave 40)', () => {
+  async function pair(macState, phoneState, extra = {}) {
+    const h = hub()
+    const archived = []
+    const adopted = []
+    const hooks = (who) => ({ archive: (reason, dev) => { archived.push({ who, reason, dev }); return true }, onAdopted: (dev, diff) => adopted.push({ who, dev, diff }), ...extra })
+    const mac = await device(h, 'Mac', macState, 'mac', hooks('mac'))
+    const phone = await device(h, 'Phone', phoneState, 'phone', hooks('phone'))
+    const mine = await phone.api.join(await mac.api.offerCode())
+    await until(() => mac.box.requests.length === 1)
+    mine.confirm(); mac.box.requests[0].confirm()
+    return { h, mac, phone, archived, adopted, macDid: phone.api.pairings()[0].did, phoneDid: mac.api.pairings()[0].did }
+  }
+
+  it('Take: the other device sends its record unprompted, this one asks its person, archives first, then holds exactly that state', async () => {
+    const t = await pair(mk('J', [person('a', 'Ada Lovelace', [line('l1')])]), mk('J', [person('b', 'Ben Carter')]))
+    await t.phone.api.takeFrom(t.macDid)
+    await until(() => t.phone.box.incoming.length === 1)
+    const i = t.phone.box.incoming[0]
+    expect(i.adopt.kind).toBe('take')
+    expect(i.adopt.diff).toEqual({ people: 2, notes: 0, settings: 0 })
+    expect(t.phone.state.people.map((p) => p.id)).toEqual(['b'])
+    expect(await i.adopt.run()).toBe(true)
+    expect(t.phone.state.people.map((p) => p.id)).toEqual(['a'])
+    expect(t.archived).toEqual([{ who: 'phone', reason: "before taking Mac's state", dev: 'Mac' }])
+    expect(t.adopted[0]).toMatchObject({ who: 'phone', dev: 'Mac' })
+    expect(t.mac.state.people.map((p) => p.id)).toEqual(['a'])
+    expect(t.mac.box.incoming).toHaveLength(0)
+  })
+
+  it('after taking, the next sync lists no conflict and changes nothing', async () => {
+    const t = await pair(mk('J', [person('a', 'Ada Lovelace', [line('l1')])]), mk('J', [person('a', 'Ada edited here')]))
+    await t.phone.api.takeFrom(t.macDid)
+    await until(() => t.phone.box.incoming.length === 1)
+    await t.phone.box.incoming[0].adopt.run()
+    await t.phone.api.syncNow(t.macDid)
+    await until(() => t.mac.box.incoming.length === 1)
+    const res = await t.mac.box.incoming[0].accept(false)
+    expect(res).toMatchObject({ added: 0, updated: 0, conflicts: [] })
+    await until(() => t.phone.box.incoming.length === 2)
+    expect(await t.phone.box.incoming[1].accept(false)).toMatchObject({ added: 0, updated: 0, conflicts: [] })
+    expect(t.phone.state.people[0].name).toBe('Ada Lovelace')
+  })
+
+  it('Send my state: the other device is asked (give), and only its confirmation replaces its record', async () => {
+    const t = await pair(mk('J', [person('a', 'Ada Lovelace')]), mk('J', [person('b', 'Ben Carter')]))
+    await t.phone.api.sendTo(t.macDid)
+    await until(() => t.mac.box.incoming.length === 1)
+    expect(t.mac.box.incoming[0].adopt.kind).toBe('give')
+    expect(t.mac.state.people.map((p) => p.id)).toEqual(['a'])
+    await t.mac.box.incoming[0].adopt.run()
+    expect(t.mac.state.people.map((p) => p.id)).toEqual(['b'])
+    expect(t.archived[0]).toMatchObject({ who: 'mac', dev: 'Phone' })
+  })
+
+  it('no copy kept: nothing is replaced', async () => {
+    const t = await pair(mk('J', [person('a', 'Ada')]), mk('J', [person('b', 'Ben')]), { archive: () => false })
+    await t.phone.api.takeFrom(t.macDid)
+    await until(() => t.phone.box.incoming.length === 1)
+    expect(await t.phone.box.incoming[0].adopt.run()).toBe(false)
+    expect(t.phone.state.people.map((p) => p.id)).toEqual(['b'])
+  })
+
+  it('a receive-only device does not answer a want; Send my state is refused on it', async () => {
+    const t = await pair(mk('J', [person('a', 'Ada')]), mk('J', []), { canSend: () => false })
+    await t.phone.api.takeFrom(t.macDid)
+    await new Promise((r) => setTimeout(r, 150))
+    expect(t.phone.box.incoming).toHaveLength(0)
+    await expect(t.phone.api.sendTo(t.macDid)).rejects.toThrow('receive only')
+  })
+
+  it('an unflagged record still merges without an adopt offer', async () => {
+    const t = await pair(mk('J', [person('a', 'Ada')]), mk('J', []))
+    await t.phone.api.syncNow(t.macDid)
+    await until(() => t.mac.box.incoming.length === 1)
+    expect(t.mac.box.incoming[0].adopt).toBeUndefined()
+  })
+})

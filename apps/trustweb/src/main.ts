@@ -204,7 +204,7 @@ import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
 import { mergeIncoming } from './matches'
 import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
-import { fetchEditStream, liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
+import { fetchEditStream, liveDevActive, liveSyncedAt, markAdopted, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
@@ -238,6 +238,8 @@ import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
+import { createArchivedCopiesView } from './archived_copies_view'
+import { thisDevice } from './device_name'
 import { careForCodes } from './sync_codes'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
 import { offerContacts, openServicesImport } from './services_view'
@@ -4807,8 +4809,13 @@ const snapshots = createSnapshotView({
   persona, storeCtx, state: () => state, sheet, openSheet, toast, when: whenLabel,
   replaceRecord: (s) => { state = s; save(); location.reload() },
 })
+const archivedCopies = createArchivedCopiesView({
+  persona, storeCtx, state: () => state, toast, when: whenLabel, deviceName: () => thisDevice() || 'This device',
+  replaceRecord: (s) => { state = s; save(); location.reload() },
+})
 const devices = createSyncView({
   persona, storeCtx, state: stateForSync, peek: () => state, save, sheet, openSheet, closeSheet, toast, when: whenLabel, changed: render, snapshots,
+  archive: archivedCopies.keep, adopted: markAdopted,
   askDid: () => state?.identity?.did,
   isPhone: () => currentLayout() === 'mobile',
   codeDeps: () => (connectEligible() && canRegister(SERVER_ORIGIN)
@@ -7121,6 +7128,7 @@ function settingsSheet(): void {
     ...askWebSettings({ state: st, save }),
     ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
     ...(liveDevActive() ? [editStreamLine()] : []),
+    ...archivedCopies.block(settingsSheet),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),
