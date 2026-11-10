@@ -3946,6 +3946,7 @@ export const S = {
     mapConsent: 'Loading the map shows a page from another site inside TrustWeb. That site then sees your address.',
     mapLoad: 'Load the map here',
     mapChange: 'Change address',
+    cancel: 'Cancel',
     openNewTab: 'Open in a new tab',
     save: 'Save',
     setMap: 'Events map address',

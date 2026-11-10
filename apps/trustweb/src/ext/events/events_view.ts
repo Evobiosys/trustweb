@@ -35,7 +35,7 @@ export function mountEvents(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const box = el('div', { class: 'events-host', 'data-events': '' })
   hostEl.append(box)
   const root = box.attachShadow({ mode: 'open' })
-  const ui: { sharing: string | null; note: string; mapNote: string } = { sharing: null, note: '', mapNote: '' }
+  const ui: { sharing: string | null; note: string; mapNote: string; mapEdit: boolean } = { sharing: null, note: '', mapNote: '', mapEdit: false }
   const st = (): AppState => ctx.store()
   const data = (): EventsData => readEvents(st())
   const save = (d: EventsData): void => { writeEvents(ctx, d); draw() }
@@ -75,15 +75,17 @@ export function mountEvents(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const d = data()
     const src = mapEmbedUrl(d.mapUrl ?? DEFAULT_MAP_URL)
     const kids: Kids = [el('h3', { class: 'eyebrow' }, [t.mapTitle])]
-    const change = btn(t.mapChange, () => { const n = data(); delete n.mapUrl; save(n) }, { 'data-events-map-change': '' })
-    if (!src) {
-      const input = el('input', { type: 'url', placeholder: t.mapPh, 'aria-label': t.mapPh, 'data-events-map-url': '' }) as HTMLInputElement
-      kids.push(el('p', { class: 'meta' }, [t.mapNone]), input, btn(t.save, () => {
+    // Review wave 40: Change opens the address field (deleting mapUrl only brought the default map straight back).
+    const change = btn(t.mapChange, () => { ui.mapEdit = true; ui.mapNote = ''; draw() }, { 'data-events-map-change': '' })
+    if (!src || ui.mapEdit) {
+      const input = el('input', { type: 'url', placeholder: t.mapPh, 'aria-label': t.mapPh, 'data-events-map-url': '', value: d.mapUrl ?? '' }) as HTMLInputElement
+      kids.push(src ? null : el('p', { class: 'meta' }, [t.mapNone]), input, btn(t.save, () => {
         const url = mapEmbedUrl(input.value)
         if (!url) { ui.mapNote = t.mapBad; draw(); return }
         ui.mapNote = ''
+        ui.mapEdit = false
         save({ ...data(), mapUrl: url })
-      }, { 'data-events-map-save': '' }, 'lnk strong'), ui.mapNote ? el('p', { class: 'note' }, [ui.mapNote]) : null)
+      }, { 'data-events-map-save': '' }, 'lnk strong'), src ? btn(t.cancel, () => { ui.mapEdit = false; ui.mapNote = ''; draw() }, { 'data-events-map-cancel': '' }) : null, ui.mapNote ? el('p', { class: 'note' }, [ui.mapNote]) : null)
     } else if (!readMapConsent()) {
       kids.push(el('p', { class: 'meta' }, [t.mapConsent]), el('div', { class: 'row wrap' }, [
         btn(t.mapLoad, () => { writeMapConsent(true); draw() }, { 'data-events-map-load': '' }, 'lnk strong'),
@@ -112,7 +114,7 @@ export function mountEvents(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const rows: Kids = cards.length
       ? [...cards.filter((c) => !c.past).map(eventCard), past.length ? el('h4', { class: 'eyebrow' }, [t.past]) : null, ...past.map(eventCard)]
       : [el('p', { class: 'empty' }, [t.empty])]
-    const key = JSON.stringify([data().mapUrl ?? '', readMapConsent(), ui.mapNote])
+    const key = JSON.stringify([data().mapUrl ?? '', readMapConsent(), ui.mapNote, ui.mapEdit])
     if (key !== mapKey) { mapHolder.replaceChildren(mapSlot()); mapKey = key }
     noteEl.replaceChildren(...(ui.note ? [el('p', { class: 'note', 'data-events-note': '' }, [ui.note])] : []))
     listEl.replaceChildren(...rows.filter((n): n is Node => n !== null && n !== undefined))
