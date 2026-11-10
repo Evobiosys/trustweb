@@ -11,6 +11,7 @@ import { gebModule } from './geb'
 import { whatsappModule } from './whatsapp'
 import { coNotesModule } from './co_notes'
 import { module as communityMighty } from './community-mighty'
+import { module as assistant } from './assistant'
 import { module as mcpLocal } from './mcp-local'
 import { module as photos } from './photos'
 import { module as eventsView } from './events'
@@ -168,5 +169,5 @@ const part = (id: string, kind: TwModule['kind']): TwModule => ({ id, title: S.e
 ;[
   wrap(calendarModule, 'view'), wrap(coNotesModule, 'view'), wrap(gebModule, 'service'), wrap(matrixModule, 'service'), wrap(signalLinkModule, 'service'), wrap(whatsappModule, 'service'),
   part('events', 'view'), part('resources', 'view'), part('feed', 'view'), part('matches', 'view'), part('support-ask', 'service'), part('ai-button', 'service'),
-  communityMighty, mcpLocal, photos, feedView, eventsView,
+  communityMighty, mcpLocal, photos, feedView, eventsView, assistant,
 ].forEach(registerModule)
