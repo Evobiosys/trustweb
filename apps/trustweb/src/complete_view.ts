@@ -8,6 +8,7 @@ import { el } from '../../demo/src/ui/dom'
 import type { AppState, Person, Ring } from './model'
 import { ringColor } from './model'
 import type { ColourTag } from './colour_tags'
+import { tagPill } from './components/tag_pill'
 import { archivePerson } from './archived_people'
 import { BULK_RINGS, clearSelection, restoreSnapshot, snapshot, toggle } from './multi_select'
 import type { Selection } from './multi_select'
@@ -104,10 +105,10 @@ export function completeView(io: CompleteIo): HTMLElement {
     const input = el('input', { class: 'field cv-tag-input', 'data-cv-tag-input': r.id, placeholder: S.completeTagPh, 'aria-label': S.completeTagAria(r.name), maxlength: '40' }) as HTMLInputElement
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(input) } })
     return el('span', { class: 'cv-c cv-c-tags' }, [
-      ...r.tags.map((t) => el('span', { class: 'cv-tag' + (t.own ? '' : ' inherited'), 'data-cv-tag': t.id }, [
-        t.label,
-        t.own ? el('button', { class: 'cv-tag-x', 'aria-label': S.completeTagRemove(t.label), onclick: () => { const p = people().find((x) => x.id === r.id); if (p) { setPersonTag(p, t.id, false); changed() } } }, ['×']) : null,
-      ])),
+      ...r.tags.map((t) => tagPill({ id: t.id, label: t.label, colour: io.tags().find((x) => x.id === t.id)?.colour ?? '#9e9e9e', kind: io.tags().find((x) => x.id === t.id)?.kind }, {
+        class: 'cv-tag' + (t.own ? '' : ' inherited'), attrs: { 'data-cv-tag': t.id },
+        after: [t.own ? el('button', { class: 'cv-tag-x', 'aria-label': S.completeTagRemove(t.label), onclick: () => { const p = people().find((x) => x.id === r.id); if (p) { setPersonTag(p, t.id, false); changed() } } }, ['×']) : null],
+      })),
       input,
     ])
   }
