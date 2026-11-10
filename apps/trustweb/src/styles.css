@@ -1739,3 +1739,12 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 /* the Theme choices are clickable: underlined like the Variations rows (the chosen one is not) */
 .look-pick .radio b{text-decoration:underline}
 .look-pick .radio.on b{text-decoration:none}
+
+/* wave 40 photo-rails */
+/* Tools > Images: show / grey out / hide for every picture (image_mode.ts sets body[data-tw-images]) */
+[data-images-mode]{text-decoration:underline; text-underline-offset:3px}
+[data-images-mode].on{font-weight:700; text-decoration:none}
+body[data-tw-images="grey"] :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) opacity(.55)}
+body[data-tw-images="hide"] :is(.post-img,.prof-their-pic,.logo){display:none}
+body[data-tw-images="hide"] [data-pic]{background-image:none !important}
+.photos-host{margin:var(--s-3, 12px) 0}

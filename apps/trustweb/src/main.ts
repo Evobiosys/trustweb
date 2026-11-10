@@ -167,6 +167,9 @@ import { completeQuery, completeView, resetComplete, setCompleteQuery } from './
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { personImageOk } from './person_image'
+import { applyImageMode, imageMode, pictureUrl } from './image_mode'
+import { clearPhotosDb } from './ext/photos/photos_data'
+import { faceMatchRow } from './ext/photos/photos_settings'
 import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
@@ -2581,7 +2584,8 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
 
 /** Wave 19: a picture in place of the initials (my own, a blob: URL; or one a person sent, a validated JPEG data URL). */
 function pictured(face: HTMLElement, url: string | undefined): HTMLElement {
-  if (url) { face.style.background = `url("${url}") center/cover`; face.textContent = '' }
+  const shown = pictureUrl(imageMode(), url)   // wave 40: Tools > Images (hide: the initials stay)
+  if (shown) { face.style.background = `url("${shown}") center/cover`; face.textContent = ''; face.dataset.pic = '1' }
   return face
 }
 
@@ -3472,6 +3476,12 @@ function cardMore(p: Person): Node[] {
     passOn: () => [passOnRowFor(p)],
     knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace)],
     invitations: () => [cardInvitationsRow(invitationIo(), p)],
+    photos: () => {   // wave 40: the Photos module answers 'person-card' by drawing into this host; off: nothing
+      if (!isEnabled('photos')) return []
+      const host = el('div', { class: 'photos-host', 'data-photos-host': p.id })
+      twBus.emit('person-card', { personId: p.id, host })
+      return [host]
+    },
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       keepInTouchRow({ state: st, save, redraw: render, toast: (msg, undo) => toast(msg, { onClick: undo }) }, p),
@@ -3486,7 +3496,7 @@ function cardMore(p: Person): Node[] {
     ],
   }
   const connected = Boolean(p.peerId)
-  const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
+  const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null, photos: isEnabled('photos') })
   return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
 }
 
@@ -4953,6 +4963,10 @@ const twBus = createBus()
 twBus.on('save', () => save())
 twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
 twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
+// wave 40 photo-rails: what a module may ask of the app (a notice, a page with Back, Back)
+twBus.on('toast', (msg) => { if (typeof msg === 'string') toast(msg) })
+twBus.on('open-page', (d) => { const p = d as { title: string; body: Node[]; mark: string }; pages.open(p.title, p.body, p.mark) })
+twBus.on('back', () => history.back())
 function twCtx(): TwCtx {
   return { store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings) }
 }
@@ -7116,6 +7130,7 @@ function settingsSheet(): void {
       el('input', { type: 'checkbox', ...(s.qrProfileOption ? { checked: '' } : {}), onchange: () => { s.qrProfileOption = !s.qrProfileOption; save() } }),
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
+    ...(isEnabled('photos') ? [faceMatchRow(s, save, settingsSheet)] : []),   // wave 40: opt-in, off unless switched on
     ...aiSettings({ state: st, save, toast, openSheet, backToSettings: () => { sheet.dataset.kind = 'settings'; settingsSheet() } }),
     ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
@@ -7197,7 +7212,7 @@ function settingsSheet(): void {
       onclick: () => {
         if (!confirm(S.resetConfirm)) return
         dropRecording()
-        void Promise.all([audioStore.clear(), images.clear()]).finally(() => { clearState(persona, storeCtx); location.reload() })
+        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id)]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
     ],
@@ -7796,6 +7811,7 @@ window.addEventListener('storage', (e) => {
 document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
 document.body.dataset.twProfile = profileOf(state?.twSettings)
+applyImageMode()
 void twRegistry.start().then(renderTabs) // wave 39: a heavy module's view joins the row once it has loaded
 render()
 void refreshOwnPicture()
