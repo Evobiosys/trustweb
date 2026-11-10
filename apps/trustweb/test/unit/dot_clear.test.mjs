@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 39 small-ui-a: bubbles never overlap; they shrink when they must (src/dot_clear.ts). */
-import { MIN_DOT_R, clearDots } from '../../src/dot_clear.ts'
+import { MIN_DOT_R, clearDots, labelSize } from '../../src/dot_clear.ts'
 
 const gap = (a, b, r) => Math.hypot(a.x - b.x, a.y - b.y) - r.get(a.id) - r.get(b.id)
 
@@ -37,4 +37,13 @@ describe('clearDots', () => {
     expect(clearDots([], []).size).toBe(0)
     expect(clearDots([{ id: 'a', x: 1, y: 1, r: 9 }], []).get('a')).toBe(9)
   })
+})
+
+describe('labelSize (names follow the bubble)', () => {
+  it('a full bubble keeps the usual 11.5 px name', () => expect(labelSize(42)).toBe(11.5))
+  it('a shrunken bubble gets a smaller name, never below 7 px', () => {
+    expect(labelSize(24)).toBeCloseTo(9.6, 5)
+    expect(labelSize(12)).toBe(7)
+  })
+  it('never larger than the usual size', () => expect(labelSize(90)).toBe(11.5))
 })

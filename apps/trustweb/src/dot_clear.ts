@@ -34,3 +34,6 @@ export function clearDots(dots: readonly DotDisc[], fixed: readonly Spot[]): Map
   }
   return r
 }
+
+/** The name's font size (layout px) for a bubble of this diameter: the usual 11.5 px on a full bubble, smaller on a shrunken one, never below 7 px. The zoom layer scales it with everything else. */
+export const labelSize = (diameter: number): number => Math.min(11.5, Math.max(7, diameter * 0.4))

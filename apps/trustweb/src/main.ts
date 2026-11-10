@@ -2997,7 +2997,7 @@ function screenWeb(): Node[] {
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
     ? el('div', { class: 'scroll' }, [createMapView({ people: s.people.filter((p) => ringShown(st(), webSlot(p))), openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
-    : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer, wantsToConnectSection()])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix); wave 39: so does "wants to connect", which stays put and full size while the Web zooms
+    : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
@@ -3009,6 +3009,7 @@ function screenWeb(): Node[] {
     view === 'rings'
       ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
       : clip,
+    ...[wantsToConnectSection()].filter((d): d is HTMLElement => d !== null),   // wave 39: below the zoom clip, so it stays put and full size while the Web zooms
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }

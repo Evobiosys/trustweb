@@ -43,7 +43,7 @@ import type { HoverEvent } from './ring_hover'
 import { singleOrDouble } from './press'
 import { contextPress } from './context_press'
 import { labelScale, dragRingTo } from './ring_spacing'
-import { clearDots, type DotDisc } from './dot_clear'
+import { clearDots, labelSize, type DotDisc } from './dot_clear'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
 import { createCountdown } from './merge_countdown'
@@ -340,6 +340,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         if (arcs) b.style.setProperty('--arcs', arcs)
         const diameter = 2 * (dotR.get(p.id) ?? (dot * k) / 2)
         b.style.setProperty('--d', diameter + 'px')
+        b.style.setProperty('--lbl', labelSize(diameter) + 'px')
         if (diameter < 11) b.classList.add('nl')
         wrap.appendChild(b)
         const to = quiet.get(p.id)
@@ -493,7 +494,7 @@ export function createWebView(deps: WebViewDeps): WebView {
           unlisten()
           if (!ringLineDrag) return
           ringLineDrag = false
-          if (e.type === 'pointerup') { setUi(st(), 'radii', radii); s.uiRings = st().uiRings; save(); render() }
+          if (e.type === 'pointerup') { setUi(st(), 'radii', { ...st().uiRings?.radii, ...Object.fromEntries(ringsGeo.rings.filter((r) => radii[r] !== ringsGeo.radius[r]).map((r) => [r, radii[r]])) }); s.uiRings = st().uiRings; save(); render() }   // only the rings that moved are kept
           setTimeout(() => { dragged = false }, 0)
         }
         window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
