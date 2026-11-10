@@ -9,7 +9,7 @@ import type { AppState } from './model'
 export type Readers = 'humans' | 'private-ai' | 'all-ai'
 export const READERS: readonly Readers[] = ['humans', 'private-ai', 'all-ai']
 
-/** Provider ids as in Settings > Advanced > Your AI. */
+/** Provider ids as in Settings > AI. */
 export const AI_PROVIDERS = ['openai', 'claude', 'ollama', 'pc24', 'custom', 'tw-subscription'] as const
 const PRIVATE_PROVIDERS: readonly string[] = ['ollama', 'pc24', 'tw-subscription']
 

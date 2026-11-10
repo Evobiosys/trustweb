@@ -46,7 +46,7 @@ import { singleOrDouble } from './press'
 import { contextPress } from './context_press'
 import { labelScale, dragRingTo } from './ring_spacing'
 import { clearDots, labelSize, type DotDisc } from './dot_clear'
-import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, minZoom, panBy, transformOf, zoomAt } from './rings_zoom'
+import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, floorZoom, panBy, reclamp, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
 import { createCountdown } from './merge_countdown'
 import { HOLD_MS, type HoldEvent, hitDot, holdEnabled, holdStart, holdStep } from './dot_merge'
@@ -660,6 +660,7 @@ export function createWebView(deps: WebViewDeps): WebView {
 
   /** Zoom and pan of the Web screen's content; survives render() and resets when the Web screen is left. View state only (I1). */
   let ringsZoom: RingsZoom = RINGS_ZOOM_HOME
+  let ringsResizeOff: (() => void) | undefined
   /** Wave 39: a ring's stroke is being dragged: the pan of the zoom layer stands back. */
   let ringLineDrag = false
 
@@ -681,7 +682,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     }
     apply(ringsZoom)
     // Wave 41: zooming out stops where the outermost ring fits the clip with a small margin (minZoom); phones keep 1.
-    const view = (): ZoomView => ({ w: layer.offsetWidth, h: layer.offsetHeight, cw: clip.clientWidth, ch: clip.clientHeight, minK: minZoom(Number(layer.querySelector<HTMLElement>('.rings-wrap')?.dataset.ringsExtent ?? 0), clip.clientWidth, clip.clientHeight) })
+    const view = (): ZoomView => ({ w: layer.offsetWidth, h: layer.offsetHeight, cw: clip.clientWidth, ch: clip.clientHeight, minK: floorZoom(Number(layer.querySelector<HTMLElement>('.rings-wrap')?.dataset.ringsExtent ?? 0), layer.querySelector<HTMLElement>('.rings-wrap')?.offsetWidth ?? 0, layer.querySelector<HTMLElement>('.rings-wrap')?.offsetHeight ?? 0, clip.clientWidth, clip.clientHeight) })
     /** The rings centred at zoom k (the first fit, and the floor: a zoom around the pointer would leave the rings off-centre). */
     const centred = (k: number): RingsZoom => {
       const wrap = layer.querySelector<HTMLElement>('.rings-wrap')
@@ -696,6 +697,19 @@ export function createWebView(deps: WebViewDeps): WebView {
         if (k > 1) apply(centred(k))
       })
     }
+    // Review fix C4: a window resize re-clamps the stored zoom to the new floor (debounced); the listener lives only while this Web view is mounted.
+    ringsResizeOff?.()
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined
+    const onResize = (): void => {
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        if (!clip.isConnected) { ringsResizeOff?.(); return }
+        const v = view(), next = reclamp(ringsZoom, v)
+        if (next !== ringsZoom) apply(next.k === v.minK && v.minK! > 1 ? centred(next.k) : next)
+      }, 150)
+    }
+    window.addEventListener('resize', onResize)
+    ringsResizeOff = () => { clearTimeout(resizeTimer); window.removeEventListener('resize', onResize); ringsResizeOff = undefined }
     const zoom = (factor: number, e: { clientX: number; clientY: number }): void => {
       if (ringsZoom.k === 1) clip.scrollTop = 0
       const box = layer.getBoundingClientRect()
@@ -1163,7 +1177,7 @@ export function createWebView(deps: WebViewDeps): WebView {
   return {
     ringsView,
     zoomOnWeb,
-    resetZoom: () => { ringsZoom = RINGS_ZOOM_HOME },
+    resetZoom: () => { ringsZoom = RINGS_ZOOM_HOME; ringsResizeOff?.() },
     hideOnRings,
     ringToTana,
     spaceOutWeb,
