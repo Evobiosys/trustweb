@@ -1835,3 +1835,9 @@ button.tag-pill{cursor:pointer; text-decoration:underline}
 .mode-default-row select, .mode-save input{max-width:100%; text-decoration:underline}
 .mode-save input{flex:1 1 10rem; min-width:0}
 body[data-community-mode] .tabs .tab{min-width:0; padding-left:2px; padding-right:2px; font-size:10.5px}
+/* wave 41 obsidian-sync */
+.cur-ai{border-style:dashed;align-self:flex-start;font-size:.8rem}
+[data-obsidian-page] progress{height:10px}
+[data-obsidian-page] a,[data-obsidian-page] .linkbtn{text-decoration:underline}
+[data-obsidian-page] p{margin:8px 0}
+[data-obsidian-page] [data-obs-summary]{margin-top:12px}

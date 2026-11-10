@@ -1500,6 +1500,8 @@ export interface ServiceRow {
   emails?: string[]; phones?: string[]; title?: string; birthday?: string; note?: string; labels?: string[]
   /** Wave 39 (import_curate.ts): the owner's choices on the Curate page before Accept. `ring`: written instead of the proposed ring; `connected`: chips `person:<id>` / `tag:<id>` the person is connected with (no membership); `keepBoth`: counterparts the owner said are not the same (`row:<key>` / `person:<id>`). */
   ring?: Ring; connected?: string[]; keepBoth?: string[]
+  /** Wave 41 obsidian-sync: the vault note this person came from (becomes Person.fields.obsidianNote on Accept); `ai`: a model found this person in the notes, the owner checks every row. */
+  obsidianNote?: string; ai?: boolean
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
 export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean; /** Fields the decision wrote into an existing person; undo removes them while they still hold that value. */ filled?: Record<string, string>
