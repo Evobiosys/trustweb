@@ -448,7 +448,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       el('p', { 'data-adopt-diff': [a.diff.people, a.diff.notes, a.diff.settings].join(',') }, [S.adDiff(a.diff)]),
       el('p', {}, [a.kind === 'take' ? S.adTakeLead(name) : S.adGiveLead(name)]),
       el('p', { class: 'meta' }, [S.adArchiveNote]),
-      el('button', { class: 'btn btn-electric', 'data-adopt-confirm': '1', onclick: () => void adopt(a, name) }, [S.adTakeOk]),
+      el('button', { class: 'btn btn-electric', 'data-adopt-confirm': '1', onclick: () => void adopt(a, name) }, [a.kind === 'take' ? S.adTakeOk : S.adGiveOk]),
       el('button', { class: 'btn btn-ghost', onclick: () => { i.decline(); devicesSheet() } }, [S.dvNotNow]),
     ])
   }

@@ -3636,6 +3636,7 @@ export const S = {
   adGiveLead: (name: string) => `${name} sends its whole state. If you take it, this device will show exactly that. What differs here is replaced.`,
   adArchiveNote: 'First, a copy of what is here now is kept for 30 days under Settings > Advanced > Archived copies. Restore puts it back.',
   adTakeOk: 'Take this state',
+  adGiveOk: 'Replace with this state',
   adDone: (name: string) => `Now showing the state of ${name}. A copy of the old one is kept for 30 days.`,
   adNotKept: 'A copy could not be kept (storage is full), so nothing was replaced.',
   adAsked: (name: string) => `Asked ${name}. Its state arrives here and you confirm it.`,
