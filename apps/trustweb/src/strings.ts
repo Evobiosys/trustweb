@@ -3999,4 +3999,6 @@ export const S = {
   tagsStewards: 'Stewards',
   tagsFork: 'Fork (make my own copy)',
   tagsCycle: 'That would put a tag inside itself.',
+  // Wave 40 review fixes
+  supportDeliverMailRest: (n: number) => ` (the other ${n} come in the next e-mail)`,
 } as const

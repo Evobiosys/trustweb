@@ -124,7 +124,7 @@ import { guestShell } from './ext/co_notes/co_invite'
 import { deserializeIdentity } from '../../demo/src/did'
 import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
-import { profileOfLink } from './profile_link'
+import { linkableProfile, profileOfLink } from './profile_link'
 import { profileLinkSettings } from './profile_link_view'
 import { zoneLinksSettings } from './zone_share_link_view'
 import { candidates, seenBy } from './share_page'
@@ -1260,7 +1260,7 @@ function barMoreTap(): void {
   openSheet([
     rest.length ? el('h3', {}, [S.barMoreViews]) : null,
     ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view' + (halo.has(id) ? ' tab-halo' : ''), 'data-bar-view': id, onclick: () => bringIntoRow(id) }, [barName(id)])),
-    el('h4', { class: 'eyebrow' }, [S.var.title]),
+    el('h4', { class: 'eyebrow' }, alphaHeading(S.var.title)),
     variationChips(barMoreTap),
     el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
   ])
@@ -1697,7 +1697,24 @@ function openAdvancedSettings(): void {
 /** Wave 37: the Web header's AI button: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
 function openAiButton(): void {
   // Wave 40 ai-edit-chat: with the assistant switched on, the sparkle opens its chat (which leads to the plans when no AI is set up).
-  if (isEnabled('assistant')) { void twRegistry.sync().then(() => twBus.emit('assistant-open')); return }
+  // Review: running -> at once (no wait behind other modules' loads); still loading -> one open after it, however often tapped meanwhile;
+  // its chunk failed (a stale preview build, offline) -> the sparkle's own behaviour below, never a dead button.
+  if (isEnabled('assistant')) {
+    if (twRegistry.isActive('assistant')) { twBus.emit('assistant-open'); return }
+    if (assistantPending) return
+    assistantPending = true
+    void twRegistry.sync().then(() => {
+      assistantPending = false
+      if (twRegistry.isActive('assistant')) twBus.emit('assistant-open'); else sparkleFallback()
+    })
+    return
+  }
+  sparkleFallback()
+}
+let assistantPending = false
+
+/** Wave 37: the sparkle without the assistant: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
+function sparkleFallback(): void {
   const to = aiButtonTarget(configured(st().advanced?.ai))
   if (to.kind === 'ask') { openQuery(); return }
   openSettingsAt(to.anchor)
@@ -5155,6 +5172,7 @@ function applyVariation(): void {
   else if (lookBeforeVariation !== null) { applyLook(lookBeforeVariation, document.documentElement, localStorage); lookBeforeVariation = null }
 }
 const settingsShown = (): boolean => sheet.classList.contains('on') && sheet.dataset.kind === 'settings'
+const redrawOpenSettings = (): void => { if (settingsShown()) settingsSheet() }
 defineAppActions(appActions, {
   state: st, save, changed: render,
   open: openAppPlace,
@@ -5170,11 +5188,12 @@ defineAppActions(appActions, {
   look: () => readLook(localStorage),
   setLook: (l) => { applyLook(l, document.documentElement, localStorage); if (settingsShown()) settingsSheet() },
   profile: () => profileOf(state?.twSettings),
-  setProfile: chooseProfile,
+  // Review wave 40: the assistant (and its Undo) switch these while Settings may be closed: Settings follows only when it is open.
+  setProfile: (p) => chooseProfile(p, redrawOpenSettings),
   modules: () => listModules().map((m) => m.id),
   defaults: () => Object.fromEntries(listModules().map((m) => [m.id, m.enabledByDefault])),
   isEnabled,
-  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(() => twChanged()) },
+  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(() => twChanged(redrawOpenSettings)) },
   setting: (k) => (k === 'system-tags' ? showSystemTags() : k === 'chats-hidden' ? Boolean(st().chatsHidden) : readTheme(localStorage) === 'dark'),
   setSetting: (k, on) => {
     if (k === 'system-tags') setShowSystemTags(on)
@@ -5182,7 +5201,7 @@ defineAppActions(appActions, {
     else applyTheme(on ? 'dark' : 'light', document.documentElement, localStorage)
     render(); if (settingsShown()) settingsSheet()
   },
-  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(() => twChanged()) },
+  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(() => twChanged(redrawOpenSettings)) },
   newId: () => randomId(8),
   now: () => Date.now(),
 })
@@ -7184,7 +7203,7 @@ function settingsSheet(): void {
         el('p', { class: 'meta skins-store', 'data-skins-store': '', 'aria-disabled': 'true', title: S.setSkinsStoreHint }, [S.setSkinsStore, el('small', {}, [S.setSkinsStoreHint])]),
       ]),
     ], true),
-    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => profileOf(s.twSettings), toast: (m) => toast(m) })]),
+    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => linkableProfile(profileOf(s.twSettings), s.twSettings), toast: (m) => toast(m) })]),
     settingsSection('advanced-web', S.setAdvanced, [
     // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
     HAS_MAP_VIEW ? el('label', { class: 'radio', 'data-pin-view': 'map' }, [
@@ -7341,7 +7360,7 @@ function settingsSheet(): void {
     settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
     settingsSection('advanced', S.setAdvanced, [
     // Wave 40: flags for parts that are not ready yet.
-    el('h4', { class: 'eyebrow' }, [S.flagsTitle]),
+    el('h4', { class: 'eyebrow' }, alphaHeading(S.flagsTitle)),
     el('p', { class: 'meta' }, [S.flagsHint]),
     el('label', { class: 'radio', 'data-flag-toggle': 'googleConnect' }, [
       el('input', { type: 'checkbox', ...(googleFlagSet(localStorage) ? { checked: '' } : {}), onchange: (e: Event) => { setGoogleConnect(localStorage, (e.target as HTMLInputElement).checked); settingsSheet() } }),
