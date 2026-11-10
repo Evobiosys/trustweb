@@ -174,6 +174,8 @@ async function run(label, viewport, touch) {
   await page.evaluate(() => { document.querySelector('[data-settings-gear]'); })
   ck('system tags are hidden by default', await page.evaluate(() => localStorage.getItem('trustweb.v1.showsystemtags')) === null)
   await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await wait(900)
+  // wave 39 review: since small-ui-a the Tools rows open in a sheet on a phone (and fold inline on desktop): open Tools when the toggle is not shown
+  if (!(await page.locator('[data-show-system-tags]').count())) { await hit(page.locator('[data-zone-side-toggle]').first()); await wait(500) }
   const toggle = page.locator('[data-show-system-tags]')
   ck('Tools has the toggle "Show system tags", off', await toggle.count() === 1 && !(await toggle.isChecked()))
   await toggle.check(); await wait(300)
