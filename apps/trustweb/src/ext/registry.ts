@@ -10,6 +10,12 @@ import { matrixModule } from './matrix'
 import { gebModule } from './geb'
 import { whatsappModule } from './whatsapp'
 import { coNotesModule } from './co_notes'
+import { S } from '../strings'
+import { createRegistry, type TwCtx, type TwModule } from './tw_registry'
+import type { TwSettings } from './profiles'
+
+export * from './tw_registry'
+export * from './profiles'
 
 /** What the host app hands a module; modules never import main.ts. */
 export interface ExtHooks {
@@ -135,3 +141,26 @@ export interface ExtModule {
 }
 
 export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule, matrixModule, signalLinkModule, whatsappModule, coNotesModule]
+
+/**
+ * Wave 39: the module registry (tw_registry.ts). main.ts binds the store once with bindTw; the six messenger and calendar modules above are
+ * registered as they are (read once at load, so a switch needs one reload), plus the app's own parts a profile can switch off.
+ */
+const bound: { settings: () => TwSettings | undefined; save: (t: TwSettings) => void; ctx: () => TwCtx } = {
+  settings: () => undefined, save: () => {}, ctx: () => { throw new Error('twRegistry used before bindTw') },
+}
+export const twRegistry = createRegistry({ settings: () => bound.settings(), save: (t) => bound.save(t), ctx: () => bound.ctx() })
+export const bindTw = (io: typeof bound): void => { Object.assign(bound, io) }
+export const registerModule = (m: TwModule): void => twRegistry.registerModule(m)
+export const listModules = (): readonly TwModule[] => twRegistry.listModules()
+export const isEnabled = (id: string): boolean => twRegistry.isEnabled(id)
+export const setEnabled = (id: string, on: boolean): Promise<void> => twRegistry.setEnabled(id, on)
+
+const wrap = (m: ExtModule, kind: TwModule['kind']): TwModule => ({ id: m.id, title: m.label, description: S.ext.desc[m.id], kind, enabledByDefault: true, reload: true })
+/** An app part with no code of its own: the switch is read where the part is drawn (featureOn, bar flags, ask modes). */
+const part = (id: string, kind: TwModule['kind']): TwModule => ({ id, title: S.ext.names[id], description: S.ext.desc[id], kind, enabledByDefault: true })
+
+;[
+  wrap(calendarModule, 'view'), wrap(coNotesModule, 'view'), wrap(gebModule, 'service'), wrap(matrixModule, 'service'), wrap(signalLinkModule, 'service'), wrap(whatsappModule, 'service'),
+  part('events', 'view'), part('resources', 'view'), part('feed', 'view'), part('matches', 'view'), part('support-ask', 'service'), part('ai-button', 'service'),
+].forEach(registerModule)

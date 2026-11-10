@@ -18,6 +18,7 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
+import type { TwSettings } from './ext/profiles'
 import type { SharedNote } from './notes_outline'
 import type { CoMsg } from './ext/co_notes/co_chat'
 import type { CoDoc } from './ext/co_notes/co_doc'
@@ -1098,6 +1099,8 @@ export interface AppState {
   tabRow?: string[]
   /** Wave 31 (bottom_bar.ts): the configurable bottom row {order, hidden, primary}. Absent: the default. Syncs with the record. */
   uiBar?: { order?: string[]; hidden?: string[]; primary?: string; orderVersion?: number }
+  /** Wave 39 (ext/profiles.ts): the profile (Settings > Variations) and the module switches (Settings > General > Extensions). Syncs with the record. */
+  twSettings?: TwSettings
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
@@ -1414,16 +1417,20 @@ export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
   return s.askDirectOnly === true
 }
 
+/** Switched off by a stored choice (a module absent from the map keeps its default, which is "available"). Lives here: the model may not value-import ext/. */
+export const moduleOff = (tw: Pick<TwSettings, 'extensions'> | undefined, id: string): boolean => tw?.extensions?.[id] === false
+
 /** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */
-export function feedOn(s: Pick<AppState, 'feed'>): boolean {
-  return s.feed?.on === true
+export function feedOn(s: Pick<AppState, 'feed' | 'twSettings'>): boolean {
+  return s.feed?.on === true && !moduleOff(s.twSettings, 'feed')
 }
 
 export type FeatureKey = 'events' | 'inventory' | 'feed'
 
 /** Whether a Settings > Features switch is on: events and inventory default on, the Feed defaults off (feedOn). */
-export function featureOn(s: Pick<AppState, 'feed' | 'features'>, key: FeatureKey): boolean {
-  return key === 'feed' ? feedOn(s) : s.features?.[key] !== false
+/** Wave 39: a profile or the Extensions list can switch the module off (Resources is the module `resources`). */
+export function featureOn(s: Pick<AppState, 'feed' | 'features' | 'twSettings'>, key: FeatureKey): boolean {
+  return key === 'feed' ? feedOn(s) : s.features?.[key] !== false && !moduleOff(s.twSettings, key === 'inventory' ? 'resources' : key)
 }
 
 /** Switch events or inventory; on removes the key so the record keeps only what differs from the default. */
