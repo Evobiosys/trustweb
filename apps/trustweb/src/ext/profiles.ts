@@ -40,8 +40,7 @@ export function profileOf(tw: Pick<TwSettings, 'profile'> | undefined): ProfileI
 
 export const profileDef = (id: ProfileId): ProfileDef => TW_PROFILES.find((p) => p.id === id) as ProfileDef
 
-/** Switched off by a stored choice (a module absent from the map keeps its default, which is "available"). */
-export const moduleOff = (tw: Pick<TwSettings, 'extensions'> | undefined, id: string): boolean => tw?.extensions?.[id] === false
+export { moduleOff } from '../model'
 
 /** A user's own toggle of one module under the profile in force. */
 export function setToggle(tw: TwSettings | undefined, id: string, on: boolean): TwSettings {

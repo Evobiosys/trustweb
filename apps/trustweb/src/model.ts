@@ -18,7 +18,7 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
-import { moduleOff, type TwSettings } from './ext/profiles'
+import type { TwSettings } from './ext/profiles'
 import type { SharedNote } from './notes_outline'
 import type { CoMsg } from './ext/co_notes/co_chat'
 import type { CoDoc } from './ext/co_notes/co_doc'
@@ -1416,6 +1416,9 @@ export interface GroupPost { id: string; kind: 'post'; group: string; text: stri
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
   return s.askDirectOnly === true
 }
+
+/** Switched off by a stored choice (a module absent from the map keeps its default, which is "available"). Lives here: the model may not value-import ext/. */
+export const moduleOff = (tw: Pick<TwSettings, 'extensions'> | undefined, id: string): boolean => tw?.extensions?.[id] === false
 
 /** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */
 export function feedOn(s: Pick<AppState, 'feed' | 'twSettings'>): boolean {
