@@ -20,6 +20,7 @@ import { bulkAccept, decide, pendingProposals } from './services_import'
 import type { Pending } from './services_import'
 import { S } from './strings'
 import { bulkAcceptable } from './zone_proposals'
+import { alphaSub } from './alpha_heading'
 
 export interface CurateHooks {
   state: () => AppState
@@ -126,7 +127,7 @@ export function curatePage(h: CurateHooks): void {
     const picked = (label: string): void => { ui.tag = ui.tag === label ? null : label; ui.limit = PAGE; draw() }
 
     top.replaceChildren(...some([
-      el('p', { class: 'cur-head' }, [el('sub', { class: 'alpha-label', 'data-alpha': '' }, [S.alphaLabel])]),
+      el('p', { class: 'cur-head' }, [alphaSub()]),
       all.length ? el('p', { class: 'meta', 'data-cur-count': String(filtered.length) }, [T.shown(filtered.length, all.length)]) : null,
       ...(all.length ? [
         el('div', { class: 'cur-bar' }, [
@@ -296,7 +297,7 @@ export function dedupePage(h: CurateHooks, after: () => void): void {
       draw(); after()
     }
     list.replaceChildren(
-      el('p', { class: 'cur-head' }, [el('sub', { class: 'alpha-label', 'data-alpha': '' }, [S.alphaLabel])]),
+      el('p', { class: 'cur-head' }, [alphaSub()]),
       el('p', { class: 'meta' }, [T.dupesLead]),
       ...(pairs.length ? [
         ...pairs.slice(0, shownCount).map((pair) => el('div', { class: 'conn-row cur-pair', style: 'flex-direction:column;align-items:stretch;gap:6px', 'data-cur-pair': pair.a.row.key }, [

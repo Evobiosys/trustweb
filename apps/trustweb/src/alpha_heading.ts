@@ -3,6 +3,9 @@
 import { el } from '../../demo/src/ui/dom'
 import { S } from './strings'
 
+/** The grey subscript alone (one source for every alpha heading; CSS .alpha-label in styles.css, once). */
+export const alphaSub = (): HTMLElement => el('sub', { class: 'alpha-label', 'data-alpha-label': '' }, [S.alphaLabel])
+
 export function alphaHeading(title: string): (Node | string)[] {
-  return [title, ' ', el('sub', { class: 'alpha-label', 'data-alpha-label': '' }, [S.alphaLabel])]
+  return [title, ' ', alphaSub()]
 }

@@ -14,6 +14,7 @@ import { exportFiles, exportName, exportRequested, type Lang, mailtoFor, markSer
 import { pasteTarget } from './export_mail'
 import { S } from './strings'
 import { zipStore } from './zip'
+import { alphaHeading as alphaTitle } from './alpha_heading'
 
 export interface SovereignDeps {
   state: () => AppState
@@ -31,7 +32,7 @@ export interface SovereignDeps {
 const T = (): typeof S.sov => S.sov
 const info = (text: string): HTMLElement => el('details', { class: 'meta', 'data-sov-info': '' }, [el('summary', {}, [T().more]), el('p', {}, [text])])
 /** A heading with the grey subscript of a feature Jakob has not approved yet. */
-const alphaHeading = (title: string): HTMLElement => el('span', {}, [title, el('sub', { class: 'alpha-label', 'data-alpha-label': '' }, [' ' + S.alphaLabel])])
+const alphaHeading = (title: string): HTMLElement => el('span', {}, alphaTitle(title))   // wave 39 review: the shared helper (alpha_heading.ts)
 const day = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
 
 function section(key: string, title: string | Node, children: (Node | null)[], open = false): HTMLElement {

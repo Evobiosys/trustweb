@@ -20,6 +20,7 @@ import type { ServicesHooks } from './services_view'
 import { setSourceHidden, sourceCount, sourceHidden } from './sources'
 import { S } from './strings'
 import { unsortedCount } from './unsorted_count'
+import { alphaSub } from './alpha_heading'
 
 const T = S.imp39
 const u = { style: 'text-decoration:underline;cursor:pointer' }
@@ -176,7 +177,7 @@ export function openImportHome(base: ServicesHooks): void {
     refreshServices()
     doneBox.replaceChildren(...some([doneView()]))
     root.replaceChildren(
-      el('p', { class: 'cur-head' }, [el('sub', { class: 'alpha-label', 'data-alpha': '' }, [S.alphaLabel])]),
+      el('p', { class: 'cur-head' }, [alphaSub()]),
       el('p', { class: 'meta' }, [T.lead]),
       doneBox,
       ...contactsSection(),
