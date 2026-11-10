@@ -17,7 +17,7 @@ export const isSystemTagId = (id: string): boolean => id.startsWith(SYSTEM_TAG_P
 /** The id a label gets as a person tag (the same rule as tag_create.ts createTag, without the uniqueness suffix). */
 export const tagSlug = (label: string): string => label.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || 'tag'
 
-const SOURCE_SLUG: Record<string, string> = { vcard: 'vcf', 'google-csv': 'google-csv', 'google-api': 'google', 'facebook-json': 'facebook', 'dex-csv': 'dex', 'generic-csv': 'csv' }
+const SOURCE_SLUG: Record<string, string> = { vcard: 'vcf', 'google-csv': 'google-csv', 'google-api': 'google', 'facebook-json': 'facebook', 'dex-csv': 'dex', 'generic-csv': 'csv', mcp: 'mcp' }
 
 /** `import:<YYYY-MM-DD>-<source>`; several sources in one pass are joined with "+". */
 export function importTagId(at: number, sources: readonly string[]): string {

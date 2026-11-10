@@ -44,7 +44,7 @@ export interface PlanOptions { me: string; now: number; dayFirst?: boolean }
 const IDS_KEPT = 20
 export const SERVICE_LABEL: Record<string, string> = {
   whatsapp: 'WhatsApp', linkedin: 'LinkedIn', vcard: 'Phone contacts', 'google-csv': 'Google contacts', 'facebook-json': 'Facebook',
-  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts',
+  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts', mcp: 'MCP server',
 }
 export const countsLine = (counts: Record<string, number>): string =>
   Object.entries(counts).map(([s, n]) => `${SERVICE_LABEL[s] ?? s} ${n}`).join(', ')
@@ -81,7 +81,7 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
   const groupOf = new Map<string, string>()
   const extras = new Map<string, PhoneExtras>()
   const summaries: ServicePlan['files'] = files.map((f) => {
-    if (f.contacts) { contacts.push(...f.contacts); return { name: f.name, source: ContactSource.GoogleApi, count: f.contacts.length } }
+    if (f.contacts) { contacts.push(...f.contacts); return { name: f.name, source: f.contacts[0]?.source ?? ContactSource.GoogleApi, count: f.contacts.length } }
     // Wave 31: the JSON of the phone tool joins the same evidence, group and row logic as a chat .txt.
     const px = parsePhoneExport(f.text)
     if (px) {

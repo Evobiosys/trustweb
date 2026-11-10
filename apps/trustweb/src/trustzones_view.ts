@@ -3,7 +3,9 @@
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { type ColourTag, saveColourTags, setShowSystemTags, showSystemTags } from './colour_tags'
+import { IMAGE_MODES, imageMode, setImageMode } from './image_mode'
 import { chipInput } from './chip_input'
+import { tagPill } from './components/tag_pill'
 import { candidates, initial, withChip, withoutChip } from './share_page'
 import { createPerson, createTag, suggestOrCreate, tagPerson, untagPerson } from './tag_create'
 import type { CreateRow } from './tag_create'
@@ -126,9 +128,13 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
     })
     return el('div', { class: 'zone-chip-row', 'data-zone-chip-row': r }, [
       el('b', {}, [name]),
-      el('div', { class: 'chips' }, page()[r].map((id) => el('button', {
-        class: 'chip on', 'data-zone-chip': id, 'aria-label': S.shareChipRemove(label(id)), onclick: () => store(withoutChip(page(), r, id)),
-      }, [label(id) + ' ×']))),
+      el('div', { class: 'chips' }, page()[r].map((id) => {
+        const tag = id.startsWith('tag:') ? d.tags.find((x) => x.id === id.slice(4)) : undefined
+        const attrs = { 'data-zone-chip': id, 'aria-label': S.shareChipRemove(label(id)) }
+        const remove = (): void => store(withoutChip(page(), r, id))
+        // Wave 40: a tag chip is the tag pill (group tags with their ring).
+        return tag ? tagPill(tag, { class: 'chip on', attrs, text: (tag.label ?? tag.id) + ' ×', onclick: remove }) : el('button', { class: 'chip on', ...attrs, onclick: remove }, [label(id) + ' ×'])
+      })),
       input, hits,
     ])
   }
@@ -209,7 +215,12 @@ export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | '
       el('input', { type: 'checkbox', 'data-show-system-tags': '', ...(showSystemTags() ? { checked: '' } : {}), onchange: (e: Event) => { setShowSystemTags((e.target as HTMLInputElement).checked); d.onChange() } }),
       ' ', S.imp39.systemTags,
     ])
-    return [el('div', { class: 'zone-tools' }, [d.expand, d.add, ...(d.select ? [d.select] : [])]), connections, perRing, autoAdjust, closest, systemTags, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
+    /** Wave 40: Images: show / grey out / hide, for every picture the app draws (image_mode.ts); a device setting like the system-tags switch. */
+    const images = el('div', { class: 'zone-check zone-row', 'data-images-row': '', role: 'group', 'aria-label': S.imagesRow.aria }, [
+      S.imagesRow.label + ': ',
+      ...IMAGE_MODES.flatMap((m) => [el('button', { type: 'button', class: 'num-edit' + (imageMode() === m ? ' on' : ''), 'data-images-mode': m, 'aria-pressed': String(imageMode() === m), onclick: () => { setImageMode(m); d.onChange() } }, [S.imagesRow.modes[m]]), ' ']),
+    ])
+    return [el('div', { class: 'zone-tools' }, [d.expand, d.add, ...(d.select ? [d.select] : [])]), connections, perRing, autoAdjust, closest, systemTags, images, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
     ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted)]
