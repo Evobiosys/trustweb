@@ -1,0 +1,16 @@
+<!-- SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later -->
+<!doctype html>
+<html><body>
+<!-- mimics the Mastodon web UI compose box (markers: .compose-form, autosuggest textarea, submit button) -->
+<div id="mastodon"><form class="compose-form">
+  <textarea class="autosuggest-textarea__textarea" aria-label="What's on your mind?"></textarea>
+  <div class="compose-form__publish"><button type="button" class="compose-form__submit-button"><span>Post</span></button></div>
+</form></div>
+<p id="other">Some other post: never read.</p>
+<script>
+  // like Mastodon: publishing clears the box right after the click
+  document.querySelector('.compose-form__submit-button').addEventListener('click', () => {
+    setTimeout(() => { document.querySelector('textarea').value = '' }, 0)
+  })
+</script>
+</body></html>

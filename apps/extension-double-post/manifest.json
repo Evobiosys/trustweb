@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Also post to TrustWeb",
+  "version": "0.1.0",
+  "description": "After you publish on Mastodon, X, Facebook or LinkedIn: asks whether to also post the text in TrustWeb. Sends nothing anywhere.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://www.facebook.com/*",
+    "https://www.linkedin.com/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*", "https://www.facebook.com/*", "https://www.linkedin.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" }
+}
