@@ -3,7 +3,7 @@
   import ClassicBody from './classic_body.svelte'
   import Desk from './desk.svelte'
   import { isDesk } from './desk'
-  import { Tab, TABS } from './nav'
+  import { Tab, TABS, headerTarget } from './nav'
   import { host } from './bridge'
   import { nav, showTab } from './nav.svelte'
   import { prefs } from './prefs.svelte'
@@ -38,7 +38,7 @@
   $effect(() => notifyView(prefs.view))
 
   // Hidden mode has no bar to come back with: a header icon already showing its page leads to People.
-  const headerTab = (tab: Tab): void => showTab(prefs.tabbar === TabbarMode.Hidden && nav.tab === tab ? Tab.People : tab)
+  const headerTab = (tab: Tab): void => showTab(headerTarget(tab, nav.tab, prefs.tabbar))
 </script>
 
 {#if isDesk(prefs.view)}<Desk />{:else}

@@ -214,9 +214,9 @@ export const S = {
     sharedAgain: (n: number) => `${n} ${n === 1 ? 'line answers' : 'lines answer'} asks again.`,
     forgotBy: (name: string, n: number) => `${name} asked to be forgotten: ${n} ${n === 1 ? 'thing' : 'things'} they shared removed.`,
     servicesTitle: 'Services',
-    startSwitch: (name: string) => `Import everything: start with ${name}`,
+    startSwitch: (name: string) => `Ask the next service for my data: ${name}`,   // wave 39: WhatsApp comes first through its own app, so no "start with Google" beside "WhatsApp comes first"
     switchDone: 'Every export is asked for',
-    startInfo: 'A browser opens one page at a time, so this opens the next service each tap and ticks its export. Untick if you did not ask. Links marked "check" were not verified on the day they were added.',
+    startInfo: 'WhatsApp exports from inside its own app (see its card below). For the others, a browser opens one page at a time, so this opens the next service each tap and ticks its export. Untick if you did not ask. Links marked "check" were not verified on the day they were added.',
     lang: 'Request in',
     accountPh: 'Your account (e-mail or user name)',
     check: '(check)',
@@ -3392,4 +3392,6 @@ export const S = {
     connectedNow: (name: string) => `${name} joined the note.`,
     guestNote: 'Shared note',
   },
+  /** Wave 39 small-ui-a: the Web's own Filters button (next to Tools). */
+  filtersButton: 'Filters',
 } as const

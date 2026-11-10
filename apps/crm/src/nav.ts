@@ -1,3 +1,5 @@
+import { TabbarMode } from './tabbar'
+
 /** Fixed sets the screens switch on. Enums live here, not in .svelte files, so every component compiles without a TypeScript preprocessor. */
 
 export enum Tab {
@@ -48,3 +50,7 @@ export enum DeskPage {
   /** My profile (the host's editor), from the profile button; not in the sidebar. */
   Profile = 'profile',
 }
+
+/** The tab a header icon leads to. Wave 39: the timeline icon toggles in every tab-bar mode (a second press returns to People); the gear only while the bar is hidden (no bar to come back with). */
+export const headerTarget = (tab: Tab, current: Tab, mode: TabbarMode): Tab =>
+  current === tab && (tab === Tab.Timeline || mode === TabbarMode.Hidden) ? Tab.People : tab

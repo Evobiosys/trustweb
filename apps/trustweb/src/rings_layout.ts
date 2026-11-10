@@ -113,14 +113,15 @@ export function restoreAngles(s: Pick<AppState, 'people'>, before: ReadonlyMap<s
   }
 }
 
-/** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. With `angles` (per ring, in layout order) the laps follow from where the dots sit. `k` is the view scale (see closeFit). */
-export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}, k = 1): RingsGeometry {
+/** Where each ring sits for `counts` people (`custom`: radii the user dragged rings to, wave 39): a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. With `angles` (per ring, in layout order) the laps follow from where the dots sit. `k` is the view scale (see closeFit). */
+export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}, k = 1, custom: Partial<Record<Ring, number>> = {}): RingsGeometry {
   const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), lapOf: {}, laps: {}, extent: 0 }
   let prev = { r: 0, dot: 0, band: 0, pushed: false }
   for (const ring of g.rings) {
     const n = Math.max(counts[ring] ?? 0, 1)
     // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it; the close ring hugs the "you" avatar.
     let { r, dot } = ring === Ring.Closest ? closeFit(n, k) : { r: RING_RADIUS[ring], dot: Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / n))) }
+    r = custom[ring] ?? r   // wave 39: a ring the user dragged keeps that radius
     if (prev.pushed) r = Math.max(r, prev.r + prev.band + (prev.dot + dot) / 2 + GAP)
     const per = around(r, dot)
     const mine = angles[ring]

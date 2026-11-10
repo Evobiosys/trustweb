@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { GRACE_MS, HOVER_IDLE, hoverStep, nameEdit } from '../../src/ring_hover.ts'
+import { BRIDGE_PX, GRACE_MS, HOVER_IDLE, hoverStep, nameEdit, nearCard } from '../../src/ring_hover.ts'
 
 const run = (...events) => events.reduce((s, e) => hoverStep(s, e), HOVER_IDLE)
 
@@ -76,4 +76,18 @@ describe('ring card row edit (rowStep)', () => {
   it('accept/cancel/archive outside an edit do nothing', () => {
     expect(rowStep(ROW_VIEW, { type: 'cancel' })).toBe(ROW_VIEW)
   })
+})
+
+describe('the bridge to the card (wave 39: the card stays while the pointer moves onto it)', () => {
+  const card = { left: 100, top: 100, right: 300, bottom: 400 }
+  it('counts the card itself and a margin around it as the card', () => {
+    expect(nearCard({ x: 200, y: 200 }, card)).toBe(true)
+    expect(nearCard({ x: 100 - BRIDGE_PX, y: 100 - BRIDGE_PX }, card)).toBe(true)
+    expect(nearCard({ x: 300 + BRIDGE_PX, y: 400 + BRIDGE_PX }, card)).toBe(true)
+  })
+  it('lets go beyond the margin', () => {
+    expect(nearCard({ x: 100 - BRIDGE_PX - 1, y: 200 }, card)).toBe(false)
+    expect(nearCard({ x: 200, y: 400 + BRIDGE_PX + 1 }, card)).toBe(false)
+  })
+  it('a custom margin applies', () => expect(nearCard({ x: 95, y: 200 }, card, 4)).toBe(false))
 })
