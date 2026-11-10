@@ -22,6 +22,7 @@ try {
   a.on('websocket', (w) => sent.push(w.url()))
 
   await a.locator('[data-bar-more]').click()
+  await a.locator('[data-bar-open-settings]').click()   // wave 40: ⋮ always lists Variations first
   await a.locator('[data-bar-opt="feed"]').click()
   await a.locator('.sheet-veil').click({ position: { x: 20, y: 20 } }).catch(() => {})
   await a.locator('nav.tabs button', { hasText: 'Feed' }).click()

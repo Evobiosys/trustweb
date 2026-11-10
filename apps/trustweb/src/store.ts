@@ -145,4 +145,5 @@ export function clearState(persona: string, context?: string): void {
   writeBlocked.delete(key)
   unreadable.delete(key)
   try { localStorage.removeItem(key) } catch { /* nothing stored */ }
+  try { localStorage.removeItem(key + ':archived-copies') } catch { /* nothing stored */ }   // review wave 40: device_adopt.ts copies are whole records too
 }

@@ -210,7 +210,7 @@ describe('embeds', () => {
   it('Google Docs: only published docs.google.com links, forced embedded=true', () => {
     expect(docsEmbedUrl('https://docs.google.com/document/d/e/2PACX-1/pub')).toBe('https://docs.google.com/document/d/e/2PACX-1/pub?embedded=true')
     expect(docsEmbedUrl('https://docs.google.com/document/d/e/2PACX-1/pub?embedded=true')).toBe('https://docs.google.com/document/d/e/2PACX-1/pub?embedded=true')
-    expect(docsEmbedUrl('https://docs.google.com/document/d/abc/edit')).toBeNull()
+    expect(docsEmbedUrl('https://docs.google.com/document/d/abc/edit')).toBe('https://docs.google.com/document/d/abc/preview') // wave 40: an edit link frames as its preview page
     expect(docsEmbedUrl('http://docs.google.com/document/d/e/x/pub')).toBeNull()
     expect(docsEmbedUrl('https://evil.org/docs.google.com/pub')).toBeNull()
     expect(docsEmbedUrl('')).toBeNull()

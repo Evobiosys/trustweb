@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Bottom bar (wave 31): configurable order, hidden views, one primary; pure. */
-import { DEFAULT_ORDER, PHONE_MAX, addBar, defaultPrimary, overflowChoices, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
+import { DEFAULT_ORDER, PHONE_MAX, addBar, defaultPair, defaultPrimary, overflowChoices, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
 
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 
@@ -146,6 +146,22 @@ describe('bottom_bar profiles (wave 33)', () => {
     expect(resolveBar({ ...four, primary: 'chat' }, all).primary).toBe('chat')
     expect(resolveBar({ primary: 'none' }, all).primary).toBe(null)
     expect(resolveBar({ order: ['web', 'chat', 'record', 'events', 'inventory', 'feed'] }, all).primary).toBe(null)
+  })
+  it('defaultPair (wave 40): an even number of buttons raises both inner ones, an odd one or fewer than two none', () => {
+    expect(defaultPair(['web', 'chat', 'record', 'events'])).toEqual(['chat', 'record'])
+    expect(defaultPair(['web', 'chat', 'record', 'events', 'inventory', 'feed'])).toEqual(['record', 'events'])
+    expect(defaultPair(['web', 'chat'])).toEqual(['web', 'chat'])
+    expect(defaultPair(DEFAULT_ORDER)).toEqual([])
+    expect(defaultPair(['web'])).toEqual([])
+    expect(defaultPair([])).toEqual([])
+  })
+  it('resolveBar (wave 40): never chosen + even = the inner pair; a choice, "none" or an odd count = no pair; module buttons do not count', () => {
+    const four = { order: ['web', 'chat', 'record', 'events'] }
+    expect(resolveBar(four, all).pair).toEqual(['chat', 'record'])
+    expect(resolveBar({ ...four, primary: 'chat' }, all).pair).toEqual([])
+    expect(resolveBar({ ...four, primary: 'none' }, all).pair).toEqual([])
+    expect(resolveBar(undefined, all).pair).toEqual([])
+    expect(resolveBar(four, { ...all, mods: ['community'] }).pair).toEqual(['chat', 'record'])
   })
   it('setPrimary accepts none', () => {
     expect(setPrimary(undefined, 'none', all)).toEqual({ primary: 'none', profile: 'custom' })

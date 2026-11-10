@@ -13,26 +13,19 @@ import type { AppState } from '../../model'
 import { loadColourTags } from '../../colour_tags'
 import type { TwCtx } from '../tw_registry'
 import {
-  MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, docsEmbedUrl, forkView, hideInView,
-  joinSpace, leaveSpace, moveInView, navItems, parseCommunity, resolveView, telegramUrl, type CommunityData, type NavId, type ResourceView,
+  MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
+  joinSpace, leaveSpace, moveInView, navItems, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
 } from './community_model'
+import { legacyLinksPatch } from './community_data'
+import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
+import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
+import { chatKey as embedChatKey, chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
 import css from './community.css?inline'
 
 export const readData = (s: AppState): CommunityData => parseCommunity(s.extData?.[MODULE_ID])
 
-const CONSENT_KEY = 'trustweb.v1.community-mighty.consent'
-export interface Consent { docs?: true; telegram?: true }
-
-export function readConsent(): Consent {
-  try {
-    const v = JSON.parse(localStorage.getItem(CONSENT_KEY) ?? '{}') as Record<string, unknown> | null
-    return { ...(v?.docs === true ? { docs: true } : {}), ...(v?.telegram === true ? { telegram: true } : {}) }
-  } catch { return {} }
-}
-
-export function writeConsent(c: Consent): void {
-  try { if (c.docs || c.telegram) localStorage.setItem(CONSENT_KEY, JSON.stringify(c)); else localStorage.removeItem(CONSENT_KEY) } catch { /* not kept: the next load asks again */ }
-}
+// Wave 40: the Docs and Telegram panes and their consent live in the embeds module (S/ext/embeds); community-mighty calls them.
+export { readConsent, writeConsent, type Consent }
 
 export function writeData(ctx: TwCtx, d: CommunityData): void {
   const s = ctx.store()
@@ -44,6 +37,9 @@ type Kids = (Node | string | null | undefined)[]
 const btn = (label: string, onclick: () => void, attrs: Record<string, string> = {}, cls = 'lnk'): HTMLButtonElement => el('button', { class: cls, type: 'button', ...attrs, onclick }, [label])
 const dateOf = (ms: number): string => (ms > 0 ? new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '')
 
+/** Wave 40: the regular Chat's "Community chat" row sets this flag, so the view opens with its chat pane showing (device-local, read once). */
+export const OPEN_CHAT_KEY = 'trustweb.v1.community-mighty.open-chat'
+
 export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const t = ctx.strings.community
   const box = el('div', { class: 'community-host', 'data-community': '' })
@@ -51,6 +47,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const root = box.attachShadow({ mode: 'open' })
   const ui: { nav: NavId; space: string | null; drawer: boolean; chat: boolean; hiddenOpen: boolean; note: string; chatNote: string } = { nav: 'home', space: null, drawer: false, chat: false, hiddenOpen: false, note: '', chatNote: '' }
 
+  try { if (localStorage.getItem(OPEN_CHAT_KEY)) { localStorage.removeItem(OPEN_CHAT_KEY); ui.chat = true } } catch { /* storage blocked: the pane stays closed */ }
   const st = (): AppState => ctx.store()
   const me = (): string => st().me.displayName || t.you
   const data = (): CommunityData => readData(st())
@@ -205,60 +202,44 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       el('h4', { class: 'eyebrow' }, [t.forkTitle]),
       d.mine?.from ? el('p', { class: 'meta' }, [t.forkFrom(d.mine.from)]) : null,
       others.length ? el('div', { class: 'row wrap' }, others.map((v) => btn(v.owner, () => save({ ...data(), mine: forkView(v, me()) }), { 'data-community-fork': v.owner }))) : el('p', { class: 'meta' }, [t.forkNone]),
-      docsSlot(d),
+      docsPane(embedEnv()),
     ]
   }
 
-  /** The Google Docs slot: paste a published link; nothing loads before the consent tap. */
-  function docsSlot(d: CommunityData): HTMLElement {
-    const src = d.docsUrl ? docsEmbedUrl(d.docsUrl) : null
-    const kids: Kids = [el('h4', { class: 'eyebrow' }, [t.docsTitle])]
-    if (!src) {
-      const input = el('input', { type: 'url', placeholder: t.docsPh, 'aria-label': t.docsPh, 'data-community-docs-url': '' })
-      kids.push(input, btn(t.save, () => {
-        if (!docsEmbedUrl(input.value)) { ui.note = t.docsBad; draw(); return }
-        ui.note = ''
-        save({ ...data(), docsUrl: input.value.trim() })
-      }, { 'data-community-docs-save': '' }, 'lnk strong'))
-    } else if (!readConsent().docs) {
-      kids.push(el('p', { class: 'meta' }, [t.docsConsent]), el('div', { class: 'row wrap' }, [
-        btn(t.docsLoad, () => { writeConsent({ ...readConsent(), docs: true }); draw() }, { 'data-community-docs-load': '' }, 'lnk strong'),
-        el('a', { href: src, target: '_blank', rel: 'noopener noreferrer' }, [t.openNewTab]),
-        btn(t.change, () => { const n = data(); delete n.docsUrl; save(n) }, { 'data-community-docs-change': '' }),
-      ]))
-    } else {
-      kids.push(el('iframe', { class: 'embed', src, title: t.docsTitle, loading: 'lazy', referrerpolicy: 'no-referrer', sandbox: 'allow-scripts allow-same-origin allow-popups', 'data-community-docs-frame': '' }),
-        el('div', { class: 'row wrap' }, [el('a', { href: src, target: '_blank', rel: 'noopener noreferrer' }, [t.openNewTab]), btn(t.change, () => { const n = data(); delete n.docsUrl; save(n) }, { 'data-community-docs-change': '' })]))
-    }
-    return el('div', { class: 'card docs' }, kids)
+  /** The pane environment of the embeds module: this community's tag, redraw after a change, a note under the section. */
+  const embedEnv = (kind: 'docs' | 'chat' = 'docs'): PaneEnv => ({ ctx, tag: communityTagOf(data(), st(), loadColourTags()) ?? NO_TAG, redraw: draw, note: (text) => { if (kind === 'docs') ui.note = text; else ui.chatNote = text; draw() } })
+
+  /** Wave 40: a Docs or Telegram link kept by wave 39 in this module's own slice moves into the embeds record once (when that has none for the tag); review: marked, so a link cleared later stays cleared. */
+  function adoptLegacyLinks(): void {
+    const env = embedEnv()
+    const { patch, next } = legacyLinksPatch(data(), entryFor(readEmbeds(st()), env.tag))
+    if (patch) writeEmbeds(ctx, withEntry(readEmbeds(st()), env.tag, patch))
+    if (next) writeData(ctx, next)
   }
 
   // ---- Chat (right pane on wide views, bottom sheet on phones) --------------
   /** What the chat pane shows; the pane is rebuilt only when this changes, so a loaded Telegram frame is not reloaded by other taps. */
   function chatKey(): string {
-    const d = data()
-    return ui.chat ? JSON.stringify([d.telegramUrl ?? '', readConsent().telegram === true, ui.chatNote]) : ''
+    return ui.chat ? embedChatKey(embedEnv('chat')) + ui.chatNote : ''
+  }
+
+  /** Wave 40: the app's regular chats under the group chat; a tap opens that chat in the app. Refilled on every draw, so the pane (and its frame) stays. */
+  let chatsBox: HTMLElement | null = null
+  function fillChats(): void {
+    const rows = ctx.chats?.() ?? []
+    chatsBox?.replaceChildren(
+      el('h4', {}, [t.chatsTitle]),
+      ...(rows.length
+        ? rows.map((r) => el('button', { class: 'lnk chat-row', type: 'button', 'data-community-chat-row': r.id, onclick: () => ctx.bus.emit('open-chat', r.id) }, [r.title + (r.unread > 0 ? ` (${r.unread})` : ''), el('span', { class: 'meta' }, [' ' + r.last])]))
+        : [el('p', { class: 'meta' }, [t.chatsNone])]),
+    )
   }
 
   function chatPane(): HTMLElement {
-    const d = data()
-    const link = d.telegramUrl ? telegramUrl(d.telegramUrl) : null
-    const kids: Kids = [el('div', { class: 'row' }, [el('h3', {}, [t.chatTitle]), btn('×', () => { ui.chat = false; draw() }, { 'aria-label': t.chatClose, 'data-community-chat-close': '' })])]
-    if (!link) {
-      const input = el('input', { type: 'url', placeholder: t.chatPh, 'aria-label': t.chatPh, 'data-community-chat-url': '' })
-      kids.push(input, btn(t.save, () => {
-        if (!telegramUrl(input.value)) { ui.chatNote = t.chatBad; draw(); return }
-        ui.chatNote = ''
-        save({ ...data(), telegramUrl: input.value.trim() })
-      }, { 'data-community-chat-save': '' }, 'lnk strong'))
-    } else {
-      const open = el('a', { href: link, target: '_blank', rel: 'noopener noreferrer', 'data-community-chat-open': '' }, [t.chatOpen])
-      if (!readConsent().telegram) kids.push(el('p', { class: 'meta' }, [t.chatConsent]), btn(t.chatLoad, () => { writeConsent({ ...readConsent(), telegram: true }); draw() }, { 'data-community-chat-load': '' }, 'lnk strong'))
-      else kids.push(el('iframe', { class: 'embed chat-frame', src: link, title: t.chatTitle, referrerpolicy: 'no-referrer', sandbox: 'allow-scripts allow-same-origin allow-popups allow-forms', 'data-community-chat-frame': '' }), el('p', { class: 'meta' }, [t.chatBlocked]))
-      kids.push(el('div', { class: 'row wrap' }, [open, btn(t.change, () => { const n = data(); delete n.telegramUrl; save(n) }, { 'data-community-chat-change': '' })]))
-    }
-    if (ui.chatNote) kids.push(el('p', { class: 'note' }, [ui.chatNote]))
-    return el('aside', { class: 'chat', 'data-community-chat': '' }, kids)
+    chatsBox = el('div', { class: 'chats', 'data-community-chats': '' })
+    const head = el('div', { class: 'row' }, [el('h3', {}, [t.chatTitle]), btn('×', () => { ui.chat = false; draw() }, { 'aria-label': t.chatClose, 'data-community-chat-close': '' })])
+    const body = embedChatPane(embedEnv('chat'))
+    return el('aside', { class: 'chat', 'data-community-chat': '' }, [head, body, ...(ui.chatNote ? [el('p', { class: 'note' }, [ui.chatNote])] : []), chatsBox])
   }
 
   // ---- Shell ---------------------------------------------------------------
@@ -305,9 +286,11 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       chatEl = next
       shownChat = key
     }
+    if (ui.chat) fillChats()
     ctx.bus.emit('community-section', { nav: ui.nav, chat: ui.chat })
   }
 
+  adoptLegacyLinks()
   // Wave 41 (community-mode): the app's Community bottom row opens a section, and learns which one is showing.
   const offGo = ctx.bus.on('community-go', (n) => { if ((NAV as readonly unknown[]).includes(n)) go(n as NavId) })
   draw()
