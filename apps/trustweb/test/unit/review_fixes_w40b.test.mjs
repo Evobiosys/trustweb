@@ -331,3 +331,60 @@ describe('photos: switching the module off closes its database connection', () =
     expect(await s.list()).toEqual([])
   })
 })
+
+describe('events: an answer cleared on one device stays cleared after a sync', () => {
+  it('clearing leaves a mark that the merge carries; it reads as no answer', async () => {
+    const { setRsvp, mergeEvents, parseEvents } = await import('../../src/ext/events/events_model.ts')
+    const other = setRsvp({}, 'e1', 'going')
+    const mine = setRsvp(other, 'e1', 'going')   // the same answer again clears it
+    expect(parseEvents(mine).rsvp?.e1).toBe('none')
+    expect(mergeEvents(other, mine).rsvp.e1).toBe('none')
+    expect(setRsvp(mine, 'e1', 'maybe').rsvp.e1).toBe('maybe')
+  })
+})
+
+describe('assistant undo never overwrites what the person changed since', () => {
+  const p1 = (s) => s.people.find((p) => p.id === 'p1')
+  it('set-ring: changed again by hand -> Undo leaves it', () => {
+    const { a, s } = actionsSetup()
+    const d = a.run(ok(a, 'set-ring', { person: 'p1', ring: 'close' }))
+    p1(s).ring = 'acquaintance'
+    d.undo()
+    expect(p1(s).ring).toBe('acquaintance')
+  })
+  it('set-field: edited since -> Undo leaves the edit; untouched -> Undo restores', () => {
+    const { a, s } = actionsSetup()
+    const d = a.run(ok(a, 'set-field', { person: 'p1', field: 'company', value: 'Acme' }))
+    p1(s).fields = { ...p1(s).fields, company: 'Mine' }
+    d.undo()
+    expect(p1(s).fields.company).toBe('Mine')
+    const e = a.run(ok(a, 'set-field', { person: 'p1', field: 'city', value: 'Graz' }))
+    e.undo()
+    expect(p1(s).fields?.city).toBeUndefined()
+  })
+  it('add-tag that made a new tag: Undo keeps the tag while someone else holds it', () => {
+    const { a, s } = actionsSetup()
+    s.people.push({ id: 'p9', name: 'Bo Other', context: '', ring: 'friend', metAt: 0, lines: [] })
+    const d = a.run(ok(a, 'add-tag', { person: 'p1', tag: 'Choir' }))
+    const tag = Object.keys(p1(s).fields).find((k) => String(p1(s).fields[k]) === 'true')
+    s.people.find((p) => p.id === 'p9').fields = { [tag]: 'true' }
+    d.undo()
+    expect(p1(s).fields?.[tag]).toBeUndefined()
+    expect(() => a.run(ok(a, 'remove-tag', { person: 'p9', tag: 'Choir' }))).not.toThrow()
+  })
+})
+
+describe('device adopt: the confirm sheet also counts what else is replaced', () => {
+  it('resources, meetings, events, tasks, invitations and chats that differ are counted; the per-device picture is not', async () => {
+    const { otherDifferences } = await import('../../src/device_adopt.ts')
+    const { bundleOf, refreshStamps } = await import('../../src/sync_core.ts')
+    const st = (over = {}) => ({ v: 1, me: { displayName: 'J' }, people: [], peers: [], inventory: [], log: [], meetings: [], ...over })
+    const bundle = (s) => bundleOf(s, refreshStamps(s, {}, 1, 'Phone'))
+    const same = st({ inventory: [{ id: 'r1', text: 'Drill' }] })
+    expect(otherDifferences(same, bundle(structuredClone(same)))).toBe(0)
+    expect(otherDifferences(st({ inventory: [{ id: 'r1', text: 'Drill', imageId: 'local' }] }), bundle(st({ inventory: [{ id: 'r1', text: 'Drill' }] })))).toBe(0)
+    const mine = st({ inventory: [{ id: 'r1', text: 'Drill' }, { id: 'r2', text: 'Saw' }], chats: { a: [{ t: 1 }] } })
+    const theirs = st({ inventory: [{ id: 'r1', text: 'Drill v2' }], chats: {} })
+    expect(otherDifferences(mine, bundle(theirs))).toBe(3)   // r1 changed, r2 only here, chat a only here
+  })
+})

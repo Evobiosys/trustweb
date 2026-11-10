@@ -54,6 +54,24 @@ function keepPictures<T extends { id: string }>(incoming: T[], local: T[], key: 
 }
 
 /** Replaces, in place, what the bundle carries with the bundle's version. Running it again with the same bundle changes nothing. */
+/**
+ * Review wave 40: the other things taking `theirs` replaces, counted for the confirm sheet: resources (the per-device picture aside), meetings,
+ * events, tasks and invitations that differ by id, and chats that differ per person.
+ */
+export function otherDifferences(mine: AppState, theirs: SyncBundle): number {
+  const lists = (a: readonly { id: string }[] | undefined, b: readonly { id: string }[] | undefined, strip: (x: unknown) => unknown = (x) => x): number => {
+    const ma = new Map((a ?? []).map((x) => [x.id, strip(x)]))
+    const mb = new Map((b ?? []).map((x) => [x.id, strip(x)]))
+    return [...new Set([...ma.keys(), ...mb.keys()])].filter((id) => !same(ma.get(id), mb.get(id))).length
+  }
+  const noImage = (x: unknown): unknown => { const { imageId: _i, ...rest } = x as { imageId?: unknown }; void _i; return rest }
+  const ca = mine.chats ?? {}
+  const cb = theirs.chats ?? {}
+  const chats = [...new Set([...Object.keys(ca), ...Object.keys(cb)])].filter((k) => !same(ca[k], cb[k])).length
+  return lists(mine.inventory, theirs.inventory, noImage) + lists(mine.meetings, theirs.meetings) + lists(mine.events, theirs.events)
+    + lists(mine.tasks, theirs.tasks) + lists(mine.invitations, theirs.invitations) + chats
+}
+
 export function adoptBundle(mine: AppState, theirs: SyncBundle): void {
   const t = structuredClone(theirs)
   const own = mine as unknown as Record<string, unknown>

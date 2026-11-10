@@ -457,6 +457,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     open('devices-incoming', [
       el('h3', {}, [a.kind === 'take' ? S.adTakeTitle(name) : S.adGiveTitle(name), ' ', alphaSub()]),
       el('p', { 'data-adopt-diff': [a.diff.people, a.diff.notes, a.diff.settings].join(',') }, [S.adDiff(a.diff)]),
+      a.other ? el('p', { 'data-adopt-other': String(a.other) }, [S.adDiffOther(a.other)]) : null,
       el('p', {}, [a.kind === 'take' ? S.adTakeLead(name) : S.adGiveLead(name)]),
       el('p', { class: 'meta' }, [S.adArchiveNote]),
       el('button', { class: 'btn btn-electric', 'data-adopt-confirm': '1', onclick: () => void adopt(a, name) }, [a.kind === 'take' ? S.adTakeOk : S.adGiveOk]),

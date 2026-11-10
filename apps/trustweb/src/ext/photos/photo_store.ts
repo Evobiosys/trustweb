@@ -78,11 +78,13 @@ export class PhotoStore {
   /** Read, change, write one meta; the new meta, or null when the id is unknown or nothing could be written. */
   async update(id: string, change: (m: PhotoMeta) => PhotoMeta): Promise<PhotoMeta | null> {
     try {
-      const store = (await this.open()).transaction(META, 'readwrite').objectStore(META)
+      const tx = (await this.open()).transaction(META, 'readwrite')
+      const store = tx.objectStore(META)
       const m = await result(store.get(id)) as PhotoMeta | undefined
       if (!m) return null
       const next = change(m)
-      await result(store.put(next))
+      store.put(next)
+      await done(tx)   // review wave 40: written = the transaction committed (a full disk aborts it at commit), not only the request
       return next
     } catch { return null }
   }

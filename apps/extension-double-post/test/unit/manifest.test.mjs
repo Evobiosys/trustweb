@@ -8,8 +8,9 @@ describe('manifest', () => {
   it('permissions: storage (settings) and scripting (Mastodon instances the user adds), nothing else', () => {
     expect([...manifest.permissions].sort()).toEqual(['scripting', 'storage'])
   })
-  it('fixed hosts: the four networks only; any other host only when the user adds it', () => {
-    expect(manifest.host_permissions).toEqual(['https://x.com/*', 'https://twitter.com/*', 'https://www.facebook.com/*', 'https://www.linkedin.com/*'])
+  it('fixed hosts: the content script on the four networks only, no extra host permission (review wave 40); any other host only when the user adds it', () => {
+    expect(manifest.host_permissions).toBeUndefined()
+    expect(manifest.content_scripts.flatMap((c) => c.matches)).toEqual(['https://x.com/*', 'https://twitter.com/*', 'https://www.facebook.com/*', 'https://www.linkedin.com/*'])
     expect(manifest.optional_host_permissions).toEqual(['https://*/*'])
   })
   it('no remote code: scripts from the package only', () => {

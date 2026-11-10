@@ -4,12 +4,6 @@
   "version": "0.1.0",
   "description": "After you publish on Mastodon, X, Facebook or LinkedIn: asks whether to also post the text in TrustWeb. Sends nothing anywhere.",
   "permissions": ["storage", "scripting"],
-  "host_permissions": [
-    "https://x.com/*",
-    "https://twitter.com/*",
-    "https://www.facebook.com/*",
-    "https://www.linkedin.com/*"
-  ],
   "optional_host_permissions": ["https://*/*"],
   "content_scripts": [
     {

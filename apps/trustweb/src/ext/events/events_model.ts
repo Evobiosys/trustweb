@@ -15,7 +15,8 @@ export type Rsvp = 'going' | 'maybe'
 export interface EventsData {
   /** Where the events map lives (Andrew Hasse's map; the address is not known yet, so the user pastes it). */
   mapUrl?: string
-  rsvp?: Record<string, Rsvp>
+  /** 'none' = an answer taken back (review wave 40: kept as a mark, so a sync with my other device does not bring the old answer back). */
+  rsvp?: Record<string, Rsvp | 'none'>
 }
 
 /** Wave 40 small-ui-c: the events map shown until the user pastes another address. */
@@ -42,7 +43,7 @@ export function parseEvents(raw: unknown): EventsData {
   const d: EventsData = {}
   if (typeof o.mapUrl === 'string' && mapEmbedUrl(o.mapUrl)) d.mapUrl = o.mapUrl
   if (o.rsvp && typeof o.rsvp === 'object') {
-    const r = Object.entries(o.rsvp as Record<string, unknown>).filter((e): e is [string, Rsvp] => e[1] === 'going' || e[1] === 'maybe')
+    const r = Object.entries(o.rsvp as Record<string, unknown>).filter((e): e is [string, Rsvp | 'none'] => e[1] === 'going' || e[1] === 'maybe' || e[1] === 'none')
     if (r.length) d.rsvp = Object.fromEntries(r)
   }
   return d
@@ -60,7 +61,7 @@ export function mergeEvents(mineRaw: unknown, theirsRaw: unknown): EventsData {
 /** The same answer again clears it. */
 export function setRsvp(d: EventsData, id: string, v: Rsvp): EventsData {
   const rsvp = { ...d.rsvp }
-  if (rsvp[id] === v) delete rsvp[id]; else rsvp[id] = v
+  rsvp[id] = rsvp[id] === v ? 'none' : v
   return { ...d, rsvp }
 }
 
@@ -68,7 +69,7 @@ export interface EventItem extends EventCard { rsvp: Rsvp | null }
 
 /** Upcoming soonest first, then past. My answer, else "going" for an event the app already marks as attended. */
 export function buildEventList(events: readonly TwEvent[] | undefined, d: EventsData, now: number): EventItem[] {
-  return buildEvents(events, now).map((c) => ({ ...c, rsvp: d.rsvp?.[c.id] ?? (c.going ? 'going' : null) }))
+  return buildEvents(events, now).map((c) => { const r = d.rsvp?.[c.id]; return { ...c, rsvp: r === 'none' ? null : r ?? (c.going ? 'going' : null) } })
 }
 
 export const eventShareText = (c: Pick<EventCard, 'name' | 'from' | 'to' | 'where'>): string =>

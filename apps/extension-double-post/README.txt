@@ -19,7 +19,7 @@ PRIVACY (site texts, formulated by an AI agent, to be checked by Jakob)
 PERMISSIONS
 - storage: the settings.
 - scripting + optional host permission: only so that you can add a Mastodon instance (the browser asks once per instance).
-- host permissions: https://x.com, https://twitter.com, https://www.facebook.com, https://www.linkedin.com (content script on these only).
+- sites: the content script runs on https://x.com, https://twitter.com, https://www.facebook.com, https://www.linkedin.com only (content_scripts matches; no extra host permission).
 
 SETTINGS (extension options page)
 - On/off per network, TrustWeb address (default https://app.trustweb.one; http://127.0.0.1:<port> allowed for a local preview),

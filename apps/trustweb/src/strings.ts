@@ -4034,4 +4034,5 @@ export const S = {
   tagsGone: 'That tag is no longer there. The list is up to date again.',
   supportDeliverCopyFailed: 'Your words could not be copied. Write them in the chat that opens.',
   adCopyUnreadable: 'This copy cannot be read any more, so nothing was restored.',
+  adDiffOther: (n: number) => `Also replaced: ${n} other ${n === 1 ? 'thing' : 'things'} (resources, meetings, events, tasks, invitations, chats).`,
 } as const
