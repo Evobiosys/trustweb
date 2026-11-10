@@ -3631,6 +3631,28 @@ export const S = {
     setNav: 'Menu items',
     setReset: 'Ask again before loading Google Docs and Telegram',
     setResetDone: 'Done: the next load asks first.',
+    chatsTitle: 'Chats',
+    chatsNone: 'No chats yet.',
+  },
+  /** Wave 40 small-ui-d: arrange the bottom row, halo, variations in the ⋮ list, link with a variation, communities-only chat. */
+  w40: {
+    barMoreDivider: 'In the ⋮ list (below the row)',
+    barHalo: 'Halo',
+    barHaloPick: (name: string) => `Halo around ${name}`,
+    barHaloHint: 'A halo rings one or two views in the row. Tap Halo to put it on a view or take it off.',
+    barArrangeHint: 'Hold any button in the row to arrange it. Tap a view in the ⋮ list to move it into the row.',
+    barMoved: (name: string) => `${name} is in the row now.`,
+    linkVarTitle: 'Connection link with a variation',
+    linkVarHint: 'Send your connection link with the same settings as yours, or with one variation you pick. The person is asked before it applies.',
+    linkVarSame: 'Same as mine',
+    linkVarCopy: 'Copy the link',
+    linkVarShare: 'Share the link',
+    linkVarPick: 'Variation for the link',
+    linkVarOffer: (name: string) => `This link suggests the ${name} variation. Tap to use it.`,
+    chatCommunitiesOnly: 'Communities only',
+    chatAllChats: 'All chats',
+    chatCommunityRow: (name: string) => `${name} (community chat)`,
+    chatCommunityNone: 'No community chats yet.',
   },
   /** Wave 40 small-ui-c: the Docs & chat view (S/ext/embeds); community-mighty shows the same panes. */
   embeds: {

@@ -21,6 +21,8 @@ export interface TwCtx {
   bus: TwBus
   navigate: (viewId: string) => void
   profile: () => ProfileId
+  /** Wave 40: the app's regular chats (newest first); a module may list them. A tap on one emits 'open-chat' with the person id. */
+  chats?: () => { id: string; title: string; last: string; unread: number }[]
   /** Wave 40 ai-edit-chat: every step a person can tap, as undoable commands (actions.ts); absent in hosts that have none. */
   actions?: Actions
   /** Wave 40: the screen or page the person is on, in plain words. */
