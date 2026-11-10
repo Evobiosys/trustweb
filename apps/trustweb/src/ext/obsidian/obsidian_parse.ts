@@ -58,10 +58,11 @@ export function parseFrontmatter(text: string): { data: Data; body: string } {
 const asList = (v: string | string[] | undefined): string[] => (v === undefined ? [] : Array.isArray(v) ? v : v.split(/[,;]/).map(unquote)).map((x) => x.trim()).filter(Boolean)
 const once = (xs: readonly string[]): string[] => [...new Set(xs)]
 
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g
+// Bounded quantifiers: a note can hold a megabyte of base64 or one endless word, and an open-ended scan from every position would be quadratic.
+const EMAIL = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}/g
 const STRIP_CODE = /```[\s\S]*?(?:```|$)|`[^`\n]*`/g
-const INLINE_TAG = /(?:^|\s)#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/gu
-const WIKILINK = /(?<!!)\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g
+const INLINE_TAG = /(?:^|\s)#([\p{L}\p{N}_][\p{L}\p{N}_/-]{0,99})/gu
+const WIKILINK = /(?<!!)\[\[([^\]|#\n]{1,200})(?:#[^\]|\n]{0,200})?(?:\|[^\]\n]{0,200})?\]\]/g
 
 function tagsIn(body: string): string[] {
   const out: string[] = []

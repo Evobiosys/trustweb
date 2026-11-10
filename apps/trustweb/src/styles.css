@@ -1744,3 +1744,5 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 .cur-ai{border-style:dashed;align-self:flex-start;font-size:.8rem}
 [data-obsidian-page] progress{height:10px}
 [data-obsidian-page] a,[data-obsidian-page] .linkbtn{text-decoration:underline}
+[data-obsidian-page] p{margin:8px 0}
+[data-obsidian-page] [data-obs-summary]{margin-top:12px}

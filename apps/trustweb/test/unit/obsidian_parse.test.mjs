@@ -68,4 +68,11 @@ describe('parseNote', () => {
     expect(parseNote('x.md', 'Hello [[B]]')).toEqual(a)
     expect(JSON.stringify(a).length).toBeLessThan(1500)
   })
+  it('a pathological note (1 MB of one word, of [[, of base64) is read in well under a second', () => {
+    for (const body of ['a'.repeat(1_000_000), '[['.repeat(500_000), 'QUJD'.repeat(250_000) + '\n' + '#'.repeat(100_000), '`'.repeat(500_000), '---\n'.repeat(200_000)]) {
+      const t0 = performance.now()
+      parseNote('x.md', body)
+      expect(performance.now() - t0).toBeLessThan(1000)
+    }
+  })
 })
