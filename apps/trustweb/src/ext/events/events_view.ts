@@ -11,7 +11,7 @@ import type { AppState } from '../../model'
 import type { TwCtx } from '../tw_registry'
 import communityCss from '../community-mighty/community.css?inline'
 import css from './events.css?inline'
-import { MODULE_ID, buildEventList, mapEmbedUrl, parseEvents, setRsvp, shareEventToTag, type EventItem, type EventsData, type Rsvp } from './events_model'
+import { DEFAULT_MAP_URL, MODULE_ID, buildEventList, mapEmbedUrl, parseEvents, setRsvp, shareEventToTag, type EventItem, type EventsData, type Rsvp } from './events_model'
 
 export const readEvents = (s: AppState): EventsData => parseEvents(s.extData?.[MODULE_ID])
 
@@ -73,7 +73,7 @@ export function mountEvents(hostEl: HTMLElement, ctx: TwCtx): () => void {
   /** The map slot: paste the address once (also under Settings), nothing loads before the consent tap. */
   function mapSlot(): HTMLElement {
     const d = data()
-    const src = d.mapUrl ? mapEmbedUrl(d.mapUrl) : null
+    const src = mapEmbedUrl(d.mapUrl ?? DEFAULT_MAP_URL)
     const kids: Kids = [el('h3', { class: 'eyebrow' }, [t.mapTitle])]
     const change = btn(t.mapChange, () => { const n = data(); delete n.mapUrl; save(n) }, { 'data-events-map-change': '' })
     if (!src) {

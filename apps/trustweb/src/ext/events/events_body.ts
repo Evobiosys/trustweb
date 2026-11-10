@@ -3,13 +3,13 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { S } from '../../strings'
 import type { TwCtx, TwModuleBody } from '../tw_registry'
-import { MODULE_ID, mapEmbedUrl } from './events_model'
+import { DEFAULT_MAP_URL, MODULE_ID, mapEmbedUrl } from './events_model'
 import { mountEvents, readEvents, writeEvents, writeMapConsent } from './events_view'
 
 function settingsRows(ctx: TwCtx): Node[] {
   const t = ctx.strings.eventsView
   const d = readEvents(ctx.store())
-  const input = el('input', { type: 'url', value: d.mapUrl ?? '', placeholder: t.mapPh, 'aria-label': t.setMap, 'data-events-set-map': '' }) as HTMLInputElement
+  const input = el('input', { type: 'url', value: d.mapUrl ?? DEFAULT_MAP_URL, placeholder: t.mapPh, 'aria-label': t.setMap, 'data-events-set-map': '' }) as HTMLInputElement
   const note = el('small', { class: 'meta', hidden: true }, [])
   return [
     el('label', { class: 'events-set-map' }, [el('b', {}, [t.setMap]), ' ', input]),

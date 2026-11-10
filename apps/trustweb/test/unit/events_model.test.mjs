@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 40 feed-events: the pure model of the Events view (src/ext/events/events_model.ts): RSVP, map link, share to a tag. */
-import { parseEvents, mergeEvents, mapEmbedUrl, setRsvp, buildEventList, eventShareText, shareEventToTag } from '../../src/ext/events/events_model.ts'
+import { DEFAULT_MAP_URL, parseEvents, mergeEvents, mapEmbedUrl, setRsvp, buildEventList, eventShareText, shareEventToTag } from '../../src/ext/events/events_model.ts'
 
 const TAGS = [{ id: 'iyg', colour: '#1565c0', label: 'IYG', community: true }]
 const ev = (id, from, extra = {}) => ({ id, name: `Event ${id}`, from, where: 'Vienna', createdAt: 0, attended: false, ...extra })
@@ -59,5 +59,12 @@ describe('share to a tag', () => {
     expect(shareEventToTag(s, TAGS, c, 'iyg', NOW)).toBe(true)
     expect(s.groupPosts[0].text).toContain('Event a')
     expect(shareEventToTag({ ...s, zoneTags: undefined, groupPosts: [] }, TAGS, c, 'iyg', NOW)).toBe(false)
+  })
+})
+
+describe('default events map (wave 40 small-ui-c)', () => {
+  it('is the regen events map, a valid https link', () => {
+    expect(DEFAULT_MAP_URL).toBe('https://andrewalan11.github.io/regen-events-map/')
+    expect(mapEmbedUrl(DEFAULT_MAP_URL)).toBe(DEFAULT_MAP_URL)
   })
 })

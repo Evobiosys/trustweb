@@ -18,6 +18,9 @@ export interface EventsData {
   rsvp?: Record<string, Rsvp>
 }
 
+/** Wave 40 small-ui-c: the events map shown until the user pastes another address. */
+export const DEFAULT_MAP_URL = 'https://andrewalan11.github.io/regen-events-map/'
+
 /** https only and no credentials; the normalised link or null. */
 export function mapEmbedUrl(raw: string): string | null {
   const href = safeUrl(raw)
