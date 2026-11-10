@@ -94,16 +94,24 @@ export function createRegistry(io: RegistryIo) {
   }
 
   /** Brings the running modules in line with the switches: the ones now off are disposed (reverse order), the ones now on initialised. */
-  async function sync(): Promise<void> {
+  async function syncOnce(): Promise<void> {
     for (const m of [...modules].reverse()) if (active.has(m.id) && !isEnabled(m.id)) disposeOne(m.id)
     for (const m of modules) {
       if (active.has(m.id) || !isEnabled(m.id)) continue
       try {
         const r = await resolve(m)
+        if (!isEnabled(m.id)) continue   // switched off while it loaded: never initialised
         await r.init?.(io.ctx())
         active.set(m.id, r)
+        if (!isEnabled(m.id)) disposeOne(m.id)   // switched off while it initialised: undo it at once
       } catch (e) { console.error(`module ${m.id}: init failed`, e) }
     }
+  }
+  /** Wave 39 review: one sync at a time (a second call waits for the first, then runs once more), so a module is never initialised twice. */
+  let queue: Promise<void> = Promise.resolve()
+  function sync(): Promise<void> {
+    queue = queue.then(syncOnce, syncOnce)
+    return queue
   }
 
   return {
@@ -133,7 +141,7 @@ export function createRegistry(io: RegistryIo) {
     stop(): void { for (const m of [...modules].reverse()) if (active.has(m.id)) disposeOne(m.id) },
     /** Modules read once at load whose switch changed since: one reload applies them. */
     needsReload: (): string[] => modules.filter((m) => m.reload && m.id in booted && booted[m.id] !== isEnabled(m.id)).map((m) => m.id),
-    views: (): TwView[] => modules.flatMap((m) => (active.get(m.id) ?? (isEnabled(m.id) && !m.heavy ? m : undefined))?.views ?? []),
-    settingsSections: (): TwSettingsSection[] => [...active.values()].flatMap((m) => m.settings?.(io.ctx()) ?? []),
+    views: (): TwView[] => modules.flatMap((m) => (isEnabled(m.id) ? active.get(m.id) ?? (m.heavy ? undefined : m) : undefined)?.views ?? []),
+    settingsSections: (): TwSettingsSection[] => [...active.values()].filter((m) => isEnabled(m.id)).flatMap((m) => m.settings?.(io.ctx()) ?? []),
   }
 }

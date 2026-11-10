@@ -248,6 +248,7 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
   const origin = { source: row.source, file: row.file, importedAt: now, key }
   const match = personFor(s, row)
   const mine = match?.person
+  const before = mine ? snapOf(mine) : undefined
   const done: ServiceDone = { did: 'accepted' }
   if (mine) {
     done.personId = mine.id
@@ -271,7 +272,17 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
   if (links.knows.length) done.knows = links.knows
   if (links.affiliated.length) done.affiliated = links.affiliated
   done.snap = snapOf(who)
+  if (before !== undefined) rebaseSnaps(s, who.id, before, done.snap)
   batch.done[key] = done
+}
+
+/**
+ * Wave 39 review: an import or an undo is no edit by the owner. When one changes a person, the other imports' fingerprints of that person
+ * that still matched (the owner had not touched them) move along, so "edited since" keeps meaning the owner's own changes.
+ */
+function rebaseSnaps(s: State, personId: string, from: string, to: string): void {
+  if (from === to) return
+  for (const b of s.serviceImports ?? []) for (const d of Object.values(b.done)) if (d.personId === personId && d.snap === from) d.snap = to
 }
 
 /** Accepts every pending row with no flag; returns how many. */
@@ -295,6 +306,7 @@ export function undoBatch(s: State, batchId: string, opts: { undoEdits?: boolean
     // Edited since (or, for a batch from before snapshots, moved off the ring the decision wrote) = kept as they are.
     const edited = d.snap !== undefined ? snapOf(p) !== d.snap : d.wrote !== undefined && p.ring !== d.wrote
     if (edited && !opts.undoEdits) { out.kept++; out.keptIds.push(p.id); continue }
+    const before = snapOf(p)
     if (d.created) { p.ring = Ring.None; out.archived++ }
     else if (d.prevRing !== undefined) { p.ring = d.prevRing; out.restored++ }
     if (d.created || d.added) p.sources = (p.sources ?? []).filter((x) => x.key !== key)
@@ -308,6 +320,7 @@ export function undoBatch(s: State, batchId: string, opts: { undoEdits?: boolean
     if (p.knows && !p.knows.length) delete p.knows
     if (p.affiliated && !p.affiliated.length) delete p.affiliated
     if (p.fields && !Object.keys(p.fields).length) delete p.fields
+    rebaseSnaps(s, p.id, before, snapOf(p))
   }
   s.serviceImports = (s.serviceImports ?? []).filter((b) => b.id !== batchId)
   return out

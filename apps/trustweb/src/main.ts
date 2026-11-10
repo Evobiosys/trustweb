@@ -267,6 +267,7 @@ import { createEventsView } from './events_view'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createViewHost } from './ext/view_host'
 import { alphaHeading } from './alpha_heading'
+import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
@@ -1487,7 +1488,14 @@ function zoomGlyph(tab: ZoomTab): HTMLElement {
   return b
 }
 
-function go(s: Screen): void {
+/** Wave 39 review: which switchable parts are on now (screen_gate.ts); a part that is off never shows, however it is reached. */
+function shownScreen(target: Screen): Screen {
+  if (!state) return target
+  return gateScreen(target, { events: featureOn(state, 'events'), inventory: featureOn(state, 'inventory'), feed: feedOn(state), resources: isEnabled('resources') }) as Screen
+}
+
+function go(to: Screen): void {
+  const s = shownScreen(to)
   const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups
   if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
@@ -1550,6 +1558,7 @@ function mountSettingsGear(): void {
 
 /** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
 function mountAiButton(): void {
+  if (!isEnabled('ai-button')) return   // wave 39 review: the Extensions switch "AI button" (and the profiles) decide
   const right = host.querySelector('.hdr .hdr-right')
   if (!right || right.querySelector('[data-ai-button]')) return
   const ai = iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn')
@@ -1762,6 +1771,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 }
 
 function render(): void {
+  screen = shownScreen(screen)
   const showTabs = screen !== Screen.Start
   tabs.style.display = showTabs ? 'flex' : 'none'
   tabs.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => {
@@ -5246,7 +5256,8 @@ function maybeOpenPendingEvent(): void {
       el('h2', {}, [S.featureEventsPrompt]),
       el('button', {
         class: 'btn btn-electric wide', 'data-feature-events-on': '',
-        onclick: () => { setFeature(st(), 'events', true); save(); renderTabs(); render(); pendingEvent = ev; maybeOpenPendingEvent() },
+        // Wave 39 review: a profile or the Extensions list may have switched the Events module off; "turn on" turns that on too (kept per profile).
+        onclick: () => { setFeature(st(), 'events', true); save(); void (isEnabled('events') ? Promise.resolve() : twRegistry.setEnabled('events', true)).then(() => { renderTabs(); render(); pendingEvent = ev; maybeOpenPendingEvent() }) },
       }, [S.featureEventsOn]),
       el('button', { class: 'btn btn-ghost wide', 'data-feature-events-later': '', onclick: closeSheet }, [S.featureEventsLater]),
     ])

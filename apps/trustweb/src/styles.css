@@ -1647,7 +1647,6 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 
 /* wave 39 import-curate */
 .cur-head{margin:6px 0 4px}
-.alpha-label{font-size:11px; font-weight:400; color:var(--ink-soft)}
 .cur-bar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0}
 .cur-bar .field{max-width:100%; min-width:0}
 .cur-row{min-width:0}
@@ -1681,8 +1680,6 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .ring-card-bar{display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; margin:2px 0}
 .ring-card-bar[hidden]{display:none}
 .ring-card-bulk{border:0; background:none; padding:2px 0; font:inherit; font-size:13px; color:inherit; text-decoration:underline; cursor:pointer}
-/* heading subscript of a feature that is not approved yet */
-.alpha-label{color:var(--ink-3); font-size:.72em; font-weight:500; margin-left:2px; white-space:nowrap}
 /* browser-only notice: wraps at any width, the button sits below the text when it does not fit */
 .browser-only{display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; box-sizing:border-box; max-width:calc(100% - 24px); white-space:normal}
 .browser-only-text{flex:1 1 200px; min-width:0; overflow-wrap:anywhere}
@@ -1725,6 +1722,7 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .rings-zoom .rings-wrap .node:not(.you) span{font-size:var(--lbl,11.5px)}
 .rings-zoom .rings-wrap .node:not(.you) .lvl{font-size:calc(var(--lbl,11.5px)*.82)}
 /* wave 39 extensions-profiles */
+/* the one rule for the grey "untested alpha feature" subscript (alpha_heading.ts alphaSub); wave 39 review merged three copies */
 .alpha-label{color:var(--ink-2); font-size:.65em; font-weight:400; margin-left:var(--s-1, 4px)}
 .variation b, [data-ext-module] b{text-decoration:underline}
 .variation.on b{text-decoration:none}
@@ -1736,3 +1734,8 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 .support-found{display:flex; flex-wrap:wrap; gap:var(--s-2, 8px); align-items:center; min-width:0}
 .support-found button{text-decoration:underline}
 .support-not-closest{display:flex; gap:var(--s-2, 8px); align-items:center; margin-top:var(--s-2, 8px)}
+
+/* wave 39 review-fixes */
+/* the Theme choices are clickable: underlined like the Variations rows (the chosen one is not) */
+.look-pick .radio b{text-decoration:underline}
+.look-pick .radio.on b{text-decoration:none}
