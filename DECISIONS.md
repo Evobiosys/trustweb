@@ -672,3 +672,4 @@ the estimate; the most relevant goal is an overview of who is in your field, not
 - Browser: `vrc_di.ts` runs in node and in headless Chromium (no Buffer/fs); minified bundle ~251 KB, ~73 KB gzipped (jsonld 90 KB,
   rdf-canonize 35 KB, noble 45 KB).
 
+- Review fixes (wave41 rf41-d): relationship secret keys stay plaintext JSON (0600, atomic write) in this alpha, like the device identity file; never in an API response or log. Sealing them in the vault is later work (review D14, I7 box).
