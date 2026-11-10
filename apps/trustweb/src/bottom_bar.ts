@@ -65,15 +65,22 @@ export function defaultPrimary(ids: readonly BarId[], preset: BarId = 'record'):
   return ids.length % 2 === 0 ? null : ids.includes(preset) ? preset : 'record'
 }
 
-/** primary is null when no button is raised (stored as 'none'). */
-export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[]; primary: BarId | null } {
+/** Wave 40: an even number of buttons has no single centre, so the two inner ones are raised together. */
+export function defaultPair(ids: readonly BarId[]): BarId[] {
+  const n = ids.length
+  return n >= 2 && n % 2 === 0 ? [ids[n / 2 - 1], ids[n / 2]] : []
+}
+
+/** primary is null when no button is raised (stored as 'none'); pair = the two inner buttons raised by default for an even count (never when the user chose, or chose none). */
+export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[]; primary: BarId | null; pair: BarId[] } {
   const ok = new Set<string>(offered(f, bar))
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
   const base = baseOrder(bar)
   const ids = [...base, ...(f.mods ?? []).map((m): BarId => `mod:${m}`).filter((id) => !base.includes(id))].filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
   // Wave 39: a module's button does not change which button is raised by default.
-  const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(ids.filter((id) => modOfBar(id) === null))
-  return { ids, primary }
+  const own = ids.filter((id) => modOfBar(id) === null)
+  const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(own)
+  return { ids, primary, pair: primary === null && bar?.primary !== 'none' ? defaultPair(own) : [] }
 }
 
 /** Every view the sheet offers, with whether it sits in the bar now. */

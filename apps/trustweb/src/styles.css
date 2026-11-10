@@ -1739,3 +1739,7 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 /* the Theme choices are clickable: underlined like the Variations rows (the chosen one is not) */
 .look-pick .radio b{text-decoration:underline}
 .look-pick .radio.on b{text-decoration:none}
+
+/* wave 40 small-ui-c: an even number of bottom-row buttons raises the two inner ones together, a little smaller so both fit */
+.tabs.pair .tab.tab-primary,.tabs.pair .tab-record{width:56px; height:56px; margin-top:-22px}
+.tabs.many.pair .tab-record{flex:0 0 56px}

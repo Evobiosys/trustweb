@@ -1199,13 +1199,14 @@ function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
   // Wave 37 (co-notes-link): a guest of a co-note link gets the nested shell instead (Web, Chat in the centre, Resources; Events too for an event note).
   const guest = state?.coGuest && state.coNotesOn ? guestShell(Boolean(state.coGuest.eventId)) : null
-  const { ids, primary } = guest ? { ids: guest.tabs, primary: guest.primary } : resolveBar(state?.uiBar, barFlags())
+  const { ids, primary, pair } = guest ? { ids: guest.tabs, primary: guest.primary, pair: [] } : resolveBar(state?.uiBar, barFlags())
   const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
-  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), ...(guest ? [] : [more]))
+  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary || pair.includes(id))), ...(guest ? [] : [more]))
   tabs.classList.toggle('four', shown.length > 3)
   tabs.classList.toggle('many', shown.length > 5)
+  tabs.classList.toggle('pair', pair.length > 0)
   phone.classList.toggle('ask-in-bar', shown.includes('ask'))
   updateChatBadge()
 }
@@ -1627,7 +1628,6 @@ const PIN_ACTIONS: Record<HeaderPin, { icon: string; run: () => void }> = {
   dnd: { icon: 'dnd', run: () => undefined },
   advanced: { icon: 'more', run: openAdvancedSettings },
   'qr-only': { icon: 'qr', run: () => screenQr(true) },
-  select: { icon: 'select', run: () => undefined },
 }
 
 /** Wave 28: the header of Web, Chat, Events and Resources in one order, right to left: settings, the QR, the pinned buttons (Do Not Disturb on by default), the views, search. */
@@ -1643,10 +1643,8 @@ function mountHeaderControls(): void {
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
-  // The select tool belongs to the Web's rings view only.
-  const pinIds = headerPins(st().uiPins?.header).filter((id) => id !== 'select' || (screen === Screen.Web && webViewNow === 'rings' && !webPage))
-  const pins = pinIds.map((id) => {
-    const b = id === 'dnd' ? dndButton() : id === 'select' ? selectToolButton('hdr-pin') : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
+  const pins = headerPins(st().uiPins?.header).map((id) => {
+    const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
     b.setAttribute('data-header-pin', id)
     return b
   })
@@ -3110,11 +3108,10 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  const pinned = headerPins(s.uiPins?.header).includes('select')
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, ...(pinned ? {} : { select: selectToolButton() }), hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted(), openPanel: (children) => openSheet(children) })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select: selectToolButton(), hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted(), openPanel: (children) => openSheet(children) })
 }
 
-/** Wave 39: the select tool; it sits beneath Settings in the header (a pin, on by default) or, unpinned, in the Web's tool column. */
+/** The select tool: a button of the Web's Tools row (wave 39 had it in the header; wave 40 moved it back). */
 function selectToolButton(extra = 'expand-btn'): HTMLElement {
   const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, `${extra} select-tool`)
   select.setAttribute('data-tool', 'select')

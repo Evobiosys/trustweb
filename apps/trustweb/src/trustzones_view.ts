@@ -170,7 +170,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
 const addingTo: { tag?: string; added: string[] } = { added: [] }
 
 /** Wave 28b: the TrustZones view's only side control (left on desktop, above the rings on the phone, unfolded by default): expand all, add, tag filters. */
-export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; /** Wave 39: absent while the select tool is pinned in the header. */ select?: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void; /** Phone: the overlay sheet (main.ts openSheet). */ openPanel: (children: (Node | null)[]) => void }): HTMLElement {
+export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; select: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void; /** Phone: the overlay sheet (main.ts openSheet). */ openPanel: (children: (Node | null)[]) => void }): HTMLElement {
   // Wave 39: on a phone Tools and Filters open as an overlay sheet that redraws after each change; wider, they fold open inline.
   const sheet = panelMode(window.innerWidth) === 'sheet'
   let showing: 'tools' | 'filters' | null = null
@@ -209,7 +209,7 @@ export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | '
       el('input', { type: 'checkbox', 'data-show-system-tags': '', ...(showSystemTags() ? { checked: '' } : {}), onchange: (e: Event) => { setShowSystemTags((e.target as HTMLInputElement).checked); d.onChange() } }),
       ' ', S.imp39.systemTags,
     ])
-    return [el('div', { class: 'zone-tools' }, [d.expand, d.add, ...(d.select ? [d.select] : [])]), connections, perRing, autoAdjust, closest, systemTags, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
+    return [el('div', { class: 'zone-tools' }, [d.expand, d.add, d.select]), connections, perRing, autoAdjust, closest, systemTags, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
     ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted)]

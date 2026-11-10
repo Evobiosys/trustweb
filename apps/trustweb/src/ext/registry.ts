@@ -11,6 +11,7 @@ import { gebModule } from './geb'
 import { whatsappModule } from './whatsapp'
 import { coNotesModule } from './co_notes'
 import { module as communityMighty } from './community-mighty'
+import { module as embeds } from './embeds'
 import { S } from '../strings'
 import { createRegistry, type TwCtx, type TwModule } from './tw_registry'
 import type { TwSettings } from './profiles'
@@ -164,5 +165,5 @@ const part = (id: string, kind: TwModule['kind']): TwModule => ({ id, title: S.e
 ;[
   wrap(calendarModule, 'view'), wrap(coNotesModule, 'view'), wrap(gebModule, 'service'), wrap(matrixModule, 'service'), wrap(signalLinkModule, 'service'), wrap(whatsappModule, 'service'),
   part('events', 'view'), part('resources', 'view'), part('feed', 'view'), part('matches', 'view'), part('support-ask', 'service'), part('ai-button', 'service'),
-  communityMighty,
+  communityMighty, embeds,
 ].forEach(registerModule)
