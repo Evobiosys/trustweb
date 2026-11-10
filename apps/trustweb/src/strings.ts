@@ -3686,6 +3686,7 @@ export const S = {
     shareTitle: (n: number) => `Share ${n} photo${n === 1 ? '' : 's'}`,
     shareGo: 'Share',
     shareDone: (people: number, sealed: number) => `Shared with ${people} ${people === 1 ? 'person' : 'people'}; ${sealed} sealed on this phone.`,
+    sharedLine: 'Shared photos',
     shareStub: 'Alpha: the share is recorded and sealed on this phone. The photos themselves are not sent yet, so no one receives them.',
     // settings
     setImport: 'Photos folder import',
