@@ -35,8 +35,8 @@ export const RINGS_FIT_MARGIN = 40
  * fits the shorter side of the clip (cw, ch) with RINGS_FIT_MARGIN to spare; never under 1, so a phone keeps the layout it has.
  */
 export function minZoom(extent: number, cw: number, ch: number): number {
-  if (extent <= 0 || cw <= 0 || ch <= 0) return 1
-  return Math.max(1, Math.min(cw, ch) / (2 * (extent + RINGS_FIT_MARGIN)))
+  if (!(extent > 0) || !(cw > 0) || !(ch > 0) || !Number.isFinite(extent + cw + ch)) return 1
+  return Math.min(RINGS_ZOOM_MAX, Math.max(1, Math.min(cw, ch) / (2 * (extent + RINGS_FIT_MARGIN))))
 }
 
 /** The most the responsive layout zooms in by itself (dots and labels stay crisp enough; a pinch may go further). */
@@ -50,4 +50,14 @@ export function fitZoom(w: number, h: number, cw: number, ch: number): number {
   if (w <= 0 || h <= 0 || ch <= 560) return 1
   const k = Math.min(RINGS_ZOOM_FIT_MAX, (ch - 48) / h, (cw - 24) / w)
   return k > 1.15 ? k : 1
+}
+
+/** Review fix C1: the floor applies only where the first fit (fitZoom) applied, so home (k = 1) stays reachable on a short window or a phone. */
+export function floorZoom(extent: number, w: number, h: number, cw: number, ch: number): number {
+  return fitZoom(w, h, cw, ch) > 1 ? minZoom(extent, cw, ch) : 1
+}
+
+/** Review fix C4: after a resize, a stored zoom under the new floor is raised to it around the clip centre (a k above it stays). */
+export function reclamp(z: RingsZoom, v: ZoomView): RingsZoom {
+  return z.k < (v.minK ?? 1) ? zoomAt(z, 1, v.cw / 2, v.ch / 2, v) : z
 }

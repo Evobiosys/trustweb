@@ -56,3 +56,31 @@ describe('vertical centring at the floor (desktop fit)', () => {
     expect(zoomAt(home, 1.2, 0, 0, { w: 352, h: 300, cw: 352, ch: 500, minK: 1 }).y).toBe(0)
   })
 })
+
+// Wave 41 review-fixes c (rf41-c)
+import { RINGS_ZOOM_MAX, floorZoom, reclamp } from '../../src/rings_zoom.ts'
+
+describe('rf41-c C1 floorZoom: the floor only where the first fit applied', () => {
+  const w = 352, h = 352, ext = 176
+  it('1280x720 (clip height 544, no first fit): floor 1, home k=1 stays reachable', () => { expect(floorZoom(ext, w, h, 1280, 544)).toBe(1) })
+  it('360x640 phone: floor 1', () => { expect(floorZoom(ext, w, h, 360, 560)).toBe(1) })
+  it('1280x800 (clip 624): floor keeps 1.444', () => { expect(floorZoom(ext, w, h, 1280, 624)).toBeCloseTo(1.4444, 3) })
+  it('a phone with rings dragged inward (extent 100): still 1', () => { expect(floorZoom(100, w, h, 360, 500)).toBe(1) })
+})
+describe('rf41-c C2/C3 minZoom bounds', () => {
+  it('never above the zoom-in maximum (4K portrait)', () => { expect(minZoom(100, 3000, 3000)).toBe(RINGS_ZOOM_MAX) })
+  it('NaN / Infinity inputs give 1', () => {
+    expect(minZoom(NaN, 1280, 624)).toBe(1)
+    expect(minZoom(Infinity, 1280, 624)).toBe(1)
+    expect(minZoom(176, NaN, 624)).toBe(1)
+    expect(minZoom(176, 1280, Infinity)).toBe(1)
+  })
+})
+describe('rf41-c C4 reclamp', () => {
+  const v = { w: 1280, h: 352, cw: 1280, ch: 800, minK: 1.9 }
+  it('a stored k under a grown floor is raised to it; a k above stays', () => {
+    expect(reclamp({ k: 1.44, x: 0, y: 0 }, v).k).toBeCloseTo(1.9, 6)
+    expect(reclamp({ k: 2.5, x: -10, y: 0 }, v).k).toBe(2.5)
+    expect(reclamp({ k: 1, x: 0, y: 0 }, { ...v, minK: 1 })).toEqual({ k: 1, x: 0, y: 0 })
+  })
+})

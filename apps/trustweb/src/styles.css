@@ -1843,3 +1843,6 @@ body[data-community-mode] .tabs .tab-badge{top:0; right:6px}
 [data-obsidian-page] a,[data-obsidian-page] .linkbtn{text-decoration:underline}
 [data-obsidian-page] p{margin:8px 0}
 [data-obsidian-page] [data-obs-summary]{margin-top:12px}
+
+/* wave 41 review-fixes c */
+.ai-back{text-decoration:underline; align-self:flex-start}

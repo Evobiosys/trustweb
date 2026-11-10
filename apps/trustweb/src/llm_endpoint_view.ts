@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Settings > Advanced > Your AI: Claude (the TrustInTheWeb.com subscription: plan cards, sign-up on the device) and, as an indented subsection,
+ * Settings > AI: Claude (the TrustInTheWeb.com subscription: plan cards, sign-up on the device) and, as an indented subsection,
  * Custom (the person's own endpoint: base URL, key, model and a Test button; Ollama on this device and pc24 are presets inside it, wave 39). Kept on this phone and in the sealed record.
  */
 import { el } from '../../demo/src/ui/dom'
@@ -108,6 +108,7 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
       },
     }, [S.aiSubSent])
     h.openSheet([
+      el('button', { class: 'btn btn-ghost btn-sm ai-back', type: 'button', 'data-ai-back': '', onclick: () => h.backToSettings() }, ['← ' + S.back]),
       el('h3', {}, [S.aiSubSheetTitle(S.aiSubPlans[id])]),
       el('p', {}, [S.aiSubWise(PLANS[id].euro)]),
       email, err, send,
