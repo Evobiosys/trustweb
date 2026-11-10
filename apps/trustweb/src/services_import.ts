@@ -44,7 +44,7 @@ export interface PlanOptions { me: string; now: number; dayFirst?: boolean }
 const IDS_KEPT = 20
 export const SERVICE_LABEL: Record<string, string> = {
   whatsapp: 'WhatsApp', linkedin: 'LinkedIn', vcard: 'Phone contacts', 'google-csv': 'Google contacts', 'facebook-json': 'Facebook',
-  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts', obsidian: 'Obsidian vault', 'obsidian-ai': 'Obsidian vault (found by AI)',
+  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts', mcp: 'MCP server', obsidian: 'Obsidian vault', 'obsidian-ai': 'Obsidian vault (found by AI)',
 }
 export const countsLine = (counts: Record<string, number>): string =>
   Object.entries(counts).map(([s, n]) => `${SERVICE_LABEL[s] ?? s} ${n}`).join(', ')

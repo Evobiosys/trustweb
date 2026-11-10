@@ -20,8 +20,9 @@ export function toE164(input: string): string | null {
 const MATRIX_ID = /^@[a-z0-9._=\-/+]+:[a-z0-9.-]+\.[a-z]{2,}(:\d{1,5})?$/i
 const TELEGRAM_USER = /^[a-z][a-z0-9_]{4,31}$/i
 const MESSENGER_USER = /^[a-z0-9.]{5,50}$/i
-/** An address only: no ? # & = / anywhere, so a value (also one another phone sent) can never carry mailto: parameters such as a prefilled body. */
-const EMAIL = /^[^\s@?#&=/]+@[^\s@?#&=/]+\.[a-z]{2,}$/i
+/** An address only: no ? # & = / anywhere, so a value (also one another phone sent) can never carry mailto: parameters such as a prefilled body;
+ *  review wave 40: nor , ; < > ( ) " \ % either, so one card field can never turn into several recipients of a mail. */
+const EMAIL = /^[^\s@?#&=/,;<>()"\\%]+@[^\s@?#&=/,;<>()"\\%]+\.[a-z]{2,}$/i
 
 /** True for a bare address (wave 33, primary email). */
 export const isEmailAddress = (v: string): boolean => EMAIL.test(v)

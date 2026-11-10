@@ -3,6 +3,7 @@
  * Wave 39: the module contract (docs: DEVLOG/wave39/SPEC-extensions-module-interface.txt). A module is one folder S/ext/<id>/, registered in one
  * line, loadable lazily (`heavy`) and removable without touching main.ts. Pure, no DOM at import time.
  */
+import type { Actions } from '../actions'
 import type { AppState } from '../model'
 import type { S } from '../strings'
 import type { ProfileId, TwSettings } from './profiles'
@@ -20,6 +21,12 @@ export interface TwCtx {
   bus: TwBus
   navigate: (viewId: string) => void
   profile: () => ProfileId
+  /** Wave 40: the app's regular chats (newest first); a module may list them. A tap on one emits 'open-chat' with the person id. */
+  chats?: () => { id: string; title: string; last: string; unread: number }[]
+  /** Wave 40 ai-edit-chat: every step a person can tap, as undoable commands (actions.ts); absent in hosts that have none. */
+  actions?: Actions
+  /** Wave 40: the screen or page the person is on, in plain words. */
+  where?: () => string
 }
 
 export interface TwView { id: string; title: string; icon: string; mount(host: HTMLElement, ctx: TwCtx): () => void }
@@ -122,6 +129,8 @@ export function createRegistry(io: RegistryIo) {
     },
     listModules: (): readonly TwModule[] => [...modules],
     isEnabled,
+    /** Wave 40 review: the module is initialised and running (a switch can be on while its chunk failed to load). */
+    isActive: (id: string): boolean => active.has(id),
     /** Persists the switch and brings the module up or down at once. */
     async setEnabled(id: string, on: boolean): Promise<void> {
       if (!find(id)) throw new Error(`unknown module: ${id}`)

@@ -98,7 +98,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
     return el('div', { class: 'cal-agenda' }, [
       day.length || dayTasks.length ? null : el('p', { class: 'empty' }, [S.cal.dayEmpty]),
       ...day.map((ev) => {
-        const row = el('button', { class: 'prow', 'data-cal-event': ev.id, onclick: () => h.openEvent(ev.id) }, [
+        const row = el('button', { class: 'prow', 'data-cal-event': ev.id, onclick: () => h.openEvent(ev.id, true) }, [
           el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [[timeOf(ev), ev.where].filter(Boolean).join(' · ')])]),
         ])
         acceptPerson(row, (ref) => invite(ev, ref.id))
