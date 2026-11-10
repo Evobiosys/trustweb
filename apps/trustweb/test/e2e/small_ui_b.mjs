@@ -45,7 +45,7 @@ try {
     // 1 + 9: AI sparkle last on every view; select tool a pin; favicon
     const order = await hdrOrder(page)
     check(`${w}: Web header ends gear, AI (${order.join(',')})`, order.at(-1) === 'ai' && order.at(-2) === 'gear')
-    check(`${w}: select tool sits in the header, not in the Tools column`, order.includes('select') && (await page.locator('[data-zone-side] .select-tool').count()) === 0)
+    check(`${w}: select tool is not in the header (wave 40: it sits in the Tools column)`, !order.includes('select'))
     check(`${w}: AI icon is a sparkle (two paths, filled)`, (await page.locator('[data-ai-button] svg path').count()) === 2)
     check(`${w}: favicon is the TrustWeb mark`, (await page.locator('link[rel=icon]').getAttribute('href')).includes('r=%2215%22'))
     await shot(page, 'header', w)
