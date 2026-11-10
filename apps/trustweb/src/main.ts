@@ -2988,7 +2988,7 @@ function trustwebThreads(): ThreadSummary[] {
 
 /** Wave 24: every chat, newest first; a tap opens the chat sheet. Wave 28: the pill and the three dots choose which messengers join the list. */
 const supportIo: SupportIo = {
-  st, save, render, openSheet, closeSheet, toast, send: (peer, text) => net.sendText(peer, text), openChat: chatSheet, appUrl: APP_URL,
+  st, save, render, openSheet, closeSheet, toast, send: (peer, text) => net.sendText(peer, text), openChat: chatSheet, appUrl: APP_URL, env: browserOpenEnv(),
 }
 
 function screenChat(): Node[] {
