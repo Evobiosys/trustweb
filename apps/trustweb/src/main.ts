@@ -175,6 +175,7 @@ import { relationsSection } from './relations_view'
 import { personImageOk } from './person_image'
 import { applyImageMode, imageMode, pictureUrl } from './image_mode'
 import { clearPhotosDb } from './ext/photos/photos_data'
+import { clearObsidianData } from './ext/obsidian/obsidian_data'
 import { faceMatchRow } from './ext/photos/photos_settings'
 import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
@@ -7498,7 +7499,7 @@ function settingsSheet(): void {
       onclick: () => {
         if (!confirm(S.resetConfirm)) return
         dropRecording()
-        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id), forgetGoogle({ device: true })]).finally(() => { clearState(persona, storeCtx); location.reload() })
+        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id), clearObsidianData(st().me.id), forgetGoogle({ device: true })]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
     ],

@@ -85,3 +85,34 @@ describe('deepLink', () => {
     expect(deepLink('V', '')).toBeNull()
   })
 })
+
+import { bulkAccept, bulkOk } from '../../src/services_import.ts'
+import { acceptAllAsAcquaintances } from '../../src/import_curate.ts'
+import { toContacts } from '../../src/ext/obsidian/obsidian_ingest.ts'
+
+describe('B8 people found by an AI are never swept up by a bulk accept', () => {
+  const found = [{ name: 'Ghost Person', aliases: [], facts: ['x'], relations: [], sources: ['Daily/a.md'] }, { name: 'Other Ghost', aliases: [], facts: [], relations: [], sources: ['Daily/b.md'] }]
+  const withAi = () => {
+    const s = fresh()
+    commitPlan(s, planVault(s, contacts().slice(0, 2), { me: 'Me', now: NOW }), 'v1', NOW)
+    commitPlan(s, planVault(s, toContacts(found), { me: 'Me', now: NOW, ai: true }), 'a1', NOW)
+    return s
+  }
+  it('bulkOk is false for an AI row, true for the same kind of vault row', () => {
+    const all = pendingProposals(withAi(), NOW)
+    expect(all.filter((x) => x.row.ai)).toHaveLength(2)
+    expect(all.filter((x) => bulkOk(x))).toHaveLength(2)
+    expect(all.filter((x) => bulkOk(x)).every((x) => !x.row.ai)).toBe(true)
+  })
+  it('services_import.bulkAccept leaves them pending', () => {
+    const s = withAi()
+    expect(bulkAccept(s, NOW, newId)).toBe(2)
+    expect(s.people.map((p) => p.name)).not.toContain('Ghost Person')
+    expect(pendingProposals(s, NOW).map((x) => x.row.name).sort()).toEqual(['Ghost Person', 'Other Ghost'])
+  })
+  it('Accept all as acquaintances leaves them pending', () => {
+    const s = withAi()
+    expect(acceptAllAsAcquaintances(s, NOW, newId)).toBe(2)
+    expect(pendingProposals(s, NOW).every((x) => x.row.ai)).toBe(true)
+  })
+})

@@ -33,6 +33,12 @@ export function fromInput(list: ArrayLike<FileLike>): VaultFiles {
   return collect(vault, items.map((file, i) => ({ path: vault && rel[i].startsWith(`${vault}/`) ? rel[i].slice(vault.length + 1) : file.name, file })))
 }
 
+/** What a failed folder picker means: the owner closed it (nothing to say), this browser context blocks the picker (use the folder input), or it refused the folder. */
+export function pickerFailure(e: unknown): 'cancelled' | 'use-input' | 'denied' {
+  const name = (e as { name?: string } | null)?.name
+  return name === 'AbortError' ? 'cancelled' : name === 'SecurityError' ? 'use-input' : 'denied'
+}
+
 export interface DirHandleLike {
   kind: 'directory'
   name: string

@@ -10,7 +10,7 @@ import type { ColourTag } from './colour_tags'
 import { isUnnamed, rowTags, snapOf, tagSlug } from './import_tags'
 import { Ring } from './model'
 import type { AppState, Person, ServiceRow } from './model'
-import { decide, pendingProposals, personFor, undoBatch } from './services_import'
+import { bulkOk, decide, pendingProposals, personFor, undoBatch } from './services_import'
 import type { Pending } from './services_import'
 import { createTag } from './tag_create'
 
@@ -108,7 +108,7 @@ export function acceptRows(s: State, keys: ReadonlySet<string>, now: number, new
 
 /** Accepts every pending row that has no flag and a real name, all on Acquaintances (a contacts file says nothing about closeness). */
 export function acceptAllAsAcquaintances(s: State, now: number, newId: () => string, tagOf?: (label: string) => string): number {
-  const rows = pendingProposals(s, now).filter((x) => x.proposal.flags.length === 0 && !isUnnamed(x.row))
+  const rows = pendingProposals(s, now).filter((x) => bulkOk(x) && !isUnnamed(x.row))
   bulkSetRing(rows.map((x) => x.row), Ring.Acquaintance)
   return acceptRows(s, new Set(rows.map((x) => x.row.key)), now, newId, tagOf)
 }

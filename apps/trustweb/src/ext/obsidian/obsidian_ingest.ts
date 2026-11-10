@@ -8,6 +8,9 @@
 import type { ImportedContact } from '../../../../crm/src/import/types'
 import { ContactSource } from '../../../../crm/src/import/types'
 import { normalizeName } from '../../../../crm/src/import/dedup'
+import { S } from '../../strings'
+
+const T = S.obsidian
 
 export const BATCH_DEFAULTS = { budget: 12_000, perNote: 3_000, maxNotes: 8, minChars: 40 } as const
 const PEOPLE_MAX = 50
@@ -56,13 +59,22 @@ const texts = (v: unknown, max: number, cap: number): string[] => (Array.isArray
 /** Checks one reply against the schema. Anything outside it is dropped, never trusted; `valid` false = the reply is not the schema at all. */
 export function validateExtraction(raw: unknown, paths: readonly string[]): Extraction {
   if (!isRec(raw) || !Array.isArray(raw.people)) return { valid: false, people: [], dropped: 0 }
-  const byBase = new Map<string, string>()
-  for (const p of paths) for (const k of [p.toLowerCase(), p.replace(/\.md$/i, '').toLowerCase(), p.split('/').pop()!.toLowerCase(), p.split('/').pop()!.replace(/\.md$/i, '').toLowerCase()]) if (!byBase.has(k)) byBase.set(k, p)
+  // A full path (with or without .md) names its note. A bare file name counts only when exactly one note of the batch has it; two notes sharing it
+  // leave the source unknown (the person is dropped), never guessed.
+  const exact = new Map<string, string>()
+  const bare = new Map<string, string | null>()
+  const noExt = (s: string): string => s.replace(/\.md$/i, '')
+  for (const p of paths) {
+    for (const k of [p.toLowerCase(), noExt(p).toLowerCase()]) exact.set(k, p)
+    const name = p.split('/').pop()!
+    for (const k of [name.toLowerCase(), noExt(name).toLowerCase()]) bare.set(k, bare.has(k) && bare.get(k) !== p ? null : p)
+  }
+  const sourceOf = (s: string): string | undefined => { const k = s.trim().toLowerCase(); return exact.get(k) ?? bare.get(k) ?? undefined }
   const people: ExtractedPerson[] = []
   let dropped = 0
   for (const item of raw.people) {
     const name = isRec(item) ? text(item.name, NAME_MAX) : null
-    const src = isRec(item) && typeof item.source === 'string' ? byBase.get(item.source.trim().toLowerCase()) : undefined
+    const src = isRec(item) && typeof item.source === 'string' ? sourceOf(item.source) : undefined
     if (!isRec(item) || !name || name.length < 2 || NOT_NAMES.has(normalizeName(name)) || !src) { dropped++; continue }
     if (people.length >= PEOPLE_MAX) continue
     const relations = (Array.isArray(item.relations) ? item.relations : []).flatMap((r) => {
@@ -79,20 +91,38 @@ const uniq = (xs: readonly string[]): string[] => {
   return xs.filter((x) => { const k = x.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true })
 }
 
-/** One entry per person: the same normalised name, or a name that is another's alias, joins; lists are joined once each. */
-export function mergePeople(lists: readonly (readonly ExtractedPerson[])[]): ExtractedPerson[] {
+/**
+ * One entry per person: the same normalised name, or a name that is another's alias, joins; lists are joined once each. The name/alias index is
+ * kept between calls, so adding a batch costs that batch only (a run over thousands of notes does not re-merge everything after every batch).
+ */
+export function createMerger() {
   const out: ExtractedPerson[] = []
+  const index = new Map<string, number>()
   const keys = (p: ExtractedPerson): string[] => [p.name, ...p.aliases].map(normalizeName)
-  for (const p of lists.flat()) {
-    const hit = out.find((o) => keys(o).some((k) => keys(p).includes(k)))
-    if (!hit) { out.push({ ...p, aliases: [...p.aliases], facts: [...p.facts], relations: [...p.relations], sources: [...p.sources] }); continue }
-    const same = normalizeName(hit.name) === normalizeName(p.name)
-    hit.aliases = uniq([...hit.aliases, ...(same ? [] : [p.name]), ...p.aliases]).filter((a) => normalizeName(a) !== normalizeName(hit.name))
-    hit.facts = uniq([...hit.facts, ...p.facts])
-    hit.relations = [...new Map([...hit.relations, ...p.relations].map((r) => [`${normalizeName(r.name)}|${r.relation.toLowerCase()}`, r])).values()]
-    hit.sources = [...new Set([...hit.sources, ...p.sources])]
+  const claim = (i: number): void => { for (const k of keys(out[i])) if (!index.has(k)) index.set(k, i) }
+  return {
+    add(list: readonly ExtractedPerson[]): void {
+      for (const p of list) {
+        const found = keys(p).flatMap((k) => index.get(k) ?? [])
+        if (!found.length) { out.push({ ...p, aliases: [...p.aliases], facts: [...p.facts], relations: [...p.relations], sources: [...p.sources] }); claim(out.length - 1); continue }
+        const at = Math.min(...found)
+        const hit = out[at]
+        const same = normalizeName(hit.name) === normalizeName(p.name)
+        hit.aliases = uniq([...hit.aliases, ...(same ? [] : [p.name]), ...p.aliases]).filter((a) => normalizeName(a) !== normalizeName(hit.name))
+        hit.facts = uniq([...hit.facts, ...p.facts])
+        hit.relations = [...new Map([...hit.relations, ...p.relations].map((r) => [`${normalizeName(r.name)}|${r.relation.toLowerCase()}`, r])).values()]
+        hit.sources = [...new Set([...hit.sources, ...p.sources])]
+        claim(at)
+      }
+    },
+    people: (): ExtractedPerson[] => [...out],
   }
-  return out
+}
+
+export function mergePeople(lists: readonly (readonly ExtractedPerson[])[]): ExtractedPerson[] {
+  const m = createMerger()
+  for (const l of lists) m.add(l)
+  return m.people()
 }
 
 /** The contacts the Import pipeline reads (source obsidian-ai): no e-mail, phone or tag, a note that says the owner has to check. */
@@ -100,11 +130,11 @@ export function toContacts(people: readonly ExtractedPerson[]): ImportedContact[
   return people.map((p) => ({
     source: ContactSource.ObsidianAi, file: p.sources[0] ?? '', sourceRef: `ai:${normalizeName(p.name)}`, name: p.name, phones: [], emails: [], labels: [],
     note: [
-      'Found by AI in your notes; check it.',
+      T.noteAi,
       ...p.facts.map((f) => `- ${f}`),
-      p.aliases.length ? `Also known as: ${p.aliases.join(', ')}` : '',
-      ...p.relations.map((r) => `Related: ${r.name}${r.relation ? ` (${r.relation})` : ''}`),
-      `Sources: ${p.sources.join(', ')}`,
+      p.aliases.length ? `${T.noteAlias}: ${p.aliases.join(', ')}` : '',
+      ...p.relations.map((r) => `${T.noteRelated}: ${r.name}${r.relation ? ` (${r.relation})` : ''}`),
+      `${T.noteSources}: ${p.sources.join(', ')}`,
     ].filter(Boolean).join('\n'),
   }))
 }
