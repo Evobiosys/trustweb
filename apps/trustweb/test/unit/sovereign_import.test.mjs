@@ -3,7 +3,7 @@
 import { DEFAULT_ESTIMATE, MAIN_ORDER, SERVICES_RTBF, mainServices, otherServices } from '../../src/data/services_rtbf.ts'
 import { LINK_TTL_MS, WAIT_MAX_MS, matchMail, startWatch, watchStep } from '../../src/export_watch.ts'
 import { MIN_TOTAL_BYTES, serviceForArchive, verifyArchive } from '../../src/takeout_verify.ts'
-import { pageSections } from '../../src/sovereign_switch.ts'
+import { exportRequested, pageSections } from '../../src/sovereign_switch.ts'
 import { SEARCH_CONFIG, rank, registerRankAdapter } from '../../src/search_rank.ts'
 
 const svc = (id) => SERVICES_RTBF.find((s) => s.id === id)
@@ -86,10 +86,10 @@ describe('sovereign import: verify gate', () => {
 
 describe('sovereign import: page sections', () => {
   it('hides erasure, export and be-forgotten until Advanced is open', () => {
-    expect(pageSections(false)).toEqual(['start', 'services', 'watch', 'other', 'sync', 'import', 'advanced'])
+    expect(pageSections(false)).toEqual(['start', 'services', 'other', 'sync', 'import', 'advanced'])
     const open = pageSections(true)
-    expect(open.slice(0, 7)).toEqual(pageSections(false))
-    expect(open.slice(7)).toEqual(['export', 'forget', 'erasure'])
+    expect(open.slice(0, 6)).toEqual(pageSections(false))
+    expect(open.slice(6)).toEqual(['export', 'forget', 'erasure'])
   })
 })
 
@@ -103,5 +103,18 @@ describe('sovereign import: search block swap', () => {
     expect(rank(cands, { now: 1 }).map((r) => r.person.text)).toEqual(['b', 'a'])
     SEARCH_CONFIG.adapter = 'missing'
     expect(rank(cands, { now: 1 }).map((r) => r.person.text)).toEqual(['a', 'b'])
+  })
+})
+
+describe('sovereign import: the export-mail watcher (wave 39)', () => {
+  it('is no section of its own: it sits under Services', () => expect(pageSections(true)).not.toContain('watch'))
+  it('shows only after an export was requested from some service', () => {
+    expect(exportRequested({})).toBe(false)
+    expect(exportRequested({ sovereign: { services: { google: { deleteAt: 5 } } } })).toBe(false)
+    expect(exportRequested({ sovereign: { services: { google: { exportAt: 5 } } } })).toBe(true)
+    expect(exportRequested({ sovereign: { services: { google: { exportAt: 5 } }, watch: {} } })).toBe(true)
+  })
+  it('a running watcher keeps it shown even if the tick was undone', () => {
+    expect(exportRequested({ sovereign: { services: {}, watch: { google: { state: 'waiting', startedAt: 1 } } } })).toBe(true)
   })
 })

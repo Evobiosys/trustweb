@@ -25,15 +25,15 @@ describe('header_controls', () => {
   it('leaves Record and every other screen to its own header', () => {
     for (const s of ['record', 'meeting', 'meet', 'start', 'review']) expect(headerControls(s)).toBeUndefined()
   })
-  it('pins nothing by default (Do Not Disturb lives in Settings > Chat), and an explicit list is kept', () => {
-    expect(headerPins(undefined)).toEqual([])
+  it('pins only the select tool by default (Do Not Disturb lives in Settings > Chat), and an explicit list is kept', () => {
+    expect(headerPins(undefined)).toEqual(['select'])
     expect(headerPins(['dnd'])).toEqual(['dnd'])
     expect(headerPins([])).toEqual([])
     expect(headerPins(['advanced', 'bogus'])).toEqual(['advanced'])
   })
   it('toggles a pin from the default and back', () => {
-    expect(togglePinned(undefined, 'dnd')).toEqual(['dnd'])
-    expect(togglePinned(undefined, 'advanced')).toEqual(['advanced'])
+    expect(togglePinned(undefined, 'dnd')).toEqual(['dnd', 'select'])
+    expect(togglePinned(undefined, 'advanced')).toEqual(['advanced', 'select'])
     expect(togglePinned(['qr-only'], 'qr-only')).toEqual([])
   })
   it('QR shows the open event, then the tag filter, else the connect code', () => {

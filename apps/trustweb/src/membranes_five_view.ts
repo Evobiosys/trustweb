@@ -252,16 +252,34 @@ export interface RingCardDeps {
   onDelete?: (p: Person) => boolean
   /** Wave 36: a name edit opened (the person) or ended (null): the caller starts or drops its multi-selection. */
   onEdit?: (p: Person | null) => void
+  /** Wave 39: the ticks beside the names changed (the ids ticked now): the caller marks those dots. */
+  onPick?: (ids: string[]) => void
+  /** Wave 39: "Archive N" pressed with N people ticked. */
+  onArchiveMany?: (ids: string[]) => void
 }
 
 const ARCHIVE_BOX = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>'
 
 /** Wave 30: the interactive "Everyone in <ring>" card: each name opens its person; the pencil turns the name into an input with save, cancel and archive (Enter saves, Esc cancels, blur changes nothing). */
 export function ringCard(zone: string, people: readonly Person[], d: RingCardDeps): HTMLElement {
+  // Wave 39: a tick beside each name selects several people here; the bar below the title archives or clears them.
+  const chosen = new Set<string>()
+  const bar = el('span', { class: 'ring-card-bar', 'data-ring-card-bar': '', hidden: true })
+  const sync = (): void => {
+    d.onPick?.([...chosen])
+    bar.hidden = chosen.size === 0
+    bar.replaceChildren(
+      el('button', { class: 'ring-card-bulk', 'data-ring-card-archive-many': '', onclick: () => d.onArchiveMany?.([...chosen]) }, [S.ringCardArchiveSel(chosen.size)]),
+      el('button', { class: 'ring-card-bulk', 'data-ring-card-clear': '', onclick: () => { chosen.clear(); card.querySelectorAll<HTMLInputElement>('[data-ring-card-pick]').forEach((b) => { b.checked = false }); sync() } }, [S.ringCardClearSel]),
+    )
+  }
   const row = (p: Person): HTMLElement => {
     const host = el('span', { class: 'ring-card-row', 'data-ring-card-row': p.id })
     let state = ROW_VIEW
+    const tick = el('input', { type: 'checkbox', class: 'ring-card-pick', 'data-ring-card-pick': p.id, 'aria-label': S.ringCardPick(p.name), onchange: (e: Event) => { if ((e.target as HTMLInputElement).checked) chosen.add(p.id); else chosen.delete(p.id); sync() } }) as HTMLInputElement
+    tick.checked = chosen.has(p.id)
     const show = (): void => host.replaceChildren(
+      tick,
       el('button', { class: 'ring-card-name', 'data-ring-card-open': p.id, onclick: () => d.onOpen(p.id) }, [p.name]),
       el('button', { class: 'ring-card-edit', 'data-ring-card-edit': p.id, 'aria-label': S.ringCardEditName, title: S.ringCardEditName, onclick: edit }, ['✎']),
     )
@@ -296,9 +314,11 @@ export function ringCard(zone: string, people: readonly Person[], d: RingCardDep
     show()
     return host
   }
-  return el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.ringCardAria(zone, people.map((p) => p.name).join(', ')), onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation() } }, [
+  const card = el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.ringCardAria(zone, people.map((p) => p.name).join(', ')), onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation() } }, [
     el('b', {}, [zone]),
     el('span', { class: 'ring-card-everyone' }, [S.ringCardEveryone('').trimEnd()]),
+    bar,
     ...people.map(row),
   ])
+  return card
 }

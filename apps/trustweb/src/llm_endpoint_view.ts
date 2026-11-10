@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Settings > Advanced > Your AI: the TrustInTheWeb.com subscription (sign-up on the device) and the person's own keys (OpenAI, Claude,
- * Ollama, Custom), each with base URL, key, model and a Test button. Kept on this phone and in the sealed record.
+ * Settings > Advanced > Your AI: Claude (the TrustInTheWeb.com subscription: plan cards, sign-up on the device) and, as an indented subsection,
+ * Custom (the person's own endpoint: base URL, key, model and a Test button; Ollama on this device and pc24 are presets inside it, wave 39). Kept on this phone and in the sealed record.
  */
 import { el } from '../../demo/src/ui/dom'
-import { activeEndpoint, apiBase, ENTERPRISE_MAIL, PLAN_CARDS, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
-import { configured, onWake, switchPreset, testEndpoint, testResultLines, type WakeEvent } from './llm_endpoint'
+import { activeEndpoint, apiBase, ENTERPRISE_MAIL, PLAN_CARDS, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, signUp, validEmail, type PlanId } from './ai_subscription'
+import { configured, CUSTOM_PRESETS, customPreset, customPresetOf, onWake, testEndpoint, testResultLines, type WakeEvent } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
 
 const net: Parameters<typeof signUp>[0] = (url, init) => fetch(url, init)
-const BYOK = ['openai', 'claude', 'ollama', 'custom'] as const
 /** One poll per open, not a timer: a draw within this window of the last poll does not ask again. */
 const POLL_GAP_MS = 30_000
 let lastPoll = 0
@@ -145,7 +144,8 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
       ] : []),
     ]) : sub ? el('p', { class: 'meta', 'data-ai-sub-state': 'revoked' }, [S.aiSubRevoked]) : null
     return el('div', { class: 'ai-group', 'data-ai-group': 'sub' }, [
-      el('h5', { class: 'eyebrow' }, [S.aiSubTitle]),
+      el('h5', { class: 'eyebrow' }, [S.aiClaudeTitle]),
+      el('p', { class: 'meta' }, [S.aiSubTitle]),
       el('h4', { class: 'ai-plans-title' }, [S.aiPlansTitle]),
       el('div', { class: 'ai-plans' }, PLAN_CARDS.map(card)),
       el('p', { class: 'meta', 'data-ai-plan-text': '' }, [`${S.aiSubUses} ${S.aiSubPrivacy}`]),
@@ -155,15 +155,18 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
 
   const byokGroup = (): HTMLElement => {
     const cur = ai().preset
+    const own = cur !== 'tw-subscription'
+    const picked = customPresetOf(ai())
     const result = el('div', { class: 'ai-test-result', 'data-ai-test-result': '', role: 'status' })
     const d = el('details', { class: 'ai-group ai-byok', 'data-ai-group': 'byok' }, [
-      el('summary', { class: 'ai-byok-toggle' }, [S.aiByokTitle]),
-      ...BYOK.map((p) => el('button', {
-        class: 'radio' + (cur === p ? ' on' : ''), 'aria-pressed': String(cur === p), 'data-ai-preset': p,
-        onclick: () => { h.state().advanced!.ai = switchPreset(ai(), p); h.save(); draw() },
-      }, [el('b', {}, [p === 'custom' && cur === 'custom' ? presetLabel(ai()) : S.aiPreset[p]])])),
-      ...(cur === 'tw-subscription' ? [] : [
-        ...(cur === 'custom' ? [field('name', S.aiName, 'text')] : []),
+      el('summary', { class: 'ai-byok-toggle' }, [S.aiCustomTitle]),
+      el('p', { class: 'meta' }, [S.aiCustomLead]),
+      ...CUSTOM_PRESETS.map((p) => el('button', {
+        class: 'radio' + (own && picked === p.id ? ' on' : ''), 'aria-pressed': String(own && picked === p.id), 'data-ai-preset': p.id,
+        onclick: () => { h.state().advanced!.ai = customPreset(ai(), p.id); h.save(); draw() },
+      }, [el('b', {}, [S.aiCustomPresets[p.id]])])),
+      ...(own ? [
+        field('name', S.aiName, 'text'),
         field('baseUrl', S.aiBaseUrl, 'url'), field('apiKey', S.aiKey, 'password'), field('model', S.aiModel, 'text'),
         el('button', {
           class: 'btn btn-ghost btn-sm', 'data-ai-test': '1',
@@ -174,7 +177,7 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
           },
         }, [S.aiTest]),
         result,
-      ]),
+      ] : []),
     ]) as HTMLDetailsElement
     d.open = byokOpen
     d.addEventListener('toggle', () => { byokOpen = d.open })

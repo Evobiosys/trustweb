@@ -19,6 +19,7 @@ import { Channel, Ring } from './model'
 import { parsePhoneExport, readPhoneExport } from './phone_export'
 import type { PhoneExtras } from './phone_export'
 import type { AppState, Person, ServiceBatch, ServiceDone, ServiceRow } from './model'
+import { DEFAULT_IMPORT_NOTE, importTagId, rowTags, snapOf, tagSlug } from './import_tags'
 import { fingerprint } from './safe_text'
 import { bulkAcceptable, propose, writeFor } from './zone_proposals'
 import type { Choice, Proposal } from './zone_proposals'
@@ -150,7 +151,8 @@ export function commitPlan(s: State, plan: ServicePlan, id: string, now: number)
   const known = knownSigs(s)
   const done: Record<string, ServiceDone> = {}
   for (const r of plan.rows) if (known.get(r.key) === r.sig) done[r.key] = { did: 'left' }
-  s.serviceImports = [{ id, at: now, counts: plan.counts, rows: plan.rows, done }, ...(s.serviceImports ?? [])]
+  const chats = Boolean(plan.counts[ContactSource.WhatsApp])
+  s.serviceImports = [{ id, at: now, counts: plan.counts, rows: plan.rows, done, tag: importTagId(now, Object.keys(plan.counts)), ...(chats ? {} : { note: DEFAULT_IMPORT_NOTE }) }, ...(s.serviceImports ?? [])]
 }
 
 export interface Pending { batchId: string; row: ServiceRow; proposal: Proposal }
@@ -201,6 +203,23 @@ function fillFrom(p: Person, r: ServiceRow, reach: boolean): Record<string, stri
   return wrote
 }
 
+/** Gives the person each tag id as a boolean field (as card_small.ts addTagTo does); returns the ids that were new. */
+function giveTags(p: Person, ids: readonly string[]): string[] {
+  const added = ids.filter((id, i) => ids.indexOf(id) === i && String(p.fields?.[id]) !== 'true')
+  if (added.length) p.fields = { ...p.fields, ...Object.fromEntries(added.map((id) => [id, true as unknown as string])) }
+  return added
+}
+
+/** `connected` chips of a row: people go to `knows` (edges in the Network view), tags to `affiliated` (no membership). Returns what was new. */
+function connect(p: Person, chips: readonly string[]): { knows: string[]; affiliated: string[] } {
+  const ids = (kind: string): string[] => chips.filter((c) => c.startsWith(`${kind}:`)).map((c) => c.slice(kind.length + 1))
+  const knows = ids('person').filter((id) => id !== p.id && !p.knows?.includes(id))
+  const affiliated = ids('tag').filter((id) => !p.affiliated?.includes(id))
+  if (knows.length) p.knows = [...(p.knows ?? []), ...knows]
+  if (affiliated.length) p.affiliated = [...(p.affiliated ?? []), ...affiliated]
+  return { knows, affiliated }
+}
+
 const rowReach = (r: ServiceRow): string[] => [...(r.emails ?? []).map((e) => e.trim().toLowerCase()), ...(r.phones ?? []).map(phoneKey)].filter(Boolean)
 
 /** Who a row is: the person it was imported as, else the one sharing an e-mail or number (whatever the name's spelling), else a same-name person (`by: 'name'`, unconfirmed). */
@@ -218,16 +237,18 @@ export function personFor(s: Pick<AppState, 'people'>, r: ServiceRow): { person:
 const contextOf = (r: ServiceRow): string => `Imported from ${SERVICE_LABEL[r.source] ?? r.source}`
 
 /** Accept / Change write the person into the record; Leave only marks the row. An existing person of that name gets the source and keeps their ring unless Change. */
-export function decide(s: State, batchId: string, key: string, choice: Choice, now: number, newId: () => string): void {
+export function decide(s: State, batchId: string, key: string, choice: Choice, now: number, newId: () => string, tagOf: (label: string) => string = tagSlug): void {
   const batch = (s.serviceImports ?? []).find((b) => b.id === batchId)
   const row = batch?.rows.find((r) => r.key === key)
   if (!batch || !row || batch.done[key]) return
   if (choice.do === 'leave') { batch.done[key] = { did: 'left' }; return }
   const prop = propose([{ ...row, personKey: key }], now)[0]
-  const ring = writeFor(prop, choice, now)!.ring
+  // Wave 39: a ring the owner picked on the Curate page (one row or a bulk step) is what Accept writes.
+  const ring = choice.do === 'accept' && row.ring ? row.ring : writeFor(prop, choice, now)!.ring
   const origin = { source: row.source, file: row.file, importedAt: now, key }
   const match = personFor(s, row)
   const mine = match?.person
+  const before = mine ? snapOf(mine) : undefined
   const done: ServiceDone = { did: 'accepted' }
   if (mine) {
     done.personId = mine.id
@@ -235,7 +256,7 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
     if (!mine.sources?.some((x) => x.key === key)) { mine.sources = [...(mine.sources ?? []), origin]; done.added = true }
     const filled = fillFrom(mine, row, match!.by !== 'name' || choice.confirm === true)
     if (Object.keys(filled).length) done.filled = filled
-    if (choice.do === 'change' && ring !== mine.ring) { done.prevRing = mine.ring; mine.ring = ring; done.wrote = ring }
+    if ((choice.do === 'change' || row.ring) && ring !== mine.ring) { done.prevRing = mine.ring; mine.ring = ring; done.wrote = ring }
   } else {
     const p: Person = { id: newId(), name: row.name, context: contextOf(row), ring, metAt: now, lines: [], sources: [origin] }
     fillFrom(p, row, true)
@@ -244,33 +265,62 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
     done.created = true
     done.wrote = ring
   }
+  const who = s.people.find((p) => p.id === done.personId)!
+  const tags = giveTags(who, [...rowTags(row).map(tagOf), ...(batch.tag ? [batch.tag] : [])])
+  if (tags.length) done.tags = tags
+  const links = connect(who, row.connected ?? [])
+  if (links.knows.length) done.knows = links.knows
+  if (links.affiliated.length) done.affiliated = links.affiliated
+  done.snap = snapOf(who)
+  if (before !== undefined) rebaseSnaps(s, who.id, before, done.snap)
   batch.done[key] = done
 }
 
+/**
+ * Wave 39 review: an import or an undo is no edit by the owner. When one changes a person, the other imports' fingerprints of that person
+ * that still matched (the owner had not touched them) move along, so "edited since" keeps meaning the owner's own changes.
+ */
+function rebaseSnaps(s: State, personId: string, from: string, to: string): void {
+  if (from === to) return
+  for (const b of s.serviceImports ?? []) for (const d of Object.values(b.done)) if (d.personId === personId && d.snap === from) d.snap = to
+}
+
 /** Accepts every pending row with no flag; returns how many. */
-export function bulkAccept(s: State, now: number, newId: () => string): number {
+export function bulkAccept(s: State, now: number, newId: () => string, tagOf?: (label: string) => string): number {
   const list = pendingProposals(s, now).filter((x) => bulkAcceptable(x.proposal))
-  for (const x of list) decide(s, x.batchId, x.row.key, { do: 'accept' }, now, newId)
+  for (const x of list) decide(s, x.batchId, x.row.key, { do: 'accept' }, now, newId, tagOf)
   return list.length
 }
 
-/** Takes the batch away: staged rows go; people it created leave the web (Ring.None, kept); rings it changed come back while they still stand where the decision put them; its source stamps go. */
-export function undoBatch(s: State, batchId: string): { restored: number; archived: number; kept: number } {
+/**
+ * Takes the batch away: staged rows go; people it created leave the web (Ring.None, kept); rings it changed come back; the tags and fields it wrote go; its source stamps go.
+ * Wave 39: a person the owner edited since the Accept (`snap` differs) stays exactly as they are, unless `undoEdits`. `keptIds` names them, so the list can highlight them.
+ */
+export function undoBatch(s: State, batchId: string, opts: { undoEdits?: boolean } = {}): { restored: number; archived: number; kept: number; keptIds: string[] } {
   const batch = (s.serviceImports ?? []).find((b) => b.id === batchId)
-  const out = { restored: 0, archived: 0, kept: 0 }
+  const out = { restored: 0, archived: 0, kept: 0, keptIds: [] as string[] }
   if (!batch) return out
   for (const [key, d] of Object.entries(batch.done)) {
     const p = d.personId ? s.people.find((x) => x.id === d.personId) : undefined
     if (!p) continue
-    // Only while the person still has the ring the decision wrote; moved or connected since = kept as they are.
-    const same = d.wrote === undefined || p.ring === d.wrote
-    if (d.created) { if (same) { p.ring = Ring.None; out.archived++ } else out.kept++ }
-    else if (d.prevRing !== undefined) { if (same) { p.ring = d.prevRing; out.restored++ } else out.kept++ }
+    // Edited since (or, for a batch from before snapshots, moved off the ring the decision wrote) = kept as they are.
+    const edited = d.snap !== undefined ? snapOf(p) !== d.snap : d.wrote !== undefined && p.ring !== d.wrote
+    if (edited && !opts.undoEdits) { out.kept++; out.keptIds.push(p.id); continue }
+    const before = snapOf(p)
+    if (d.created) { p.ring = Ring.None; out.archived++ }
+    else if (d.prevRing !== undefined) { p.ring = d.prevRing; out.restored++ }
     if (d.created || d.added) p.sources = (p.sources ?? []).filter((x) => x.key !== key)
     if (!d.created && d.filled) {
       for (const [k, v] of Object.entries(d.filled)) if (p.fields?.[k] === v) delete p.fields[k]
       if (p.fields && !Object.keys(p.fields).length) delete p.fields
     }
+    for (const id of d.tags ?? []) if (p.fields) delete p.fields[id]
+    if (d.knows?.length) p.knows = (p.knows ?? []).filter((x) => !d.knows!.includes(x))
+    if (d.affiliated?.length) p.affiliated = (p.affiliated ?? []).filter((x) => !d.affiliated!.includes(x))
+    if (p.knows && !p.knows.length) delete p.knows
+    if (p.affiliated && !p.affiliated.length) delete p.affiliated
+    if (p.fields && !Object.keys(p.fields).length) delete p.fields
+    rebaseSnaps(s, p.id, before, snapOf(p))
   }
   s.serviceImports = (s.serviceImports ?? []).filter((b) => b.id !== batchId)
   return out

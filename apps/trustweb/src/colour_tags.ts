@@ -6,12 +6,20 @@ export const COLOUR_TAGS_KEY = 'trustweb.v1.colourtags'
 export const COLOUR_TAGS_EVENT = 'tw-colour-tags'
 export const PERSON_GREEN = 'var(--person-default)'   // warm amber by default, not green (Jakob 2026-10-15 16:10), now the token; the name stays for the callers
 
-export interface ColourTag { id: string; colour: string; label?: string; /** Wave 28 (trustzones.ts communityTags): this tag is a #community node; the friends and community zone can add its holders. */ community?: boolean }
+export interface ColourTag { id: string; colour: string; label?: string; /** Wave 39: a system tag (`import:<date>-<source>`, import_tags.ts): hidden everywhere unless Tools > "show system tags" is on. */ system?: boolean; /** Wave 28 (trustzones.ts communityTags): this tag is a #community node; the friends and community zone can add its holders. */ community?: boolean }
 
 /** Family is the preset: purple. */
 export const FAMILY_PRESET: readonly ColourTag[] = [{ id: FAMILY_FIELD, colour: '#7b1fa2', label: 'family' }]
 
-export function loadColourTags(): ColourTag[] {
+/** Wave 39: the Tools toggle "show system tags" (a view choice of this device). */
+export const SHOW_SYSTEM_TAGS_KEY = 'trustweb.v1.showsystemtags'
+export const showSystemTags = (): boolean => { try { return localStorage.getItem(SHOW_SYSTEM_TAGS_KEY) === '1' } catch { return false } }
+export function setShowSystemTags(on: boolean): void {
+  try { if (on) localStorage.setItem(SHOW_SYSTEM_TAGS_KEY, '1'); else localStorage.removeItem(SHOW_SYSTEM_TAGS_KEY) } catch { /* browser refused: the toggle stays as it was */ }
+  window.dispatchEvent(new Event(COLOUR_TAGS_EVENT))
+}
+
+function loadAll(): ColourTag[] {
   try {
     const saved = JSON.parse(localStorage.getItem(COLOUR_TAGS_KEY) ?? 'null') as ColourTag[] | null
     return Array.isArray(saved) ? saved.filter((t) => typeof t.id === 'string' && /^#[0-9a-f]{6}$/i.test(t.colour)) : [...FAMILY_PRESET]
@@ -20,12 +28,26 @@ export function loadColourTags(): ColourTag[] {
   }
 }
 
+/** The tags the screens use; system tags only while the Tools toggle is on. */
+export const loadColourTags = (): ColourTag[] => (showSystemTags() ? loadAll() : loadAll().filter((t) => t.system !== true))
+
+/** Saves what the screens hold; system tags that were hidden meanwhile are kept, never lost. */
 export function saveColourTags(tags: readonly ColourTag[]): void {
-  try { localStorage.setItem(COLOUR_TAGS_KEY, JSON.stringify(tags)) } catch { /* browser refused: the Web view keeps the last choice */ }
+  const hidden = showSystemTags() ? [] : loadAll().filter((t) => t.system === true && !tags.some((x) => x.id === t.id))
+  try { localStorage.setItem(COLOUR_TAGS_KEY, JSON.stringify([...tags, ...hidden])) } catch { /* browser refused: the Web view keeps the last choice */ }
   window.dispatchEvent(new Event(COLOUR_TAGS_EVENT))
 }
 
+/** Makes sure the system tag of an import exists (grey, labelled `#<id>`). */
+export function defineSystemTag(id: string): void {
+  const all = loadAll()
+  if (all.some((t) => t.id === id)) return
+  try { localStorage.setItem(COLOUR_TAGS_KEY, JSON.stringify([...all, { id, colour: '#9e9e9e', label: `#${id}`, system: true }])) } catch { /* browser refused: the tag stays undefined, the person still holds it */ }
+}
+
 const has = (p: Pick<Person, 'ring' | 'fields'>, id: string): boolean => (id === FAMILY_FIELD ? isFamily(p) : String(p.fields?.[id]) === 'true')
+/** Wave 39: does this person carry that colour tag (the support ask's tag audience). */
+export const hasColourTag = has
 
 /** The colour tags a person has, in the order the tags were chosen. */
 export const tagsOf = (p: Pick<Person, 'ring' | 'fields'>, tags: readonly ColourTag[]): ColourTag[] => tags.filter((t) => has(p, t.id))
