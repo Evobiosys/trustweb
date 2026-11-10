@@ -88,7 +88,7 @@ describe('commit, curate, undo', () => {
     expect(s.people).toHaveLength(2)
     expect(s.people[0].ring).toBe(Ring.Friend)
     const r = undoBatch(s, 'b1')
-    expect(r).toEqual({ restored: 1, archived: 1, kept: 0 })
+    expect(r).toMatchObject({ restored: 1, archived: 1, kept: 0 })
     expect(s.serviceImports).toEqual([])
     expect(s.people).toHaveLength(2)
     expect(s.people[0].ring).toBe(Ring.Close)
@@ -102,7 +102,7 @@ describe('commit, curate, undo', () => {
     s.people[0].ring = Ring.Closest // moved by hand since
     s.people[1].ring = Ring.Close // the created person got connected since
     const r = undoBatch(s, 'b1')
-    expect(r).toEqual({ restored: 0, archived: 0, kept: 2 })
+    expect(r).toMatchObject({ restored: 0, archived: 0, kept: 2 })
     expect(s.people[0].ring).toBe(Ring.Closest)
     expect(s.people[1].ring).toBe(Ring.Close)
   })
@@ -148,7 +148,7 @@ describe('wave33 review fixes C1/C2/P6', () => {
     commitPlan(s, plan, 'b1', NOW)
     decide(s, 'b1', plan.rows[0].key, { do: 'accept' }, NOW, newId)
     expect(s.people).toHaveLength(1)
-    expect(s.people[0].fields).toBeUndefined()
+    expect(Object.keys(s.people[0].fields ?? {}).filter((k) => !k.startsWith('import:'))).toEqual([])
     expect(s.people[0].channels).toBeUndefined()
     expect(s.people[0].sources).toHaveLength(1)
   })

@@ -13,6 +13,7 @@ import { dragStarts } from './web_view'
 import { editKey } from './tap_edit'
 import { S } from './strings'
 import { toolsRowAfterTap } from './row_tools'
+import { contactOf } from './import_tags'
 
 /** What a row does to the record; the list view owns the redraw, the undo and the toasts. */
 export interface RowActions {
@@ -52,6 +53,12 @@ if (typeof document !== 'undefined') {
   }, true)
 }
 
+/** Wave 39: e-mail and phone under the name, wherever a person is listed with contact data. */
+function contactLine(p: Person): HTMLElement | null {
+  const c = contactOf(p)
+  return c.email || c.phone ? el('small', { class: 'meta person-contact', 'data-person-contact': p.id }, [S.imp39.contactLine(c.email, c.phone)]) : null
+}
+
 export function personRow(p: Person, a: RowActions): HTMLElement {
   const host = el('div', { class: 'person-row', 'data-person-row': p.id })
   let lifted = false
@@ -61,12 +68,12 @@ export function personRow(p: Person, a: RowActions): HTMLElement {
       const { checked, toggle } = a.select
       host.replaceChildren(el('label', { class: 'row-pick' + (checked ? ' on' : '') }, [
         el('input', { type: 'checkbox', 'data-row-check': p.id, checked, 'aria-label': p.name, onchange: toggle }),
-        el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
+        el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null, contactLine(p),
       ]))
       return
     }
     const open = el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => { if (!swallow) a.open(p.id) } }, [
-      el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
+      el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null, contactLine(p),
     ])
     host.replaceChildren(
       open,
