@@ -10,6 +10,7 @@ import type { DeliveryGroup, DeliveryPlan, DeliveryVia } from './support_deliver
 
 export interface DeliveryIo {
   save: () => void
+  render: () => void
   toast: (text: string) => void
   appUrl: string
   /** How links open on this device: the app link first (assign), the web link in a new tab. */
@@ -20,7 +21,7 @@ export function deliveryPanel(io: DeliveryIo, ask: SupportAsk, plan: DeliveryPla
   const body = el('div', { class: 'support-delivery', 'data-delivery': '' })
   const when = new Date(ask.until).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
   const left = (g: DeliveryGroup) => g.items.filter((d) => !ask.via?.[d.peerId])
-  const sent = (via: DeliveryVia, peerId: string): void => { if (markSent(ask, peerId, via, Date.now())) io.save() }
+  const sent = (via: DeliveryVia, peerId: string): void => { if (markSent(ask, peerId, via, Date.now())) { io.save(); io.render() } }
 
   const messengerBlock = (g: DeliveryGroup): HTMLElement => {
     const label = S.supportViaLabel[g.via]

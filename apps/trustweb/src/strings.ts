@@ -3634,7 +3634,7 @@ export const S = {
   supportViaMail: (n: number) => `${n} by e-mail`,
   supportViaLabel: { signal: 'Signal', whatsapp: 'WhatsApp', geb: 'Geb', email: 'e-mail' } as Record<string, string>,
   supportDeliverTitle: 'Sent in the app. Now the other ways',
-  supportDeliverHint: 'Tap once per person. Each opens with your words ready.',
+  supportDeliverHint: 'Tap once per person. Your words are ready to send.',
   supportDeliverNext: (name: string, label: string) => `Open ${label} for ${name}`,
   supportDeliverCopied: 'Your words are copied. Paste them into the chat.',
   supportDeliverProgress: (i: number, n: number) => `${i} of ${n}`,
