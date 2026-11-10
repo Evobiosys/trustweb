@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 40 (support_delivery.ts): the sheet after "Send". The app entry has gone; the messenger and e-mail parts wait here, one tap each. */
 import { el } from '../../demo/src/ui/dom'
+import { alphaHeading } from './alpha_heading'
 import { openLocalFirst } from './messenger_links'
 import type { LocalOpenEnv } from './messenger_links'
 import { S } from './strings'
 import type { SupportAsk } from './support_ask'
-import { deliverySummary, deliveryText, emailLink, markSent, messengerOpen } from './support_delivery'
+import { deliverySummary, deliveryText, emailLinks, markSent, messengerOpen } from './support_delivery'
 import type { DeliveryGroup, DeliveryPlan, DeliveryVia } from './support_delivery'
 
 export interface DeliveryIo {
@@ -46,14 +47,19 @@ export function deliveryPanel(io: DeliveryIo, ask: SupportAsk, plan: DeliveryPla
 
   const mailBlock = (g: DeliveryGroup): HTMLElement => {
     const todo = left(g)
+    // Review wave 40: a long BCC list is split so no mail program cuts it; one mail per tap, like the messengers (never several windows at once).
+    const links = emailLinks(todo.map((d) => d.email as string), S.supportMailSubject, deliveryText('', ask, when, io.appUrl))
+    const first = links[0]
+    const firstItems = first ? todo.slice(0, (new URL(first).searchParams.get('bcc') ?? '').split(',').length) : []
+    const rest = todo.length - firstItems.length
     return el('div', { 'data-delivery-group': 'email', ...(todo.length ? {} : { 'data-delivery-done': '' }) }, [
       el('p', { class: 'chips-lbl' }, [S.supportViaMail(g.items.length)]),
-      todo.length
-        ? el('button', { class: 'btn btn-electric wide', type: 'button', 'data-delivery-mail': '', onclick: () => {
-          io.env.assign(emailLink(todo.map((d) => d.email as string), S.supportMailSubject, deliveryText('', ask, when, io.appUrl)))
-          for (const d of todo) sent('email', d.peerId)
+      first
+        ? el('button', { class: 'btn btn-electric wide', type: 'button', 'data-delivery-mail': String(firstItems.length), onclick: () => {
+          io.env.assign(first)
+          for (const d of firstItems) sent('email', d.peerId)
           draw()
-        } }, [S.supportDeliverMail(todo.length)])
+        } }, [S.supportDeliverMail(firstItems.length) + (rest ? S.supportDeliverMailRest(rest) : '')])
         : el('p', { class: 'hint' }, [S.supportDeliverGroupDone(S.supportViaLabel.email)]),
       todo.length ? el('p', { class: 'hint' }, [S.supportDeliverMailHint]) : null,
     ])
@@ -61,7 +67,7 @@ export function deliveryPanel(io: DeliveryIo, ask: SupportAsk, plan: DeliveryPla
 
   const draw = (): void => {
     body.replaceChildren(...[
-      el('h3', {}, [S.supportDeliverTitle]),
+      el('h3', {}, alphaHeading(S.supportDeliverTitle)),
       el('p', { class: 'hint', 'data-delivery-summary': '' }, [deliverySummary(plan)]),
       el('p', { class: 'hint' }, [S.supportDeliverHint]),
       ...plan.groups.map((g) => (g.via === 'email' ? mailBlock(g) : messengerBlock(g))),
