@@ -46,6 +46,8 @@ export function defineSystemTag(id: string): void {
 }
 
 const has = (p: Pick<Person, 'ring' | 'fields'>, id: string): boolean => (id === FAMILY_FIELD ? isFamily(p) : String(p.fields?.[id]) === 'true')
+/** Wave 39: does this person carry that colour tag (the support ask's tag audience). */
+export const hasColourTag = has
 
 /** The colour tags a person has, in the order the tags were chosen. */
 export const tagsOf = (p: Pick<Person, 'ring' | 'fields'>, tags: readonly ColourTag[]): ColourTag[] => tags.filter((t) => has(p, t.id))

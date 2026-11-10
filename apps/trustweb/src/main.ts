@@ -23,6 +23,8 @@ import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
 import { applyTheme, readTheme, type Theme } from './theme'
+import { applyLook, LOOKS, readLook, type Look } from './look'
+import { ownDataImported } from './own_data'
 import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
@@ -216,12 +218,12 @@ import { profileSheetNodes, scopePageNodes, theirProfileBlock, type ProfileViewD
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
-import { DEX_URL, UI_VIEWS, UiView, wideAllowed } from './desktop_view'
+import { DEX_URL, SETTINGS_VIEWS, UiView, wideAllowed } from './desktop_view'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
 import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, travelsInPack } from './note_fields'
-import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
+import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, dummyIds, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { KeepNotice, dueForTakeDown, guestAsk, guestAsked, guestEnded, guestGranted, guestKept, isKept, keepAccount, keepText, parseKeepText, unkeepAccount } from './account_keep'
 import { asksMatchNotes, notesMatchDefault } from './notes_source'
@@ -262,7 +264,8 @@ import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { EXT_MODULES, type ExtHooks, type ThreadSummary } from './ext/registry'
+import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary } from './ext/registry'
+import { alphaHeading } from './alpha_heading'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
@@ -1040,6 +1043,16 @@ const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: (
 const DESK_PILL_SHOWN = false
 const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
 let statusPill: HTMLElement | null = null
+/** Wave 39: the desktop dock (Add a device, See TrustWeb in action); hidden from the main flow once the person has brought in their own data. */
+let pageDock: HTMLElement | null = null
+let demoSeedSize: number | undefined
+/** True once the record holds more own people than the demo seed (see own_data.ts); the demo helpers then live in Settings > Advanced. */
+function ownDataBrought(): boolean {
+  if (!state) return false
+  demoSeedSize ??= demoContentForLivePhone(0, ctx).people.length
+  if (state.people.length <= demoSeedSize) return false
+  return ownDataImported(state.people, dummyIds(state, ctx).people, demoSeedSize)
+}
 /** A newer build is deployed (app_update.ts): small banner above the tab bar, only its button takes taps. */
 const updateBanner = el('div', { class: 'update-banner', role: 'status', 'aria-live': 'polite', 'data-update-banner': '1', hidden: true }, [
   el('span', {}, [S.updBanner]),
@@ -1056,7 +1069,8 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   ])
   const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
-  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
+  pageDock = el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see])
+  root.append(pageDock, demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
 }
 
 /**
@@ -1105,7 +1119,7 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
@@ -1512,6 +1526,15 @@ function mountSettingsGear(): void {
   right.insertBefore(gear, right.querySelector('[data-chat-dots]'))
 }
 
+/** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
+function mountAiButton(): void {
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right || right.querySelector('[data-ai-button]')) return
+  const ai = iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn')
+  ai.setAttribute('data-ai-button', '')
+  right.append(ai)
+}
+
 /** Wave 28: what the QR button shows for what is on screen: an open event, the tag the web is filtered to, else the connect code (Meet). */
 function screenQr(plain = false): void {
   const ev = screen === Screen.Events ? eventsView.current() : undefined
@@ -1573,6 +1596,7 @@ const PIN_ACTIONS: Record<HeaderPin, { icon: string; run: () => void }> = {
   dnd: { icon: 'dnd', run: () => undefined },
   advanced: { icon: 'more', run: openAdvancedSettings },
   'qr-only': { icon: 'qr', run: () => screenQr(true) },
+  select: { icon: 'select', run: () => undefined },
 }
 
 /** Wave 28: the header of Web, Chat, Events and Resources in one order, right to left: settings, the QR, the pinned buttons (Do Not Disturb on by default), the views, search. */
@@ -1585,19 +1609,19 @@ function mountHeaderControls(): void {
   gear.dataset.settingsGear = '1'
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
-  const ai = screen === Screen.Web ? iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn') : null
-  if (ai) ai.setAttribute('data-ai-button', '')
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
-  const pins = headerPins(st().uiPins?.header).map((id) => {
-    const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
+  // The select tool belongs to the Web's rings view only.
+  const pinIds = headerPins(st().uiPins?.header).filter((id) => id !== 'select' || (screen === Screen.Web && webViewNow === 'rings' && !webPage))
+  const pins = pinIds.map((id) => {
+    const b = id === 'dnd' ? dndButton() : id === 'select' ? selectToolButton('hdr-pin') : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
     b.setAttribute('data-header-pin', id)
     return b
   })
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
-  const parts: Record<string, (Node | null)[]> = { search: [find, ai], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
+  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
@@ -1761,6 +1785,7 @@ function render(): void {
   host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
   mountSettingsGear()
+  mountAiButton()
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   applyLayout()
@@ -2022,7 +2047,9 @@ function offerDemoContent(): void {
 }
 
 function updateDemoToggle(): void {
-  demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp()
+  const own = ownDataBrought()
+  if (pageDock) pageDock.hidden = own
+  demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp() || own
   if (state) demoToggle.textContent = demoShown(state) ? S.demoHide : S.demoAdd
   updateDeskToggle()
 }
@@ -2081,17 +2108,29 @@ function setLayout(l: Layout): void {
   applyLayout()
 }
 
+/** Wave 39: Settings > General > Theme, next to the view picker: the look of the app (Default, Sleek, Dex-like); light or dark stays under Advanced. */
+function themeRow(): HTMLElement {
+  const now = readLook(localStorage)
+  return el('div', { class: 'theme-row', 'data-theme-row': '' }, [
+    el('b', {}, [S.themeTitle]),
+    el('div', { class: 'look-pick', role: 'radiogroup', 'aria-label': S.themeTitle }, LOOKS.map((l: Look) => el('button', {
+      class: 'radio' + (now === l ? ' on' : ''), role: 'radio', 'aria-checked': String(now === l), 'data-look-choice': l,
+      onclick: () => { applyLook(l, document.documentElement, localStorage); settingsSheet() },
+    }, [el('b', {}, [S.themeLooks[l]]), el('small', {}, [S.themeLookHints[l]])]))),
+  ])
+}
+
 /** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
 function viewRow(): HTMLElement {
-  const items = UI_VIEWS.map((v) => el('button', {
+  // Wave 39: only Dex and TrustWeb are offered here; Contacts and Contacts (wide) stay in the eye menu.
+  const items = SETTINGS_VIEWS.map((v) => el('button', {
     role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
-    ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : v === UiView.Desk ? { 'aria-describedby': 'view-desk-info' } : {}),
-    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openDeskSheet(UiView.Classic); else toggle(false) },
+    ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : {}),
+    onclick: () => { if (v === UiView.Dex) showDesktopVersion(v); else toggle(false) },
   }, [S.views[v]]))
   const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
     ...items,
     el('p', { class: 'meta view-dex-info', id: 'view-dex-info', 'data-dex-info': '' }, [el('a', { href: DEX_URL, target: '_blank', rel: 'noopener' }, [S.views.dexInfo])]),
-    el('p', { class: 'meta view-dex-info', id: 'view-desk-info', 'data-desk-info': '' }, [`${S.views.desk}: ${S.views.deskInfo}`]),
   ])
   const pill = el('button', { class: 'view-pill', 'data-view-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `${S.views.pickAria}: ${S.views.trustweb}`, onclick: () => toggle(menu.hidden) }, [
     el('span', {}, [S.views.trustweb]), el('span', { class: 'view-pill-half', 'aria-hidden': 'true' }, ['▾']),
@@ -2805,7 +2844,7 @@ function screenViewDrop(): HTMLElement | null {
   const which = screen === Screen.Events ? 'events' : 'inventory'
   if (!eyeOpen) return null
   const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : screen === Screen.Notes ? 'notes' : invMatches ? 'matches' : zoom.inventory ? 'outline' : 'list'
-  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).map((v) => {
+  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).filter((v) => v.key !== 'matches' || isEnabled('matches')).map((v) => {
     const b = el('button', { class: 'view-opt' + (v.key === current ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(v.key === current), 'data-view': v.key, disabled: !v.available, onclick: () => chooseScreenView(which, v.key) })
     b.innerHTML = icon(v.key === 'list' || v.key === 'matches' || v.key === 'notes' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
     b.append(el('b', {}, [v.available ? S.screenViewNames[v.key] : S.viewSolarOff]))
@@ -2962,10 +3001,12 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 setTimeout(() => { if (screen === Screen.Web) render() }, 5 * 60_000 + 1000)
 function browserOnlyNotice(): HTMLElement | null {
   if (!state || !shouldShowBrowserOnly({ dismissed: Boolean(state.browserOnlyDismissed), demo: demoPhone(), openedAt: visitOpenedAt, wasHidden: visitWasHidden }, Date.now())) return null
-  return el('p', { class: 'browser-only', 'data-browser-only-notice': '' }, [
-    S.browserOnlyNotice + ' ',
-    el('a', { href: 'https://trustintheweb.com/', target: '_blank', rel: 'noopener noreferrer' }, [S.browserOnlyLink]),
-    ' ' + S.browserOnlyNoticeEnd + ' ',
+  return el('div', { class: 'browser-only', 'data-browser-only-notice': '' }, [
+    el('span', { class: 'browser-only-text' }, [
+      S.browserOnlyNotice + ' ',
+      el('a', { href: 'https://trustintheweb.com/', target: '_blank', rel: 'noopener noreferrer' }, [S.browserOnlyLink]),
+      ' ' + S.browserOnlyNoticeEnd,
+    ]),
     el('button', { class: 'browser-only-x', type: 'button', 'data-browser-only-dismiss': '', onclick: () => { st().browserOnlyDismissed = true; save(); render() } }, [S.browserOnlyDismiss]),
   ])
 }
@@ -2993,10 +3034,8 @@ function screenWeb(): Node[] {
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
     supportLine(supportIo),
-    wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
-    browserOnlyNotice(),
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
@@ -3013,6 +3052,9 @@ function screenWeb(): Node[] {
     view === 'rings'
       ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
       : clip,
+    // Wave 39: the browser-only notice sits under the web, outside the zoomed layer (inside it the zoom scaled the line off the screen).
+    ...[browserOnlyNotice()].filter((n): n is HTMLElement => n !== null),
+    ...[wantsToConnectSection()].filter((d): d is HTMLElement => d !== null),   // wave 39: below the zoom clip, so it stays put and full size while the Web zooms
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
@@ -3024,10 +3066,16 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, 'expand-btn select-tool')
+  const pinned = headerPins(s.uiPins?.header).includes('select')
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, ...(pinned ? {} : { select: selectToolButton() }), hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted(), openPanel: (children) => openSheet(children) })
+}
+
+/** Wave 39: the select tool; it sits beneath Settings in the header (a pin, on by default) or, unpinned, in the Web's tool column. */
+function selectToolButton(extra = 'expand-btn'): HTMLElement {
+  const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, `${extra} select-tool`)
   select.setAttribute('data-tool', 'select')
   select.setAttribute('aria-pressed', String(web.selectOn()))
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
+  return select
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -3188,6 +3236,13 @@ function openQuery(): void {
 }
 
 function queryFab(): HTMLElement {
+  // Wave 39: in the IYG support variation the Web's primary button asks for support.
+  if (profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')) {
+    const b = el('button', { class: 'query-fab', 'aria-label': S.supportTitle, 'data-open-query': '1', 'data-support-primary': '', onclick: () => { askMode = AskMode.Support; openQuery() } })
+    b.innerHTML = icon('query')
+    b.append(el('span', {}, [S.supportTitle]))
+    return b
+  }
   const call = queryStyle() === QueryStyle.Call
   const b = el('button', {
     class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
@@ -3548,7 +3603,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   const open = (svc: ChatService): void => {
     noteUsed(st(), p.id, svc.id, Date.now()); save()
     if (svc.url) {
-      if (!EXT_MODULES.some((m) => m.openExternal?.(svc.url!))) {
+      if (!extOn.some((m) => m.openExternal?.(svc.url!))) {
         const app = appLinkFor(svc.url)
         if (app) openLocalFirst(app, svc.url, browserOpenEnv())
         else window.open(svc.url, '_blank', 'noopener,noreferrer')
@@ -4848,10 +4903,17 @@ const extHooks: ExtHooks = {
   openChat: (personId) => chatSheet(personId),
   guestChanged: (show) => { renderTabs(); if (!show) go(Screen.Web); else if (st().coGuest?.eventId) openEvents(st().coGuest?.eventId); else go(Screen.Chat) },
 }
-const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
-const coNotes = EXT_MODULES.find((m) => m.id === 'co-notes')?.screen(extHooks)
+// Wave 39: the module registry reads its switches from the record (loaded above); the legacy modules are read once, a switch needs one reload.
+bindTw({
+  settings: () => state?.twSettings,
+  save: (t) => { st().twSettings = t; save() },
+  ctx: () => ({ store: st, strings: S, bus: createBus(), navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings) }),
+})
+const extOn = EXT_MODULES.filter((m) => isEnabled(m.id))
+const cal = extOn.find((m) => m.id === 'calendar')?.screen(extHooks)
+const coNotes = extOn.find((m) => m.id === 'co-notes')?.screen(extHooks)
 /** Wave 27: the messengers extension modules add to the Chat screen's Extend. */
-const messengers = EXT_MODULES.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
+const messengers = extOn.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
 
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet: openCardPage, itemSheet,
@@ -6700,15 +6762,61 @@ function reachOutLink(): string {
  * Settings sections: a folded <details> each; the open state is remembered per device (trustweb.ui.settings.<key>);
  * `first` opens when nothing is remembered. An empty section is not drawn.
  */
-function settingsSection(key: string, title: string, children: (Node | null)[], first = false): Node | null {
+function settingsSection(key: string, title: string | (Node | string)[], children: (Node | null)[], first = false): Node | null {
   if (!children.some(Boolean)) return null
   const attrs: Record<string, string> = { 'data-settings-section': key, class: 'settings-adv' }
   if (key === 'advanced') attrs['data-settings-advanced'] = '1'
-  const d = el('details', attrs, [el('summary', { class: 'adv-toggle' }, [title]), ...children]) as HTMLDetailsElement
+  const d = el('details', attrs, [el('summary', { class: 'adv-toggle' }, Array.isArray(title) ? title : [title]), ...children]) as HTMLDetailsElement
   const k = `trustweb.ui.settings.${key}`
   try { const v = localStorage.getItem(k); d.open = v === null ? first : v === '1' } catch { d.open = first }
   d.addEventListener('toggle', () => { try { localStorage.setItem(k, d.open ? '1' : '0') } catch { /* ignore */ } })
   return d
+}
+
+/** Wave 39: a profile or module switch changed: the bottom row, the screen and Settings follow; modules read once at load ask for one reload. */
+function twChanged(): void {
+  document.body.dataset.twProfile = profileOf(state?.twSettings)
+  const s = st()
+  if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
+  renderTabs(); render(); settingsSheet()
+  if (twRegistry.needsReload().length) toast(S.ext.reload)
+}
+
+function chooseProfile(id: ProfileId): void {
+  void twRegistry.setProfile(id).then(() => {
+    const preset = profileDef(id).barPreset
+    if (preset) { st().uiBar = applyProfile(st().uiBar, preset); save() }
+    twChanged()
+  })
+}
+
+/** Wave 39: Settings > Variations (above General): Dex (moved here from the view row) and the profiles; the current one is marked. */
+function variationRows(s: AppState): Node[] {
+  const cur = profileOf(s.twSettings)
+  return [
+    el('p', { class: 'meta' }, [S.var.hint]),
+    el('button', { class: 'radio variation', 'data-variation': 'dex', onclick: () => showDesktopVersion(UiView.Dex) }, [el('b', {}, [S.var.dex]), el('small', {}, [S.var.dexHint])]),
+    el('p', { class: 'meta view-dex-info', 'data-dex-info': '' }, [el('a', { href: DEX_URL, target: '_blank', rel: 'noopener' }, [S.views.dexInfo])]),
+    ...TW_PROFILES.map((p) => el('button', {
+      class: 'radio variation' + (p.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(p.id === cur), 'data-variation': p.id, onclick: () => chooseProfile(p.id),
+    }, [el('b', {}, [(p.id === cur ? '✓ ' : '') + S.var.names[p.id]]), el('small', {}, [S.var.hints[p.id] + (p.id === cur ? ` · ${S.var.current}` : '')])])),
+  ]
+}
+
+/** Wave 39: Settings > General > Extensions: one switch per module with its one line; heavy ones say they load only when on. */
+function extensionRows(): Node[] {
+  return [
+    el('p', { class: 'meta' }, [S.ext.hint]),
+    ...twRegistry.listModules().map((m) => {
+      const on = isEnabled(m.id)
+      return el('button', {
+        class: 'radio' + (on ? ' on' : ''), role: 'switch', 'aria-checked': String(on), 'aria-pressed': String(on), 'data-ext-module': m.id,
+        onclick: () => { void twRegistry.setEnabled(m.id, !on).then(twChanged) },
+      }, [el('b', {}, [m.title]), el('small', {}, [[m.description, m.heavy ? S.ext.heavy : ''].filter(Boolean).join(' · ')])])
+    }),
+    ...twRegistry.settingsSections().flatMap((sec) => [el('h4', { class: 'eyebrow' }, [sec.title]), ...sec.rows()]),
+    ...(coNotes?.settingsRows?.() ?? []),
+  ]
 }
 
 /** Group ids that stay open across the redraws a toggle causes; reset to the lead group whenever Settings opens afresh. */
@@ -6768,12 +6876,15 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       importEntry(),
-      el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
-      el('p', { class: 'meta' }, [S.viewPinsHint]),
-      ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
-        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
-        el('b', {}, [S.viewNames[i.view]]),
-      ])),
+      // Wave 39: folded until asked for (settings redraws keep it closed; a tick does not redraw the sheet).
+      el('details', { class: 'settings-adv', 'data-pin-views': '' }, [
+        el('summary', { class: 'adv-toggle' }, [S.viewPinsTitle]),
+        el('p', { class: 'meta' }, [S.viewPinsHint]),
+        ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+          el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
+          el('b', {}, [S.viewNames[i.view]]),
+        ])),
+      ]),
     ]),
     settingsSection('skins', S.setSkins, [
       el('div', { 'data-settings-skins': '' }, [
@@ -6938,8 +7049,8 @@ function settingsSheet(): void {
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
       eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
     })),
-    settingsSection('features', S.setSecFeatures, feed.settingsGroup()),
-    settingsSection('extensions', S.coNotes.group, coNotes?.settingsRows?.() ?? []),
+    settingsSection('features', S.setSecFeatures, isEnabled('feed') ? feed.settingsGroup() : []),
+    settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
     settingsSection('advanced', S.setAdvanced, [
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
     el('h4', { class: 'eyebrow' }, [S.headerPinsTitle]),
@@ -6978,6 +7089,11 @@ function settingsSheet(): void {
       }, [el('b', {}, [S.setDemoOnly]), el('small', {}, [S.setDemoOnlyHint])]),
     ]),
     // The installed app offers no demo content (owner 2026-10-07); where some is already on, removing it stays possible.
+    ...(ownDataBrought() && !solo && !isDemoPersona(persona) && window.top === window ? [
+      el('h4', { class: 'eyebrow' }, [S.advancedHelpers]),
+      ...(runsAsInstalledApp() ? [] : [el('a', { class: 'btn btn-ghost', 'data-add-device': '', href: APP_URL + 'demo/' }, [S.addDeviceShort])]),
+      el('button', { class: 'btn btn-ghost', 'data-see-action': '', onclick: () => { closeSheet(); openWalkthrough() } }, [S.seeInAction]),
+    ] : []),
     demoSettingsShown ? el('h4', { class: 'eyebrow' }, [S.setDemo]) : null,
     demoSettingsShown ? el('button', {
       class: 'radio' + (demoShown(s) ? ' on' : ''),
@@ -7039,12 +7155,14 @@ function settingsSheet(): void {
       oninput: (e) => { settingsQuery = (e.target as HTMLInputElement).value; filterSettings(sheet, settingsQuery) },
     }),
     viewRow(),
+    themeRow(),
     apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
-    ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
+    el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
+    ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
   ])
   sheet.dataset.kind = 'settings'
   if (settingsQuery) filterSettings(sheet, settingsQuery)
@@ -7381,7 +7499,7 @@ function queryDock(s: AppState): HTMLElement {
     if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
     save(); render()
   })
-  const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.map((m) => el('button', {
+  const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {
     class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
     onclick: () => { askMode = m; render() },
   }, [{ [AskMode.Support]: S.askModeSupport, [AskMode.Hints]: S.askModeHints, [AskMode.Intros]: S.askModeIntros }[m]])))
@@ -7623,6 +7741,8 @@ window.addEventListener('storage', (e) => {
 })
 document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
+document.body.dataset.twProfile = profileOf(state?.twSettings)
+void twRegistry.start()
 render()
 void refreshOwnPicture()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })

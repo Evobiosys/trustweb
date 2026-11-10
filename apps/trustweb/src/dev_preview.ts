@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { approveBoxVisible, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
+import { approveBoxVisible, focusAfterApprove, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -269,7 +269,7 @@ export function initDevPreview(): void {
   }
   // A box or pill writes the registry (the CLI cascades requires/dependants). Approve and needs work only mark what gets pushed; the boxes assemble.
   const press = (key: string, v: 'merge' | 'needs-work'): void => {
-    focus.set(focusAfterPress(focus.get(), key))
+    focus.set(v === 'merge' && pillPress(p!.features, key, v) === 'merge' ? focusAfterApprove(p!.features, focus.get(), key) : focusAfterPress(focus.get(), key))   // wave 39: an approve jumps to the next unreviewed row
     const plan = pressPlan(p!.features, key, v)   // approve on an unticked row ticks it for the owner, but never assembles (the reload hid the preview)
     const { loadFirst } = plan
     const base = v === 'merge' ? ensureLoaded(p!.features, key) : p!.features
@@ -581,7 +581,7 @@ export function initDevPreview(): void {
         expand.innerHTML = EXPAND_SVG
         expand.addEventListener('click', () => { lastFocus.set(ftHead!.last); focus.set(ftHead!.focus); if (ftHead!.to === 'full') loadOpen.set(true); render() })
       }
-      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : '', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), ...(expand ? [expand] : []), x, close)
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', { title: (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'Saving your press on the preview server; the seconds show how long it has taken.' : '' }, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : '', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), ...(expand ? [expand] : []), x, close)
       const hs = drag(root.appendChild(header))
       // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))

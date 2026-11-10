@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 27 (sovereign-switch): Settings > Sovereign Switch, a page with Back. Wave 28: it IMPORTS from other services. Sections
- * (sovereign_switch.ts pageSections): the services, the export-mail watcher, Other services, two-way sync (not built), the import
+ * (sovereign_switch.ts pageSections): the services (wave 39: the export-mail watcher sits under them, once an export was asked), Other services, two-way sync (not built), the import
  * rows, and Advanced (folded): export my TrustWeb record, be forgotten on TrustWeb (a confirmation PAGE before anything is sent),
  * erasure requests to other services. DOM only; the logic is sovereign_switch.ts, export_watch.ts and forget.ts.
  */
@@ -10,7 +10,8 @@ import { DEFAULT_ESTIMATE, SERVICES_RTBF, mainServices, otherServices, type Rtbf
 import { startWatch, watchStep, type Watch, type WatchEvent } from './export_watch'
 import { forgetStatus, forgetText, noteForgetSent, retractOwn, shareAgain } from './forget'
 import type { AppState, Peer } from './model'
-import { exportFiles, exportName, type Lang, mailtoFor, markService, nextToExport, pageSections } from './sovereign_switch'
+import { exportFiles, exportName, exportRequested, type Lang, mailtoFor, markService, nextToExport, pageSections } from './sovereign_switch'
+import { pasteTarget } from './export_mail'
 import { S } from './strings'
 import { zipStore } from './zip'
 
@@ -29,9 +30,11 @@ export interface SovereignDeps {
 
 const T = (): typeof S.sov => S.sov
 const info = (text: string): HTMLElement => el('details', { class: 'meta', 'data-sov-info': '' }, [el('summary', {}, [T().more]), el('p', {}, [text])])
+/** A heading with the grey subscript of a feature Jakob has not approved yet. */
+const alphaHeading = (title: string): HTMLElement => el('span', {}, [title, el('sub', { class: 'alpha-label', 'data-alpha-label': '' }, [' ' + S.alphaLabel])])
 const day = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
 
-function section(key: string, title: string, children: (Node | null)[], open = false): HTMLElement {
+function section(key: string, title: string | Node, children: (Node | null)[], open = false): HTMLElement {
   const d = el('details', { class: 'settings-adv', 'data-sov-section': key }, [el('summary', { class: 'adv-toggle' }, [title]), ...children]) as HTMLDetailsElement
   d.open = open
   return d
@@ -150,10 +153,30 @@ export function createSovereignView(d: SovereignDeps): { open: () => void; refre
     return [
       el('p', { class: 'meta' }, [T().watchLead]),
       el('details', { class: 'meta', 'data-sov-info': '' }, [el('summary', {}, [T().watchSees]), el('ul', {}, [T().watchSees1, T().watchSees2, T().watchSees3].map((x) => el('li', {}, [x]))), el('p', {}, [T().watchRevoke])]),
-      el('button', { class: 'btn btn-ghost', 'data-sov-mail-connect': '', disabled: true }, [T().watchConnect]),
+      pasteBox(set),
       el('p', { class: 'meta', 'data-sov-watch-stub': '' }, [T().watchStub]),
       ...mainServices().filter((x) => x.exportUrl).map(row),
     ]
+  }
+
+  /** "Connect my mail": a folded paste box. The pasted mail is read for sender, subject and link and dropped; nothing is stored of it but the link. */
+  let pasteOpen = false
+  function pasteBox(set: (id: string, w: Watch | null) => void): HTMLElement {
+    const area = el('textarea', { class: 'field', rows: '5', placeholder: T().watchPastePh, 'aria-label': T().watchPastePh, 'data-sov-paste': '' }) as HTMLTextAreaElement
+    const msg = el('p', { class: 'meta', role: 'status', 'data-sov-paste-msg': '' })
+    const go = el('button', { class: 'btn btn-sm', 'data-sov-paste-go': '', onclick: () => {
+      const hit = pasteTarget(mainServices(), area.value, d.state().sovereign?.watch)
+      area.value = ''
+      if (!hit) { msg.textContent = T().watchPasteNone; return }
+      const name = mainServices().find((x) => x.id === hit.id)?.name ?? hit.id
+      pasteOpen = false
+      set(hit.id, watchStep(startWatch(Date.now()), { type: 'mail', mail: hit.mail }, Date.now()))
+      d.toast(T().watchPasteOk(name))
+    } }, [T().watchPasteGo])
+    return el('div', { 'data-sov-connect': '' }, [
+      el('button', { class: 'btn btn-ghost', 'data-sov-mail-connect': '', 'aria-expanded': String(pasteOpen), onclick: () => { pasteOpen = !pasteOpen; refresh() } }, [T().watchConnect]),
+      ...(pasteOpen ? [el('p', { class: 'meta' }, [T().watchPasteLead]), area, go, msg] : []),
+    ])
   }
 
   /** Advanced: asking the services to erase me (request letters, links, ticks). */
@@ -190,8 +213,7 @@ export function createSovereignView(d: SovereignDeps): { open: () => void; refre
   function body(): Node[] {
     const parts: Record<string, () => Node | null> = {
       start: () => el('p', { class: 'meta', 'data-sov-lead': '' }, [T().lead]),
-      services: () => section('services', T().servicesTitle, serviceRows(), true),
-      watch: () => section('watch', T().watchTitle, watchRows()),
+      services: () => section('services', T().servicesTitle, [...serviceRows(), exportRequested(d.state()) ? section('watch', alphaHeading(T().watchTitle), watchRows(), true) : null], true),
       other: () => section('other', T().otherTitle, otherServices().map(serviceCard)),
       sync: () => section('sync', T().syncTitle, [el('button', { class: 'btn btn-ghost', 'data-sov-sync': '', disabled: true }, [T().syncTitle]), el('p', { class: 'meta' }, [T().syncSoon])]),
       import: () => section('import', T().importTitle, [el('p', { class: 'meta' }, [T().importLead]), ...d.importRows()]),

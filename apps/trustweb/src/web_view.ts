@@ -9,7 +9,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { arcsGradient, loadColourTags, tagColours } from './colour_tags'
 import { isBlocked, isNonResponsive } from './non_responsive'
-import { type Column, DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, avoidSector, beyondRings, columnSector, lapRadius, CONTROL_GAP, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
+import { type Column, YOU_EDGE, DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, avoidSector, beyondRings, columnSector, lapRadius, CONTROL_GAP, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry, Spot } from './rings_layout'
 import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, visiblePeople } from './rings_hide'
 import { EXPAND_DX, HANDLE, ringPoints } from './ring_handles'
@@ -37,12 +37,13 @@ import { applyAll, clearSelection, toggle as toggleSel } from './multi_select'
 import type { Selection } from './multi_select'
 import { UNDO_SINGLE_MS, dragIds, undoMs } from './select_tool'
 import type { BinKind } from './drag_bins'
-import { GRACE_MS, HOVER_IDLE, hoverStep } from './ring_hover'
+import { GRACE_MS, HOVER_IDLE, hoverStep, nearCard } from './ring_hover'
 import { OVERLAY_DWELL_MS, overlayAllowed, restedAt } from './overlay_gate'
 import type { HoverEvent } from './ring_hover'
 import { singleOrDouble } from './press'
 import { contextPress } from './context_press'
-import { labelScale } from './ring_spacing'
+import { labelScale, dragRingTo } from './ring_spacing'
+import { clearDots, labelSize, type DotDisc } from './dot_clear'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
 import { createCountdown } from './merge_countdown'
@@ -234,7 +235,8 @@ export function createWebView(deps: WebViewDeps): WebView {
     const angles = Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOfP)]))
     // The close ring depends on the scale (the "you" avatar does not shrink), the scale on the extent: settle on the first scale whose layout still fits.
     let k = 1
-    for (ringsGeo = ringsGeometry(counts, angles, k); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k)) k = C / ringsGeo.extent
+    const custom = desk ? undefined : s.uiRings?.radii   // wave 39: ring lines the user dragged
+    for (ringsGeo = ringsGeometry(counts, angles, k, custom); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k, custom)) k = C / ringsGeo.extent
     ringsK = k
     const colourTags = loadColourTags()
     const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
@@ -282,6 +284,15 @@ export function createWebView(deps: WebViewDeps): WebView {
       const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
       return visiblePeople(members[ring] ?? [], hidden).map((p) => ({ id: p.id, angle: angleOfP(p), radius: lapRadius(ringsGeo, ring, laps.get(p)!) * k, r: (ringsGeo.dot[ring] * k) / 2 }))
     }), controls, C, keepOutColumn)
+    // Wave 39: bubbles never overlap: each shrinks just enough to clear its neighbours, the "you" avatar and the controls (layout px, so zoom never changes it).
+    const discs: DotDisc[] = ringsGeo.rings.flatMap((ring) => {
+      const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
+      return visiblePeople(members[ring] ?? [], hidden).map((p) => {
+        const a = ((drawAngle.get(p.id)! - 90) * Math.PI) / 180, radius = lapRadius(ringsGeo, ring, laps.get(p)!) * k
+        return { id: p.id, x: C + radius * Math.cos(a), y: C + radius * Math.sin(a), r: (ringsGeo.dot[ring] * k) / 2 }
+      })
+    })
+    const dotR = clearDots(discs, [{ x: C, y: C, r: YOU_EDGE }, ...controls])
     for (const ring of ringsGeo.rings) {
       const dot = ringsGeo.dot[ring]
       const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
@@ -327,8 +338,10 @@ export function createWebView(deps: WebViewDeps): WebView {
         b.style.left = x + 'px'
         b.style.top = y + 'px'
         if (arcs) b.style.setProperty('--arcs', arcs)
-        b.style.setProperty('--d', dot * k + 'px')
-        if (dot * k < 11) b.classList.add('nl')
+        const diameter = 2 * (dotR.get(p.id) ?? (dot * k) / 2)
+        b.style.setProperty('--d', diameter + 'px')
+        b.style.setProperty('--lbl', labelSize(diameter) + 'px')
+        if (diameter < 11) b.classList.add('nl')
         wrap.appendChild(b)
         const to = quiet.get(p.id)
         if (to) { // Wave 28: a note, never a move: tap accepts this one move
@@ -409,6 +422,14 @@ export function createWebView(deps: WebViewDeps): WebView {
         onArchive: (p) => { if (!bulk('archive')) { archivePerson(p); save(); hideAll(); render(); toast(S.archivedInSettings) } },
         onDelete: () => bulk('delete'),
         onEdit: (p) => { picked = p ? toggleSel(clearSelection(), p.id) : clearSelection(); markPicked() },
+        // Wave 39: the ticks beside the names pick several people; "Archive N" archives them in one undo (a single tick archives that one person).
+        onPick: (ids) => { picked = new Set(ids); markPicked() },
+        onArchiveMany: (ids) => {
+          picked = new Set(ids)
+          if (bulk('archive')) return
+          const one = st().people.find((x) => x.id === ids[0])
+          if (one) { archivePerson(one); save(); hideAll(); render(); toast(S.archivedInSettings) }
+        },
       })
       box.style.left = Math.min(at.x + 12, RINGS_SIZE - 90) + 'px'
       box.style.top = Math.min(at.y + 12, RINGS_SIZE - 40) + 'px'
@@ -438,16 +459,55 @@ export function createWebView(deps: WebViewDeps): WebView {
     }
     if (!desk) { // the band: the pointer on a ring's stroke (nodes, handles and the card keep their own hover)
       let onBand: Ring | null = null
+      let bridged = false
       wrap.addEventListener('pointermove', (e) => {
         const over = e.target as HTMLElement
-        if (!mouse(e) || over.closest('[data-ring-card], .ring-toggle')) return
+        if (!mouse(e)) return
+        // Wave 39: the card and a margin around it count as the card (hit-tested by position, not by what the pointer is over), so the gap between line and card never closes it.
+        const card = hover.open ? wrap.querySelector('[data-ring-card]') : null
+        if (card && nearCard({ x: e.clientX, y: e.clientY }, card.getBoundingClientRect())) { clearTimeout(dwellTimer); bridged = true; step({ type: 'enter-card' }); return }
+        if (bridged) { bridged = false; step({ type: 'leave' }) }
+        if (over.closest('[data-ring-card], .ring-toggle')) return
         const band = over.closest('.node, .ring-more') ? null : onRingLine(ringsGeo, localPoint(e, wrap.getBoundingClientRect()), k) // wave 37: the stroke itself, not the whole annulus
+        wrap.classList.toggle('on-ring-line', band !== null)
         if (band === onBand) { if (band && !restedAt(dwellAt, { x: e.clientX, y: e.clientY }) && hover.open !== band) dwell(band, e); return }
         clearTimeout(dwellTimer)
         if (band) dwell(band, e); else if (onBand) step({ type: 'leave' })
         onBand = band
       })
-      wrap.addEventListener('pointerleave', () => { clearTimeout(dwellTimer); if (onBand) { onBand = null; step({ type: 'leave' }) } })
+      wrap.addEventListener('pointerleave', () => { clearTimeout(dwellTimer); bridged = false; if (onBand) { onBand = null; step({ type: 'leave' }) } })
+      // Wave 39: a drag on a ring's stroke (mouse at once, touch after a 300 ms hold) moves that ring; rings outside or inside it make room. Dots keep their rings (no dot changes).
+      wrap.addEventListener('pointerdown', (down) => {
+        if ((down.target as HTMLElement).closest('.node, button, a, input, [data-ring-card], .ring-toggle, .ring-more')) return
+        const at0 = localPoint(down, wrap.getBoundingClientRect())
+        const ring = onRingLine(ringsGeo, at0, k)
+        if (!ring) return
+        const touch = down.pointerType !== 'mouse'
+        let radii = { ...ringsGeo.radius }
+        const move = (e: PointerEvent): void => {
+          if (!ringLineDrag) {
+            if (!dragStarts(e.clientX - down.clientX, e.clientY - down.clientY, touch)) return
+            if (touch) { clearTimeout(hold); unlisten(); return }   // a finger that moved before the hold is a scroll or pan
+            lift()
+          }
+          const p = localPoint(e, wrap.getBoundingClientRect())
+          radii = dragRingTo(ringsGeo.radius, ringsGeo.rings, ring, Math.hypot(p.x - RINGS_SIZE / 2, p.y - RINGS_SIZE / 2) / k)
+          wrap.querySelectorAll<SVGCircleElement>('circle[data-ring]').forEach((c) => c.setAttribute('r', String(radii[c.getAttribute('data-ring') as Ring] * k)))
+        }
+        const lift = (): void => { ringLineDrag = true; dragged = true; clearTimeout(dwellTimer); hideAll(); window.getSelection()?.removeAllRanges() }
+        const hold = touch ? window.setTimeout(lift, 300) : 0
+        const unlisten = (): void => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
+        const end = (e: PointerEvent): void => {
+          clearTimeout(hold)
+          unlisten()
+          if (!ringLineDrag) return
+          ringLineDrag = false
+          if (e.type === 'pointerup') { setUi(st(), 'radii', { ...st().uiRings?.radii, ...Object.fromEntries(ringsGeo.rings.filter((r) => radii[r] !== ringsGeo.radius[r]).map((r) => [r, radii[r]])) }); s.uiRings = st().uiRings; save(); render() }   // only the rings that moved are kept
+          setTimeout(() => { dragged = false }, 0)
+        }
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
+      })
+      wrap.addEventListener('touchmove', (e) => { if (ringLineDrag) e.preventDefault() }, { passive: false })
     }
     for (const w of rows) {
       const diamond = ringToggle(w.ring, hidden.has(w.ring), w.at.top, w.at.left, false, (btn) => toggle(toggleHidden(hidden, w.ring), btn.parentElement ?? wrap))
@@ -553,6 +613,8 @@ export function createWebView(deps: WebViewDeps): WebView {
 
   /** Zoom and pan of the Web screen's content; survives render() and resets when the Web screen is left. View state only (I1). */
   let ringsZoom: RingsZoom = RINGS_ZOOM_HOME
+  /** Wave 39: a ring's stroke is being dragged: the pan of the zoom layer stands back. */
+  let ringLineDrag = false
 
   /**
    * Pinch (trackpad ctrl + wheel, Safari gestures, two fingers), pan (one pointer past 6 px at k > 1) and double tap home over the whole
@@ -626,7 +688,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         if (before > 0) zoom(spread() / before, { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 })
         return
       }
-      if (!start || ringsZoom.k === 1) return
+      if (!start || ringsZoom.k === 1 || ringLineDrag) return
       if (!panning) {
         if (Math.hypot(e.clientX - start.x, e.clientY - start.y) <= 6) return
         panning = panned = true

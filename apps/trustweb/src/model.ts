@@ -18,6 +18,7 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
+import { moduleOff, type TwSettings } from './ext/profiles'
 import type { SharedNote } from './notes_outline'
 import type { CoMsg } from './ext/co_notes/co_chat'
 import type { CoDoc } from './ext/co_notes/co_doc'
@@ -1100,10 +1101,12 @@ export interface AppState {
   tabRow?: string[]
   /** Wave 31 (bottom_bar.ts): the configurable bottom row {order, hidden, primary}. Absent: the default. Syncs with the record. */
   uiBar?: { order?: string[]; hidden?: string[]; primary?: string; orderVersion?: number }
+  /** Wave 39 (ext/profiles.ts): the profile (Settings > Variations) and the module switches (Settings > General > Extensions). Syncs with the record. */
+  twSettings?: TwSettings
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
-  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
+  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
   /** Wave 31 (matches.ts): what I can offer (edited like My Resources) and the matches the pc24 service found, with my answers. This device only (not in sync_core's bundle). */
@@ -1113,7 +1116,7 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 39: radii (layout px) the user dragged the ring lines to; absent = the default spacing. */ radii?: Partial<Record<Ring, number>>; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
@@ -1417,15 +1420,16 @@ export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
 }
 
 /** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */
-export function feedOn(s: Pick<AppState, 'feed'>): boolean {
-  return s.feed?.on === true
+export function feedOn(s: Pick<AppState, 'feed' | 'twSettings'>): boolean {
+  return s.feed?.on === true && !moduleOff(s.twSettings, 'feed')
 }
 
 export type FeatureKey = 'events' | 'inventory' | 'feed'
 
 /** Whether a Settings > Features switch is on: events and inventory default on, the Feed defaults off (feedOn). */
-export function featureOn(s: Pick<AppState, 'feed' | 'features'>, key: FeatureKey): boolean {
-  return key === 'feed' ? feedOn(s) : s.features?.[key] !== false
+/** Wave 39: a profile or the Extensions list can switch the module off (Resources is the module `resources`). */
+export function featureOn(s: Pick<AppState, 'feed' | 'features' | 'twSettings'>, key: FeatureKey): boolean {
+  return key === 'feed' ? feedOn(s) : s.features?.[key] !== false && !moduleOff(s.twSettings, key === 'inventory' ? 'resources' : key)
 }
 
 /** Switch events or inventory; on removes the key so the record keeps only what differs from the default. */

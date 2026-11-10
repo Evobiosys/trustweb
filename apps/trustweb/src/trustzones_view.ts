@@ -16,6 +16,7 @@ import { connectionsShown } from './zone_connections'
 import { activeCountLabel, activeFilters } from './filter_active'
 import { closestLimit, closestMoot, limitOf, parseLimit, setPerRingLimit } from './membranes_five'
 import { webSlot } from './rings_layout'
+import { panelMode } from './filter_panel'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
 export const triangle = (open: boolean): string => (open ? '▾' : '▸')
@@ -161,54 +162,73 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
       input, hits,
     ])
   }
-  const open = d.s.uiRings?.showOpen === true
-  return el('section', { class: 'zone-filter', 'data-zone-tag-filters': '' }, [
-    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'showOpen', !open); d.onChange() }, { 'data-zone-tags-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length))])]),
-    ...(open ? [...activeRows(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null) : []),
-  ])
+  // Wave 39: the Filters button (zoneSidebar) owns the head and the folding; this is only the body.
+  return el('section', { class: 'zone-filter', 'data-zone-tag-filters': '' }, [...activeRows(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null))
 }
 
 /** Wave 29: which tag the filter's "Add people" row serves and who it added this go; survives the redraw after each Enter. */
 const addingTo: { tag?: string; added: string[] } = { added: [] }
 
 /** Wave 28b: the TrustZones view's only side control (left on desktop, above the rings on the phone, unfolded by default): expand all, add, tag filters. */
-export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; select: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void }): HTMLElement {
-  const open = d.s.uiRings?.sidebarOpen !== false
-  const m = limitOf(d.s)
-  const rings = new Set(d.people.map((p) => webSlot(p))).size
-  // Wave 36b: "closest n" adds nothing while the per-ring cut already stays within n (and the cut is on).
-  const moot = !d.s.uiRings?.perRingLimitOff && closestMoot(m, rings, closestLimit(d.s.uiRings))
-  /** Every Tools row is one line: a leading control, then its label. */
-  const action = (attr: string, glyph: string, label: string, enabled: boolean, onclick: () => void): HTMLElement =>
-    el('div', { class: 'zone-check zone-row' }, [el('button', { type: 'button', class: 'row-action', [attr]: '', ...(enabled ? {} : { disabled: '' }), onclick }, [el('span', { 'aria-hidden': 'true', class: 'row-glyph' }, [glyph]), el('u', {}, [label])])])
-  const connections = el('label', { class: 'zone-check zone-row' }, [
-    el('input', { type: 'checkbox', 'data-zone-connections': '', ...(connectionsShown(d.s) ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'connections', (e.target as HTMLInputElement).checked); d.onChange() } }),
-    ' ', S.zoneConnections,
-  ])
-  const perRing = el('label', { class: 'zone-check zone-row' }, [
-    el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); if ((e.target as HTMLInputElement).checked) setUi(d.s, 'filled', undefined); d.onChange() } }),
-    ' ', S.perRingBefore, numEdit(m, 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) setPerRingLimit(d.s, n); d.onChange() }), ' ',
-    el('button', { type: 'button', class: 'num-edit', 'data-recent-mode': '', onclick: (e: Event) => { e.preventDefault(); setUi(d.s, 'rankBy', d.s.uiRings?.rankBy === 'frequent' ? undefined : 'frequent'); d.onChange() } }, [d.s.uiRings?.rankBy === 'frequent' ? S.perRingFrequent : S.perRingRecent]), S.perRingAfter,
-  ])
-  const autoAdjust = el('label', { class: 'zone-check zone-row', title: S.ringsAutoAdjustHint }, [
-    el('input', { type: 'checkbox', 'data-rings-auto-adjust': '', ...(d.s.uiRings?.autoAdjust ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'autoAdjust', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
-    ' ', S.ringsAutoAdjust,
-  ])
-  const closest = el(moot ? 'div' : 'label', { class: 'zone-check zone-row' + (moot ? ' moot' : ''), ...(moot ? { 'aria-disabled': 'true', 'data-closest-moot': '1', title: S.closestMootHint(m * rings) } : {}) }, [
-    el('input', { type: 'checkbox', 'data-closest150': '', ...(moot ? { disabled: '' } : {}), ...(d.s.uiRings?.closest150 ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'closest150', (e.target as HTMLInputElement).checked); d.onChange() } }),
-    ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
-    ...(moot ? [el('small', { class: 'moot-hint' }, [S.closestMootHint(m * rings)])] : []),
-  ])
-  /** Wave 39: the import tags (#import:<date>-<source>) stay hidden unless this is on. */
-  const systemTags = el('label', { class: 'zone-check zone-row', title: S.imp39.systemTagsHint }, [
-    el('input', { type: 'checkbox', 'data-show-system-tags': '', ...(showSystemTags() ? { checked: '' } : {}), onchange: (e: Event) => { setShowSystemTags((e.target as HTMLInputElement).checked); d.onChange() } }),
-    ' ', S.imp39.systemTags,
-  ])
-  return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
-    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneSidebarTitle, () => { setUi(d.s, 'sidebarOpen', !open); d.onChange() }, { 'data-zone-side-toggle': '' }), el('b', {}, [S.zoneSidebarTitle])]),
-    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add, d.select]), connections, perRing, autoAdjust, closest, systemTags, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
+export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; /** Wave 39: absent while the select tool is pinned in the header. */ select?: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void; /** Phone: the overlay sheet (main.ts openSheet). */ openPanel: (children: (Node | null)[]) => void }): HTMLElement {
+  // Wave 39: on a phone Tools and Filters open as an overlay sheet that redraws after each change; wider, they fold open inline.
+  const sheet = panelMode(window.innerWidth) === 'sheet'
+  let showing: 'tools' | 'filters' | null = null
+  const d = { ...din, onChange: (): void => { din.onChange(); if (showing) present(showing) } }
+  const toolsOpen = d.s.uiRings?.sidebarOpen !== false
+  const filtersOpen = d.s.uiRings?.showOpen === true
+  /** The Tools rows, built fresh (the sheet redraws them after each change). */
+  const toolsRows = (): Node[] => {
+    const m = limitOf(d.s)
+    const rings = new Set(d.people.map((p) => webSlot(p))).size
+    // Wave 36b: "closest n" adds nothing while the per-ring cut already stays within n (and the cut is on).
+    const moot = !d.s.uiRings?.perRingLimitOff && closestMoot(m, rings, closestLimit(d.s.uiRings))
+    /** Every Tools row is one line: a leading control, then its label. */
+    const action = (attr: string, glyph: string, label: string, enabled: boolean, onclick: () => void): HTMLElement =>
+      el('div', { class: 'zone-check zone-row' }, [el('button', { type: 'button', class: 'row-action', [attr]: '', ...(enabled ? {} : { disabled: '' }), onclick }, [el('span', { 'aria-hidden': 'true', class: 'row-glyph' }, [glyph]), el('u', {}, [label])])])
+    const connections = el('label', { class: 'zone-check zone-row' }, [
+      el('input', { type: 'checkbox', 'data-zone-connections': '', ...(connectionsShown(d.s) ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'connections', (e.target as HTMLInputElement).checked); d.onChange() } }),
+      ' ', S.zoneConnections,
+    ])
+    const perRing = el('label', { class: 'zone-check zone-row' }, [
+      el('input', { type: 'checkbox', 'data-per-ring': '', ...(d.s.uiRings?.perRingLimitOff ? {} : { checked: '' }), onchange: (e: Event) => { setUi(d.s, 'perRingLimitOff', (e.target as HTMLInputElement).checked ? undefined : true); if ((e.target as HTMLInputElement).checked) setUi(d.s, 'filled', undefined); d.onChange() } }),
+      ' ', S.perRingBefore, numEdit(m, 'data-per-ring-m', (raw) => { const n = parseLimit(raw); if (n !== null) setPerRingLimit(d.s, n); d.onChange() }), ' ',
+      el('button', { type: 'button', class: 'num-edit', 'data-recent-mode': '', onclick: (e: Event) => { e.preventDefault(); setUi(d.s, 'rankBy', d.s.uiRings?.rankBy === 'frequent' ? undefined : 'frequent'); d.onChange() } }, [d.s.uiRings?.rankBy === 'frequent' ? S.perRingFrequent : S.perRingRecent]), S.perRingAfter,
+    ])
+    const autoAdjust = el('label', { class: 'zone-check zone-row', title: S.ringsAutoAdjustHint }, [
+      el('input', { type: 'checkbox', 'data-rings-auto-adjust': '', ...(d.s.uiRings?.autoAdjust ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'autoAdjust', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
+      ' ', S.ringsAutoAdjust,
+    ])
+    const closest = el(moot ? 'div' : 'label', { class: 'zone-check zone-row' + (moot ? ' moot' : ''), ...(moot ? { 'aria-disabled': 'true', 'data-closest-moot': '1', title: S.closestMootHint(m * rings) } : {}) }, [
+      el('input', { type: 'checkbox', 'data-closest150': '', ...(moot ? { disabled: '' } : {}), ...(d.s.uiRings?.closest150 ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'closest150', (e.target as HTMLInputElement).checked); d.onChange() } }),
+      ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
+      ...(moot ? [el('small', { class: 'moot-hint' }, [S.closestMootHint(m * rings)])] : []),
+    ])
+    /** Wave 39: the import tags (#import:<date>-<source>) stay hidden unless this is on. */
+    const systemTags = el('label', { class: 'zone-check zone-row', title: S.imp39.systemTagsHint }, [
+      el('input', { type: 'checkbox', 'data-show-system-tags': '', ...(showSystemTags() ? { checked: '' } : {}), onchange: (e: Event) => { setShowSystemTags((e.target as HTMLInputElement).checked); d.onChange() } }),
+      ' ', S.imp39.systemTags,
+    ])
+    return [el('div', { class: 'zone-tools' }, [d.expand, d.add, ...(d.select ? [d.select] : [])]), connections, perRing, autoAdjust, closest, systemTags, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
-    ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted), tagFilters(d)] : []),
+    ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted)]
+  }
+  const filterCount = activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length)
+  /** The two buttons: inline they fold their section open; on a phone they open the overlay sheet. */
+  const present = (kind: 'tools' | 'filters'): void => {
+    showing = kind
+    d.openPanel([el('h3', {}, [kind === 'tools' ? S.zoneSidebarTitle : S.filtersButton]), ...(kind === 'tools' ? toolsRows() : [tagFilters(d)])])
+  }
+  const button = (kind: 'tools' | 'filters', open: boolean, label: string, attr: string, fold: () => void): HTMLElement =>
+    el('button', { type: 'button', class: 'zone-switch-btn', 'aria-expanded': String(!sheet && open), 'aria-haspopup': sheet ? 'dialog' : false, [attr]: '', onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); if (sheet) present(kind); else fold() } },
+      [sheet ? '' : triangle(open) + ' ', el('u', {}, [label])])
+  return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
+    el('div', { class: 'zone-switch' }, [
+      button('tools', toolsOpen, S.zoneSidebarTitle, 'data-zone-side-toggle', () => { setUi(d.s, 'sidebarOpen', !toolsOpen); d.onChange() }),
+      button('filters', filtersOpen, S.filtersButton + filterCount, 'data-zone-tags-toggle', () => { setUi(d.s, 'showOpen', !filtersOpen); d.onChange() }),
+    ]),
+    ...(!sheet && toolsOpen ? toolsRows() : []),
+    ...(!sheet && filtersOpen ? [tagFilters(d)] : []),
   ])
 }

@@ -395,6 +395,14 @@ export function panelTitle(id: string, features: PreviewFeature[]): string {
 /** After approve, needs work or note the panel stays on the pressed row (wave 37: no hop to the next one); a press from the full list leaves the focus empty. */
 export const focusAfterPress = (focus: string | null, pressed: string): string | null => (focus === pressed ? focus : null)
 
+/** Wave 39: an approve in focus mode jumps at once to the next row (wrapping) that is neither approved nor marked needs work; the pressed row counts as approved. Nothing left: stay. A press from the full list leaves the focus empty. */
+export function focusAfterApprove(features: PreviewFeature[], focus: string | null, pressed: string): string | null {
+  if (focus !== pressed) return null
+  const rows = visible(features), at = rows.findIndex((f) => f.key === pressed)
+  const after = [...rows.slice(at + 1), ...rows.slice(0, Math.max(at, 0))]
+  return after.find((f) => f.key !== pressed && shownVerdict(f) === null)?.key ?? pressed
+}
+
 /** The focus toggle (wave 33): in focus mode it leaves for the full list and remembers the row; in the full list it returns to the last focused row. null = nothing to toggle. */
 export function focusToggle(features: PreviewFeature[], focus: string | null, last: string | null): { to: 'full' | 'focus'; focus: string | null; last: string | null; row: PreviewFeature } | null {
   const rows = visible(features), now = rows.find((f) => f.key === focus), before = rows.find((f) => f.key === last)

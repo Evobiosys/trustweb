@@ -132,8 +132,14 @@ export function nextToExport(list: readonly RtbfService[], s: Sov): RtbfService 
   return list.find((x) => x.exportUrl && !s.sovereign?.services?.[x.id]?.exportAt) ?? null
 }
 
+/** Wave 39: the export-mail watcher shows (under Services) only once an export was asked from some service, or a watcher already runs. */
+export function exportRequested(s: Pick<AppState, 'sovereign'>): boolean {
+  const sov = s.sovereign
+  return Object.values(sov?.services ?? {}).some((v) => v.exportAt !== undefined) || Object.keys(sov?.watch ?? {}).length > 0
+}
+
 /** Wave 28: the sections of the page, top to bottom. Export, be forgotten and erasure requests exist only while Advanced is open. */
 export function pageSections(advancedOpen: boolean): string[] {
-  const base = ['start', 'services', 'watch', 'other', 'sync', 'import', 'advanced']
+  const base = ['start', 'services', 'other', 'sync', 'import', 'advanced']
   return advancedOpen ? [...base, 'export', 'forget', 'erasure'] : base
 }

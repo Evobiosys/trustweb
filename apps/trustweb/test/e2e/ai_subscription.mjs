@@ -81,7 +81,7 @@ try {
     const groups = await page.locator('[data-ai-group]').evaluateAll((g) => g.map((x) => x.getAttribute('data-ai-group')))
     c.ok(`${w}: subscription group first`, groups.join() === 'sub,byok', groups.join())
     const aiText = await page.locator('[data-ai]').innerText()
-    c.ok(`${w}: no pc24 anywhere in stock`, !/pc24/i.test(aiText) && (await page.locator('[data-ai-preset="pc24"]').count()) === 0)
+    c.ok(`${w}: pc24 only as a preset inside Custom, none chosen in stock (wave 39)`, (await page.locator('[data-ai-group="byok"] [data-ai-preset="pc24"]').count()) === 1 && (await page.locator('[data-ai-preset="pc24"].on').count()) === 0)
     const plans = await page.locator('[data-ai-plan]').allInnerTexts()
     c.ok(`${w}: plan cards Small 5 €, Big 18 €, Enterprise`, plans.length === 3 && /Small[\s\S]*5 €/.test(plans[0]) && /Big[\s\S]*18 €/.test(plans[1]) && /Enterprise/.test(plans[2]), plans.join(' | '))
     await page.locator('[data-ai-signup="ai"]').click()
@@ -121,9 +121,9 @@ try {
 
     // 5b review: the token never follows to another provider; "Use the subscription again" brings it back
     await page.locator('[data-ai-group="byok"] > summary').click()
-    await page.locator('[data-ai-preset="openai"]').click()
+    await page.locator('[data-ai-preset="other"]').click()
     const openai = (await record(page)).advanced.ai
-    c.ok(`${w}: picking OpenAI leaves no subscription token as key`, openai.preset === 'openai' && openai.apiKey === '' && openai.sub?.state === 'active', `${openai.preset} key ${openai.apiKey ? 'set' : 'empty'}`)
+    c.ok(`${w}: picking Custom leaves no subscription token as key`, openai.preset === 'custom' && openai.apiKey === '' && openai.sub?.state === 'active', `${openai.preset} key ${openai.apiKey ? 'set' : 'empty'}`)
     await page.locator('[data-ai-use-sub]').click()
     const back = (await record(page)).advanced.ai
     c.ok(`${w}: Use the subscription again restores it`, back.preset === 'tw-subscription' && back.apiKey === ai.apiKey)

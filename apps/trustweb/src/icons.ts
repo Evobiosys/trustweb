@@ -6,8 +6,8 @@
 // users and info are Lucide icons (lucide.dev, ISC licence).
 export const ICONS: Record<string, string> = {
   web: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="10.5" stroke-dasharray="2 3"/></svg>',
-  // Wave 36: the Your AI button, a four-point star.
-  sparkle: '<svg viewBox="0 0 24 24"><path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/></svg>',
+  // Wave 36: the Your AI button; wave 39: a clear four-point sparkle with a small one beside it.
+  sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3c.7 5.6 3.2 8.3 8.5 9-5.3.7-7.8 3.4-8.5 9-.7-5.6-3.2-8.3-8.5-9C6.8 11.3 9.3 8.6 10 3z"/><path d="M19 2.5c.25 1.9.95 2.6 2.7 2.9-1.75.3-2.45 1-2.7 2.9-.25-1.9-.95-2.6-2.7-2.9 1.75-.3 2.45-1 2.7-2.9z"/></svg>',
   feed: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>',
   // The Web Curator: a ring with its dot.
   curator: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>',
@@ -25,6 +25,8 @@ export const ICONS: Record<string, string> = {
   // "Just me" (owner 2026-10-06): the Meeting icon's person on its own, three small sound arcs at the mouth.
   solo: '<svg viewBox="0 0 24 24"><circle cx="7.5" cy="5.6" r="2.7" fill="currentColor" stroke="none"/><rect x="3" y="10" width="9" height="11.5" rx="3" fill="currentColor" stroke="none"/><path d="M14.6 7.6a3 3 0 0 1 0 4"/><path d="M17.4 5.6a6 6 0 0 1 0 8"/><path d="M20.2 3.6a9 9 0 0 1 0 12"/></svg>',
   handshake: '<svg viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>',
+  // Wave 39: the Simple list view, three flat stacked stones (a zen cairn).
+  stones: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="18.4" rx="8.5" ry="3"/><ellipse cx="12" cy="12" rx="6.2" ry="2.6"/><ellipse cx="12" cy="6.2" rx="3.8" ry="2.2"/></svg>',
   users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
   info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
