@@ -1655,3 +1655,15 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .rings-wrap .node:not(.you) .lvl,.rings-wrap .node:not(.you) .dummy-chip{position:absolute; top:100%; left:50%; transform:translateX(-50%); margin:2px 0 0; white-space:nowrap; z-index:3}
 .rings-zoom .rings-wrap .node:not(.you) span{font-size:var(--lbl,11.5px)}
 .rings-zoom .rings-wrap .node:not(.you) .lvl{font-size:calc(var(--lbl,11.5px)*.82)}
+/* wave 39 extensions-profiles */
+.alpha-label{color:var(--ink-2); font-size:.65em; font-weight:400; margin-left:var(--s-1, 4px)}
+.variation b, [data-ext-module] b{text-decoration:underline}
+.variation.on b{text-decoration:none}
+body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-chat-new], body[data-tw-profile="reader"] [data-add-node]{display:none}
+.support-sheet select.field{width:100%; text-decoration:underline}
+.support-closest{display:inline-flex; align-items:center; gap:var(--s-1, 4px)}
+.support-adv{margin-top:var(--s-2, 8px)}
+.support-adv summary{text-decoration:underline; cursor:pointer}
+.support-found{display:flex; flex-wrap:wrap; gap:var(--s-2, 8px); align-items:center; min-width:0}
+.support-found button{text-decoration:underline}
+.support-not-closest{display:flex; gap:var(--s-2, 8px); align-items:center; margin-top:var(--s-2, 8px)}
