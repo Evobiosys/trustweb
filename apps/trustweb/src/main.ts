@@ -470,6 +470,8 @@ const viaCard = createViaCard()
 const personShare = pendingConnect ? parsePersonShare(location.hash) : null
 // Wave 31 (zone_share_link.ts): the same link made for a whole zone; the box names the zone and says there is more to ask for.
 const zoneShare = pendingConnect ? parseZoneShare(location.hash, Date.now()) : null
+// Wave 40 (profile_link.ts): a link may suggest a Variation (#tp=<id>); read here, before the fragment is cleared; offered at the end of boot.
+const linkProfile = profileOfLink(location.hash)
 // Wave 31 (notes_outline.ts): a link may carry an outline note with its provenance; kept on the sender's card after their tap.
 const noteShare = pendingConnect ? parseNoteShare(location.hash) : null
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
@@ -7898,7 +7900,6 @@ document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redr
 document.body.dataset.twProfile = profileOf(state?.twSettings)
 void twRegistry.start().then(renderTabs) // wave 39: a heavy module's view joins the row once it has loaded
 // Wave 40: a connection link may suggest a Variation (#tp=<id>); it applies only on a tap.
-const linkProfile = profileOfLink(location.hash)
 if (linkProfile && profileOf(state?.twSettings) !== linkProfile) toast(S.w40.linkVarOffer(S.var.names[linkProfile]), { onClick: () => chooseProfile(linkProfile, () => undefined) })
 render()
 void refreshOwnPicture()

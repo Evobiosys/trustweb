@@ -1742,7 +1742,7 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 
 /* wave 40 small-ui-d */
 /* the halo: a ring like the raised button's, around one or two views of the row (also in the lists) */
-.tab.tab-halo{border-radius:16px; box-shadow:0 0 0 2px rgba(23,143,134,.6), 0 0 14px rgba(23,143,134,.35)}
+.tab.tab-halo{border-radius:16px; box-shadow:inset 0 0 0 2px rgba(23,143,134,.65), 0 0 12px rgba(23,143,134,.3)}
 .bar-opt-row.tab-halo,.bar-more-view.tab-halo{border-radius:12px; box-shadow:0 0 0 2px rgba(23,143,134,.6), 0 0 10px rgba(23,143,134,.3)}
 .bar-halo-btn{text-decoration:underline}
 .bar-halo-btn[aria-pressed=true]{font-weight:700}
@@ -1753,7 +1753,7 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 .var-chips .chip{text-decoration:underline; cursor:pointer}
 .var-chips .chip.on{font-weight:700; text-decoration:none}
 /* Theme folded under a dropdown like the view picker */
-.theme-row.view-row{margin:4px 0 12px}
+.theme-row.view-row{flex-direction:row; align-items:center; margin:4px 0 12px}
 .theme-row .look-pick{gap:0; min-width:240px}
 .theme-row .look-pick button small{opacity:.7}
 .chat-comm-btn[aria-pressed=true]{background:var(--tint-teal); color:var(--teal)}
