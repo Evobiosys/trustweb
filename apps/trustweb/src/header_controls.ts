@@ -16,13 +16,13 @@ export function headerControls(screen: string): HeaderControl[] | undefined {
 /** Wave 33: the settings gear sits in the header of every screen but Start (Meet, Review, Place, hand-over included). */
 export const showsSettingsGear = (screen: string): boolean => screen !== 'start'
 
-/** What can sit as a button beneath Settings: Do Not Disturb (unpinned by default; its switch is in Settings > Chat), Advanced settings, "Share QR only", and (wave 39, on the Web only) the select tool. */
-export const HEADER_PINS = ['dnd', 'advanced', 'qr-only', 'select'] as const
+/** What can sit as a button beneath Settings: Do Not Disturb (unpinned by default; its switch is in Settings > Chat), Advanced settings and "Share QR only". (Wave 40: the select tool left the header again; it is a row of the Web's Tools.) */
+export const HEADER_PINS = ['dnd', 'advanced', 'qr-only'] as const
 export type HeaderPin = (typeof HEADER_PINS)[number]
 
-/** The stored list (`uiPins.header`); absent = the default, only the select tool (wave 39: moved here from the Web's tool column). */
+/** The stored list (`uiPins.header`); absent = the default, none. */
 export function headerPins(stored: readonly string[] | undefined): HeaderPin[] {
-  return stored === undefined ? ['select'] : HEADER_PINS.filter((p) => stored.includes(p))
+  return stored === undefined ? [] : HEADER_PINS.filter((p) => stored.includes(p))
 }
 
 export function togglePinned(stored: readonly string[] | undefined, pin: HeaderPin): HeaderPin[] {
