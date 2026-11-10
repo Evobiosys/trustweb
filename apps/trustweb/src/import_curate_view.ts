@@ -21,6 +21,7 @@ import type { Pending } from './services_import'
 import { S } from './strings'
 import { bulkAcceptable } from './zone_proposals'
 import { alphaSub } from './alpha_heading'
+import { obsidianLink } from './ext/obsidian/obsidian_card'
 
 export interface CurateHooks {
   state: () => AppState
@@ -221,6 +222,8 @@ export function curatePage(h: CurateHooks): void {
     return el('div', { class: 'conn-row cur-row', style: 'flex-direction:column;align-items:stretch;gap:6px', 'data-svc-row': row.key }, [
       el('label', { class: 'cur-name' }, [el('input', { type: 'checkbox', 'data-cur-check': row.key, ...(ui.sel.has(row.key) ? { checked: '' } : {}), 'aria-label': row.name, onchange: (e: Event) => { if ((e.target as HTMLInputElement).checked) ui.sel.add(row.key); else ui.sel.delete(row.key); draw() } }), el('b', {}, [row.name])]),
       rowContact(row),
+      row.ai ? el('span', { class: 'chip cur-ai', 'data-cur-ai-chip': '' }, [S.obsidian.aiChip]) : null,
+      obsidianLink(h.state(), row.obsidianNote ?? (row.ai ? row.file : undefined)),
       tags.length ? el('div', { class: 'chips cur-pills', 'data-cur-pills': '' }, tags.map((l) => el('button', { class: 'chip cur-pill' + (l === ui.tag ? ' on' : ''), 'data-cur-pill': l, ...u, onclick: () => pickTag(l) }, [`#${l}`]))) : null,
       el('span', { class: 'meta' }, history ? [`${S.ringLabel[row.ring ?? p.ring]} · ${S.svcScore(p.score)} · `, el('i', {}, [S.svcInferred])] : [`${S.ringLabel[row.ring ?? p.ring]} · `, el('i', { 'data-cur-nohistory': '' }, [T.noHistory])]),
       ...(history ? [el('details', { class: 'meta' }, [

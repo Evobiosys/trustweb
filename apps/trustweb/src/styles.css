@@ -1739,3 +1739,8 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 /* the Theme choices are clickable: underlined like the Variations rows (the chosen one is not) */
 .look-pick .radio b{text-decoration:underline}
 .look-pick .radio.on b{text-decoration:none}
+
+/* wave 41 obsidian-sync */
+.cur-ai{border-style:dashed;align-self:flex-start;font-size:.8rem}
+[data-obsidian-page] progress{height:10px}
+[data-obsidian-page] a,[data-obsidian-page] .linkbtn{text-decoration:underline}
