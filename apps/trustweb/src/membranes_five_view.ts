@@ -2,6 +2,7 @@
 /** Wave 25 (membranes_five.ts): the pages and bits the Membranes screen opens: the small card, the "everyone beyond the five" list, the tag filter chip. */
 import { el } from '../../demo/src/ui/dom'
 import type { ColourTag } from './colour_tags'
+import { tagPill } from './components/tag_pill'
 import { Ring } from './model'
 import type { ConnectedPlace } from './connected_places'
 import { ICONS } from './icons'
@@ -171,7 +172,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     el('button', { class: 'chip', 'data-ring-choice': r.ring, 'aria-pressed': String(r.current), onclick: () => d.onRing?.(r.ring) }, [r.label])))
   const togglePicker = (): void => { picker.hidden = !picker.hidden }
   const tagPicker = el('div', { class: 'chips', hidden: true, 'data-tag-pick': p.id }, d.addableTags?.length
-    ? d.addableTags.map((t) => el('button', { class: 'chip', 'data-tag-choice': t.id, onclick: () => d.onAddTag?.(t.id) }, [t.label ?? t.id]))
+    ? d.addableTags.map((t) => tagPill(t, { class: 'chip', attrs: { 'data-tag-choice': t.id }, onclick: () => d.onAddTag?.(t.id) }))
     : [el('span', { class: 'meta' }, [S.cardTagsUndefined])])
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
     el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
@@ -184,7 +185,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     sharesLine(d),
     el('div', { class: 'chips', 'data-card-tags': '' }, [
       ...(d.tags.length
-        ? d.tags.map((t) => el('button', { class: 'chip', 'data-card-tag': t.id, onclick: () => d.onTag(t.id) }, [t.label ?? t.id]))
+        ? d.tags.map((t) => tagPill(t, { class: 'chip', attrs: { 'data-card-tag': t.id }, onclick: () => d.onTag(t.id) }))
         : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
       el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden } }, [S.cardTagAdd]),
     ]),
