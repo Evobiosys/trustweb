@@ -5,11 +5,13 @@ import { el } from '../../demo/src/ui/dom'
 import { Ring } from './model'
 import type { AppState, Peer } from './model'
 import { askPeers } from './non_responsive'
+import { hasColourTag, loadColourTags } from './colour_tags'
+import { foldText } from './settings_search'
 import { S } from './strings'
 import {
-  SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, audiencePeople, buildSupport, emergencyNumber, hereText, isOpen, openAsks, supportText,
+  SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, audience, buildSupport, emergencyNumber, hereText, isOpen, openAsks, supportText,
 } from './support_ask'
-import type { SupportIn } from './support_ask'
+import type { AudienceChoice, SupportIn } from './support_ask'
 
 export interface SupportIo {
   st: () => AppState
@@ -23,32 +25,71 @@ export interface SupportIo {
   appUrl: string
 }
 
-const WIDEST: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Friend]
+/** The zones the dropdown offers, narrowest first (the ask is never wider than Friends); tags follow. */
+const ZONES: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Friend]
 
-/** The people the ask would reach: connected, on the chosen rings, not blocked or silent. */
-function recipients(io: SupportIo, widest: Ring): { peer: Peer; name: string }[] {
+/** The people the ask would reach: connected, in the chosen zone or tag, Closest few always (unless left out), filtered in and out; not blocked or silent. */
+function recipients(io: SupportIo, a: AudienceChoice): { peer: Peer; name: string }[] {
   const s = io.st()
   const open = new Set(askPeers(s).map((p) => p.id))
-  return s.people.filter((p) => p.peerId && open.has(p.peerId) && audiencePeople([p], widest).length)
+  return audience(s.people.filter((p) => p.peerId && open.has(p.peerId)), a, hasColourTag)
     .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name }))
 }
 
 /** The send form: the sheet and the Ask dock both show it; `sent` runs after a send. */
 export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
-  let widest: Ring = Ring.Closest
+  const pick: AudienceChoice = { zone: `ring:${Ring.Closest}` }
+  const include = new Set<string>()
+  const exclude = new Set<string>()
   const chosen = new Set<string>()
   let window: SupportWindow = SupportWindow.Today
   const note = el('textarea', { class: 'field', rows: '2', maxlength: '200', placeholder: S.supportNotePh, 'aria-label': S.supportNotePh, 'data-support-note': '' }) as HTMLTextAreaElement
   const body = el('div', { class: 'support-sheet' })
+  const found = el('div', { class: 'support-found', 'data-support-found': '' })
+  const find = el('input', {
+    class: 'field', type: 'search', placeholder: S.supportFind, 'aria-label': S.supportFind, autocomplete: 'off', 'data-support-find': '',
+    oninput: () => drawFound(),
+  }) as HTMLInputElement
+  const nameOf = (id: string): string => io.st().people.find((p) => p.id === id)?.name ?? ''
+  const mark = (id: string, into: Set<string>, from: Set<string>): void => { from.delete(id); into.add(id); find.value = ''; draw() }
+  /** Matches of the find field, each to include or leave out. */
+  const drawFound = (): void => {
+    const q = foldText(find.value)
+    const hits = q ? io.st().people.filter((p) => p.peerId && !include.has(p.id) && !exclude.has(p.id) && foldText(p.name).includes(q)).slice(0, 5) : []
+    found.replaceChildren(...hits.flatMap((p) => [
+      el('span', {}, [p.name]),
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-support-include': p.id, onclick: () => mark(p.id, include, exclude) }, [S.supportInclude]),
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-support-exclude': p.id, onclick: () => mark(p.id, exclude, include) }, [S.supportLeaveOut]),
+    ]))
+  }
+  const chips = (label: string, ids: Set<string>, attr: string): HTMLElement | null => ids.size === 0 ? null : el('div', { class: 'chips', [attr]: '' }, [
+    el('span', { class: 'chips-lbl' }, [label]),
+    ...[...ids].map((id) => el('button', { class: 'chip on', type: 'button', 'aria-label': S.supportRemove(nameOf(id)), onclick: () => { ids.delete(id); draw() } }, [nameOf(id) + ' ×'])),
+  ])
   const draw = (): void => {
-    const to = recipients(io, widest)
+    pick.include = [...include]
+    pick.exclude = [...exclude]
+    const to = recipients(io, pick)
     const num = emergencyNumber(navigator.language)
-    body.replaceChildren(
+    body.replaceChildren(...[
       el('p', { class: 'chips-lbl' }, [S.supportWho]),
-      el('div', { class: 'chips' }, WIDEST.map((r) => el('button', {
-        class: 'chip' + (r === widest ? ' on' : ''), type: 'button', 'data-support-ring': r, 'aria-pressed': String(r === widest),
-        onclick: () => { widest = r; draw() },
-      }, [S.ringLabel[r]]))),
+      // One audience control: a zone or a tag; Closest few are always in unless the advanced switch says otherwise.
+      el('select', { class: 'field', 'aria-label': S.supportZoneAria, 'data-support-zone': '', onchange: (e) => { pick.zone = (e.target as HTMLSelectElement).value; draw() } }, [
+        ...ZONES.map((r) => el('option', { value: `ring:${r}`, ...(pick.zone === `ring:${r}` ? { selected: '' } : {}) }, [S.ringLabel[r]])),
+        ...loadColourTags().map((t) => el('option', { value: `tag:${t.id}`, ...(pick.zone === `tag:${t.id}` ? { selected: '' } : {}) }, [S.supportTag(t.label ?? t.id)])),
+      ]),
+      pick.notClosest ? null : el('div', { class: 'chips' }, [el('span', { class: 'chip on support-closest', 'data-support-closest-always': '' }, [S.supportClosestAlways])]),
+      find,
+      found,
+      chips(S.supportAlso, include, 'data-support-included'),
+      chips(S.supportLeaveOut, exclude, 'data-support-excluded'),
+      el('details', { class: 'support-adv', 'data-support-advanced': '', ...(pick.notClosest ? { open: '' } : {}) }, [
+        el('summary', {}, [S.supportAdvanced]),
+        el('label', { class: 'support-not-closest' }, [
+          el('input', { type: 'checkbox', 'data-support-not-closest': '', ...(pick.notClosest ? { checked: '' } : {}), onchange: (e) => { pick.notClosest = (e.target as HTMLInputElement).checked; draw() } }),
+          el('span', {}, [S.supportNotClosest]),
+        ]),
+      ]),
       el('p', { class: 'hint', 'data-support-count': String(to.length) }, [to.length ? S.supportOnly(to.length) : S.supportNobody]),
       el('p', { class: 'chips-lbl' }, [S.supportWhat]),
       el('div', { class: 'chips' }, SUPPORT_CHIPS.map((c) => el('button', {
@@ -63,7 +104,7 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
       }, [label]))),
       el('button', { class: 'btn btn-electric wide', type: 'button', 'data-support-send': '', disabled: to.length === 0, onclick: () => send(to) }, [S.supportSend]),
       el('p', { class: 'hint', 'data-support-danger': '' }, [num === '112' ? S.supportDangerEu(num) : S.supportDanger(num)]),
-    )
+    ].filter((n): n is HTMLElement => n !== null))
   }
   const send = (to: { peer: Peer }[]): void => {
     const s = io.st()

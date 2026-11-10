@@ -264,7 +264,8 @@ import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { EXT_MODULES, type ExtHooks, type ThreadSummary } from './ext/registry'
+import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary } from './ext/registry'
+import { alphaHeading } from './alpha_heading'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
@@ -1115,7 +1116,7 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
@@ -2840,7 +2841,7 @@ function screenViewDrop(): HTMLElement | null {
   const which = screen === Screen.Events ? 'events' : 'inventory'
   if (!eyeOpen) return null
   const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : screen === Screen.Notes ? 'notes' : invMatches ? 'matches' : zoom.inventory ? 'outline' : 'list'
-  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).map((v) => {
+  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).filter((v) => v.key !== 'matches' || isEnabled('matches')).map((v) => {
     const b = el('button', { class: 'view-opt' + (v.key === current ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(v.key === current), 'data-view': v.key, disabled: !v.available, onclick: () => chooseScreenView(which, v.key) })
     b.innerHTML = icon(v.key === 'list' || v.key === 'matches' || v.key === 'notes' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
     b.append(el('b', {}, [v.available ? S.screenViewNames[v.key] : S.viewSolarOff]))
@@ -3030,7 +3031,6 @@ function screenWeb(): Node[] {
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
     supportLine(supportIo),
-    wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
@@ -3051,6 +3051,7 @@ function screenWeb(): Node[] {
       : clip,
     // Wave 39: the browser-only notice sits under the web, outside the zoomed layer (inside it the zoom scaled the line off the screen).
     ...[browserOnlyNotice()].filter((n): n is HTMLElement => n !== null),
+    ...[wantsToConnectSection()].filter((d): d is HTMLElement => d !== null),   // wave 39: below the zoom clip, so it stays put and full size while the Web zooms
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
@@ -3063,7 +3064,7 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
   const pinned = headerPins(s.uiPins?.header).includes('select')
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, ...(pinned ? {} : { select: selectToolButton() }), hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, ...(pinned ? {} : { select: selectToolButton() }), hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted(), openPanel: (children) => openSheet(children) })
 }
 
 /** Wave 39: the select tool; it sits beneath Settings in the header (a pin, on by default) or, unpinned, in the Web's tool column. */
@@ -3232,6 +3233,13 @@ function openQuery(): void {
 }
 
 function queryFab(): HTMLElement {
+  // Wave 39: in the IYG support variation the Web's primary button asks for support.
+  if (profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')) {
+    const b = el('button', { class: 'query-fab', 'aria-label': S.supportTitle, 'data-open-query': '1', 'data-support-primary': '', onclick: () => { askMode = AskMode.Support; openQuery() } })
+    b.innerHTML = icon('query')
+    b.append(el('span', {}, [S.supportTitle]))
+    return b
+  }
   const call = queryStyle() === QueryStyle.Call
   const b = el('button', {
     class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
@@ -3592,7 +3600,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   const open = (svc: ChatService): void => {
     noteUsed(st(), p.id, svc.id, Date.now()); save()
     if (svc.url) {
-      if (!EXT_MODULES.some((m) => m.openExternal?.(svc.url!))) {
+      if (!extOn.some((m) => m.openExternal?.(svc.url!))) {
         const app = appLinkFor(svc.url)
         if (app) openLocalFirst(app, svc.url, browserOpenEnv())
         else window.open(svc.url, '_blank', 'noopener,noreferrer')
@@ -4892,10 +4900,17 @@ const extHooks: ExtHooks = {
   openChat: (personId) => chatSheet(personId),
   guestChanged: (show) => { renderTabs(); if (!show) go(Screen.Web); else if (st().coGuest?.eventId) openEvents(st().coGuest?.eventId); else go(Screen.Chat) },
 }
-const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
-const coNotes = EXT_MODULES.find((m) => m.id === 'co-notes')?.screen(extHooks)
+// Wave 39: the module registry reads its switches from the record (loaded above); the legacy modules are read once, a switch needs one reload.
+bindTw({
+  settings: () => state?.twSettings,
+  save: (t) => { st().twSettings = t; save() },
+  ctx: () => ({ store: st, strings: S, bus: createBus(), navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings) }),
+})
+const extOn = EXT_MODULES.filter((m) => isEnabled(m.id))
+const cal = extOn.find((m) => m.id === 'calendar')?.screen(extHooks)
+const coNotes = extOn.find((m) => m.id === 'co-notes')?.screen(extHooks)
 /** Wave 27: the messengers extension modules add to the Chat screen's Extend. */
-const messengers = EXT_MODULES.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
+const messengers = extOn.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
 
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet: openCardPage, itemSheet,
@@ -6744,15 +6759,61 @@ function reachOutLink(): string {
  * Settings sections: a folded <details> each; the open state is remembered per device (trustweb.ui.settings.<key>);
  * `first` opens when nothing is remembered. An empty section is not drawn.
  */
-function settingsSection(key: string, title: string, children: (Node | null)[], first = false): Node | null {
+function settingsSection(key: string, title: string | (Node | string)[], children: (Node | null)[], first = false): Node | null {
   if (!children.some(Boolean)) return null
   const attrs: Record<string, string> = { 'data-settings-section': key, class: 'settings-adv' }
   if (key === 'advanced') attrs['data-settings-advanced'] = '1'
-  const d = el('details', attrs, [el('summary', { class: 'adv-toggle' }, [title]), ...children]) as HTMLDetailsElement
+  const d = el('details', attrs, [el('summary', { class: 'adv-toggle' }, Array.isArray(title) ? title : [title]), ...children]) as HTMLDetailsElement
   const k = `trustweb.ui.settings.${key}`
   try { const v = localStorage.getItem(k); d.open = v === null ? first : v === '1' } catch { d.open = first }
   d.addEventListener('toggle', () => { try { localStorage.setItem(k, d.open ? '1' : '0') } catch { /* ignore */ } })
   return d
+}
+
+/** Wave 39: a profile or module switch changed: the bottom row, the screen and Settings follow; modules read once at load ask for one reload. */
+function twChanged(): void {
+  document.body.dataset.twProfile = profileOf(state?.twSettings)
+  const s = st()
+  if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
+  renderTabs(); render(); settingsSheet()
+  if (twRegistry.needsReload().length) toast(S.ext.reload)
+}
+
+function chooseProfile(id: ProfileId): void {
+  void twRegistry.setProfile(id).then(() => {
+    const preset = profileDef(id).barPreset
+    if (preset) { st().uiBar = applyProfile(st().uiBar, preset); save() }
+    twChanged()
+  })
+}
+
+/** Wave 39: Settings > Variations (above General): Dex (moved here from the view row) and the profiles; the current one is marked. */
+function variationRows(s: AppState): Node[] {
+  const cur = profileOf(s.twSettings)
+  return [
+    el('p', { class: 'meta' }, [S.var.hint]),
+    el('button', { class: 'radio variation', 'data-variation': 'dex', onclick: () => showDesktopVersion(UiView.Dex) }, [el('b', {}, [S.var.dex]), el('small', {}, [S.var.dexHint])]),
+    el('p', { class: 'meta view-dex-info', 'data-dex-info': '' }, [el('a', { href: DEX_URL, target: '_blank', rel: 'noopener' }, [S.views.dexInfo])]),
+    ...TW_PROFILES.map((p) => el('button', {
+      class: 'radio variation' + (p.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(p.id === cur), 'data-variation': p.id, onclick: () => chooseProfile(p.id),
+    }, [el('b', {}, [(p.id === cur ? '✓ ' : '') + S.var.names[p.id]]), el('small', {}, [S.var.hints[p.id] + (p.id === cur ? ` · ${S.var.current}` : '')])])),
+  ]
+}
+
+/** Wave 39: Settings > General > Extensions: one switch per module with its one line; heavy ones say they load only when on. */
+function extensionRows(): Node[] {
+  return [
+    el('p', { class: 'meta' }, [S.ext.hint]),
+    ...twRegistry.listModules().map((m) => {
+      const on = isEnabled(m.id)
+      return el('button', {
+        class: 'radio' + (on ? ' on' : ''), role: 'switch', 'aria-checked': String(on), 'aria-pressed': String(on), 'data-ext-module': m.id,
+        onclick: () => { void twRegistry.setEnabled(m.id, !on).then(twChanged) },
+      }, [el('b', {}, [m.title]), el('small', {}, [[m.description, m.heavy ? S.ext.heavy : ''].filter(Boolean).join(' · ')])])
+    }),
+    ...twRegistry.settingsSections().flatMap((sec) => [el('h4', { class: 'eyebrow' }, [sec.title]), ...sec.rows()]),
+    ...(coNotes?.settingsRows?.() ?? []),
+  ]
 }
 
 /** Group ids that stay open across the redraws a toggle causes; reset to the lead group whenever Settings opens afresh. */
@@ -6812,12 +6873,15 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
-      el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
-      el('p', { class: 'meta' }, [S.viewPinsHint]),
-      ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
-        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
-        el('b', {}, [S.viewNames[i.view]]),
-      ])),
+      // Wave 39: folded until asked for (settings redraws keep it closed; a tick does not redraw the sheet).
+      el('details', { class: 'settings-adv', 'data-pin-views': '' }, [
+        el('summary', { class: 'adv-toggle' }, [S.viewPinsTitle]),
+        el('p', { class: 'meta' }, [S.viewPinsHint]),
+        ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+          el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
+          el('b', {}, [S.viewNames[i.view]]),
+        ])),
+      ]),
     ]),
     settingsSection('skins', S.setSkins, [
       el('div', { 'data-settings-skins': '' }, [
@@ -6983,8 +7047,8 @@ function settingsSheet(): void {
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
       eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
     })),
-    settingsSection('features', S.setSecFeatures, feed.settingsGroup()),
-    settingsSection('extensions', S.coNotes.group, coNotes?.settingsRows?.() ?? []),
+    settingsSection('features', S.setSecFeatures, isEnabled('feed') ? feed.settingsGroup() : []),
+    settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
     settingsSection('advanced', S.setAdvanced, [
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
     el('h4', { class: 'eyebrow' }, [S.headerPinsTitle]),
@@ -7095,7 +7159,8 @@ function settingsSheet(): void {
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
-    ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
+    el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
+    ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
   ])
   sheet.dataset.kind = 'settings'
   if (settingsQuery) filterSettings(sheet, settingsQuery)
@@ -7432,7 +7497,7 @@ function queryDock(s: AppState): HTMLElement {
     if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
     save(); render()
   })
-  const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.map((m) => el('button', {
+  const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {
     class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
     onclick: () => { askMode = m; render() },
   }, [{ [AskMode.Support]: S.askModeSupport, [AskMode.Hints]: S.askModeHints, [AskMode.Intros]: S.askModeIntros }[m]])))
@@ -7674,6 +7739,8 @@ window.addEventListener('storage', (e) => {
 })
 document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
+document.body.dataset.twProfile = profileOf(state?.twSettings)
+void twRegistry.start()
 render()
 void refreshOwnPicture()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })

@@ -6,6 +6,15 @@ import { renamedTo } from './card_name'
 /** How long the card stays once the pointer left handle, band and card (time to cross the gap). */
 export const GRACE_MS = 250
 
+/** Wave 39: the pointer counts as being on the card within this many px around it, so the gap between a ring line and the card never closes it (the regression after the stroke-only hit test). */
+export const BRIDGE_PX = 24
+
+export interface PxRect { left: number; top: number; right: number; bottom: number }
+
+/** True when the point (screen px) sits on the card's rectangle or in the margin `pad` around it. */
+export const nearCard = (p: { x: number; y: number }, card: PxRect, pad = BRIDGE_PX): boolean =>
+  p.x >= card.left - pad && p.x <= card.right + pad && p.y >= card.top - pad && p.y <= card.bottom + pad
+
 export interface HoverState {
   /** The ring whose card is shown. */
   open: Ring | null
