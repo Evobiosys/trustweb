@@ -5174,7 +5174,7 @@ defineAppActions(appActions, {
   modules: () => listModules().map((m) => m.id),
   defaults: () => Object.fromEntries(listModules().map((m) => [m.id, m.enabledByDefault])),
   isEnabled,
-  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(twChanged) },
+  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(() => twChanged()) },
   setting: (k) => (k === 'system-tags' ? showSystemTags() : k === 'chats-hidden' ? Boolean(st().chatsHidden) : readTheme(localStorage) === 'dark'),
   setSetting: (k, on) => {
     if (k === 'system-tags') setShowSystemTags(on)
@@ -5182,7 +5182,7 @@ defineAppActions(appActions, {
     else applyTheme(on ? 'dark' : 'light', document.documentElement, localStorage)
     render(); if (settingsShown()) settingsSheet()
   },
-  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(twChanged) },
+  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(() => twChanged()) },
   newId: () => randomId(8),
   now: () => Date.now(),
 })
