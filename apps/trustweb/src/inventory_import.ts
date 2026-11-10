@@ -139,8 +139,16 @@ function changed(item: InventoryItem, as: ImportBatch['items'][number]): boolean
   return item.text !== as.text || item.audience !== as.audience
 }
 
-/** Undo one import: removes its items the person has not changed; the batch goes. Returns removed / kept counts. */
-export function undoImport(s: AppState, batchId: string): { removed: number; kept: number } {
+/** Wave 39: the ids of an import's items the person changed since (text or who can ask): Undo keeps them unless "also undo my edits". */
+export function editedItems(s: AppState, batchId: string): string[] {
+  const batch = (s.imports ?? []).find((b) => b.id === batchId)
+  if (!batch) return []
+  const byId = new Map(batch.items.map((x) => [x.itemId, x]))
+  return s.inventory.filter((item) => { const as = byId.get(item.id); return as !== undefined && (changed(item, as) || item.source?.ref !== as.key) }).map((i) => i.id)
+}
+
+/** Undo one import: removes its items the person has not changed (all of them with `undoEdits`); the batch goes. Returns removed / kept counts. */
+export function undoImport(s: AppState, batchId: string, opts: { undoEdits?: boolean } = {}): { removed: number; kept: number } {
   const batch = (s.imports ?? []).find((b) => b.id === batchId)
   if (!batch) return { removed: 0, kept: 0 }
   const byId = new Map(batch.items.map((x) => [x.itemId, x]))
@@ -149,7 +157,7 @@ export function undoImport(s: AppState, batchId: string): { removed: number; kep
   s.inventory = s.inventory.filter((item) => {
     const as = byId.get(item.id)
     if (!as) return true
-    if (changed(item, as) || item.source?.ref !== as.key) { kept++; return true }
+    if (!opts.undoEdits && (changed(item, as) || item.source?.ref !== as.key)) { kept++; return true }
     removed++
     return false
   })

@@ -239,9 +239,9 @@ import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
-import { importGroup } from './import_view'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
-import { offerContacts, openServicesImport, servicesGroup } from './services_view'
+import { offerContacts, openServicesImport } from './services_view'
+import type { ServicesHooks } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
@@ -1013,7 +1013,10 @@ const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 /** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
 const pages = createPages(phone)
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
-const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }
+/** Wave 39: the one Import page (contacts, resources file, Tana, earlier imports with Undo); every old entry point opens it. */
+const importHooks = (): ServicesHooks => ({ state: st, save, toast, changed: render, pages, openAi: () => openAiButton() })
+const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry])
+const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
 mountOnboardingNotice(onboardHooks)
 // Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
 void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
@@ -1022,7 +1025,7 @@ const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
   peers: () => st().peers.filter((p) => !isBlocked(personOf(st().people, p.id))),
   send: (peer, text) => net.sendText(peer, text),
-  importRows: () => (solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+  importRows: () => (solo ? [] : [importEntry()]),
 })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
@@ -6872,7 +6875,7 @@ function settingsSheet(): void {
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
-      el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
+      importEntry(),
       // Wave 39: folded until asked for (settings redraws keep it closed; a tick does not redraw the sheet).
       el('details', { class: 'settings-adv', 'data-pin-views': '' }, [
         el('summary', { class: 'adv-toggle' }, [S.viewPinsTitle]),
@@ -7014,9 +7017,8 @@ function settingsSheet(): void {
     inventory: [
       featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
     settingsSection('sources', S.setSources, sourcesGroup(s)),
-    ...(solo ? [] : servicesGroup({ state: st, save, toast, changed: render, pages })),
+    ...(solo ? [] : [importEntry()]),
     settingsSection('advanced-inventory', S.setAdvanced, [
-    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     el('button', {
       class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
       // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.

@@ -5,7 +5,6 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
-import { Ring } from './model'
 import type { AppState } from './model'
 import { autoMap, CSV_FIELDS } from '../../crm/src/import/generic_csv'
 import type { CsvField } from '../../crm/src/import/generic_csv'
@@ -15,10 +14,11 @@ import { COMING_SOURCES, VERIFIED_SOURCES } from './import_sources'
 import { failRun, finishRun, IDLE_RUN, startRun, tickRun } from './import_run'
 import type { Run } from './import_run'
 import type { Pages } from './page_view'
-import { bulkAccept, commitPlan, countsLine, decide, pendingProposals, personFor, planServices, undoBatch } from './services_import'
+import { commitPlan, countsLine, pendingProposals, planServices } from './services_import'
 import type { ServiceFile, ServicePlan } from './services_import'
+import { curatePage } from './import_curate_view'
+import { openImportHome } from './import_home_view'
 import { S } from './strings'
-import { bulkAcceptable } from './zone_proposals'
 
 export interface ServicesHooks {
   state: () => AppState
@@ -27,11 +27,13 @@ export interface ServicesHooks {
   /** After people were added or taken away: the web redraws. */
   changed: () => void
   pages: Pages
+  /** Wave 39: the Import page shows the result of an import inside itself (the dialog stays in the overlay the owner is looking at). */
+  done?: (text: string, review?: () => void) => void
+  /** The existing "Your AI" entry (a stub button on the Curate page opens it). */
+  openAi?: () => void
 }
 
 const FILE_MAX_BYTES = 20 * 1024 * 1024
-/** The zones the owner may move a person to on the Curate page (the proposal itself never goes above Friend). */
-const CHANGE_RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 const info = (text: string): HTMLElement =>
   el('details', { class: 'meta', 'data-svc-info': '' }, [el('summary', { style: 'text-decoration:underline;cursor:pointer;display:inline' }, [S.svcInfoMark]), el('p', { class: 'meta' }, [text])])
 
@@ -56,6 +58,9 @@ export function offerContacts(h: ServicesHooks, contacts: ImportedContact[]): vo
   if (redraw && document.querySelector('[data-import-services]')?.isConnected) redraw()
   else openServicesImport(h)
 }
+
+/** The open Contacts box draws itself again (its counts, e.g. "Curate (n)", read the record). */
+export function refreshServices(): void { redraw?.() }
 
 export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   const box = el('div', { 'data-import-services': '1' })
@@ -127,16 +132,8 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
     plan = null
     files = []
     draw()
+    h.done?.(S.imp39.doneStaged(p.rows.length), () => curatePage(h))
     curatePage(h)
-  }
-
-  function undo(batchId: string): void {
-    if (!confirm(S.svcUndoConfirm)) return
-    const r = undoBatch(h.state(), batchId)
-    h.save()
-    h.changed()
-    h.toast(S.svcUndone(r.archived, r.restored, r.kept))
-    draw()
   }
 
   function draw(): void {
@@ -154,7 +151,6 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
       last ? el('div', { class: 'conn-row', 'data-svc-last': last.id }, [
         el('span', {}, [S.svcLast(new Date(last.at).toLocaleDateString(), last.rows.length)]),
         waiting ? el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-curate': '1', onclick: () => curatePage(h) }, [S.svcCurate(waiting)]) : null,
-        el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-undo': last.id, onclick: () => undo(last.id) }, [S.svcUndo]),
       ].filter((x): x is HTMLElement => x !== null)) : null,
     ].filter((x): x is HTMLElement => x !== null))
   }
@@ -163,49 +159,9 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   return [box, googleGroup((contacts) => offerContacts(h, contacts), h.toast), exportEntry({ state: h.state, toast: h.toast, pages: h.pages })]
 }
 
-/** The one way in from Contacts and from Settings: the same section, as a page with Back (shared state lives in this module). */
+/** The one way in from Contacts, Settings and "Import everything": the Import page (import_home_view.ts); its Contacts section is servicesGroup above. */
 export function openServicesImport(h: ServicesHooks): void {
-  h.pages.open(S.svcGroup, servicesGroup(h), 'import-services')
+  openImportHome(h)
 }
 
-/** The Curate page: one row per proposal, Accept / Change / Leave; bulk accept only for rows with no flag. */
-export function curatePage(h: ServicesHooks): void {
-  const list = el('div', { 'data-svc-list': '1' })
-  const bulk = el('div')
-  const draw = (): void => {
-    const now = Date.now()
-    const rows = pendingProposals(h.state(), now)
-    const free = rows.filter((x) => bulkAcceptable(x.proposal)).length
-    bulk.replaceChildren(...(free ? [el('button', { class: 'btn btn-electric', 'data-svc-bulk': String(free), onclick: () => { bulkAccept(h.state(), Date.now(), () => randomId(8)); h.save(); h.changed(); draw() } }, [S.svcAcceptAll(free)])] : []))
-    list.replaceChildren(...(rows.length ? rows.map(({ batchId, row, proposal: p }) => {
-      const act = (choice: Parameters<typeof decide>[3]): void => {
-        decide(h.state(), batchId, row.key, choice, Date.now(), () => randomId(8))
-        h.save()
-        if (choice.do !== 'leave') { h.changed(); h.toast(S.svcAccepted(row.name)) }
-        draw()
-      }
-      const found = personFor(h.state(), row)
-      const maybe = found?.by === 'name' && (row.emails?.length || row.phones?.length) ? found : undefined
-      const pick = el('select', { style: 'max-width:100%', 'aria-label': S.svcChange, 'data-svc-ring': row.key }, CHANGE_RINGS.map((r) => el('option', { value: r, selected: r === p.ring }, [S.ringLabel[r]]))) as HTMLSelectElement
-      return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:6px', 'data-svc-row': row.key }, [
-        el('b', {}, [row.name]),
-        el('span', { class: 'meta' }, [`${S.ringLabel[p.ring]} · ${S.svcScore(p.score)} · `, el('i', {}, [S.svcInferred])]),
-        el('details', { class: 'meta' }, [
-          el('summary', { style: 'text-decoration:underline;cursor:pointer;display:inline' }, [S.svcInfoMark]),
-          el('p', { class: 'meta' }, [S.svcTerms(p.terms.freq, p.terms.recency, p.terms.reciprocity, p.n365)]),
-          ...p.flags.map((f) => el('p', { class: 'warn' }, [f === 'one-way' ? S.svcFlagOneWay : S.svcFlagDupe])),
-          maybe ? el('p', { class: 'warn', 'data-svc-possible-match': row.key }, [S.svcPossibleMatch(maybe.person.name)]) : null,
-        ].filter((x): x is HTMLElement => x !== null)),
-        el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' }, ([
-          el('button', { class: 'btn btn-electric btn-sm', 'data-svc-accept': row.key, onclick: () => act({ do: 'accept' }) }, [S.svcAccept]),
-          maybe ? el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-confirm-match': row.key, onclick: () => act({ do: 'accept', confirm: true }) }, [S.svcConfirmMatch(maybe.person.name)]) : null,
-          pick,
-          el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-change': row.key, onclick: () => act({ do: 'change', ring: pick.value as Ring }) }, [S.svcChange]),
-          el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-leave': row.key, onclick: () => act({ do: 'leave' }) }, [S.svcLeave]),
-        ] as (HTMLElement | null)[]).filter((x): x is HTMLElement => x !== null)),
-      ])
-    }) : [el('p', { class: 'meta', 'data-svc-empty': '1' }, [S.svcCurateEmpty])]))
-  }
-  draw()
-  h.pages.open(S.svcCuratePage, [bulk, list], 'import-curate')
-}
+export { curatePage }
