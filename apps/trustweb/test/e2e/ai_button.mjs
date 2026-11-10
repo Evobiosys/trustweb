@@ -52,7 +52,7 @@ try {
     })
     await page.reload(); await page.getByRole('heading', { name: 'TrustZones' }).waitFor()
     await page.locator('[data-ai-button]').click()
-    c.ok(`${w}: with an endpoint the press opens the Ask sheet`, (await page.locator('[data-ask-input]').count()) > 0)
+    c.ok(`${w}: with an endpoint the press still opens the Your AI sheet (wave 41)`, (await page.locator('[data-ai-group="sub"]').count()) > 0 && (await page.locator('[data-ask-input]').count()) === 0)
     await shot(page, `${w}-ask`)
     await page.context().close()
   }

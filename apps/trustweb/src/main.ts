@@ -302,7 +302,6 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
 import { aiSettings, bootAi } from './llm_endpoint_view'
-import { aiButtonTarget } from './ai_button'
 import { agentSettings } from './agent_view'
 import { ownChannels } from './channel_readers'
 import { readersBlock } from './channel_readers_view'
@@ -1612,15 +1611,14 @@ function openAdvancedSettings(): void {
   settingsSheet()
 }
 
-/** Wave 37: the Web header's AI button: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
+/** Wave 41: Your AI (Claude plans, Custom, Agent (pi)) as one block. The AI sparkle opens it as its own sheet, Settings shows the same block as its own section "AI". */
+function aiBlock(back: () => void): Node[] {
+  return [...aiSettings({ state: st, save, toast, openSheet, backToSettings: back }), ...agentSettings({ state: st, save })]
+}
+
+/** The AI button always opens the Your AI sheet (wave 41, screenshot 94df73a3); asking the web stays on "Ask your web". */
 function openAiButton(): void {
-  const to = aiButtonTarget(configured(st().advanced?.ai))
-  if (to.kind === 'ask') { openQuery(); return }
-  try { localStorage.setItem('trustweb.ui.settings.advanced', '1') } catch { /* not remembered */ }
-  settingsSheet()
-  const at = sheet.querySelector(to.anchor)
-  for (let d = at?.closest('details'); d; d = d.parentElement?.closest('details')) { d.open = true; if (d.dataset.settingsGroup) settingsOpen.add(d.dataset.settingsGroup) }
-  at?.scrollIntoView({ block: 'start' })
+  openSheet(aiBlock(openAiButton))
 }
 
 const PIN_ACTIONS: Record<HeaderPin, { icon: string; run: () => void }> = {
@@ -7116,8 +7114,6 @@ function settingsSheet(): void {
       el('input', { type: 'checkbox', ...(s.qrProfileOption ? { checked: '' } : {}), onchange: () => { s.qrProfileOption = !s.qrProfileOption; save() } }),
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
-    ...aiSettings({ state: st, save, toast, openSheet, backToSettings: () => { sheet.dataset.kind = 'settings'; settingsSheet() } }),
-    ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
     ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
     ...(liveDevActive() ? [editStreamLine()] : []),
@@ -7216,6 +7212,8 @@ function settingsSheet(): void {
     keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
+    // Wave 41: AI is a section of its own (it sat inside Advanced); same block as the AI sparkle's sheet.
+    el('div', { 'data-settings-group': 'ai' }, [settingsSection('ai', S.setSecAi, aiBlock(() => { sheet.dataset.kind = 'settings'; settingsSheet() }))]),
     ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
   ])
   sheet.dataset.kind = 'settings'

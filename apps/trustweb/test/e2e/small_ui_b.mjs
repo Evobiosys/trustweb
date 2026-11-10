@@ -70,6 +70,7 @@ try {
     check(`${w}: no horizontal scroll in Your AI`, await noOverflow(page))
 
     // 3 + 8: view picker and Theme
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300); await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(400)   // wave 41: the sparkle opens the AI sheet; Settings via the gear
     await page.locator('[data-view-pill]').scrollIntoViewIfNeeded(); await page.locator('[data-view-pill]').click(); await page.waitForTimeout(200)
     const views = await page.locator('.view-menu [data-view]').evaluateAll((b) => b.map((x) => x.dataset.view))
     check(`${w}: view picker offers only Dex and TrustWeb (${views})`, views.join() === 'dex,trustweb')
@@ -90,7 +91,7 @@ try {
     await shot(page, 'theme-dex-web', w)
     await page.evaluate(() => { document.documentElement.dataset.look = 'sleek' }); await page.waitForTimeout(200)
     await shot(page, 'theme-sleek-web', w)
-    await page.locator('[data-ai-button]').click(); await page.waitForTimeout(400)
+    await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(400)
     await page.locator('[data-look-choice="default"]').evaluate((e) => e.click()); await page.waitForTimeout(300)
     check(`${w}: Default clears the look`, (await page.evaluate(() => document.documentElement.dataset.look)) === undefined && (await page.evaluate(() => localStorage.getItem('tw-look'))) === null)
     check(`${w}: no page errors (${errors.join(' | ')})`, errors.length === 0)
@@ -125,7 +126,7 @@ try {
     await shot(stock.page, 'dock-before', w); await stock.ctx.close()
     const big = await open(browser, 'big', w, record({}, 80))
     check('own data (80 people): the dock is hidden from the main flow', (await big.page.locator('.page-dock').evaluate((d) => d.hidden)))
-    await big.page.locator('[data-ai-button]').click(); await big.page.waitForTimeout(400)
+    await big.page.locator('[data-settings-gear]').click(); await big.page.waitForTimeout(400)
     await big.page.locator('[data-settings-group="general"] > summary, [data-settings-group="advanced"] > summary').first().click().catch(() => {})
     await big.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true }); await big.page.waitForTimeout(300)
     check('own data: Settings > Advanced holds Add a device and See TrustWeb in action', (await big.page.locator('[data-add-device]').count()) === 1 && (await big.page.locator('[data-see-action]').count()) === 1)
@@ -135,12 +136,12 @@ try {
   // 4 + 6: export-mail watcher under Services, only after an export was asked; paste a mail
   for (const w of [360, 1280]) {
     const none = await open(browser, 'sov0', w, record())
-    await none.page.locator('[data-ai-button]').click(); await none.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
+    await none.page.locator('[data-settings-gear]').click(); await none.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
     await none.page.locator('[data-settings-sovereign]').click(); await none.page.waitForTimeout(500)
     check(`${w}: nothing asked yet -> no watcher`, (await none.page.locator('[data-sov-section="watch"]').count()) === 0)
     await none.ctx.close()
     const asked = await open(browser, 'sov1', w, record({ sovereign: { services: { google: { exportAt: Date.now() } } } }))
-    await asked.page.locator('[data-ai-button]').click(); await asked.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
+    await asked.page.locator('[data-settings-gear]').click(); await asked.page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = true })
     await asked.page.locator('[data-settings-sovereign]').click(); await asked.page.waitForTimeout(500)
     check(`${w}: export asked -> watcher appears under Services`, (await asked.page.locator('[data-sov-section="services"] [data-sov-section="watch"]').count()) === 1)
     check(`${w}: heading carries "untested alpha feature"`, /untested alpha feature/.test(await asked.page.locator('[data-sov-section="watch"] > summary').innerText()))
