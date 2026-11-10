@@ -69,6 +69,8 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', 'agent',
   // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
   'groups',
+  // wave 40 hover-sources: what I said about how two contacts relate stays on this phone
+  'relations',
   // wave 37 co-notes-link: invites, guest shell, note chats and this device's secret belong to this phone only
   'coInvites', 'coGuest', 'coChats', 'coDevice',
 ])

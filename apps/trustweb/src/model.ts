@@ -9,6 +9,7 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
+import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
@@ -1139,6 +1140,8 @@ export interface AppState {
   profile?: MyProfile
   /** Wave 36 (group_fit.ts): groups I could join or help. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED), never sent. Absent: none. */
   groups?: TwGroup[]
+  /** Wave 40 (relations_model.ts): what I said about how two of my contacts relate (a kind, or none). THIS DEVICE ONLY (sync_core SYNC_EXCLUDED), never sent. Absent: nothing said. */
+  relations?: StatedRelation[]
   /** Wave 20 (profile.ts autoSendRank): peer id -> the widest zone reach whose profile slice already went to that peer automatically. */
   autoSentRank?: Record<string, number>
   /** Wave 20: Settings "Share my profile when we connect". Absent: on; only true (off) is stored. */

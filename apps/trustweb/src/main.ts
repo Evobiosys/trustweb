@@ -29,7 +29,7 @@ import { ownDataImported } from './own_data'
 import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
+import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
@@ -167,7 +167,12 @@ import { activeLineDue, recordThought } from './thought_of'
 import { completeQuery, completeView, resetComplete, setCompleteQuery } from './complete_view'
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
+import { clearStated, setStated } from './relations_model'
+import { relationsSection } from './relations_view'
 import { personImageOk } from './person_image'
+import { applyImageMode, imageMode, pictureUrl } from './image_mode'
+import { clearPhotosDb } from './ext/photos/photos_data'
+import { faceMatchRow } from './ext/photos/photos_settings'
 import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
@@ -241,7 +246,9 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
+import { googleFlagSet, setGoogleConnect } from './google_flag'
 import { offerContacts, openServicesImport } from './services_view'
+import type { ImportedContact } from '../../crm/src/import/types'
 import type { ServicesHooks } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
@@ -272,6 +279,7 @@ import { ensureTags } from './import_curate_view'
 import { curatePage as curateImportPage } from './services_view'
 import { createViewHost } from './ext/view_host'
 import { alphaHeading, alphaSub } from './alpha_heading'
+import { tagManagerView } from './tag_manager_view'
 import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
@@ -509,6 +517,8 @@ function installedHere(): boolean {
 // Wave 27 review: the extension modules read their pairing links from this copy, taken before the clean below.
 const bootHash = location.hash
 const bootSearch = location.search
+// Wave 40: Google's return trip (?code=...) is read from the address as opened; the clean below removes it.
+const bootHref = location.href
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
 
@@ -1035,7 +1045,7 @@ const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'd
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
 mountOnboardingNotice(onboardHooks)
 // Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
-void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
+void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts), bootHref)
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
@@ -2598,7 +2608,8 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
 
 /** Wave 19: a picture in place of the initials (my own, a blob: URL; or one a person sent, a validated JPEG data URL). */
 function pictured(face: HTMLElement, url: string | undefined): HTMLElement {
-  if (url) { face.style.background = `url("${url}") center/cover`; face.textContent = '' }
+  const shown = pictureUrl(imageMode(), url)   // wave 40: Tools > Images (hide: the initials stay)
+  if (shown) { face.style.background = `url("${shown}") center/cover`; face.textContent = ''; face.dataset.pic = '1' }
   return face
 }
 
@@ -2606,6 +2617,11 @@ function pictured(face: HTMLElement, url: string | undefined): HTMLElement {
 const personFace = (p: Person): HTMLElement => pictured(avatar(p.name, p.id), personImageOk(p.image) ? p.image : undefined)
 /** People for lists and pickers: no archived contact (the Curator's hidden ids). */
 const activePeople = (): Person[] => shown(st(), curatorHiddenIds()).people
+/** Wave 40 hover-sources: the person card's "How they relate to others I know"; a change saves and redraws the card. */
+const relationsRowFor = (p: Person): HTMLElement => relationsSection(p, st(), activePeople(), (id) => openWebPage({ kind: 'card', id }), {
+  set: (a, b, kind) => { setStated(st(), a, b, kind, Date.now()); save(); personSheet(p.id) },
+  clear: (a, b) => { clearStated(st(), a, b); save(); personSheet(p.id) },
+})
 
 /** Wave 25: a tag the small card picked; the Membranes show only the people holding it. View state only. */
 let tagFilter: string | null = null
@@ -2682,7 +2698,7 @@ function webPageScreen(page: WebPage): Node[] {
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
   return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
-    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags),
+    person: p, zone: S.ringLabel[webSlot(p)], tags: memberTagsOf(p, s.people, tags),
     visible: visibleVia(s.inventory ?? [], webSlot(p), tagsOf(p, tags), { zone: S.ringLabel[webSlot(p)], web: S.cardSharesWeb }),
     kindOf: (i) => S.cardSharesKind[kindKey(i.source?.kind)],
     onRenameResource: (id, next) => { if (renameResource(st(), id, next)) save(); render() },
@@ -3455,6 +3471,7 @@ function personSheet(personId: string): void {
     leanRow(p),
     eventChipsRow(p),
     knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace),
+    relationsRowFor(p),
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
@@ -3487,8 +3504,14 @@ function cardMore(p: Person): Node[] {
     ],
     askLinks: () => [askLinksRow(p)],
     passOn: () => [passOnRowFor(p)],
-    knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace)],
+    knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace), relationsRowFor(p)],
     invitations: () => [cardInvitationsRow(invitationIo(), p)],
+    photos: () => {   // wave 40: the Photos module answers 'person-card' by drawing into this host; off: nothing
+      if (!isEnabled('photos')) return []
+      const host = el('div', { class: 'photos-host', 'data-photos-host': p.id })
+      twBus.emit('person-card', { personId: p.id, host })
+      return [host]
+    },
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       keepInTouchRow({ state: st, save, redraw: render, toast: (msg, undo) => toast(msg, { onClick: undo }) }, p),
@@ -3503,7 +3526,7 @@ function cardMore(p: Person): Node[] {
     ],
   }
   const connected = Boolean(p.peerId)
-  const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
+  const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null, photos: isEnabled('photos') })
   return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
 }
 
@@ -4970,6 +4993,11 @@ const twBus = createBus()
 twBus.on('save', () => save())
 twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
 twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
+twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[]; name: string }; offerContacts({ state: st, save, toast: (msg) => toast(msg), changed: render, pages }, x.contacts, x.name) })
+// wave 40 photo-rails: what a module may ask of the app (a notice, a page with Back, Back)
+twBus.on('toast', (msg) => { if (typeof msg === 'string') toast(msg) })
+twBus.on('open-page', (d) => { const p = d as { title: string; body: Node[]; mark: string }; pages.open(p.title, p.body, p.mark) })
+twBus.on('back', () => history.back())
 function twCtx(): TwCtx {
   return { store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings), actions: appActions, where: whereNow }
 }
@@ -7038,6 +7066,7 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       importEntry(),
+      tagManagerView({ tags: loadColourTags, saveTags: (t) => saveColourTags([...t]), people: () => st().people, toast: (m) => toast(m) }),
       // Wave 39: folded until asked for (settings redraws keep it closed; a tick does not redraw the sheet).
       el('details', { class: 'settings-adv', 'data-pin-views': '' }, [
         el('summary', { class: 'adv-toggle' }, [S.viewPinsTitle]),
@@ -7214,6 +7243,13 @@ function settingsSheet(): void {
     settingsSection('features', S.setSecFeatures, isEnabled('feed') ? feed.settingsGroup() : []),
     settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
     settingsSection('advanced', S.setAdvanced, [
+    // Wave 40: flags for parts that are not ready yet.
+    el('h4', { class: 'eyebrow' }, [S.flagsTitle]),
+    el('p', { class: 'meta' }, [S.flagsHint]),
+    el('label', { class: 'radio', 'data-flag-toggle': 'googleConnect' }, [
+      el('input', { type: 'checkbox', ...(googleFlagSet(localStorage) ? { checked: '' } : {}), onchange: (e: Event) => { setGoogleConnect(localStorage, (e.target as HTMLInputElement).checked); settingsSheet() } }),
+      el('b', {}, [S.flagGoogleConnect]), el('small', {}, [S.flagGoogleConnectHint]),
+    ]),
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
     el('h4', { class: 'eyebrow' }, [S.headerPinsTitle]),
     ...HEADER_PINS.map((id) => el('label', { class: 'radio', 'data-header-pin-toggle': id }, [
@@ -7224,6 +7260,7 @@ function settingsSheet(): void {
       el('input', { type: 'checkbox', ...(s.qrProfileOption ? { checked: '' } : {}), onchange: () => { s.qrProfileOption = !s.qrProfileOption; save() } }),
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
+    ...(isEnabled('photos') ? [faceMatchRow(s, save, settingsSheet)] : []),   // wave 40: opt-in, off unless switched on
     ...aiSettings({ state: st, save, toast, openSheet, backToSettings: () => { sheet.dataset.kind = 'settings'; settingsSheet() } }),
     ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
@@ -7305,7 +7342,7 @@ function settingsSheet(): void {
       onclick: () => {
         if (!confirm(S.resetConfirm)) return
         dropRecording()
-        void Promise.all([audioStore.clear(), images.clear()]).finally(() => { clearState(persona, storeCtx); location.reload() })
+        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id)]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
     ],
@@ -7905,6 +7942,7 @@ document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redr
 
 document.body.dataset.twProfile = profileOf(state?.twSettings)
 applyVariation()
+applyImageMode()
 void twRegistry.start().then(renderTabs) // wave 39: a heavy module's view joins the row once it has loaded
 render()
 void refreshOwnPicture()
