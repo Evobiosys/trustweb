@@ -1103,6 +1103,8 @@ export interface AppState {
   uiBar?: { order?: string[]; hidden?: string[]; primary?: string; orderVersion?: number }
   /** Wave 39 (ext/profiles.ts): the profile (Settings > Variations) and the module switches (Settings > General > Extensions). Syncs with the record. */
   twSettings?: TwSettings
+  /** Wave 39 (ext/): data an extension module keeps, keyed by module id; each module checks its own slice. Absent: none. Syncs with the record. */
+  extData?: Record<string, unknown>
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
