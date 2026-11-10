@@ -4059,6 +4059,9 @@ export const S = {
     use: 'Use',
     remove: 'Remove',
     web: 'Web',
+    versionDefault: 'My version',
+    openFailed: 'Community could not be opened. Try again in a moment.',
+    navHidden: 'hidden in the Community menu',
   },
   /** Wave 41 obsidian-sync: the Obsidian vault import, re-sync and "complete ingestion". */
   obsidian: {
