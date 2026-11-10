@@ -44,6 +44,9 @@ type Kids = (Node | string | null | undefined)[]
 const btn = (label: string, onclick: () => void, attrs: Record<string, string> = {}, cls = 'lnk'): HTMLButtonElement => el('button', { class: cls, type: 'button', ...attrs, onclick }, [label])
 const dateOf = (ms: number): string => (ms > 0 ? new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '')
 
+/** Wave 40: the regular Chat's "Community chat" row sets this flag, so the view opens with its chat pane showing (device-local, read once). */
+export const OPEN_CHAT_KEY = 'trustweb.v1.community-mighty.open-chat'
+
 export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const t = ctx.strings.community
   const box = el('div', { class: 'community-host', 'data-community': '' })
@@ -51,6 +54,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const root = box.attachShadow({ mode: 'open' })
   const ui: { nav: NavId; space: string | null; drawer: boolean; chat: boolean; hiddenOpen: boolean; note: string; chatNote: string } = { nav: 'home', space: null, drawer: false, chat: false, hiddenOpen: false, note: '', chatNote: '' }
 
+  try { if (localStorage.getItem(OPEN_CHAT_KEY)) { localStorage.removeItem(OPEN_CHAT_KEY); ui.chat = true } } catch { /* storage blocked: the pane stays closed */ }
   const st = (): AppState => ctx.store()
   const me = (): string => st().me.displayName || t.you
   const data = (): CommunityData => readData(st())
@@ -240,6 +244,18 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     return ui.chat ? JSON.stringify([d.telegramUrl ?? '', readConsent().telegram === true, ui.chatNote]) : ''
   }
 
+  /** Wave 40: the app's regular chats under the group chat; a tap opens that chat in the app. Refilled on every draw, so the pane (and its frame) stays. */
+  let chatsBox: HTMLElement | null = null
+  function fillChats(): void {
+    const rows = ctx.chats?.() ?? []
+    chatsBox?.replaceChildren(
+      el('h4', {}, [t.chatsTitle]),
+      ...(rows.length
+        ? rows.map((r) => el('button', { class: 'lnk chat-row', type: 'button', 'data-community-chat-row': r.id, onclick: () => ctx.bus.emit('open-chat', r.id) }, [r.title + (r.unread > 0 ? ` (${r.unread})` : ''), el('span', { class: 'meta' }, [' ' + r.last])]))
+        : [el('p', { class: 'meta' }, [t.chatsNone])]),
+    )
+  }
+
   function chatPane(): HTMLElement {
     const d = data()
     const link = d.telegramUrl ? telegramUrl(d.telegramUrl) : null
@@ -258,6 +274,8 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       kids.push(el('div', { class: 'row wrap' }, [open, btn(t.change, () => { const n = data(); delete n.telegramUrl; save(n) }, { 'data-community-chat-change': '' })]))
     }
     if (ui.chatNote) kids.push(el('p', { class: 'note' }, [ui.chatNote]))
+    chatsBox = el('div', { class: 'chats', 'data-community-chats': '' })
+    kids.push(chatsBox)
     return el('aside', { class: 'chat', 'data-community-chat': '' }, kids)
   }
 
@@ -305,6 +323,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       chatEl = next
       shownChat = key
     }
+    if (ui.chat) fillChats()
   }
 
   draw()

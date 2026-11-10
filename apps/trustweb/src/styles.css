@@ -1312,7 +1312,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .person-share ul{margin:4px 0 4px 18px; padding:0}
 
 /* Wave 31: the configurable bottom row. ⋮ sits on the bar line at the far right; a highlighted non-Record view is raised like Record. */
-.bar-more{position:absolute; right:6px; top:-13px; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--tab-bg); color:var(--ink-soft); font-size:16px; line-height:1; padding:0; cursor:pointer; text-decoration:underline}
+.bar-more{position:absolute; right:6px; top:-13px; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--tab-bg); color:var(--ink-soft); font-size:16px; line-height:1; padding:0; cursor:pointer; text-decoration:none}
 .tabs.many .tab{width:auto; flex:1 1 0; min-width:0}
 .tabs.many .tab-record{flex:0 0 66px}
 .tab.tab-primary{width:66px; height:66px; border-radius:50%; margin-top:-28px; justify-content:center; flex-shrink:0; align-self:flex-start; color:#fff;
@@ -1739,3 +1739,21 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 /* the Theme choices are clickable: underlined like the Variations rows (the chosen one is not) */
 .look-pick .radio b{text-decoration:underline}
 .look-pick .radio.on b{text-decoration:none}
+
+/* wave 40 small-ui-d */
+/* the halo: a ring like the raised button's, around one or two views of the row (also in the lists) */
+.tab.tab-halo{border-radius:16px; box-shadow:0 0 0 2px rgba(23,143,134,.6), 0 0 14px rgba(23,143,134,.35)}
+.bar-opt-row.tab-halo,.bar-more-view.tab-halo{border-radius:12px; box-shadow:0 0 0 2px rgba(23,143,134,.6), 0 0 10px rgba(23,143,134,.3)}
+.bar-halo-btn{text-decoration:underline}
+.bar-halo-btn[aria-pressed=true]{font-weight:700}
+/* an arrow that cannot move further is greyed out */
+.bar-arrow.greyed,.bar-arrow:disabled{opacity:.3; cursor:default}
+.bar-divider{margin:10px 0 4px; padding-top:6px; border-top:1px dashed var(--line)}
+.var-chips{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px}
+.var-chips .chip{text-decoration:underline; cursor:pointer}
+.var-chips .chip.on{font-weight:700; text-decoration:none}
+/* Theme folded under a dropdown like the view picker */
+.theme-row.view-row{margin:4px 0 12px}
+.theme-row .look-pick{gap:0; min-width:240px}
+.theme-row .look-pick button small{opacity:.7}
+.chat-comm-btn[aria-pressed=true]{background:var(--tint-teal); color:var(--teal)}

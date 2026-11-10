@@ -20,6 +20,8 @@ export interface TwCtx {
   bus: TwBus
   navigate: (viewId: string) => void
   profile: () => ProfileId
+  /** Wave 40: the app's regular chats (newest first); a module may list them. A tap on one emits 'open-chat' with the person id. */
+  chats?: () => { id: string; title: string; last: string; unread: number }[]
 }
 
 export interface TwView { id: string; title: string; icon: string; mount(host: HTMLElement, ctx: TwCtx): () => void }

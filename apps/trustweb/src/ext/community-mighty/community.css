@@ -72,6 +72,9 @@ select { width: auto; max-width: 100%; }
 .chat { position: fixed; left: 0; right: 0; bottom: var(--tw-tabs-height, 86px); height: 50vh; z-index: 70; background: var(--raised); border-radius: var(--r-sheet) var(--r-sheet) 0 0; box-shadow: var(--shadow-float); padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); overflow-y: auto; }
 .chat h3 { margin: 0; }
 .chat .chat-frame { flex: 1; min-height: 200px; height: auto; }
+.chat .chats { display: flex; flex-direction: column; gap: var(--s-1); }
+.chat .chats h4 { margin: var(--s-2) 0 0; }
+.chat .chat-row { text-align: left; text-decoration: underline; }
 
 @container (min-width: 600px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
