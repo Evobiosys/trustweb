@@ -16,6 +16,7 @@ import {
   MODULE_ID, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
   joinSpace, leaveSpace, moveInView, navItems, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
 } from './community_model'
+import { legacyLinksPatch } from './community_data'
 import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
 import { chatKey as embedChatKey, chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
@@ -208,13 +209,12 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   /** The pane environment of the embeds module: this community's tag, redraw after a change, a note under the section. */
   const embedEnv = (kind: 'docs' | 'chat' = 'docs'): PaneEnv => ({ ctx, tag: communityTagOf(data(), st(), loadColourTags()) ?? NO_TAG, redraw: draw, note: (text) => { if (kind === 'docs') ui.note = text; else ui.chatNote = text; draw() } })
 
-  /** Wave 40: a Docs or Telegram link kept by wave 39 in this module's own slice moves into the embeds record once (when that has none for the tag). */
+  /** Wave 40: a Docs or Telegram link kept by wave 39 in this module's own slice moves into the embeds record once (when that has none for the tag); review: marked, so a link cleared later stays cleared. */
   function adoptLegacyLinks(): void {
-    const d = data()
     const env = embedEnv()
-    const have = entryFor(readEmbeds(st()), env.tag)
-    const patch = { ...(d.docsUrl && !have.docsUrl ? { docsUrl: d.docsUrl } : {}), ...(d.telegramUrl && !have.telegramUrl ? { telegramUrl: d.telegramUrl } : {}) }
-    if (Object.keys(patch).length) writeEmbeds(ctx, withEntry(readEmbeds(st()), env.tag, patch))
+    const { patch, next } = legacyLinksPatch(data(), entryFor(readEmbeds(st()), env.tag))
+    if (patch) writeEmbeds(ctx, withEntry(readEmbeds(st()), env.tag, patch))
+    if (next) writeData(ctx, next)
   }
 
   // ---- Chat (right pane on wide views, bottom sheet on phones) --------------
