@@ -8,16 +8,12 @@ const chord = (a, b, r) => {
 }
 
 describe('ring spacing', () => {
-  it('keeps labels at screen size: the scale is 1 / zoom, never above 1', () => {
-    expect(labelScale(1)).toBe(1)
-    expect(labelScale(2)).toBe(0.5)
-    expect(labelScale(0.5)).toBe(1)
+  it('wave 39: names zoom with the web like the bubbles do: the scale stays 1 at every zoom', () => {
+    for (const z of [0.5, 1, 2, 4]) expect(labelScale(z)).toBe(1)
   })
 
-  it('the room a label needs on the ring shrinks as the zoom grows', () => {
-    expect(labelGap(1, 40)).toBe(40)
-    expect(labelGap(2, 40)).toBe(20)
-    expect(labelGap(3, 40)).toBeCloseTo(13.33, 1)
+  it('so the room a label needs on the ring is the same at every zoom', () => {
+    for (const z of [1, 2, 3]) expect(labelGap(z, 40)).toBe(40)
   })
 
   for (const zoom of [1, 2, 3]) {

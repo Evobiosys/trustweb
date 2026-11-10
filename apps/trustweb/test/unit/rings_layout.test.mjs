@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 36 rings-column-dark: the diamond/expand column is a keep-out sector for dots. */
-import { columnSector, avoidSector, nudgeAngles, spaceOut } from '../../src/rings_layout.ts'
+import { columnSector, avoidSector, nudgeAngles, ringsGeometry, spaceOut } from '../../src/rings_layout.ts'
 import { Ring } from '../../src/model.ts'
 
 // Column relative to the rings centre: x = left edge, w = width, cy = centre y (down), h = height.
@@ -57,5 +57,18 @@ describe('spaceOut with a keep-out', () => {
     const s = { expanse: [], people: Array.from({ length: 8 }, (_, i) => ({ id: 'p' + i, name: 'P', ring: Ring.Friend, context: '', metAt: 1, lines: [] })) }
     spaceOut(s, undefined, (a) => avoidSector(a, [160, 200]))
     for (const p of s.people) expect(p.angle <= 160 || p.angle >= 200).toBe(true)
+  })
+})
+
+describe('ringsGeometry with the user own ring radii (wave 39)', () => {
+  const counts = { closest: 2, close: 2, friend: 2, acquaintance: 2, intending: 2 }
+  it('draws a ring at the radius the user dragged it to', () => {
+    expect(ringsGeometry(counts, {}, 1, { friend: 120 }).radius.friend).toBe(120)
+  })
+  it('without a custom radius the rings keep their default place', () => {
+    expect(ringsGeometry(counts, {}, 1).radius.friend).toBe(ringsGeometry(counts, {}, 1, {}).radius.friend)
+  })
+  it('the extent follows the outermost ring', () => {
+    expect(ringsGeometry(counts, {}, 1, { intending: 220 }).extent).toBeGreaterThan(220)
   })
 })

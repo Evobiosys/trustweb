@@ -25,6 +25,27 @@ export type FetchLike = (url: string, init: { method: string; headers: Record<st
 /** Drafting is on only with a base URL and a model. */
 export const configured = (ai: AiEndpoint | undefined): ai is AiEndpoint => Boolean(ai?.baseUrl.trim() && ai.model.trim())
 
+/** Wave 39: what Custom offers to fill in. pc24 is a preset here, not a provider of its own; OpenAI is not offered. */
+export const CUSTOM_PRESETS = [
+  { id: 'ollama', name: 'Ollama (this device)', baseUrl: PRESETS.ollama.baseUrl, model: '' },
+  { id: 'pc24', name: 'pc24', baseUrl: 'http://localhost:11435/v1', model: 'qwen3.6:35b' },
+  { id: 'other', name: '', baseUrl: '', model: '' },
+] as const
+export type CustomPresetId = (typeof CUSTOM_PRESETS)[number]['id']
+
+/** A Custom endpoint filled from a preset: its name, address and model, an empty key (a key never follows to another address), the sign-up stays. */
+export function customPreset(ai: AiEndpoint, id: CustomPresetId): AiEndpoint {
+  const { name: _name, ...rest } = ai
+  const p = CUSTOM_PRESETS.find((x) => x.id === id)!
+  return { ...rest, preset: 'custom', ...(p.name ? { name: p.name } : {}), baseUrl: p.baseUrl, model: p.model, apiKey: '' }
+}
+
+/** Which Custom preset an endpoint shows as: the old own-key presets (ollama, openai, claude) read as a Custom endpoint now. */
+export function customPresetOf(ai: AiEndpoint): CustomPresetId {
+  if (ai.preset === 'ollama' || ai.baseUrl.trim().replace(/\/+$/, '') === PRESETS.ollama.baseUrl) return 'ollama'
+  return ai.name === 'pc24' ? 'pc24' : 'other'
+}
+
 /** Another provider: its base URL and model, an empty key (a key, or the subscription token, never follows to a different provider), no custom name; the sign-up stays. */
 export function switchPreset(ai: AiEndpoint, p: keyof typeof PRESETS): AiEndpoint {
   if (ai.preset === p) return ai
@@ -80,11 +101,15 @@ async function post(ai: AiEndpoint, url: string, init: { method: string; headers
   return up ? once(Math.max(timeoutMs, 90_000)) : first
 }
 
-/** choices[0].message.content as JSON (code fences stripped); null when absent or not JSON. */
+/** choices[0].message.content as JSON (<think> blocks and code fences stripped, JSON found inside surrounding prose); null when absent or not JSON. */
 export function parseReply(body: unknown): unknown {
   const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
   if (typeof content !== 'string') return null
-  try { return JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { return null }
+  const text = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+  const whole = jsonOrNull(text)
+  if (whole !== null) return whole
+  const a = text.indexOf('{'), b = text.lastIndexOf('}')
+  return a >= 0 && b > a ? jsonOrNull(text.slice(a, b + 1)) : null
 }
 
 /** One call; throws with the endpoint's own message on an error, a timeout or a reply that is not JSON. */
@@ -108,13 +133,13 @@ export async function askEndpointText(ai: AiEndpoint, system: string, text: stri
 }
 
 export type TestOutcome =
-  | { ok: true; ms: number; reply: string }
+  | { ok: true; ms: number; reply: string; /** Wave 39: answered, but not in the JSON shape drafting reads. */ note?: 'not JSON' }
   | { ok: false; message: string; status?: number; raw?: string; timedOut?: boolean }
 export interface ResultLine { kind: 'status' | 'message' | 'raw' | 'hint'; text: string; ok?: boolean }
 
 const CUT = 200
+function jsonOrNull(t: string): unknown { try { return JSON.parse(t) as unknown } catch { return null } }
 const asText = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v) ?? '')
-const jsonOrNull = (t: string): unknown => { try { return JSON.parse(t) as unknown } catch { return null } }
 
 /** The Test button's one call: never throws; keeps the status, the endpoint's own message and the raw text for the result block. */
 export async function testEndpoint(ai: AiEndpoint, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS): Promise<TestOutcome> {
@@ -130,8 +155,9 @@ export async function testEndpoint(ai: AiEndpoint, fetchFn: FetchLike = fetch as
     const raw = body === null ? text || undefined : asText(body)
     if (!res.ok) return { ok: false, status: res.status, message: (body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`, raw }
     const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
-    if (parseReply(body) === null) return { ok: false, message: 'not JSON', raw: typeof content === 'string' ? content : raw }
-    return { ok: true, ms: Date.now() - t0, reply: asText(content) }
+    // A reply that is no chat completion at all (a web page, a login form) is a wrong address: that fails. A chat reply in plain words works.
+    if (typeof content !== 'string') return { ok: false, message: 'not JSON', raw }
+    return { ok: true, ms: Date.now() - t0, reply: content, ...(parseReply(body) === null ? { note: 'not JSON' as const } : {}) }
   } catch (e) {
     return { ok: false, message: (e as Error).message, timedOut: ctl.signal.aborted }
   } finally { clearTimeout(timer) }
@@ -139,8 +165,8 @@ export async function testEndpoint(ai: AiEndpoint, fetchFn: FetchLike = fetch as
 
 /** The result block under the Test button: status, the endpoint's message, the first 200 characters of the reply or body, and a hint for the common causes. Never one line. */
 export function testResultLines(o: TestOutcome): ResultLine[] {
-  if (o.ok) return [{ kind: 'status', ok: true, text: S.aiTestOk(o.ms) }, { kind: 'raw', text: o.reply.slice(0, CUT) }]
-  const hint = o.timedOut ? S.aiTestHintTimeout : o.status === 401 ? S.aiTestHintKey : o.message === 'not JSON' ? S.aiTestHintJson : ''
+  if (o.ok) return [{ kind: 'status', ok: true, text: S.aiTestOk(o.ms) }, { kind: 'raw', text: o.reply.slice(0, CUT) }, ...(o.note ? [{ kind: 'hint' as const, text: S.aiTestHintJson }] : [])]
+  const hint = o.timedOut ? S.aiTestHintTimeout : o.status === 401 ? S.aiTestHintKey : o.message === 'not JSON' ? S.aiTestHintPage : ''
   return [
     { kind: 'status', ok: false, text: S.aiTestFailed },
     { kind: 'message', text: o.message },

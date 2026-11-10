@@ -17,11 +17,11 @@ describe('testResultLines', () => {
     expect(lines[0]).toMatchObject({ ok: true, text: 'Answered in 1.2 s' })
     expect(lines[1].text).toHaveLength(200)
   })
-  it('not JSON: failed, the endpoint message, the raw text, the model-name hint', () => {
+  it('not JSON (a web page, no chat reply): failed, the endpoint message, the raw text, the address hint', () => {
     const lines = testResultLines({ ok: false, message: 'not JSON', raw: 'Hello there' })
     expect(kinds(lines)).toEqual(['status', 'message', 'raw', 'hint'])
     expect(lines[0]).toMatchObject({ ok: false, text: 'Failed' })
-    expect(lines[3].text).toBe('The endpoint answered, but not with JSON: check the model name')
+    expect(lines[3].text).toBe(S.aiTestHintPage)
   })
   it('401 gets the key hint, a timeout the 30 s hint, no raw line when there is none', () => {
     expect(testResultLines({ ok: false, message: 'Unauthorized', status: 401 }).at(-1).text).toBe('Key rejected')
@@ -42,8 +42,8 @@ describe('testEndpoint', () => {
     const o = await testEndpoint(ai, fake(true, 200, reply('{"a":1}')))
     expect(o).toMatchObject({ ok: true, reply: '{"a":1}' })
   })
-  it('plain text reply -> not JSON with the raw text', async () => {
-    expect(await testEndpoint(ai, fake(true, 200, reply('Hello')))).toMatchObject({ ok: false, message: 'not JSON', raw: 'Hello' })
+  it('plain text reply -> answered, with a "not JSON" note (wave 39: no longer a failure)', async () => {
+    expect(await testEndpoint(ai, fake(true, 200, reply('Hello')))).toMatchObject({ ok: true, reply: 'Hello', note: 'not JSON' })
   })
   it('401 keeps the status, the endpoint message and the body', async () => {
     expect(await testEndpoint(ai, fake(false, 401, { error: { message: 'bad key' } }))).toMatchObject({ ok: false, status: 401, message: 'bad key', raw: '{"error":{"message":"bad key"}}' })

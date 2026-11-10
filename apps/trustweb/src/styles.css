@@ -1,5 +1,6 @@
 @import './design/tokens.css';
 @import './components/rings.css';
+@import './design/looks.css';
 /* TrustWeb. Tokens now come from src/design/tokens.css (generated from tokens.json); the
    phone frame, tab bar, rings, sheet and cosmic register were ported from apps/mobile-ui/src/styles.css;
    the notes-flow pieces follow the owner's note-taking mockup (teal call-to-action, tag pills). */
@@ -1644,6 +1645,85 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .co-chat-send .field{flex:1 1 8em; min-width:0}
 [data-guest-shell] .bar-more{display:none}
 
+/* wave 39 import-curate */
+.cur-head{margin:6px 0 4px}
+.alpha-label{font-size:11px; font-weight:400; color:var(--ink-soft)}
+.cur-bar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0}
+.cur-bar .field{max-width:100%; min-width:0}
+.cur-row{min-width:0}
+.cur-name{display:flex; gap:8px; align-items:center; min-width:0}
+.cur-name b{overflow-wrap:anywhere}
+.cur-contact{overflow-wrap:anywhere}
+.cur-pills{margin:0}
+.cur-pill{padding:3px 9px; font-size:12px; text-decoration:underline}
+.cur-bulk-panel{background:var(--card); border-radius:12px; padding:10px 12px; margin:10px 0; display:flex; flex-direction:column; gap:8px}
+.cur-adv .grp-field{display:flex; flex-direction:column; gap:4px; margin:8px 0}
+.cur-adv .field, .cur-bulk-panel .field{width:100%; box-sizing:border-box}
+.cur-unnamed{margin-top:14px}
+.cur-sides{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.cur-side{display:flex; flex-direction:column; gap:3px; min-width:0; overflow-wrap:anywhere}
+.cur-pair{min-width:0}
+.cur-done{border:1.5px solid var(--teal); background:var(--tint-teal)}
+.cur-edited mark, mark.cur-edited-name{background:var(--tint-teal); color:inherit; border-radius:6px; padding:1px 6px}
+.cur-also{display:block; margin:10px 0}
+.person-contact{display:block; overflow-wrap:anywhere}
+.page-layer [data-import-home], .page-layer [data-svc-list], .page-layer [data-cur-top-bar], .page-layer [data-cur-bulk], .page-layer [data-cur-foot], .page-layer [data-cur-dupe-list]{max-width:760px}
+/* wave 39 small-ui-b */
+.page-dock[hidden]{display:none}
+/* AI button: a sparkle at the far right of every header */
+.hdr-right .ai-btn{color:var(--trust)}
+.hdr-right .ai-btn svg{fill:currentColor; stroke:none}
+/* Your AI: Custom is an indented subsection under Claude */
+.ai-byok{margin-left:var(--s-4); padding-left:var(--s-3); border-left:2px solid var(--line)}
+.ai-byok > summary{font-size:var(--fs-2); font-weight:600; color:var(--ink)}
+/* ring card: ticks beside the names, a bar to archive the ticked */
+.ring-card-pick{width:18px; height:18px; margin:0; flex:none; accent-color:var(--trust)}
+.ring-card-bar{display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; margin:2px 0}
+.ring-card-bar[hidden]{display:none}
+.ring-card-bulk{border:0; background:none; padding:2px 0; font:inherit; font-size:13px; color:inherit; text-decoration:underline; cursor:pointer}
+/* heading subscript of a feature that is not approved yet */
+.alpha-label{color:var(--ink-3); font-size:.72em; font-weight:500; margin-left:2px; white-space:nowrap}
+/* browser-only notice: wraps at any width, the button sits below the text when it does not fit */
+.browser-only{display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; box-sizing:border-box; max-width:calc(100% - 24px); white-space:normal}
+.browser-only-text{flex:1 1 200px; min-width:0; overflow-wrap:anywhere}
+.browser-only-x{flex:none; padding:4px 0; margin-left:0}
+@media (max-width:480px){ .browser-only-x{flex-basis:100%; text-align:left} }
+/* clear of the Ask button (16 px from the bottom, 55 px high) */
+.screen:has(.query-fab) .browser-only{margin-bottom:76px}
+@media (max-width:380px){ .hdr-right{gap:2px} .hdr-btn.icon-only{width:28px; height:28px} }
+/* Settings > Theme */
+.theme-row{display:flex; flex-direction:column; gap:var(--s-2); margin:4px 0 12px}
+.look-pick{display:flex; flex-direction:column; gap:var(--s-2)}
+/* looks: the token overlays live in design/looks.css */
+/* Sleek: dense and quiet. Thin 1 px lines, no shadows, sans headings, subtle hover. */
+:root[data-look="sleek"] body{font-size:var(--fs-2); line-height:var(--lh-ui)}
+:root[data-look="sleek"] :is(h2,h3,h4,h5,.ai-plan-name,.ai-plan-price,.ai-plans-title){font-family:var(--font-sans); font-weight:600}
+:root[data-look="sleek"] :is(.btn,.radio,.field,.ai-plan,.view-pill,.view-menu,.ring-card,.sheet .radio){border:var(--hairline) solid var(--line); box-shadow:none}
+:root[data-look="sleek"] .hdr{border-bottom:var(--hairline) solid var(--line)}
+:root[data-look="sleek"] .hdr-btn.icon-only{width:28px; height:28px; background:transparent}
+:root[data-look="sleek"] :is(.btn,.radio,.hdr-btn,.prow,.menu-item,.view-opt,.view-menu button):hover{background:var(--surface-2)}
+:root[data-look="sleek"] :is(.btn-electric,.ai-plan-btn){background:var(--trust); color:var(--on-trust)}
+:root[data-look="sleek"] .radio.on{border-color:var(--trust); background:var(--trust-tint)}
+:root[data-look="sleek"] .btn{padding:6px 12px; font-size:var(--fs-2); font-weight:500; border-radius:var(--r-control)}
+:root[data-look="sleek"] .btn-sm{padding:3px 9px; font-size:var(--fs-1)}
+:root[data-look="sleek"] .field{padding:6px 9px; font-size:var(--fs-2); border-radius:var(--r-control); background:var(--raised)}
+:root[data-look="sleek"] .radio{padding-top:var(--s-2); padding-bottom:var(--s-2); border-radius:var(--r-control)}
+:root[data-look="sleek"] .radio::before{left:10px; width:14px; height:14px; margin-top:-7px; border-width:1.5px}
+/* Dex-like: soft rounded controls with the indigo accent */
+:root[data-look="dex"] .btn{border-radius:var(--r-control)}
+:root[data-look="dex"] .field{border-radius:var(--r-control)}
+:root[data-look="dex"] :is(.btn-electric,.ai-plan-btn){background:var(--trust); color:var(--on-trust)}
+/* wave 39 small-ui-a */
+.rings-wrap.on-ring-line{cursor:row-resize}
+.zone-switch{display:flex; align-items:center; gap:14px}
+.zone-switch-btn{display:inline-flex; align-items:center; gap:4px; min-height:34px; padding:0 4px; background:none; border:0; font:inherit; font-weight:700; color:inherit; cursor:pointer}
+.zone-switch-btn u{text-underline-offset:3px}
+.screen>.wants{flex:none; margin:8px 12px 68px; background:var(--surface-1,#fff); box-shadow:0 2px 10px rgba(0,0,0,.18)}
+/* the dot sits exactly on its place: the name hangs above it and the ring name / demo chip below it, none of them in the flow (the dot was drawn ~8 px below its ring, so the overlap rule could not hold) */
+.rings-wrap .node:not(.you) span{position:absolute; bottom:100%; left:50%; transform:translateX(-50%); margin-bottom:2px; white-space:nowrap}
+.rings-wrap .node:not(.you) .lvl,.rings-wrap .node:not(.you) .dummy-chip{position:absolute; top:100%; left:50%; transform:translateX(-50%); margin:2px 0 0; white-space:nowrap; z-index:3}
+.rings-zoom .rings-wrap .node:not(.you) span{font-size:var(--lbl,11.5px)}
+.rings-zoom .rings-wrap .node:not(.you) .lvl{font-size:calc(var(--lbl,11.5px)*.82)}
 /* wave 39 extensions-profiles */
 .alpha-label{color:var(--ink-2); font-size:.65em; font-weight:400; margin-left:var(--s-1, 4px)}
 .variation b, [data-ext-module] b{text-decoration:underline}

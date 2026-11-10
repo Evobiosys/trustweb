@@ -23,6 +23,8 @@ import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
 import { applyTheme, readTheme, type Theme } from './theme'
+import { applyLook, LOOKS, readLook, type Look } from './look'
+import { ownDataImported } from './own_data'
 import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
@@ -216,12 +218,12 @@ import { profileSheetNodes, scopePageNodes, theirProfileBlock, type ProfileViewD
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
-import { DEX_URL, UI_VIEWS, UiView, wideAllowed } from './desktop_view'
+import { DEX_URL, SETTINGS_VIEWS, UiView, wideAllowed } from './desktop_view'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
 import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, travelsInPack } from './note_fields'
-import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
+import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, dummyIds, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { KeepNotice, dueForTakeDown, guestAsk, guestAsked, guestEnded, guestGranted, guestKept, isKept, keepAccount, keepText, parseKeepText, unkeepAccount } from './account_keep'
 import { asksMatchNotes, notesMatchDefault } from './notes_source'
@@ -237,9 +239,9 @@ import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
-import { importGroup } from './import_view'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
-import { offerContacts, openServicesImport, servicesGroup } from './services_view'
+import { offerContacts, openServicesImport } from './services_view'
+import type { ServicesHooks } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
@@ -1017,7 +1019,10 @@ const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 /** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
 const pages = createPages(phone)
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
-const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }
+/** Wave 39: the one Import page (contacts, resources file, Tana, earlier imports with Undo); every old entry point opens it. */
+const importHooks = (): ServicesHooks => ({ state: st, save, toast, changed: render, pages, openAi: () => openAiButton() })
+const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry])
+const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
 mountOnboardingNotice(onboardHooks)
 // Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
 void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
@@ -1026,7 +1031,7 @@ const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
   peers: () => st().peers.filter((p) => !isBlocked(personOf(st().people, p.id))),
   send: (peer, text) => net.sendText(peer, text),
-  importRows: () => (solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+  importRows: () => (solo ? [] : [importEntry()]),
 })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
@@ -1044,6 +1049,16 @@ const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: (
 const DESK_PILL_SHOWN = false
 const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
 let statusPill: HTMLElement | null = null
+/** Wave 39: the desktop dock (Add a device, See TrustWeb in action); hidden from the main flow once the person has brought in their own data. */
+let pageDock: HTMLElement | null = null
+let demoSeedSize: number | undefined
+/** True once the record holds more own people than the demo seed (see own_data.ts); the demo helpers then live in Settings > Advanced. */
+function ownDataBrought(): boolean {
+  if (!state) return false
+  demoSeedSize ??= demoContentForLivePhone(0, ctx).people.length
+  if (state.people.length <= demoSeedSize) return false
+  return ownDataImported(state.people, dummyIds(state, ctx).people, demoSeedSize)
+}
 /** A newer build is deployed (app_update.ts): small banner above the tab bar, only its button takes taps. */
 const updateBanner = el('div', { class: 'update-banner', role: 'status', 'aria-live': 'polite', 'data-update-banner': '1', hidden: true }, [
   el('span', {}, [S.updBanner]),
@@ -1060,7 +1075,8 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   ])
   const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
-  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
+  pageDock = el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see])
+  root.append(pageDock, demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
 }
 
 /**
@@ -1109,7 +1125,7 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
@@ -1532,6 +1548,15 @@ function mountSettingsGear(): void {
   right.insertBefore(gear, right.querySelector('[data-chat-dots]'))
 }
 
+/** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
+function mountAiButton(): void {
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right || right.querySelector('[data-ai-button]')) return
+  const ai = iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn')
+  ai.setAttribute('data-ai-button', '')
+  right.append(ai)
+}
+
 /** Wave 28: what the QR button shows for what is on screen: an open event, the tag the web is filtered to, else the connect code (Meet). */
 function screenQr(plain = false): void {
   const ev = screen === Screen.Events ? eventsView.current() : undefined
@@ -1593,6 +1618,7 @@ const PIN_ACTIONS: Record<HeaderPin, { icon: string; run: () => void }> = {
   dnd: { icon: 'dnd', run: () => undefined },
   advanced: { icon: 'more', run: openAdvancedSettings },
   'qr-only': { icon: 'qr', run: () => screenQr(true) },
+  select: { icon: 'select', run: () => undefined },
 }
 
 /** Wave 28: the header of Web, Chat, Events and Resources in one order, right to left: settings, the QR, the pinned buttons (Do Not Disturb on by default), the views, search. */
@@ -1605,19 +1631,19 @@ function mountHeaderControls(): void {
   gear.dataset.settingsGear = '1'
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
-  const ai = screen === Screen.Web && isEnabled('ai-button') ? iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn') : null
-  if (ai) ai.setAttribute('data-ai-button', '')
   const views: Node = screen === Screen.Web ? viewControls(webViewNow)
     : screen === Screen.People ? viewControls(completeMode ? 'complete' : 'people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
-  const pins = headerPins(st().uiPins?.header).map((id) => {
-    const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
+  // The select tool belongs to the Web's rings view only.
+  const pinIds = headerPins(st().uiPins?.header).filter((id) => id !== 'select' || (screen === Screen.Web && webViewNow === 'rings' && !webPage))
+  const pins = pinIds.map((id) => {
+    const b = id === 'dnd' ? dndButton() : id === 'select' ? selectToolButton('hdr-pin') : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
     b.setAttribute('data-header-pin', id)
     return b
   })
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
-  const parts: Record<string, (Node | null)[]> = { search: [find, ai], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
+  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
@@ -1787,6 +1813,7 @@ function render(): void {
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
   mountSettingsGear()
+  mountAiButton()
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   applyLayout()
@@ -2048,7 +2075,9 @@ function offerDemoContent(): void {
 }
 
 function updateDemoToggle(): void {
-  demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp()
+  const own = ownDataBrought()
+  if (pageDock) pageDock.hidden = own
+  demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp() || own
   if (state) demoToggle.textContent = demoShown(state) ? S.demoHide : S.demoAdd
   updateDeskToggle()
 }
@@ -2107,16 +2136,29 @@ function setLayout(l: Layout): void {
   applyLayout()
 }
 
+/** Wave 39: Settings > General > Theme, next to the view picker: the look of the app (Default, Sleek, Dex-like); light or dark stays under Advanced. */
+function themeRow(): HTMLElement {
+  const now = readLook(localStorage)
+  return el('div', { class: 'theme-row', 'data-theme-row': '' }, [
+    el('b', {}, [S.themeTitle]),
+    el('div', { class: 'look-pick', role: 'radiogroup', 'aria-label': S.themeTitle }, LOOKS.map((l: Look) => el('button', {
+      class: 'radio' + (now === l ? ' on' : ''), role: 'radio', 'aria-checked': String(now === l), 'data-look-choice': l,
+      onclick: () => { applyLook(l, document.documentElement, localStorage); settingsSheet() },
+    }, [el('b', {}, [S.themeLooks[l]]), el('small', {}, [S.themeLookHints[l]])]))),
+  ])
+}
+
 /** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
 function viewRow(): HTMLElement {
-  const items = UI_VIEWS.filter((v) => v !== UiView.Dex).map((v) => el('button', {
+  // Wave 39: only Dex and TrustWeb are offered here; Contacts and Contacts (wide) stay in the eye menu.
+  const items = SETTINGS_VIEWS.map((v) => el('button', {
     role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
-    ...(v === UiView.Desk ? { 'aria-describedby': 'view-desk-info' } : {}),
-    onclick: () => { if (v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openDeskSheet(UiView.Classic); else toggle(false) },
+    ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : {}),
+    onclick: () => { if (v === UiView.Dex) showDesktopVersion(v); else toggle(false) },
   }, [S.views[v]]))
   const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
     ...items,
-    el('p', { class: 'meta view-dex-info', id: 'view-desk-info', 'data-desk-info': '' }, [`${S.views.desk}: ${S.views.deskInfo}`]),
+    el('p', { class: 'meta view-dex-info', id: 'view-dex-info', 'data-dex-info': '' }, [el('a', { href: DEX_URL, target: '_blank', rel: 'noopener' }, [S.views.dexInfo])]),
   ])
   const pill = el('button', { class: 'view-pill', 'data-view-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `${S.views.pickAria}: ${S.views.trustweb}`, onclick: () => toggle(menu.hidden) }, [
     el('span', {}, [S.views.trustweb]), el('span', { class: 'view-pill-half', 'aria-hidden': 'true' }, ['▾']),
@@ -2993,10 +3035,12 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 setTimeout(() => { if (screen === Screen.Web) render() }, 5 * 60_000 + 1000)
 function browserOnlyNotice(): HTMLElement | null {
   if (!state || !shouldShowBrowserOnly({ dismissed: Boolean(state.browserOnlyDismissed), demo: demoPhone(), openedAt: visitOpenedAt, wasHidden: visitWasHidden }, Date.now())) return null
-  return el('p', { class: 'browser-only', 'data-browser-only-notice': '' }, [
-    S.browserOnlyNotice + ' ',
-    el('a', { href: 'https://trustintheweb.com/', target: '_blank', rel: 'noopener noreferrer' }, [S.browserOnlyLink]),
-    ' ' + S.browserOnlyNoticeEnd + ' ',
+  return el('div', { class: 'browser-only', 'data-browser-only-notice': '' }, [
+    el('span', { class: 'browser-only-text' }, [
+      S.browserOnlyNotice + ' ',
+      el('a', { href: 'https://trustintheweb.com/', target: '_blank', rel: 'noopener noreferrer' }, [S.browserOnlyLink]),
+      ' ' + S.browserOnlyNoticeEnd,
+    ]),
     el('button', { class: 'browser-only-x', type: 'button', 'data-browser-only-dismiss': '', onclick: () => { st().browserOnlyDismissed = true; save(); render() } }, [S.browserOnlyDismiss]),
   ])
 }
@@ -3024,10 +3068,8 @@ function screenWeb(): Node[] {
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
     supportLine(supportIo),
-    wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
-    browserOnlyNotice(),
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
@@ -3044,6 +3086,9 @@ function screenWeb(): Node[] {
     view === 'rings'
       ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, ...(fiveRingsOn() ? [fieldOverviewPanel(s, { live: st, save, render })] : [])])])
       : clip,
+    // Wave 39: the browser-only notice sits under the web, outside the zoomed layer (inside it the zoom scaled the line off the screen).
+    ...[browserOnlyNotice()].filter((n): n is HTMLElement => n !== null),
+    ...[wantsToConnectSection()].filter((d): d is HTMLElement => d !== null),   // wave 39: below the zoom clip, so it stays put and full size while the Web zooms
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
@@ -3055,10 +3100,16 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, 'expand-btn select-tool')
+  const pinned = headerPins(s.uiPins?.header).includes('select')
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, ...(pinned ? {} : { select: selectToolButton() }), hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted(), openPanel: (children) => openSheet(children) })
+}
+
+/** Wave 39: the select tool; it sits beneath Settings in the header (a pin, on by default) or, unpinned, in the Web's tool column. */
+function selectToolButton(extra = 'expand-btn'): HTMLElement {
+  const select = iconButton('select', S.selectToolAria, () => { web.toggleSelect(); render() }, `${extra} select-tool`)
   select.setAttribute('data-tool', 'select')
   select.setAttribute('aria-pressed', String(web.selectOn()))
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select, hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted() })
+  return select
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -6867,13 +6918,16 @@ function settingsSheet(): void {
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
-      el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
-      el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
-      el('p', { class: 'meta' }, [S.viewPinsHint]),
-      ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
-        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
-        el('b', {}, [S.viewNames[i.view]]),
-      ])),
+      importEntry(),
+      // Wave 39: folded until asked for (settings redraws keep it closed; a tick does not redraw the sheet).
+      el('details', { class: 'settings-adv', 'data-pin-views': '' }, [
+        el('summary', { class: 'adv-toggle' }, [S.viewPinsTitle]),
+        el('p', { class: 'meta' }, [S.viewPinsHint]),
+        ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+          el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
+          el('b', {}, [S.viewNames[i.view]]),
+        ])),
+      ]),
     ]),
     settingsSection('skins', S.setSkins, [
       el('div', { 'data-settings-skins': '' }, [
@@ -7006,9 +7060,8 @@ function settingsSheet(): void {
     inventory: [
       featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
     settingsSection('sources', S.setSources, sourcesGroup(s)),
-    ...(solo ? [] : servicesGroup({ state: st, save, toast, changed: render, pages })),
+    ...(solo ? [] : [importEntry()]),
     settingsSection('advanced-inventory', S.setAdvanced, [
-    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     el('button', {
       class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
       // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
@@ -7079,6 +7132,11 @@ function settingsSheet(): void {
       }, [el('b', {}, [S.setDemoOnly]), el('small', {}, [S.setDemoOnlyHint])]),
     ]),
     // The installed app offers no demo content (owner 2026-10-07); where some is already on, removing it stays possible.
+    ...(ownDataBrought() && !solo && !isDemoPersona(persona) && window.top === window ? [
+      el('h4', { class: 'eyebrow' }, [S.advancedHelpers]),
+      ...(runsAsInstalledApp() ? [] : [el('a', { class: 'btn btn-ghost', 'data-add-device': '', href: APP_URL + 'demo/' }, [S.addDeviceShort])]),
+      el('button', { class: 'btn btn-ghost', 'data-see-action': '', onclick: () => { closeSheet(); openWalkthrough() } }, [S.seeInAction]),
+    ] : []),
     demoSettingsShown ? el('h4', { class: 'eyebrow' }, [S.setDemo]) : null,
     demoSettingsShown ? el('button', {
       class: 'radio' + (demoShown(s) ? ' on' : ''),
@@ -7140,6 +7198,7 @@ function settingsSheet(): void {
       oninput: (e) => { settingsQuery = (e.target as HTMLInputElement).value; filterSettings(sheet, settingsQuery) },
     }),
     viewRow(),
+    themeRow(),
     apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,

@@ -492,6 +492,8 @@ export interface Person {
   blocked?: number
   /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
   knows?: string[]
+  /** Wave 39 (import_curate.ts): tag ids this person is connected with without holding them (affiliation, no membership). Absent: none. */
+  affiliated?: string[]
   /** Wave 28 (person_image.ts): a small JPEG data URL (256 px) shown on the card and the who-they-know entries. This phone only, never synced. Absent: initials. */
   image?: string
   /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
@@ -1106,7 +1108,7 @@ export interface AppState {
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
-  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
+  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
   /** Wave 31 (matches.ts): what I can offer (edited like My Resources) and the matches the pc24 service found, with my answers. This device only (not in sync_core's bundle). */
@@ -1116,7 +1118,7 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 39: radii (layout px) the user dragged the ring lines to; absent = the default spacing. */ radii?: Partial<Record<Ring, number>>; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
@@ -1490,11 +1492,19 @@ export interface ServiceRow {
   items?: { title: string; need: boolean }[]
   /** Wave 33: contact files and Google: what the file holds about them, copied to the person on Accept. */
   emails?: string[]; phones?: string[]; title?: string; birthday?: string; note?: string; labels?: string[]
+  /** Wave 39 (import_curate.ts): the owner's choices on the Curate page before Accept. `ring`: written instead of the proposed ring; `connected`: chips `person:<id>` / `tag:<id>` the person is connected with (no membership); `keepBoth`: counterparts the owner said are not the same (`row:<key>` / `person:<id>`). */
+  ring?: Ring; connected?: string[]; keepBoth?: string[]
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
-export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean; /** Fields the decision wrote into an existing person; undo removes them while they still hold that value. */ filled?: Record<string, string> }
+export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean; /** Fields the decision wrote into an existing person; undo removes them while they still hold that value. */ filled?: Record<string, string>
+  /** Wave 39: tag ids the decision added (undo takes them away again); `snap` = fingerprint of the person right after the decision, so a later difference means the owner edited them; `knows` / `affiliated` the connections it added. */
+  tags?: string[]; snap?: string; knows?: string[]; affiliated?: string[] }
 /** Wave 27: one "From other services" import, kept for the Curate page and its undo. */
-export interface ServiceBatch { id: string; at: number; counts: Record<string, number>; rows: ServiceRow[]; done: Record<string, ServiceDone> }
+export interface ServiceBatch {
+  id: string; at: number; counts: Record<string, number>; rows: ServiceRow[]; done: Record<string, ServiceDone>
+  /** Wave 39: the system tag every accepted person gets (`import:<YYYY-MM-DD>-<source>`, hidden by default) and the owner's note about this import. */
+  tag?: string; note?: string
+}
 
 /** Demo content on this phone: these people and items were added as "imaginary friends" and are marked dummy. */
 export function isDemoPerson(s: Pick<AppState, 'demo'>, personId: string): boolean {
