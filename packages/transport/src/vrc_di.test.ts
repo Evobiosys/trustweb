@@ -4,10 +4,20 @@ import { describe, expect, it } from "vitest";
 import * as jsigs from "@digitalcredentials/jsonld-signatures";
 import { DataIntegrityProof } from "@digitalcredentials/data-integrity";
 import { cryptosuite } from "@digitalcredentials/eddsa-rdfc-2022-cryptosuite";
+import { createHash } from "node:crypto";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { createIdentity } from "./did_identity.js";
 import { issueVrc, verifyVrc } from "./vrc.js";
 import { createRelationshipKey, exportVrcDi, importVrcDi, offlineDocumentLoader, relationshipKeyFromJson, relationshipKeyToJson } from "./vrc_di.js";
-import { CREDENTIALS_V2_CONTEXT_URL, DTG_REGISTRY_CONTEXT_V1_URL } from "./vrc_di_contexts.js";
+import {
+  BUNDLED_CONTEXT_SHA256,
+  CREDENTIALS_V2_CONTEXT_URL,
+  DTG_REGISTRY_CONTEXT_V1_SHA256,
+  DTG_REGISTRY_CONTEXT_V1_TEXT,
+  DTG_REGISTRY_CONTEXT_V1_URL,
+  STANDARD_CONTEXTS,
+  THIRD_CONTEXTS,
+} from "./vrc_di_contexts.js";
 
 const NOW = new Date("2026-11-10T12:00:00Z");
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -155,5 +165,116 @@ describe("Keyring-stack fixture (test-fixtures/keyring/)", () => {
     expect(Object.keys(ours).sort()).toEqual(Object.keys(theirs).filter((k) => k !== "id").sort());
     expect(ours["@context"]).toEqual(theirs["@context"]);
     expect(ours.issuerScope).toBe(theirs.issuerScope);
+  });
+});
+
+// ---- wave41 review-fixes d ----
+
+/** Signs an arbitrary (possibly malformed) credential body with a relationship key, like a hostile issuer would. */
+async function signRaw(key: ReturnType<typeof createRelationshipKey>, unsigned: Record<string, unknown>): Promise<any> {
+  const j = (jsigs as any).default;
+  const suite = new DataIntegrityProof({
+    cryptosuite,
+    date: "2026-11-10T00:00:00Z",
+    signer: { id: `${key.did}#${key.did.slice("did:peer:0".length)}`, algorithm: "Ed25519", sign: async ({ data }: { data: Uint8Array }) => ed25519.sign(data, key.secretKey) },
+  });
+  return j.sign(unsigned, { suite, purpose: new j.purposes.AssertionProofPurpose(), documentLoader: offlineDocumentLoader });
+}
+const body = (issuer: { did: string }, subject: { did: string }, extra: Record<string, unknown> = {}) => ({
+  "@context": [CREDENTIALS_V2_CONTEXT_URL, DTG_REGISTRY_CONTEXT_V1_URL],
+  type: ["VerifiableCredential", "DTGCredential", "RelationshipCredential"],
+  issuer: issuer.did,
+  issuerScope: "pairwise",
+  validFrom: "2026-11-10T00:00:00Z",
+  validUntil: "2027-11-10T00:00:00Z",
+  credentialSubject: { id: subject.did },
+  ...extra,
+});
+
+describe("D1 validity window is mandatory and finite", () => {
+  const issuer = createRelationshipKey();
+  const subject = createRelationshipKey();
+  it.each([
+    ["missing validFrom", { validFrom: undefined }],
+    ["missing validUntil", { validUntil: undefined }],
+    ["garbage validFrom", { validFrom: "garbage" }],
+    ["garbage validUntil", { validUntil: "garbage" }],
+  ])("%s is refused even though the issuer signed it", async (_n, patch) => {
+    const unsigned: Record<string, unknown> = { ...body(issuer, subject), ...patch };
+    for (const k of Object.keys(unsigned)) if (unsigned[k] === undefined) delete unsigned[k];
+    const vrc = await signRaw(issuer, unsigned);
+    const r = await importVrcDi(vrc, { now: NOW });
+    expect(r.valid).toBe(false);
+    expect(r.reason).toMatch(/validity window/);
+  });
+});
+
+describe("D11 5 minute clock skew on validFrom only", () => {
+  it("accepts now = validFrom - 4 min, rejects - 10 min; validUntil gets no grace", async () => {
+    const { vrc } = await exported(); // validFrom 2026-11-10T00:00:00Z
+    expect((await importVrcDi(vrc, { now: new Date("2026-11-09T23:56:00Z") })).valid).toBe(true);
+    expect((await importVrcDi(vrc, { now: new Date("2026-11-09T23:50:00Z") })).reason).toMatch(/not yet valid/);
+    expect((await importVrcDi(vrc, { now: new Date("2027-11-10T00:00:01Z") })).reason).toMatch(/expired/);
+  });
+});
+
+describe("D2 context lookup uses own properties only; extra contexts only from the allowlist", () => {
+  const issuer = createRelationshipKey();
+  const subject = createRelationshipKey();
+  it.each(["__proto__", "constructor", "toString", "hasOwnProperty"])("loader refuses %s", async (name) => {
+    await expect(offlineDocumentLoader(name)).rejects.toThrow(/unknown|offline/i);
+  });
+  it.each(["__proto__", "constructor"])("a credential listing %s as third context is refused", async (name) => {
+    const vrc = await signRaw(issuer, body(issuer, subject, { "@context": [CREDENTIALS_V2_CONTEXT_URL, DTG_REGISTRY_CONTEXT_V1_URL, name] })).catch(() => undefined);
+    // signing may already fail; a hand-appended entry on a valid VRC must fail too
+    const base = clone((await exported()).vrc);
+    base["@context"].push(name);
+    expect((await importVrcDi(base, { now: NOW })).valid).toBe(false);
+    if (vrc) expect((await importVrcDi(vrc, { now: NOW })).valid).toBe(false);
+  });
+  it("more than 4 contexts, or an extra context outside the allowlist, is refused before any RDF work", async () => {
+    const base = clone((await exported()).vrc);
+    const [hw] = Object.keys(THIRD_CONTEXTS);
+    base["@context"] = [...base["@context"], hw, hw, hw];
+    expect((await importVrcDi(base, { now: NOW })).reason).toMatch(/@context/);
+    const other = clone((await exported()).vrc);
+    other["@context"].push("https://www.w3.org/ns/did/v1"); // bundled, but not a credential context
+    expect((await importVrcDi(other, { now: NOW })).reason).toMatch(/@context/);
+  });
+  it("a credentialSubject with extra keys is refused", async () => {
+    const base = clone((await exported()).vrc);
+    base.credentialSubject.extra = "x";
+    expect((await importVrcDi(base, { now: NOW })).valid).toBe(false);
+  });
+});
+
+describe("D3 bundled context bytes are pinned", () => {
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+  it("the DTG registry text matches its published sha256", () => {
+    expect(sha(DTG_REGISTRY_CONTEXT_V1_TEXT)).toBe(DTG_REGISTRY_CONTEXT_V1_SHA256);
+  });
+  it("the table covers every bundled context and each document matches its hash", async () => {
+    const urls = [CREDENTIALS_V2_CONTEXT_URL, DTG_REGISTRY_CONTEXT_V1_URL, ...Object.keys(STANDARD_CONTEXTS), ...Object.keys(THIRD_CONTEXTS)].sort();
+    expect(Object.keys(BUNDLED_CONTEXT_SHA256).sort()).toEqual(urls);
+    for (const url of urls) {
+      const { document } = await offlineDocumentLoader(url);
+      const text = url === DTG_REGISTRY_CONTEXT_V1_URL ? DTG_REGISTRY_CONTEXT_V1_TEXT : JSON.stringify(document);
+      expect(sha(text), url).toBe(BUNDLED_CONTEXT_SHA256[url]);
+    }
+  });
+});
+
+describe("D16 no network on export + import", () => {
+  it("export and import work with globalThis.fetch throwing", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      throw new Error("network call attempted");
+    }) as typeof fetch;
+    try {
+      const { vrc } = await exported();
+      expect((await importVrcDi(vrc, { now: NOW })).valid).toBe(true);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

@@ -15,7 +15,11 @@
 // the DTG registry carries only issuer + credentialSubject.id, so the trust level is NOT exported.
 //
 // Verification is fully offline: contexts come from vrc_di_contexts.ts, did:peer:0 resolves from the DID string, any
-// other URL is refused. Runs in node and in the browser (no Buffer, no fs).
+// other URL is refused. Runs in node and in the browser: no fs, and the code in this package that the browser bundle
+// reaches uses no Buffer (did_identity.ts keeps Buffer in functions this module never calls, which esbuild drops). The
+// bundled third-party libraries mention Buffer only in their node variants or unused branches: the 245 KB esbuild
+// browser bundle ran export + import with globalThis.Buffer deleted (wave41 review-fix D13). Under node (vitest) the
+// libraries resolve to their node builds, which do use Buffer.
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { base58btc } from "multiformats/bases/base58";
 import { base64url } from "multiformats/bases/base64";
@@ -114,12 +118,16 @@ function didPeer0Document(did: string): { document: Record<string, any>; verific
   return { document, verificationMethod };
 }
 
-const CONTEXT_DOCUMENTS: Record<string, object> = {
-  [CREDENTIALS_V2_CONTEXT_URL]: CREDENTIALS_V2_CONTEXT_DOCUMENT,
-  [DTG_REGISTRY_CONTEXT_V1_URL]: JSON.parse(DTG_REGISTRY_CONTEXT_V1_TEXT) as object,
-  ...STANDARD_CONTEXTS,
-  ...THIRD_CONTEXTS,
-};
+// A Map, not an object: "__proto__" / "constructor" must never resolve to a prototype member (review D2).
+const CONTEXT_DOCUMENTS = new Map<string, object>([
+  [CREDENTIALS_V2_CONTEXT_URL, CREDENTIALS_V2_CONTEXT_DOCUMENT],
+  [DTG_REGISTRY_CONTEXT_V1_URL, JSON.parse(DTG_REGISTRY_CONTEXT_V1_TEXT) as object],
+  ...Object.entries(STANDARD_CONTEXTS),
+  ...Object.entries(THIRD_CONTEXTS),
+]);
+const isThirdContext = (url: unknown): boolean => typeof url === "string" && Object.hasOwn(THIRD_CONTEXTS, url);
+const MAX_CONTEXTS = 4; // credentials/v2, DTG registry, at most two allowlisted extras
+const SKEW_MS = 5 * 60 * 1000; // clock skew tolerated on validFrom only
 
 /** Offline JSON-LD document loader: bundled contexts and did:peer:0 only. Anything else throws (no network, ever). */
 export async function offlineDocumentLoader(url: string): Promise<{ contextUrl: null; documentUrl: string; document: object }> {
@@ -131,7 +139,7 @@ export async function offlineDocumentLoader(url: string): Promise<{ contextUrl: 
     if (url.includes("#") && verificationMethod.id !== url) throw new Error(`verification method not found: ${url}`);
     return { contextUrl: null, documentUrl: url, document: target };
   }
-  const context = CONTEXT_DOCUMENTS[url];
+  const context = CONTEXT_DOCUMENTS.get(url);
   if (context === undefined) throw new Error(`offline loader: unknown document ${url.slice(0, 80)}`);
   return { contextUrl: null, documentUrl: url, document: context };
 }
@@ -189,21 +197,30 @@ export async function importVrcDi(input: unknown, options: ImportVrcDiOptions = 
     if (!Array.isArray(ctx) || ctx[0] !== CREDENTIALS_V2_CONTEXT_URL || ctx[1] !== DTG_REGISTRY_CONTEXT_V1_URL) {
       return fail("@context must start with credentials/v2 then the DTG registry context");
     }
+    const extras = ctx.slice(2);
+    if (ctx.length > MAX_CONTEXTS || !extras.every(isThirdContext) || new Set(extras).size !== extras.length) {
+      return fail(`@context may add at most ${MAX_CONTEXTS - 2} distinct allowlisted contexts after the first two`);
+    }
     if (!Array.isArray(vrc.type) || !VRC_TYPE.every((t) => vrc.type?.includes(t))) return fail("type must be a DTG RelationshipCredential");
     if (typeof vrc.issuer !== "string") return fail("issuer must be a did:peer:0");
     publicKeyOfDidPeer0(vrc.issuer);
     if (proof.verificationMethod !== verificationMethodId(vrc.issuer)) return fail("proof verificationMethod does not match issuer");
     const subject = vrc.credentialSubject?.id;
     if (typeof subject !== "string") return fail("credentialSubject.id missing");
+    if (Object.keys(vrc.credentialSubject ?? {}).length !== 1) return fail("credentialSubject may carry only id");
     publicKeyOfDidPeer0(subject);
+    // validity window is mandatory: NaN compares false both ways, so a missing/garbage date would never expire
+    const validFrom = typeof vrc.validFrom === "string" ? Date.parse(vrc.validFrom) : NaN;
+    const validUntil = typeof vrc.validUntil === "string" ? Date.parse(vrc.validUntil) : NaN;
+    if (!Number.isFinite(validFrom) || !Number.isFinite(validUntil)) return fail("invalid validity window: validFrom and validUntil are required dates");
 
     const result = await jsigs.verify(vrc as object, { suite: suiteFor(undefined, proof.created), purpose: purpose(), documentLoader: offlineDocumentLoader });
     if (!result.verified) {
       return fail(result.error?.errors?.[0]?.message ?? result.error?.message ?? "signature verification failed");
     }
     const now = (options.now ?? new Date()).getTime();
-    if (Date.parse(String(vrc.validFrom)) > now) return fail("credential not yet valid");
-    if (Date.parse(String(vrc.validUntil)) <= now) return fail("credential expired");
+    if (validFrom > now + SKEW_MS) return fail("credential not yet valid");
+    if (validUntil <= now) return fail("credential expired");
     return { valid: true, issuer: vrc.issuer, subject };
   } catch (err) {
     return fail((err as Error).message);
