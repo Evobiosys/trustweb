@@ -167,3 +167,11 @@ describe('looks.css repeats the token tables of look.ts', () => {
     }
   })
 })
+
+describe('install wording', () => {
+  it('the install card and its Settings button say "on this device"', () => {
+    expect(S.instTitle).toBe('Install TrustWeb on this device')
+    expect(S.setInstall).toBe('Install TrustWeb on this device')
+  })
+  it('the export-mail heading names the alpha label', () => expect(S.alphaLabel).toBe('untested alpha feature'))
+})

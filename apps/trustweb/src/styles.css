@@ -1665,6 +1665,9 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .browser-only-text{flex:1 1 200px; min-width:0; overflow-wrap:anywhere}
 .browser-only-x{flex:none; padding:4px 0; margin-left:0}
 @media (max-width:480px){ .browser-only-x{flex-basis:100%; text-align:left} }
+/* clear of the Ask button (16 px from the bottom, 55 px high) */
+.screen:has(.query-fab) .browser-only{margin-bottom:76px}
+@media (max-width:380px){ .hdr-right{gap:2px} .hdr-btn.icon-only{width:28px; height:28px} }
 /* Settings > Theme */
 .theme-row{display:flex; flex-direction:column; gap:var(--s-2); margin:4px 0 12px}
 .look-pick{display:flex; flex-direction:column; gap:var(--s-2)}
@@ -1681,7 +1684,8 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 :root[data-look="sleek"] .btn{padding:6px 12px; font-size:var(--fs-2); font-weight:500; border-radius:var(--r-control)}
 :root[data-look="sleek"] .btn-sm{padding:3px 9px; font-size:var(--fs-1)}
 :root[data-look="sleek"] .field{padding:6px 9px; font-size:var(--fs-2); border-radius:var(--r-control); background:var(--raised)}
-:root[data-look="sleek"] .radio{padding:var(--s-2) var(--s-3); border-radius:var(--r-control)}
+:root[data-look="sleek"] .radio{padding-top:var(--s-2); padding-bottom:var(--s-2); border-radius:var(--r-control)}
+:root[data-look="sleek"] .radio::before{left:10px; width:14px; height:14px; margin-top:-7px; border-width:1.5px}
 /* Dex-like: soft rounded controls with the indigo accent */
 :root[data-look="dex"] .btn{border-radius:var(--r-control)}
 :root[data-look="dex"] .field{border-radius:var(--r-control)}
