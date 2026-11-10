@@ -28,7 +28,7 @@ import { ownDataImported } from './own_data'
 import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
+import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
@@ -166,6 +166,8 @@ import { activeLineDue, recordThought } from './thought_of'
 import { completeQuery, completeView, resetComplete, setCompleteQuery } from './complete_view'
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
+import { clearStated, setStated } from './relations_model'
+import { relationsSection } from './relations_view'
 import { personImageOk } from './person_image'
 import { applyImageMode, imageMode, pictureUrl } from './image_mode'
 import { clearPhotosDb } from './ext/photos/photos_data'
@@ -243,6 +245,7 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
+import { googleFlagSet, setGoogleConnect } from './google_flag'
 import { offerContacts, openServicesImport } from './services_view'
 import type { ServicesHooks } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
@@ -270,6 +273,7 @@ import { createEventsView } from './events_view'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createViewHost } from './ext/view_host'
 import { alphaHeading } from './alpha_heading'
+import { tagManagerView } from './tag_manager_view'
 import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
@@ -507,6 +511,8 @@ function installedHere(): boolean {
 // Wave 27 review: the extension modules read their pairing links from this copy, taken before the clean below.
 const bootHash = location.hash
 const bootSearch = location.search
+// Wave 40: Google's return trip (?code=...) is read from the address as opened; the clean below removes it.
+const bootHref = location.href
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
 
@@ -1029,7 +1035,7 @@ const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'd
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
 mountOnboardingNotice(onboardHooks)
 // Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
-void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
+void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts), bootHref)
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
@@ -2593,6 +2599,11 @@ function pictured(face: HTMLElement, url: string | undefined): HTMLElement {
 const personFace = (p: Person): HTMLElement => pictured(avatar(p.name, p.id), personImageOk(p.image) ? p.image : undefined)
 /** People for lists and pickers: no archived contact (the Curator's hidden ids). */
 const activePeople = (): Person[] => shown(st(), curatorHiddenIds()).people
+/** Wave 40 hover-sources: the person card's "How they relate to others I know"; a change saves and redraws the card. */
+const relationsRowFor = (p: Person): HTMLElement => relationsSection(p, st(), activePeople(), (id) => openWebPage({ kind: 'card', id }), {
+  set: (a, b, kind) => { setStated(st(), a, b, kind, Date.now()); save(); personSheet(p.id) },
+  clear: (a, b) => { clearStated(st(), a, b); save(); personSheet(p.id) },
+})
 
 /** Wave 25: a tag the small card picked; the Membranes show only the people holding it. View state only. */
 let tagFilter: string | null = null
@@ -2669,7 +2680,7 @@ function webPageScreen(page: WebPage): Node[] {
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
   return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
-    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags),
+    person: p, zone: S.ringLabel[webSlot(p)], tags: memberTagsOf(p, s.people, tags),
     visible: visibleVia(s.inventory ?? [], webSlot(p), tagsOf(p, tags), { zone: S.ringLabel[webSlot(p)], web: S.cardSharesWeb }),
     kindOf: (i) => S.cardSharesKind[kindKey(i.source?.kind)],
     onRenameResource: (id, next) => { if (renameResource(st(), id, next)) save(); render() },
@@ -3442,6 +3453,7 @@ function personSheet(personId: string): void {
     leanRow(p),
     eventChipsRow(p),
     knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace),
+    relationsRowFor(p),
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
@@ -3474,7 +3486,7 @@ function cardMore(p: Person): Node[] {
     ],
     askLinks: () => [askLinksRow(p)],
     passOn: () => [passOnRowFor(p)],
-    knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace)],
+    knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace), relationsRowFor(p)],
     invitations: () => [cardInvitationsRow(invitationIo(), p)],
     photos: () => {   // wave 40: the Photos module answers 'person-card' by drawing into this host; off: nothing
       if (!isEnabled('photos')) return []
@@ -6944,6 +6956,7 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       importEntry(),
+      tagManagerView({ tags: loadColourTags, saveTags: (t) => saveColourTags([...t]), people: () => st().people, toast: (m) => toast(m) }),
       // Wave 39: folded until asked for (settings redraws keep it closed; a tick does not redraw the sheet).
       el('details', { class: 'settings-adv', 'data-pin-views': '' }, [
         el('summary', { class: 'adv-toggle' }, [S.viewPinsTitle]),
@@ -7120,6 +7133,13 @@ function settingsSheet(): void {
     settingsSection('features', S.setSecFeatures, isEnabled('feed') ? feed.settingsGroup() : []),
     settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
     settingsSection('advanced', S.setAdvanced, [
+    // Wave 40: flags for parts that are not ready yet.
+    el('h4', { class: 'eyebrow' }, [S.flagsTitle]),
+    el('p', { class: 'meta' }, [S.flagsHint]),
+    el('label', { class: 'radio', 'data-flag-toggle': 'googleConnect' }, [
+      el('input', { type: 'checkbox', ...(googleFlagSet(localStorage) ? { checked: '' } : {}), onchange: (e: Event) => { setGoogleConnect(localStorage, (e.target as HTMLInputElement).checked); settingsSheet() } }),
+      el('b', {}, [S.flagGoogleConnect]), el('small', {}, [S.flagGoogleConnectHint]),
+    ]),
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
     el('h4', { class: 'eyebrow' }, [S.headerPinsTitle]),
     ...HEADER_PINS.map((id) => el('label', { class: 'radio', 'data-header-pin-toggle': id }, [

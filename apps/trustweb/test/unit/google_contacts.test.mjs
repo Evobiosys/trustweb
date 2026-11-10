@@ -49,12 +49,9 @@ describe('buildAuthUrl', () => {
     expect(p.get('include_granted_scopes')).toBe('false')
     expect(p.get('prompt')).toBe('consent')
   })
-  it('asks for both read scopes and never a write scope', () => {
+  it('asks for the one read scope contacts.readonly and never a write scope', () => {
     const scopes = u.searchParams.get('scope').split(' ')
-    expect(scopes).toEqual([
-      'https://www.googleapis.com/auth/contacts.readonly',
-      'https://www.googleapis.com/auth/contacts.other.readonly',
-    ])
+    expect(scopes).toEqual(['https://www.googleapis.com/auth/contacts.readonly'])
     expect(u.search).not.toMatch(/auth\/contacts(%20|&|$)/)
   })
 })
@@ -105,45 +102,61 @@ describe('exchangeCode', () => {
 })
 
 describe('fetchAllContacts', () => {
-  const person = (n) => ({ resourceName: `people/c${n}`, names: [{ displayName: `Anna ${n}` }] })
-  it('pages connections and other contacts with a bearer header', async () => {
+  const person = (n, extra = {}) => ({ resourceName: `people/c${n}`, names: [{ displayName: `Anna ${n}` }], ...extra })
+  const member = (id) => ({ contactGroupMembership: { contactGroupId: id, contactGroupResourceName: `contactGroups/${id}` } })
+  const groups = { contactGroups: [
+    { resourceName: 'contactGroups/myContacts', groupType: 'SYSTEM_CONTACT_GROUP', name: 'myContacts', formattedName: 'My Contacts' },
+    { resourceName: 'contactGroups/starred', groupType: 'SYSTEM_CONTACT_GROUP', name: 'starred', formattedName: 'Starred' },
+    { resourceName: 'contactGroups/fam', groupType: 'USER_CONTACT_GROUP', name: 'Family', formattedName: 'Family' },
+    { resourceName: 'contactGroups/work', groupType: 'USER_CONTACT_GROUP', name: 'Work', formattedName: 'Work' },
+  ] }
+  it('pages connections with a bearer header and reads no other contacts', async () => {
     const calls = []
     const f = async (url, init) => {
       calls.push({ url, auth: init.headers.Authorization })
       const u = new URL(url)
-      if (u.pathname === '/v1/people/me/connections') {
-        return u.searchParams.get('pageToken')
-          ? res(200, { connections: [person(2)] })
-          : res(200, { connections: [person(1)], nextPageToken: 'P2' })
-      }
+      if (u.pathname === '/v1/contactGroups') return res(200, groups)
       return u.searchParams.get('pageToken')
-        ? res(200, { otherContacts: [{ resourceName: 'otherContacts/c4', emailAddresses: [{ value: 'O@example.at' }] }] })
-        : res(200, { otherContacts: [person(3)], nextPageToken: 'Q2' })
+        ? res(200, { connections: [person(2)] })
+        : res(200, { connections: [person(1)], nextPageToken: 'P2' })
     }
     const r = await fetchAllContacts(f, 'tok')
-    expect(r.contacts.map((c) => c.sourceRef)).toEqual(['people/c1', 'people/c2', 'people/c3', 'otherContacts/c4'])
-    expect(r.otherSkipped).toBe(false)
-    expect(calls).toHaveLength(4)
+    expect(r.contacts.map((c) => c.sourceRef)).toEqual(['people/c1', 'people/c2'])
     expect(calls.every((c) => c.auth === 'Bearer tok')).toBe(true)
-    const first = new URL(calls[0].url)
+    expect(calls.some((c) => c.url.includes('otherContacts'))).toBe(false)
+    const first = new URL(calls.find((c) => c.url.includes('/people/me/connections')).url)
     expect(first.searchParams.get('personFields')).toBe('names,emailAddresses,phoneNumbers,organizations,birthdays,biographies,memberships')
     expect(first.searchParams.get('pageSize')).toBe('1000')
-    const other = new URL(calls[2].url)
-    expect(other.pathname).toBe('/v1/otherContacts')
-    expect(other.searchParams.get('readMask')).toBe('names,emailAddresses,phoneNumbers')
   })
-  it('tolerates 403 on other contacts', async () => {
-    const f = async (url) => (url.includes('otherContacts') ? res(403, {}) : res(200, { connections: [person(1)] }))
+  it('turns contact groups into labels and leaves out Google system groups', async () => {
+    const f = async (url) => {
+      if (new URL(url).pathname === '/v1/contactGroups') return res(200, groups)
+      return res(200, { connections: [person(1, { memberships: [member('myContacts'), member('fam'), member('work'), member('starred')] }), person(2, { memberships: [member('gone')] })] })
+    }
+    const r = await fetchAllContacts(f, 'tok')
+    expect(r.contacts[0].labels).toEqual(['Family', 'Work'])
+    expect(r.contacts[1].labels).toEqual([])
+  })
+  it('pages the contact groups too', async () => {
+    const f = async (url) => {
+      const u = new URL(url)
+      if (u.pathname !== '/v1/contactGroups') return res(200, { connections: [person(1, { memberships: [member('fam'), member('work')] })] })
+      return u.searchParams.get('pageToken') ? res(200, { contactGroups: [groups.contactGroups[3]] }) : res(200, { contactGroups: [groups.contactGroups[2]], nextPageToken: 'G2' })
+    }
+    expect((await fetchAllContacts(f, 'tok')).contacts[0].labels).toEqual(['Family', 'Work'])
+  })
+  it('still returns the people when the groups cannot be read', async () => {
+    const f = async (url) => (url.includes('/contactGroups') ? res(403, {}) : res(200, { connections: [person(1, { memberships: [member('fam')] })] }))
     const r = await fetchAllContacts(f, 'tok')
     expect(r.contacts).toHaveLength(1)
-    expect(r.otherSkipped).toBe(true)
+    expect(r.contacts[0].labels).toEqual([])
   })
-  it('fails when the first call fails', async () => {
-    await expect(fetchAllContacts(async () => res(401, {}), 'tok')).rejects.toThrow(Error)
+  it('fails when the connections call fails', async () => {
+    await expect(fetchAllContacts(async (u) => (u.includes('/contactGroups') ? res(200, groups) : res(401, {})), 'tok')).rejects.toThrow(Error)
   })
   it('handles an empty account', async () => {
     const r = await fetchAllContacts(async () => res(200, {}), 'tok')
-    expect(r).toEqual({ contacts: [], otherSkipped: false })
+    expect(r).toEqual({ contacts: [] })
   })
 })
 
@@ -157,12 +170,12 @@ describe('mapPerson', () => {
       organizations: [{ name: 'Example GmbH', title: 'Dev' }],
       birthdays: [{ date: { year: 1990, month: 3, day: 7 } }],
       biographies: [{ value: 'Met at a fair' }],
-      memberships: [{ contactGroupMembership: { contactGroupId: 'abc' } }],
-    }, 'Google contacts', 3)
+      memberships: [{ contactGroupMembership: { contactGroupResourceName: 'contactGroups/abc' } }, { contactGroupMembership: { contactGroupResourceName: 'contactGroups/zzz' } }],
+    }, 'Google contacts', 3, (r) => ({ 'contactGroups/abc': 'Family' })[r])
     expect(c).toEqual({
       source: 'google-api', file: 'Google contacts', sourceRef: 'people/c9', name: 'Anna Beispiel',
       given: 'Anna', family: 'Beispiel', emails: ['anna@example.at'], phones: ['+43 1 234'],
-      org: 'Example GmbH', title: 'Dev', birthday: '1990-03-07', note: 'Met at a fair', labels: [],
+      org: 'Example GmbH', title: 'Dev', birthday: '1990-03-07', note: 'Met at a fair', labels: ['Family'],
     })
   })
   it('writes a yearless birthday as --MM-DD', () => {
