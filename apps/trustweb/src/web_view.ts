@@ -409,6 +409,14 @@ export function createWebView(deps: WebViewDeps): WebView {
         onArchive: (p) => { if (!bulk('archive')) { archivePerson(p); save(); hideAll(); render(); toast(S.archivedInSettings) } },
         onDelete: () => bulk('delete'),
         onEdit: (p) => { picked = p ? toggleSel(clearSelection(), p.id) : clearSelection(); markPicked() },
+        // Wave 39: the ticks beside the names pick several people; "Archive N" archives them in one undo (a single tick archives that one person).
+        onPick: (ids) => { picked = new Set(ids); markPicked() },
+        onArchiveMany: (ids) => {
+          picked = new Set(ids)
+          if (bulk('archive')) return
+          const one = st().people.find((x) => x.id === ids[0])
+          if (one) { archivePerson(one); save(); hideAll(); render(); toast(S.archivedInSettings) }
+        },
       })
       box.style.left = Math.min(at.x + 12, RINGS_SIZE - 90) + 'px'
       box.style.top = Math.min(at.y + 12, RINGS_SIZE - 40) + 'px'

@@ -19,4 +19,6 @@ export enum UiView {
   Mobile = 'mobile',
 }
 export const UI_VIEWS: readonly UiView[] = [UiView.Dex, UiView.Desk, UiView.Classic, UiView.TrustWeb]
+/** Wave 39: the picker in Settings offers only these two; Contacts and Contacts (wide) stay reachable from the eye menu. */
+export const SETTINGS_VIEWS: readonly UiView[] = [UiView.Dex, UiView.TrustWeb]
 export const DEX_URL = 'https://getdex.com'

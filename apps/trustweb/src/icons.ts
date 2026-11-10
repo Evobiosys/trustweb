@@ -6,8 +6,8 @@
 // users and info are Lucide icons (lucide.dev, ISC licence).
 export const ICONS: Record<string, string> = {
   web: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="10.5" stroke-dasharray="2 3"/></svg>',
-  // Wave 36: the Your AI button, a four-point star.
-  sparkle: '<svg viewBox="0 0 24 24"><path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/></svg>',
+  // Wave 36: the Your AI button; wave 39: a clear four-point sparkle with a small one beside it.
+  sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3c.7 5.6 3.2 8.3 8.5 9-5.3.7-7.8 3.4-8.5 9-.7-5.6-3.2-8.3-8.5-9C6.8 11.3 9.3 8.6 10 3z"/><path d="M19 2.5c.25 1.9.95 2.6 2.7 2.9-1.75.3-2.45 1-2.7 2.9-.25-1.9-.95-2.6-2.7-2.9 1.75-.3 2.45-1 2.7-2.9z"/></svg>',
   feed: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>',
   // The Web Curator: a ring with its dot.
   curator: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>',

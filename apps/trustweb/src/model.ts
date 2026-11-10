@@ -1101,7 +1101,7 @@ export interface AppState {
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
-  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
+  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
   /** Wave 31 (matches.ts): what I can offer (edited like My Resources) and the matches the pc24 service found, with my answers. This device only (not in sync_core's bundle). */

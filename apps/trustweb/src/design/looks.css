@@ -1,0 +1,168 @@
+/* SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later */
+/* Wave 39 small-ui-b: the looks (Settings > Theme) as token overlays on tokens.css. Written from src/look.ts; small_ui_b.test.mjs keeps the two in step. */
+:root[data-look="sleek"]{
+  --fs-1:11.5px;
+  --fs-2:13px;
+  --fs-3:15px;
+  --fs-4:18px;
+  --fs-5:22px;
+  --lh-ui:1.35;
+  --lh-text:1.5;
+  --s-2:6px;
+  --s-3:9px;
+  --s-4:12px;
+  --s-5:18px;
+  --s-6:24px;
+  --r-card:8px;
+  --r-control:6px;
+  --r-chip:6px;
+  --r-sheet:12px;
+  --dur-1:90ms;
+  --dur-2:140ms;
+  --surface-0:#F7F7F6;
+  --surface-1:#FFFFFF;
+  --surface-2:#EFEFED;
+  --raised:#FFFFFF;
+  --surface-tab:rgba(255,255,255,.96);
+  --ink:#1E1E1C;
+  --ink-2:#5B5B57;
+  --ink-3:#8A8A85;
+  --line:rgba(0,0,0,.09);
+  --line-strong:rgba(0,0,0,.18);
+  --trust-tint:#E8F1F0;
+  --shadow-float:0 4px 14px rgba(0,0,0,.10);
+  --hairline:1px;
+}
+:root[data-look="sleek"][data-theme="dark"]{
+  --fs-1:11.5px;
+  --fs-2:13px;
+  --fs-3:15px;
+  --fs-4:18px;
+  --fs-5:22px;
+  --lh-ui:1.35;
+  --lh-text:1.5;
+  --s-2:6px;
+  --s-3:9px;
+  --s-4:12px;
+  --s-5:18px;
+  --s-6:24px;
+  --r-card:8px;
+  --r-control:6px;
+  --r-chip:6px;
+  --r-sheet:12px;
+  --dur-1:90ms;
+  --dur-2:140ms;
+  --surface-0:#171717;
+  --surface-1:#1F1F1E;
+  --surface-2:#2B2B29;
+  --raised:#252524;
+  --surface-tab:rgba(31,31,30,.96);
+  --ink:#ECECE8;
+  --ink-2:#B4B4AE;
+  --ink-3:#85857F;
+  --line:rgba(255,255,255,.10);
+  --line-strong:rgba(255,255,255,.22);
+  --trust-tint:#16302E;
+  --shadow-float:0 4px 14px rgba(0,0,0,.5);
+  --hairline:1px;
+}
+@media (prefers-color-scheme:dark){
+  :root[data-look="sleek"]:not([data-theme="light"]):not([data-theme="dark"]){
+    --fs-1:11.5px;
+    --fs-2:13px;
+    --fs-3:15px;
+    --fs-4:18px;
+    --fs-5:22px;
+    --lh-ui:1.35;
+    --lh-text:1.5;
+    --s-2:6px;
+    --s-3:9px;
+    --s-4:12px;
+    --s-5:18px;
+    --s-6:24px;
+    --r-card:8px;
+    --r-control:6px;
+    --r-chip:6px;
+    --r-sheet:12px;
+    --dur-1:90ms;
+    --dur-2:140ms;
+    --surface-0:#171717;
+    --surface-1:#1F1F1E;
+    --surface-2:#2B2B29;
+    --raised:#252524;
+    --surface-tab:rgba(31,31,30,.96);
+    --ink:#ECECE8;
+    --ink-2:#B4B4AE;
+    --ink-3:#85857F;
+    --line:rgba(255,255,255,.10);
+    --line-strong:rgba(255,255,255,.22);
+    --trust-tint:#16302E;
+    --shadow-float:0 4px 14px rgba(0,0,0,.5);
+    --hairline:1px;
+  }
+}
+:root[data-look="dex"]{
+  --fs-2:14px;
+  --r-card:12px;
+  --r-control:8px;
+  --r-sheet:16px;
+  --surface-0:#F6F6F9;
+  --surface-1:#FFFFFF;
+  --surface-2:#ECECF3;
+  --raised:#FFFFFF;
+  --surface-tab:rgba(255,255,255,.96);
+  --ink:#1B1B2B;
+  --ink-2:#58586E;
+  --ink-3:#8888A0;
+  --line:rgba(27,27,43,.10);
+  --line-strong:rgba(27,27,43,.22);
+  --trust:#4B45C4;
+  --trust-strong:#3A35A8;
+  --trust-tint:#ECEBFB;
+  --focus:#4B45C4;
+  --shadow-float:0 10px 28px rgba(27,27,43,.14);
+}
+:root[data-look="dex"][data-theme="dark"]{
+  --fs-2:14px;
+  --r-card:12px;
+  --r-control:8px;
+  --r-sheet:16px;
+  --surface-0:#14141C;
+  --surface-1:#1C1C27;
+  --surface-2:#2A2A39;
+  --raised:#232331;
+  --surface-tab:rgba(28,28,39,.96);
+  --ink:#EEEEF6;
+  --ink-2:#B6B6CC;
+  --ink-3:#8686A0;
+  --line:rgba(238,238,246,.12);
+  --line-strong:rgba(238,238,246,.26);
+  --trust:#8C86F0;
+  --trust-strong:#B5B1FA;
+  --trust-tint:#26244A;
+  --focus:#8C86F0;
+  --shadow-float:0 10px 28px rgba(0,0,0,.5);
+}
+@media (prefers-color-scheme:dark){
+  :root[data-look="dex"]:not([data-theme="light"]):not([data-theme="dark"]){
+    --fs-2:14px;
+    --r-card:12px;
+    --r-control:8px;
+    --r-sheet:16px;
+    --surface-0:#14141C;
+    --surface-1:#1C1C27;
+    --surface-2:#2A2A39;
+    --raised:#232331;
+    --surface-tab:rgba(28,28,39,.96);
+    --ink:#EEEEF6;
+    --ink-2:#B6B6CC;
+    --ink-3:#8686A0;
+    --line:rgba(238,238,246,.12);
+    --line-strong:rgba(238,238,246,.26);
+    --trust:#8C86F0;
+    --trust-strong:#B5B1FA;
+    --trust-tint:#26244A;
+    --focus:#8C86F0;
+    --shadow-float:0 10px 28px rgba(0,0,0,.5);
+  }
+}

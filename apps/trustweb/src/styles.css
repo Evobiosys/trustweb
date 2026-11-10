@@ -1,5 +1,6 @@
 @import './design/tokens.css';
 @import './components/rings.css';
+@import './design/looks.css';
 /* TrustWeb. Tokens now come from src/design/tokens.css (generated from tokens.json); the
    phone frame, tab bar, rings, sheet and cosmic register were ported from apps/mobile-ui/src/styles.css;
    the notes-flow pieces follow the owner's note-taking mockup (teal call-to-action, tag pills). */
@@ -1643,3 +1644,45 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .co-chat-send{display:flex; gap:var(--s-2); min-width:0}
 .co-chat-send .field{flex:1 1 8em; min-width:0}
 [data-guest-shell] .bar-more{display:none}
+
+/* wave 39 small-ui-b */
+.page-dock[hidden]{display:none}
+/* AI button: a sparkle at the far right of every header */
+.hdr-right .ai-btn{color:var(--trust)}
+.hdr-right .ai-btn svg{fill:currentColor; stroke:none}
+/* Your AI: Custom is an indented subsection under Claude */
+.ai-byok{margin-left:var(--s-4); padding-left:var(--s-3); border-left:2px solid var(--line)}
+.ai-byok > summary{font-size:var(--fs-2); font-weight:600; color:var(--ink)}
+/* ring card: ticks beside the names, a bar to archive the ticked */
+.ring-card-pick{width:18px; height:18px; margin:0; flex:none; accent-color:var(--trust)}
+.ring-card-bar{display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; margin:2px 0}
+.ring-card-bar[hidden]{display:none}
+.ring-card-bulk{border:0; background:none; padding:2px 0; font:inherit; font-size:13px; color:inherit; text-decoration:underline; cursor:pointer}
+/* heading subscript of a feature that is not approved yet */
+.alpha-label{color:var(--ink-3); font-size:.72em; font-weight:500; margin-left:2px; white-space:nowrap}
+/* browser-only notice: wraps at any width, the button sits below the text when it does not fit */
+.browser-only{display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; box-sizing:border-box; max-width:calc(100% - 24px); white-space:normal}
+.browser-only-text{flex:1 1 200px; min-width:0; overflow-wrap:anywhere}
+.browser-only-x{flex:none; padding:4px 0; margin-left:0}
+@media (max-width:480px){ .browser-only-x{flex-basis:100%; text-align:left} }
+/* Settings > Theme */
+.theme-row{display:flex; flex-direction:column; gap:var(--s-2); margin:4px 0 12px}
+.look-pick{display:flex; flex-direction:column; gap:var(--s-2)}
+/* looks: the token overlays live in design/looks.css */
+/* Sleek: dense and quiet. Thin 1 px lines, no shadows, sans headings, subtle hover. */
+:root[data-look="sleek"] body{font-size:var(--fs-2); line-height:var(--lh-ui)}
+:root[data-look="sleek"] :is(h2,h3,h4,h5,.ai-plan-name,.ai-plan-price,.ai-plans-title){font-family:var(--font-sans); font-weight:600}
+:root[data-look="sleek"] :is(.btn,.radio,.field,.ai-plan,.view-pill,.view-menu,.ring-card,.sheet .radio){border:var(--hairline) solid var(--line); box-shadow:none}
+:root[data-look="sleek"] .hdr{border-bottom:var(--hairline) solid var(--line)}
+:root[data-look="sleek"] .hdr-btn.icon-only{width:28px; height:28px; background:transparent}
+:root[data-look="sleek"] :is(.btn,.radio,.hdr-btn,.prow,.menu-item,.view-opt,.view-menu button):hover{background:var(--surface-2)}
+:root[data-look="sleek"] :is(.btn-electric,.ai-plan-btn){background:var(--trust); color:var(--on-trust)}
+:root[data-look="sleek"] .radio.on{border-color:var(--trust); background:var(--trust-tint)}
+:root[data-look="sleek"] .btn{padding:6px 12px; font-size:var(--fs-2); font-weight:500; border-radius:var(--r-control)}
+:root[data-look="sleek"] .btn-sm{padding:3px 9px; font-size:var(--fs-1)}
+:root[data-look="sleek"] .field{padding:6px 9px; font-size:var(--fs-2); border-radius:var(--r-control); background:var(--raised)}
+:root[data-look="sleek"] .radio{padding:var(--s-2) var(--s-3); border-radius:var(--r-control)}
+/* Dex-like: soft rounded controls with the indigo accent */
+:root[data-look="dex"] .btn{border-radius:var(--r-control)}
+:root[data-look="dex"] .field{border-radius:var(--r-control)}
+:root[data-look="dex"] :is(.btn-electric,.ai-plan-btn){background:var(--trust); color:var(--on-trust)}
