@@ -21,7 +21,7 @@ import css from './assistant.css?inline'
 import { createApproval, type Card } from './approval'
 import { streamChat, type ChatMessage } from './chat_stream'
 import { lookupQuestion, quickLook, type LookTarget } from './person_context'
-import { mentionedPeople, parseAssistantReply, systemPrompt, visibleText } from './protocol'
+import { aiRowName, mentionedPeople, parseAssistantReply, systemPrompt, visibleText } from './protocol'
 
 const WATCH_KEY = 'tw-assistant-watch'
 const PANE = 'tw-assistant-pane'
@@ -38,6 +38,8 @@ export function createPanel(ctx: TwCtx) {
   let watch = (() => { try { return localStorage.getItem(WATCH_KEY) === '1' } catch { return false } })()
   const approval = createApproval({ run: (a: Valid) => actions.run(a, 'assistant') }, { auto: () => watch })
   let busy: AbortController | null = null
+  /** Review wave 40: the running person lookup; closing the panel stops it too. */
+  let lookCtl: AbortController | null = null
   /** Phone only: min = just the header (the assistant brought me somewhere and I look at it), normal, big. */
   let size: 'min' | 'normal' | 'big' = 'normal'
   let reviewOpen = false
@@ -120,7 +122,7 @@ export function createPanel(ctx: TwCtx) {
     if (m.role === 'user') return el('div', { class: 'msg user', 'data-assistant-msg': 'user' }, [m.text])
     if (m.look) return el('div', { class: 'msg assistant' }, [lookView(m, m.look)])
     const cards = approval.cards().filter((c) => m.cards?.includes(c.id))
-    const waiting = cards.filter((c) => c.state === 'proposed').length
+    const waiting = cards.filter((c) => c.state === 'proposed' && c.action.auto).length   // Approve all leaves the ones that need their own Approve
     return el('div', { class: 'msg assistant', 'data-assistant-msg': 'assistant' }, [
       m.text || (busy && m === msgs[msgs.length - 1] ? T.thinking : ''),
       m.noAi ? el('div', { 'data-assistant-noai': '' }, [el('p', { class: 'meta' }, [T.noAiMore]), lnk(T.noAiLink, () => { close(); actions!.do('open', { place: 'your-ai' }) }, { 'data-assistant-plans': '' }, 'lnk strong')]) : null,
@@ -164,7 +166,7 @@ export function createPanel(ctx: TwCtx) {
       specs: actions!.specs(), where: ctx.where?.() ?? '', profile: ctx.profile(), look: readLook(localStorage),
       variations: allProfiles(s.twSettings).map((p) => p.id), modules: listModules().map((m) => m.id), places: PLACES,
       recent: actions!.recent().map((r) => `${r.by}: ${r.label}`),
-      rows: pendingProposals(s, Date.now()).slice(0, 60).map((x) => ({ key: x.row.key, name: x.row.name, labels: x.row.labels, ring: x.row.ring ?? x.proposal.ring, note: x.row.note })),
+      rows: pendingProposals(s, Date.now()).slice(0, 60).map((x) => ({ key: x.row.key, name: aiRowName(x.row.name), labels: x.row.labels, ring: x.row.ring ?? x.proposal.ring, note: x.row.note })),
       people: mentionedPeople(s.people.filter((p) => !p.deleted_at && p.ring !== 'none'), text, 20).map((p) => ({ id: p.id, name: p.name, ring: p.ring, tags: tags.filter((t) => String(p.fields?.[t.id]) === 'true').map((t) => t.label ?? t.id) })),
     })
   }
@@ -207,9 +209,12 @@ export function createPanel(ctx: TwCtx) {
     draw()
     const endpoint = ai()
     if (!configured(endpoint)) return
+    lookCtl?.abort()
+    const ctl = new AbortController()
+    lookCtl = ctl
     try {
       const sys = 'You help someone remember a contact. Say in 4 to 8 short lines what is publicly known about this person (role, work, where they are active). If you can search the web, do it and name the sources. Say plainly when you are not sure or the name is common. Never guess private details.'
-      await streamChat(endpoint, [{ role: 'system', content: sys }, { role: 'user', content: lookupQuestion(s, target, tags) }], (t) => { l.longer = visibleText(t); draw() }, new AbortController().signal, ownChannels(s), 600)
+      await streamChat(endpoint, [{ role: 'system', content: sys }, { role: 'user', content: lookupQuestion(s, target, tags) }], (t) => { l.longer = visibleText(t); draw() }, ctl.signal, ownChannels(s), 600)
       l.longerState = 'done'
     } catch (e) { l.longer = T.failed((e as Error).message); l.longerState = 'failed' }
     draw()
@@ -241,6 +246,7 @@ export function createPanel(ctx: TwCtx) {
   }
   function close(): void {
     busy?.abort()
+    lookCtl?.abort()
     hostEl.hidden = true
     document.documentElement.classList.remove(PANE)
   }

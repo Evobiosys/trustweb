@@ -22,6 +22,8 @@ export interface CommunityData {
   views?: ResourceView[]
   docsUrl?: string
   telegramUrl?: string
+  /** Wave 40 review: docsUrl / telegramUrl were moved into the embeds record once; they are kept, never adopted again. */
+  linksMoved?: true
 }
 
 const isStr = (v: unknown): v is string => typeof v === 'string'
@@ -57,7 +59,18 @@ export function parseCommunity(raw: unknown): CommunityData {
   if (Array.isArray(o.views)) d.views = o.views.map(parseView).filter((v): v is ResourceView => v !== undefined)
   if (isStr(o.docsUrl)) d.docsUrl = o.docsUrl
   if (isStr(o.telegramUrl)) d.telegramUrl = o.telegramUrl
+  if (o.linksMoved === true) d.linksMoved = true
   return d
+}
+
+/**
+ * Wave 40 review: the wave 39 Docs / Telegram links of this slice move into the embeds record ONCE (only the ones it lacks), and the slice is
+ * marked, so a link later cleared in embeds is not brought back by the next mount. The old fields stay (nothing deleted). Null: nothing to do.
+ */
+export function legacyLinksPatch(d: CommunityData, have: { docsUrl?: string; telegramUrl?: string }): { patch: { docsUrl?: string; telegramUrl?: string } | null; next: CommunityData | null } {
+  if (d.linksMoved || (!d.docsUrl && !d.telegramUrl)) return { patch: null, next: null }
+  const patch = { ...(d.docsUrl && !have.docsUrl ? { docsUrl: d.docsUrl } : {}), ...(d.telegramUrl && !have.telegramUrl ? { telegramUrl: d.telegramUrl } : {}) }
+  return { patch: Object.keys(patch).length ? patch : null, next: { ...d, linksMoved: true } }
 }
 
 const union = (a: readonly string[], b: readonly string[]): string[] => [...new Set([...a, ...b])]

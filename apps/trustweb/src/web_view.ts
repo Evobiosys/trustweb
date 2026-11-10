@@ -113,7 +113,7 @@ export interface WebViewDeps {
   st(): AppState
   save(): void
   render(): void
-  toast(msg: string): void
+  toast(msg: string, o?: { onClick?: () => void }): void
   showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void
   hideNotice(): void
   curator: Pick<Curator, 'hide' | 'unhide' | 'ring'>
@@ -213,7 +213,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       if (complete) { members[r] = ps; continue }
       // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
       const lim = drawnLimit(s, s, r)
-      const cut = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter()), lim, Date.now())
+      const cut = rankedBy(s.uiRings, s, withTag(ps, deps.tagFilter(), loadColourTags()), lim, Date.now())
       if (Number.isFinite(lim)) { ranks[r] = [...cut.shown, ...cut.rest]; rankedAll.push(...ranks[r]!.map((p) => ({ id: p.id, ring: r }))) }
       const f = keepPinned(sticky && Number.isFinite(lim) ? stickyCut([...cut.shown, ...cut.rest], sticky, stickyAt) : cut, s.uiRings?.pinnedId) // wave 36b: a dragged dot stays
       members[r] = f.shown; rest[r] = f.rest
@@ -470,7 +470,12 @@ export function createWebView(deps: WebViewDeps): WebView {
         if (!r) return
         const save2 = (): void => { s.relations = st().relations; save(); relClose(); render() }
         const box = relationCard(r, (id) => ppl.find((x) => x.id === id)?.name ?? id, {
-          set: (x, y, kind) => { setStated(st(), x, y, kind, Date.now()); save2(); if (kind === 'none') toast(S.relations.toastNone) },
+          // Review wave 40: "Not related" from the line card can be undone from its toast (the line is gone, the person card is far).
+          set: (x, y, kind) => {
+            const prev = st().relations?.find((q) => (q.a === x && q.b === y) || (q.a === y && q.b === x))
+            setStated(st(), x, y, kind, Date.now()); save2()
+            if (kind === 'none') toast(S.relations.toastNone, { onClick: () => { if (prev) setStated(st(), x, y, prev.kind, prev.at); else clearStated(st(), x, y); save2() } })
+          },
           clear: (x, y) => { clearStated(st(), x, y); save2() },
         })
         const pt = localPoint(e, wrap.getBoundingClientRect())

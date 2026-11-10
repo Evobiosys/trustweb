@@ -35,7 +35,7 @@ describe('RSVP', () => {
     d = setRsvp(d, 'a', 'maybe')
     expect(d.rsvp).toEqual({ a: 'maybe' })
     d = setRsvp(d, 'a', 'maybe')
-    expect(d.rsvp).toEqual({})
+    expect(d.rsvp).toEqual({ a: 'none' })   // review wave 40: cleared = a mark the sync carries
   })
   it('the list shows my answer, else "going" for an event I already attend, soonest upcoming first', () => {
     const list = buildEventList([ev('late', '2026-12-01'), ev('soon', '2026-11-12', { attended: true }), ev('old', '2026-10-01')], { rsvp: { late: 'maybe' } }, NOW)

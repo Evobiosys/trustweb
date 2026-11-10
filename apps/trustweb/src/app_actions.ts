@@ -83,6 +83,8 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
     return named[0]
   }
   const nameOf = (ref: string): string => { try { return person(ref).name } catch { return ref } }
+  /** Someone holds tag `id` (review wave 40: an undo keeps a tag that is in use by now). */
+  const held = (id: string): boolean => host.state().people.some((x) => String(x.fields?.[id]) === 'true')
   const tagByLabel = (label: string): ColourTag | undefined => {
     const l = label.replace(/^#/, '').trim().toLowerCase()
     return host.tags().find((t) => t.id === l || (t.label ?? '').toLowerCase() === l || t.id === tagSlug(l))
@@ -123,7 +125,8 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
     type: 'set-ring', doc: 'Moves a person to a ring.', shape: `{"person": id or name, "ring": ${RINGS.map((r) => `"${r}"`).join('|')}}`,
     parse: (a) => ({ person: str(a, 'person', 80)!, ring: oneOf(a, 'ring', RINGS) }),
     label: (a) => T.ring(nameOf(a.person), S.assistant.ringShort[a.ring]),
-    apply: (a) => { const p = person(a.person); const prev = p.ring; p.ring = a.ring; done(); return () => { p.ring = prev; done() } },
+    // Review wave 40 (every undo below): put back only while the value is still the one this step set; a change made since stays.
+    apply: (a) => { const p = person(a.person); const prev = p.ring; p.ring = a.ring; done(); return () => { if (p.ring !== a.ring) return; p.ring = prev; done() } },
   })
   reg.define({
     type: 'add-tag', doc: 'Gives a person a tag (an existing one by label, else a new one).', shape: '{"person": id or name, "tag": label}',
@@ -140,7 +143,7 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
       done()
       return () => {
         if (!had) untagPerson(p, id)
-        if (created) host.saveTags(host.tags().filter((t) => t.id !== id))
+        if (created && !held(id)) host.saveTags(host.tags().filter((t) => t.id !== id))   // a tag someone holds by now stays
         done()
       }
     },
@@ -155,7 +158,7 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
       if (!tag || String(p.fields?.[tag.id]) !== 'true') throw new Error(`${p.name} has no tag "${a.tag}"`)
       untagPerson(p, tag.id)
       done()
-      return () => { tagPerson(p, tag.id); done() }
+      return () => { if (host.tags().some((t) => t.id === tag.id)) { tagPerson(p, tag.id); done() } }   // not with a tag deleted since
     },
   })
   reg.define({
@@ -163,7 +166,8 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
     parse: (a) => {
       const field = str(a, 'field', 40)!
       if (!FIELD.test(field) || RESERVED.has(field)) throw new Error(`field "${field}" cannot be set`)
-      const value = typeof a.value === 'string' ? a.value.trim() : ''
+      if (typeof a.value !== 'string') throw new Error('value must be text ("" clears the field)')   // review wave 40: a missing value never clears
+      const value = a.value.trim()
       if (value.length > 500) throw new Error('value is too long')
       return { person: str(a, 'person', 80)!, field, value }
     },
@@ -175,7 +179,7 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
         const prev = p[a.field]
         p[a.field] = a.value.slice(0, a.field === 'name' ? 40 : 500)
         done()
-        return () => { p[a.field as 'name' | 'context'] = prev; done() }
+        return () => { const f = a.field as 'name' | 'context'; if (p[f] !== a.value.slice(0, f === 'name' ? 40 : 500)) return; p[f] = prev; done() }
       }
       const prev = p.fields?.[a.field]
       const put = (v: string | undefined): void => {
@@ -185,7 +189,7 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
       }
       put(a.value)
       done()
-      return () => { put(prev); done() }
+      return () => { if ((p.fields?.[a.field] ?? '') !== a.value) return; put(prev); done() }
     },
   })
   reg.define({
@@ -223,7 +227,7 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
       done()
       return () => {
         for (const p of people) untagPerson(p, tag.id)
-        host.saveTags(host.tags().filter((t) => t.id !== tag.id))
+        if (!held(tag.id)) host.saveTags(host.tags().filter((t) => t.id !== tag.id))
         done()
       }
     },
@@ -259,11 +263,14 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
       const snap = before ? structuredClone(before) : undefined
       const ids = new Set(s.people.map((p) => p.id))
       decide(s, x.batchId, x.row.key, { do: 'accept' }, host.now(), () => host.newId(), host.tagOf?.(x) ?? tagSlug)
+      // Review wave 40: undo takes out only the person THIS accept created, and puts an existing person back only while nobody changed them since.
+      const created = new Set(s.people.filter((p) => !ids.has(p.id)).map((p) => p.id))
+      const applied = before ? JSON.stringify(before) : ''
       done()
       return () => {
         const st = host.state()
-        if (before && snap) { for (const k of Object.keys(before)) delete (before as unknown as Record<string, unknown>)[k]; Object.assign(before, snap) }
-        st.people = st.people.filter((p) => ids.has(p.id))
+        if (before && snap && JSON.stringify(before) === applied) { for (const k of Object.keys(before)) delete (before as unknown as Record<string, unknown>)[k]; Object.assign(before, snap) }
+        st.people = st.people.filter((p) => !created.has(p.id))
         const batch = (st.serviceImports ?? []).find((b) => b.id === x.batchId)
         if (batch) delete batch.done[x.row.key]
         done()
@@ -287,7 +294,7 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
     type: 'set-look', doc: 'Changes the look of the app.', shape: '{"look": "default"|"sleek"|"dex"}',
     parse: (a) => ({ look: oneOf(a, 'look', LOOKS) }),
     label: (a) => T.look(S.themeLooks[a.look]),
-    apply: (a) => { const prev = host.look(); host.setLook(a.look); return () => host.setLook(prev) },
+    apply: (a) => { const prev = host.look(); host.setLook(a.look); return () => { if (host.look() === a.look) host.setLook(prev) } },
   })
   reg.define({
     type: 'set-profile', doc: 'Switches the variation (built-in or one made before).', shape: '{"profile": VARIATION}',
@@ -297,20 +304,21 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
       if (a.profile.startsWith('custom-') && !host.state().twSettings?.custom?.some((c) => c.id === a.profile)) throw new Error(`no variation "${a.profile}"`)
       const prev = host.profile()
       host.setProfile(a.profile)
-      return () => host.setProfile(prev)
+      return () => { if (host.profile() === a.profile) host.setProfile(prev) }
     },
   })
   reg.define({
     type: 'set-extension', doc: 'Switches a part of the app (a module) on or off.', shape: '{"module": MODULE, "on": true|false}',
-    parse: (a) => ({ module: oneOf(a, 'module', host.modules()), on: bool(a, 'on') }),
+    // Review wave 40: not the assistant itself (switching it off would take this card and every Undo with it).
+    parse: (a) => ({ module: oneOf(a, 'module', host.modules().filter((m) => m !== 'assistant')), on: bool(a, 'on') }),
     label: (a) => T.ext(a.module, a.on),
-    apply: (a) => { const prev = host.isEnabled(a.module); host.setExtension(a.module, a.on); return () => host.setExtension(a.module, prev) },
+    apply: (a) => { const prev = host.isEnabled(a.module); host.setExtension(a.module, a.on); return () => { if (host.isEnabled(a.module) === a.on) host.setExtension(a.module, prev) } },
   })
   reg.define({
     type: 'set-setting', doc: `Flips a switch of this device: ${SETTINGS.join(', ')}.`, shape: `{"key": ${SETTINGS.map((k) => `"${k}"`).join('|')}, "on": true|false}`,
     parse: (a) => ({ key: oneOf(a, 'key', SETTINGS), on: bool(a, 'on') }),
     label: (a) => T.setting(S.assistant.settings[a.key], a.on),
-    apply: (a) => { const prev = host.setting(a.key); host.setSetting(a.key, a.on); return () => host.setSetting(a.key, prev) },
+    apply: (a) => { const prev = host.setting(a.key); host.setSetting(a.key, a.on); return () => { if (host.setting(a.key) === a.on) host.setSetting(a.key, prev) } },
   })
   reg.define({
     type: 'create-variation', doc: 'Makes a named variation (listed under Settings > Variations): a built-in base, module switches, a look, design-token colours/sizes. Switch to it with set-profile "custom-<name>".',
@@ -318,8 +326,10 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
     parse: (a) => customProfile(a, host.modules()),
     label: (a) => T.variation(a.name),
     apply: (a) => {
+      const prev = host.state().twSettings?.custom?.find((c) => c.id === a.id)   // review wave 40: a same-named one is replaced; undo brings it back
       host.saveTw(addCustom(host.state().twSettings, a))
       return () => {
+        if (prev) { host.saveTw(addCustom(host.state().twSettings, prev)); return }
         const defaults = host.defaults?.() ?? Object.fromEntries(host.modules().map((m) => [m, true]))
         host.saveTw(removeCustom(host.state().twSettings, a.id, defaults))
       }

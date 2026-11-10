@@ -15,6 +15,7 @@ const PATH = '/__tw/dev-record'
 const EDITS_PATH = '/__tw/dev-edits'
 const AT_HEADER = 'X-TW-Live-At'
 const BASE_HEADER = 'X-TW-Live-Base'
+const ADOPTED_HEADER = 'X-TW-Adopted'
 const DEBOUNCE_MS = 2000
 
 /** True in a personal preview (not stock, not a build). */
@@ -68,6 +69,12 @@ let timer: ReturnType<typeof setTimeout> | undefined
 let warned = false
 /** Another preview posted a newer record since this tab last synced (409): this tab stops sharing; its next boot takes the newer one and keeps its own as <key>.before-live. */
 let stale = false
+/** Wave 40: a device's state was just taken; the next post tells the dev server so it writes one adopted-from-device line (header value: URI-encoded JSON). */
+let adopted: string | null = null
+export function markAdopted(device: string, d: { people: number; notes: number; settings: number }): void {
+  adopted = encodeURIComponent(JSON.stringify({ device, ...d }))
+}
+
 /** Posts run one after another, so a second save never carries a base older than this tab's own previous post. */
 let posting: Promise<unknown> = Promise.resolve()
 
@@ -77,9 +84,11 @@ export function pushLiveDevRecord(persona: string, s: AppState): void {
   clearTimeout(timer)
   timer = setTimeout(() => {
     const body = JSON.stringify(s)
+    const adoptedNow = adopted
+    adopted = null
     posting = posting.then(() => ready).then((replaced) => {
       if (replaced || stale) return
-      return fetch(PATH, { method: 'POST', headers: { 'Content-Type': 'application/json', [BASE_HEADER]: String(readAt(persona) ?? 0) }, body }).then(async (r) => {
+      return fetch(PATH, { method: 'POST', headers: { 'Content-Type': 'application/json', [BASE_HEADER]: String(readAt(persona) ?? 0), ...(adoptedNow ? { [ADOPTED_HEADER]: adoptedNow } : {}) }, body }).then(async (r) => {
         if (r.status === 409) { stale = true; console.warn('dev record: another personal preview saved a newer record; this tab no longer shares (reload to take it)'); return }
         if (!r.ok) throw new Error(String(r.status))
         const at = Number(r.headers.get(AT_HEADER))

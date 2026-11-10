@@ -26,7 +26,8 @@ export function openShare(svc: PhotosService, photoIds: string[]): void {
   let scope: PageState = initial(defaultZone(s()))
   const note = el('p', { class: 'meta', 'data-photo-share-note': '' }, [t.shareStub])
 
-  const go = async (): Promise<void> => {
+  let busy = false   // review wave 40: a second tap while the first runs would write the bundle and its share line twice
+  const share = async (): Promise<void> => {
     const metas = (await svc.store.list()).filter((m) => photoIds.includes(m.id))
     const plan = planShare(basisOf(s()), { photos: metas, scope, now: new Date(), newId: () => randomId(8) })
     if (!plan) return
@@ -39,6 +40,11 @@ export function openShare(svc: PhotosService, photoIds: string[]): void {
     const sealed = me ? (await Promise.all(dids.map((did) => sealBundleFor(plan.bundle, me, did).then(() => 1, () => 0)))).reduce<number>((a, b) => a + b, 0) : 0
     svc.toast(t.shareDone(plan.bundle.recipients.length, sealed))
     svc.back()
+  }
+  const go = async (): Promise<void> => {
+    if (busy) return
+    busy = true
+    try { await share() } finally { busy = false }
   }
 
   svc.page(t.shareTitle(photoIds.length), [

@@ -129,6 +129,8 @@ export function createRegistry(io: RegistryIo) {
     },
     listModules: (): readonly TwModule[] => [...modules],
     isEnabled,
+    /** Wave 40 review: the module is initialised and running (a switch can be on while its chunk failed to load). */
+    isActive: (id: string): boolean => active.has(id),
     /** Persists the switch and brings the module up or down at once. */
     async setEnabled(id: string, on: boolean): Promise<void> {
       if (!find(id)) throw new Error(`unknown module: ${id}`)

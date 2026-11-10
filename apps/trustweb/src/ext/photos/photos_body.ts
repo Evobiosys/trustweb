@@ -19,6 +19,18 @@ let off: (() => void)[] = []
 const cards = new Map<string, () => void>()
 const imports = new Set<() => void>()
 
+/** Review wave 40: calls `fn` once `node`, after being shown, leaves the page (Back, another page): the import grid's object URLs of the
+ *  original files go then, not only when the module is switched off. The returned function stops watching (and runs nothing). */
+function whenGone(node: Node, fn: () => void): () => void {
+  let seen = node.isConnected
+  const obs = new MutationObserver(() => {
+    if (node.isConnected) { seen = true; return }
+    if (seen) { obs.disconnect(); fn() }
+  })
+  obs.observe(document.body, { childList: true, subtree: true })
+  return () => obs.disconnect()
+}
+
 function settingsRows(ctx: TwCtx): Node[] {
   const t = ctx.strings.photos
   const s = svc
@@ -29,7 +41,14 @@ function settingsRows(ctx: TwCtx): Node[] {
     line,
     el('button', {
       class: 'linkbtn', 'data-photos-import-open': '',
-      onclick: () => { const p = importPage(s); imports.add(p.letGo); s.page(t.folder, [p.node], 'photos-import') },
+      onclick: () => {
+        const p = importPage(s)
+        let stop = (): void => undefined
+        const release = (): void => { stop(); p.letGo(); imports.delete(release) }
+        imports.add(release)
+        s.page(t.folder, [p.node], 'photos-import')
+        stop = whenGone(p.node, release)
+      },
     }, [t.folder]),
   ]
 }
@@ -51,6 +70,7 @@ export const body: TwModuleBody = {
     for (const f of [...cards.values(), ...imports]) f()
     cards.clear()
     imports.clear()
+    svc?.store.close()   // review wave 40: dispose undoes init, the database connection included
     svc = null
   },
   settings: (ctx) => [{ id: MODULE_ID, title: ctx.strings.photos.title, rows: () => settingsRows(ctx) }],

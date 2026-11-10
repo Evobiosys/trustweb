@@ -53,6 +53,11 @@ const row = (p: Person): Obj => ({ id: p.id, name: p.name, zone: p.ring, tags: t
 const schema = (properties: Obj, required: string[] = []): Obj => ({ type: 'object', properties, required, additionalProperties: false })
 const S = (description: string): Obj => ({ type: 'string', description })
 
+/** TW_MCP_TOOLS as an allow list: absent = every tool; set (also empty, i.e. every tool switched off in Settings) = only those named. */
+export function toolAllow(v: string | undefined): string[] | undefined {
+  return v === undefined ? undefined : v.split(',').map((s) => s.trim()).filter(Boolean)
+}
+
 export function recordTools(o: RecordToolsOptions): Tool[] {
   const now = o.now ?? (() => new Date())
 

@@ -23,7 +23,9 @@ export function mountCardPhotos(svc: PhotosService, personId: string, host: HTML
   let urls: string[] = []      // the object URLs of the grid on screen
   let gen = 0
   const revoke = (list: string[]): void => { for (const u of list) URL.revokeObjectURL(u) }
-  const letGo = (): void => { revoke(urls); urls = [] }
+  /** Review wave 40: the open viewer (its full-size picture URL) closes too when the card or the module lets go. */
+  let closeViewer: (() => void) | null = null
+  const letGo = (): void => { revoke(urls); urls = []; gen++; closeViewer?.() }
   const name = (): string => svc.ctx.store().people.find((p) => p.id === personId)?.name ?? '?'
 
   async function tile(m: PhotoMeta, mode: string, made: string[], onTap: () => void): Promise<HTMLElement> {
@@ -43,7 +45,9 @@ export function mountCardPhotos(svc: PhotosService, personId: string, host: HTML
     const mode = imageMode()
     const blob = mode === 'hide' ? null : await svc.store.blob(m.id, 'full')
     const full = blob ? URL.createObjectURL(blob) : ''
-    const close = (): void => { dlg.close(); dlg.remove(); if (full) URL.revokeObjectURL(full) }
+    const close = (): void => { dlg.close(); dlg.remove(); if (full) URL.revokeObjectURL(full); if (closeViewer === close) closeViewer = null }
+    closeViewer?.()
+    closeViewer = close
     dlg.append(
       mode === 'hide' ? el('p', { class: 'meta' }, [t.hiddenTile]) : el('div', { class: mode === 'grey' ? 'grey' : '' }, [el('img', { src: full, alt: '' })]),
       el('p', { class: 'meta', 'data-photo-source': '' }, [`${new Date(m.addedAt).toLocaleDateString()} · ${m.source} · ${formatBytes(m.bytes)}`]),
