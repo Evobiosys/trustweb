@@ -1816,3 +1816,6 @@ button.tag-pill{cursor:pointer; text-decoration:underline}
 .tag-manager .chips{display:flex; flex-wrap:wrap; gap:6px; min-width:0}
 .tag-manager .field{max-width:100%}
 .tag-manager .tm-count{color:var(--ink-2); font-size:var(--fs-1,13px)}
+/* wave 40 review-fixes */
+/* the new wave 40 text buttons are underlined like every clickable text (UI rule); filled buttons stay as they are */
+.tag-manager .btn-ghost,[data-profile-link-copy],.settings-import-bottom,[data-delivery-close]{text-decoration:underline}
