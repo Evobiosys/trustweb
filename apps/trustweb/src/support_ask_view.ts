@@ -85,9 +85,9 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
       chips(S.supportLeaveOut, exclude, 'data-support-excluded'),
       el('details', { class: 'support-adv', 'data-support-advanced': '', ...(pick.notClosest ? { open: '' } : {}) }, [
         el('summary', {}, [S.supportAdvanced]),
-        el('label', { class: 'radio' }, [
+        el('label', { class: 'support-not-closest' }, [
           el('input', { type: 'checkbox', 'data-support-not-closest': '', ...(pick.notClosest ? { checked: '' } : {}), onchange: (e) => { pick.notClosest = (e.target as HTMLInputElement).checked; draw() } }),
-          el('b', {}, [S.supportNotClosest]),
+          el('span', {}, [S.supportNotClosest]),
         ]),
       ]),
       el('p', { class: 'hint', 'data-support-count': String(to.length) }, [to.length ? S.supportOnly(to.length) : S.supportNobody]),

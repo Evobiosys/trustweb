@@ -1655,3 +1655,4 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 .support-adv summary{text-decoration:underline; cursor:pointer}
 .support-found{display:flex; flex-wrap:wrap; gap:var(--s-2, 8px); align-items:center; min-width:0}
 .support-found button{text-decoration:underline}
+.support-not-closest{display:flex; gap:var(--s-2, 8px); align-items:center; margin-top:var(--s-2, 8px)}
