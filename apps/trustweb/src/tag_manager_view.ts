@@ -25,7 +25,7 @@ export function tagManagerView(io: TagManagerIo): HTMLElement {
 
   /** Runs an edit; a refused one (a loop) says so and changes nothing. */
   const apply = (edit: (tags: readonly ColourTag[]) => ColourTag[]): void => {
-    try { io.saveTags(edit(io.tags())) } catch { io.toast(S.tagsCycle) }
+    try { io.saveTags(edit(io.tags())) } catch (e) { io.toast((e as Error).message === 'cycle' ? S.tagsCycle : S.tagsGone) }   // review wave 40: not every refusal is a loop
     draw()
   }
   const nameOf = (id: string): string => io.people().find((p) => p.id === id)?.name ?? id

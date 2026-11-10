@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 import { DEFAULT_BASE_URL, normalizeBaseUrl } from './compose_link'
-import type { Network } from './selectors'
+import { NETWORKS, type Network } from './selectors'
 
 export interface Settings {
   baseUrl: string
@@ -35,3 +35,17 @@ export function shouldAsk(settings: Settings, network: Network, host: string): b
 }
 
 export const SETTINGS_KEY = 'settings'
+
+const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
+/**
+ * Review wave 40: the host of a Mastodon instance the person adds in the options: a plain host name (labels of letters, digits, inner hyphens),
+ * not one of the built-in sites (their content script runs already) and not one added before. Null = refuse.
+ */
+export function instanceHost(raw: string, added: readonly string[]): string | null {
+  const h = raw.trim().toLowerCase()
+  const labels = h.split('.')
+  if (labels.length < 2 || !labels.every((l) => LABEL.test(l)) || !/^[a-z]{2,}$/.test(labels[labels.length - 1] ?? '')) return null
+  const builtIn = Object.values(NETWORKS).flatMap((n) => n.hosts)
+  return builtIn.includes(h) || added.includes(h) ? null : h
+}

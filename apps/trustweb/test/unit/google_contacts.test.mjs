@@ -195,10 +195,13 @@ describe('mapPerson', () => {
 })
 
 describe('revokeToken', () => {
-  it('posts to the revoke endpoint', async () => {
+  it('posts to the revoke endpoint, the token in the body (review wave 40: never in the address, where logs keep it)', async () => {
     let url
-    await revokeToken(async (u) => { url = u; return res(200, {}) }, 'a b')
-    expect(url).toBe('https://oauth2.googleapis.com/revoke?token=a%20b')
+    let init
+    await revokeToken(async (u, i) => { url = u; init = i; return res(200, {}) }, 'a b')
+    expect(url).toBe('https://oauth2.googleapis.com/revoke')
+    expect(init.method).toBe('POST')
+    expect(String(init.body)).toBe('token=a+b')
   })
   it('never throws', async () => {
     await expect(revokeToken(async () => { throw new Error('offline') }, 't')).resolves.toBeUndefined()

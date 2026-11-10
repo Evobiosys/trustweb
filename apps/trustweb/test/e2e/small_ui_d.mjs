@@ -95,14 +95,17 @@ try {
     ;({ ctx, page } = await fresh(vp, { feed: { on: true }, uiBar: { order: ['web', 'chat', 'record', 'events', 'inventory', 'feed', 'network'], orderVersion: 2, profile: 'custom' } }))
     const phone = w < 600
     const row = await barIds(page)
-    check(`${w}: the row holds ${phone ? 'six' : 'all seven'} (${row.join()})`, row.length === (phone ? 6 : 7))
+    // review wave 40: on a wide screen the module views (Timeline, Events map) follow the seven in the row
+    check(`${w}: the row holds ${phone ? 'six' : 'all seven first'} (${row.join()})`, phone ? row.length === 6 : row.slice(0, 7).join() === 'web,chat,record,events,inventory,feed,network')
     await page.locator('.tabs button.tab[data-go="chat"]').click({ button: 'right' }); await page.waitForTimeout(500)
     check(`${w}: a long press (right click) on a row button opens the arrange list, not a removal`, (await page.locator('.sheet.on [data-bar-arrange]').count()) === 1 && (await barIds(page)).length === row.length)
     const listIds = await page.locator('.sheet.on [data-bar-row]').evaluateAll((n) => n.map((x) => x.dataset.barRow))
     check(`${w}: list order = row order left to right, then the ⋮ list (${listIds.slice(0, 7).join()})`, listIds.slice(0, 7).join() === 'web,chat,record,events,inventory,feed,network')
     check(`${w}: the list reveals the views below the row${phone ? ' (a divider before the ⋮ ones)' : ''}`, phone ? (await page.locator('.sheet.on [data-bar-divider]').count()) === 1 : true)
     const first = await page.locator('.sheet.on [data-bar-move="web:-1"]').isDisabled()
-    const lastR = await page.locator('.sheet.on [data-bar-move="network:1"]').isDisabled()
+    // review wave 40: module views (Timeline, Events map) and Ask follow Network in the list now: the last row's → is the greyed one
+    const lastOn = await page.locator('.sheet.on [data-bar-row]:not([data-bar-slot="off"])').evaluateAll((n) => n.map((x) => x.dataset.barRow).pop())
+    const lastR = await page.locator(`.sheet.on [data-bar-move="${lastOn}:1"]`).isDisabled()
     check(`${w}: the arrow that cannot move further is greyed out (first ←, last →)`, first && lastR)
     check(`${w}: the others can move`, !(await page.locator('.sheet.on [data-bar-move="chat:-1"]').isDisabled()) && !(await page.locator('.sheet.on [data-bar-move="chat:1"]').isDisabled()))
     await page.locator('.sheet.on [data-bar-arrange]').scrollIntoViewIfNeeded(); await shot(page, '6-arrange', w)
@@ -138,16 +141,31 @@ try {
     await ctx.close()
 
     // ---- 7 + 9: the sparkle and Ask your web always answer ------------------------------------------------------------------------
+    // Review wave 40: the assistant (ai-edit-chat, on by default) answers the sparkle; with it switched off the sparkle keeps the small-ui-d behaviour.
+    const panelOpen = () => page.evaluate(() => { const h = document.querySelector('[data-assistant]'); return !!h && h.isConnected && !h.hidden })
+    const panelClose = () => page.evaluate(() => document.querySelector('[data-assistant]')?.shadowRoot?.querySelector('[data-assistant-close]')?.click())
     ;({ ctx, page } = await fresh(vp, { advanced: { ai: { baseUrl: 'http://127.0.0.1:1', model: 'm', preset: 'custom' } }, uiBar: { order: ['web', 'chat', 'record', 'events', 'inventory', 'ask'], orderVersion: 2, profile: 'custom' } }))
     await page.locator('[data-pid="p2"]').last().click(); await page.waitForTimeout(500)
     check(`${w}: a card page is open`, (await page.locator('[data-small-card="p2"]').count()) === 1)
     await page.locator('[data-ai-button]').click(); await page.waitForTimeout(500)
-    check(`${w}: the sparkle opens the ask even from a card page (endpoint set)`, (await page.locator('.query-dock').count()) === 1)
+    check(`${w}: the sparkle opens the assistant even from a card page (endpoint set)`, await panelOpen())
     await shot(page, '7-sparkle-ask', w)
+    await panelClose(); await page.waitForTimeout(200)
     for (const tab of ['chat', 'events', 'inventory', 'web']) {
       await page.locator(`button.tab[data-go="${tab}"]`).click(); await page.waitForTimeout(400)
       await page.locator('[data-ai-button]').click(); await page.waitForTimeout(400)
-      check(`${w}: sparkle answers on ${tab}`, (await page.locator('.query-dock').count()) === 1)
+      check(`${w}: sparkle answers on ${tab}`, await panelOpen())
+      await panelClose(); await page.waitForTimeout(200)
+    }
+    await ctx.close()
+    ;({ ctx, page } = await fresh(vp, { advanced: { ai: { baseUrl: 'http://127.0.0.1:1', model: 'm', preset: 'custom' } }, twSettings: { extensions: { assistant: false } }, uiBar: { order: ['web', 'chat', 'record', 'events', 'inventory', 'ask'], orderVersion: 2, profile: 'custom' } }))
+    await page.locator('[data-pid="p2"]').last().click(); await page.waitForTimeout(500)
+    await page.locator('[data-ai-button]').click(); await page.waitForTimeout(500)
+    check(`${w}: assistant off: the sparkle opens the ask even from a card page (endpoint set)`, (await page.locator('.query-dock').count()) === 1)
+    for (const tab of ['chat', 'events', 'inventory', 'web']) {
+      await page.locator(`button.tab[data-go="${tab}"]`).click(); await page.waitForTimeout(400)
+      await page.locator('[data-ai-button]').click(); await page.waitForTimeout(400)
+      check(`${w}: assistant off: sparkle answers on ${tab}`, (await page.locator('.query-dock').count()) === 1)
       if (tab !== 'web') await page.locator('.query-dock .x').click().catch(() => {})
     }
     await ctx.close()
@@ -155,7 +173,8 @@ try {
     for (const tab of ['chat', 'events', 'inventory', 'web']) {
       await page.locator(`button.tab[data-go="${tab}"]`).click(); await page.waitForTimeout(400)
       await page.locator('[data-ai-button]').click(); await page.waitForTimeout(500)
-      check(`${w}: without an endpoint the sparkle on ${tab} opens Settings > Your AI`, (await page.locator('.sheet.on [data-ai-group="sub"]').count()) === 1)
+      await page.evaluate(() => document.querySelector('[data-assistant]')?.shadowRoot?.querySelector('[data-assistant-plans]')?.click()); await page.waitForTimeout(500)
+      check(`${w}: without an endpoint the sparkle on ${tab} leads to Settings > Your AI (one tap in the assistant)`, (await page.locator('.sheet.on [data-ai-group="sub"]').count()) === 1)
       if (tab === 'web') await shot(page, '7-sparkle-no-endpoint', w)
       await page.keyboard.press('Escape'); await page.waitForTimeout(200)
     }

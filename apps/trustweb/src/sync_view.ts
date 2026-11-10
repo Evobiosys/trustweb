@@ -22,9 +22,11 @@ import { opensOn } from './sync_code'
 import type { CodeMerge } from './sync_code'
 import { dropCode, makePrimary, moveHere, openHere, pickCode, refreshAll, releaseName, rotateCodes, settleCodes } from './sync_codes'
 import type { CodeOpsDeps } from './sync_codes'
+import { alphaSub } from './alpha_heading'
 import { createSyncLink } from './sync_link'
 import type { Incoming, PairRequest, Pairing } from './sync_link'
 import type { Conflict } from './sync_core'
+import type { Differences } from './device_adopt'
 import { SCHEMA_VERSION } from './schema_version'
 import { linkButton } from './link_change_view'
 import { S } from './strings'
@@ -60,6 +62,10 @@ export interface SyncViewHooks {
   isPhone: () => boolean
   /** Wave 32: called after Sync now went through (the notes relay is polled then). */
   afterSyncNow?: () => void
+  /** Wave 40: keeps a copy of the record before another device's state replaces it (archived_copies_view.ts); false = none kept. */
+  archive: (reason: string, device: string) => boolean
+  /** Wave 40: after a state was taken (the edit stream gets its one line). */
+  adopted: (device: string, diff: Differences) => void
 }
 
 export interface SyncView {
@@ -118,6 +124,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   const link = createSyncLink({
     persona: h.persona, storeCtx: h.storeCtx, state: h.state, save: h.save, deviceName: () => deviceNameOf(nameKey), snapshot: h.snapshots.take,
     canSend: () => shouldSend(readSyncMode(), h.isPhone()),
+    archive: h.archive, onAdopted: h.adopted,
+    onWant: (name, send) => wantSheet(name, send),
     onLog: (line) => addLog(line),
     onChange: () => { if (showing()) devicesSheet() },
     askDid: h.askDid,
@@ -160,6 +168,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       el('p', { class: 'meta' }, [`${p.fp} · ${p.lastSyncAt ? S.dvLast(h.when(p.lastSyncAt)) : S.dvNever}`]),
       failed.has(p.did) ? el('p', { class: 'warn', 'data-sync-failed': p.did }, [failed.get(p.did)]) : null,
       el('button', { class: 'btn btn-electric btn-sm', 'data-sync-now': p.did, onclick: () => void syncNow(p) }, [failed.has(p.did) ? S.dvTryAgain : S.dvSyncNow]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-take-state': p.did, onclick: () => void ask(p, link.takeFrom(p.did), S.adAsked(p.name)) }, [S.adTake]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-give-state': p.did, onclick: () => void ask(p, link.sendTo(p.did), S.adOffered) }, [S.adGive]),
       shareToggle(p),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.dvUnlinkConfirm)) void unlinkDevice(p) } }, [S.dvUnlink]),
     ]))
@@ -351,12 +361,16 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     mergedSheet()
   }
 
-  async function syncNow(p: Pairing): Promise<void> {
-    try { await link.syncNow(p.did); failed.delete(p.did); h.toast(S.dvSent); h.afterSyncNow?.() } catch (e) {
+  /** Runs one request to a linked device; says why in the device's row when it fails. */
+  async function request(p: Pairing, run: Promise<void>, done: () => void): Promise<void> {
+    try { await run; failed.delete(p.did); done() } catch (e) {
       failed.set(p.did, { version: S.dvUpdate(p.name), offline: S.dvOffline, 'too large': S.dvTooLarge, 'receive only': S.dvReceiveOnlyNow }[(e as Error).message] ?? S.dvSendFailed)
       devicesSheet()
     }
   }
+  const syncNow = (p: Pairing): Promise<void> => request(p, link.syncNow(p.did), () => { h.toast(S.dvSent); h.afterSyncNow?.() })
+  /** Wave 40: Take this device's state / Send my state to this device; the answer comes back as an Incoming sheet. */
+  const ask = (p: Pairing, run: Promise<void>, msg: string): Promise<void> => request(p, run, () => h.toast(msg))
 
   async function linkSheet(): Promise<void> {
     const code = await link.offerCode()
@@ -415,6 +429,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       open('devices-incoming', [el('h3', {}, [S.dvReceiveTitle(i.from.name)]), el('p', { 'data-schema-newer': String(i.newer) }, [S.schemaNewer(i.newer, SCHEMA_VERSION)]), el('button', { class: 'btn btn-ghost', onclick: () => { i.decline(); devicesSheet() } }, [S.dvNotNow])])
       return
     }
+    if (i.adopt) { adoptSheet(i, i.adopt); return }
     const file = el('input', { type: 'checkbox', id: 'dv-file', 'data-also-file': '1' })
     open('devices-incoming', [
       el('h3', {}, [S.dvReceiveTitle(i.from.name)]),
@@ -424,6 +439,37 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       el('button', { class: 'btn btn-electric', 'data-receive': '1', onclick: () => void receive(i, file.checked) }, [S.dvReceive]),
       el('button', { class: 'btn btn-ghost', onclick: () => { i.decline(); devicesSheet() } }, [S.dvNotNow]),
     ])
+  }
+
+  /** Review wave 40: a linked device asks for this device's state; it is sent only on Send. */
+  function wantSheet(name: string, send: () => Promise<void>): void {
+    open('devices-want', [
+      el('h3', {}, [S.adWantTitle(name), ' ', alphaSub()]),
+      el('p', {}, [S.adWantLead(name)]),
+      el('button', { class: 'btn btn-electric', 'data-want-send': '1', onclick: () => { void send().then(() => h.toast(S.adWantSent(name))); devicesSheet() } }, [S.adWantSend]),
+      el('button', { class: 'btn btn-ghost', 'data-want-decline': '1', onclick: () => devicesSheet() }, [S.dvNotNow]),
+    ])
+  }
+
+  /** Wave 40: the confirm sheet before another device's state replaces this one: what differs, what happens to the old state. */
+  function adoptSheet(i: Incoming, a: NonNullable<Incoming['adopt']>): void {
+    const name = i.from.name
+    open('devices-incoming', [
+      el('h3', {}, [a.kind === 'take' ? S.adTakeTitle(name) : S.adGiveTitle(name), ' ', alphaSub()]),
+      el('p', { 'data-adopt-diff': [a.diff.people, a.diff.notes, a.diff.settings].join(',') }, [S.adDiff(a.diff)]),
+      a.other ? el('p', { 'data-adopt-other': String(a.other) }, [S.adDiffOther(a.other)]) : null,
+      el('p', {}, [a.kind === 'take' ? S.adTakeLead(name) : S.adGiveLead(name)]),
+      el('p', { class: 'meta' }, [S.adArchiveNote]),
+      el('button', { class: 'btn btn-electric', 'data-adopt-confirm': '1', onclick: () => void adopt(a, name) }, [a.kind === 'take' ? S.adTakeOk : S.adGiveOk]),
+      el('button', { class: 'btn btn-ghost', onclick: () => { i.decline(); devicesSheet() } }, [S.dvNotNow]),
+    ])
+  }
+
+  async function adopt(a: NonNullable<Incoming['adopt']>, name: string): Promise<void> {
+    const ok = await a.run().catch(() => false)   // review wave 40: odd data or a failed save says so instead of leaving the sheet hanging
+    h.toast(ok ? S.adDone(name) : S.adNotKept)
+    if (ok) h.changed()
+    devicesSheet()
   }
 
   async function receive(i: Incoming, file: boolean): Promise<void> {

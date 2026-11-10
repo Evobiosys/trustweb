@@ -4,7 +4,7 @@ import { el } from '../../../../demo/src/ui/dom'
 import { alphaSub } from '../../alpha_heading'
 import type { TwCtx, TwModuleBody } from '../tw_registry'
 import { callableForImport, contactsFromResult, openSession, pushArgs, pushableTools, type McpSession } from './mcp_client'
-import { CLIENTS, MCP_TOOLS, SERVERS_KEY, SERVER_PATH_HINT, SETTINGS_KEY, SUMBIOS_ID, parseServers, parseSettings, removeServer, snippet, upsertServer, type ClientId, type McpServerEntry, type McpSettings } from './mcp_config'
+import { CLIENTS, MCP_TOOLS, SERVERS_KEY, SERVER_PATH_HINT, SETTINGS_KEY, SUMBIOS_ID, parseServers, parseSettings, removeServer, snippet, upsertServer, validUrl, type ClientId, type McpServerEntry, type McpSettings } from './mcp_config'
 
 const store = (): Storage | null => { try { return localStorage } catch { return null } }
 const loadSettings = (): McpSettings => parseSettings(store()?.getItem(SETTINGS_KEY) ?? null)
@@ -39,6 +39,7 @@ function serverBlock(e: McpServerEntry, ctx: TwCtx, redraw: () => void): HTMLEle
     try { put(SERVERS_KEY, upsertServer(loadServers(), next)); say(t.saved); redraw() } catch { say(t.badUrl) }
   }
   const connect = async (): Promise<void> => {
+    if (!validUrl(url.value.trim())) { say(t.badUrl); return }   // review wave 40: the key never goes to an address Save refuses
     say(t.connecting)
     try { drawWork(await openSession({ ...e, url: url.value.trim(), token: token.value.trim() }, fetchFn)); say('') } catch (err) { say(t.connectFailed(err instanceof Error ? err.message : String(err))) }
   }

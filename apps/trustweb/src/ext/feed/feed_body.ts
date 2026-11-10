@@ -15,7 +15,7 @@ function settingsRows(ctx: TwCtx): Node[] {
         type: 'checkbox', ...(on ? { checked: '' } : {}),
         onchange: (e: Event) => {
           const d = readFeed(ctx.store())
-          if ((e.target as HTMLInputElement).checked) d.preview = true; else delete d.preview
+          d.preview = (e.target as HTMLInputElement).checked   // review wave 40: off is stored too, so a sync cannot switch it back on
           writeFeed(ctx, d)
         },
       }),

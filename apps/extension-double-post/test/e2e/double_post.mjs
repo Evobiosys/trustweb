@@ -41,6 +41,7 @@ const ctx = await chromium.launchPersistentContext(join(out, 'profile'), {
 try {
   const opt = await ctx.newPage()
   await opt.goto(`chrome-extension://${id}/options.html`)
+  await opt.locator('#sites input').nth(3).waitFor()   // review wave 40: the first render fills #base from storage; typing before it is overwritten
   await opt.fill('#base', 'http://evil.example')
   await opt.click('#save-base')
   check((await opt.textContent('#base-msg')).startsWith('Only https'), 'options: non-loopback http address refused')

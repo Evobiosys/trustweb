@@ -64,7 +64,7 @@ export function validUrl(raw: string): boolean {
   try {
     const u = new URL(raw)
     if (u.username || u.password) return false
-    return u.protocol === 'https:' || (u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost'))
+    return u.protocol === 'https:' || (u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]'))
   } catch { return false }
 }
 
