@@ -241,6 +241,7 @@ import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
 import { offerContacts, openServicesImport } from './services_view'
+import type { ImportedContact } from '../../crm/src/import/types'
 import type { ServicesHooks } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
@@ -4953,6 +4954,7 @@ const twBus = createBus()
 twBus.on('save', () => save())
 twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
 twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
+twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[]; name: string }; offerContacts({ state: st, save, toast: (msg) => toast(msg), changed: render, pages }, x.contacts, x.name) })
 function twCtx(): TwCtx {
   return { store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings) }
 }

@@ -49,8 +49,8 @@ let run: Run = IDLE_RUN
 let redraw: (() => void) | null = null
 
 /** Connect Google came back with contacts: they join the same summary as a file (wave 33). */
-export function offerContacts(h: ServicesHooks, contacts: ImportedContact[]): void {
-  files = [{ name: 'Google contacts', text: '', contacts }]
+export function offerContacts(h: ServicesHooks, contacts: ImportedContact[], name = 'Google contacts'): void {
+  files = [{ name, text: '', contacts }]
   dayFirst = undefined
   plan = planServices(h.state(), files, { me: me || h.state().me.displayName, now: Date.now() })
   notRecognised = 0
