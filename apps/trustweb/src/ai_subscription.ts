@@ -82,3 +82,22 @@ export async function checkSubscription(fetchFn: Fetch, base: string, ai: AiEndp
   const out = r.token ? { ...activeEndpoint(base, r.token), sub: next } : { ...ai, sub: next }
   return { ai: out, used: r.used, quota: r.quota }
 }
+
+export interface WaitOpts { sleep?: (ms: number) => Promise<void>; maxWaitMs?: number; intervalMs?: number; onTick?: (waitedSeconds: number) => void }
+
+/** The server's computer sleeps when idle: polls <base>/api/ai/status until it answers "up". False after maxWaitMs (default 5 min); a failed poll counts as not up yet. */
+export async function waitForAi(fetchFn: Fetch | ((url: string, init: never) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>), statusUrl: string, o: WaitOpts = {}): Promise<boolean> {
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  const every = o.intervalMs ?? 4000
+  const max = o.maxWaitMs ?? 300_000
+  for (let waited = 0; waited < max; waited += every) {
+    try {
+      const res = await (fetchFn as Fetch)(statusUrl, { method: 'GET', headers: {} })
+      const body = await res.json().catch(() => null) as { state?: string } | null
+      if (res.ok && body?.state === 'up') return true
+    } catch { /* offline for a moment: keep waiting */ }
+    await sleep(every)
+    o.onTick?.((waited + every) / 1000)
+  }
+  return false
+}

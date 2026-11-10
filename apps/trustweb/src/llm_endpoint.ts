@@ -7,6 +7,7 @@ import type { AiEndpoint } from './model'
 import { type OwnChannel, scrubFor } from './channel_readers'
 import { TOGETHER_DRAFT_SHAPE } from './together_request'
 import { S } from './strings'
+import { waitForAi, type WaitOpts } from './ai_subscription'
 
 export const AI_TIMEOUT_MS = 30_000
 
@@ -48,6 +49,37 @@ export function buildRequest(ai: AiEndpoint, text: string, system: string = TOGE
   }
 }
 
+
+/** What the person sees while the server's computer wakes (the loading window listens). */
+export type WakeEvent = { phase: 'waiting'; waited: number } | { phase: 'ready' } | { phase: 'failed' }
+let wakeListener: ((e: WakeEvent) => void) | undefined
+export const onWake = (f: ((e: WakeEvent) => void) | undefined): void => { wakeListener = f }
+
+type Reply = Awaited<ReturnType<FetchLike>>
+const isWaking = (res: Reply, body: unknown): boolean => res.status === 503 && (body as { error?: { code?: string } } | null)?.error?.code === 'waking'
+
+/**
+ * One chat call. The subscription's server sleeps its AI computer when idle: a "waking" 503 shows the wait, polls /status until up,
+ * then retries ONCE (a second "waking" is an error, never a loop). Own-key endpoints never wait.
+ */
+async function post(ai: AiEndpoint, url: string, init: { method: string; headers: Record<string, string>; body: string }, fetchFn: FetchLike, timeoutMs: number, wake: WaitOpts): Promise<{ res: Reply; body: unknown }> {
+  // The retry gets a longer budget: the model loads into the GPU on the first ask after a boot.
+  const once = async (limit = timeoutMs): Promise<{ res: Reply; body: unknown }> => {
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), limit)
+    try {
+      const res = await fetchFn(url, { ...init, signal: ctl.signal })
+      return { res, body: await res.json().catch(() => null) }
+    } finally { clearTimeout(timer) }
+  }
+  const first = await once()
+  if (ai.preset !== 'tw-subscription' || !isWaking(first.res, first.body)) return first
+  wakeListener?.({ phase: 'waiting', waited: 0 })
+  const up = await waitForAi(fetchFn as unknown as Parameters<typeof waitForAi>[0], `${ai.baseUrl.trim().replace(/\/+$/, '')}/status`, { ...wake, onTick: (s) => wakeListener?.({ phase: 'waiting', waited: s }) })
+  wakeListener?.({ phase: up ? 'ready' : 'failed' })
+  return up ? once(Math.max(timeoutMs, 90_000)) : first
+}
+
 /** choices[0].message.content as JSON (code fences stripped); null when absent or not JSON. */
 export function parseReply(body: unknown): unknown {
   const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
@@ -56,33 +88,23 @@ export function parseReply(body: unknown): unknown {
 }
 
 /** One call; throws with the endpoint's own message on an error, a timeout or a reply that is not JSON. */
-export async function askEndpoint(ai: AiEndpoint, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS, own: readonly OwnChannel[] = []): Promise<unknown> {
+export async function askEndpoint(ai: AiEndpoint, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS, own: readonly OwnChannel[] = [], wake: WaitOpts = {}): Promise<unknown> {
   const { url, init } = buildRequest(ai, text, undefined, undefined, own)
-  const ctl = new AbortController()
-  const timer = setTimeout(() => ctl.abort(), timeoutMs)
-  try {
-    const res = await fetchFn(url, { ...init, signal: ctl.signal })
-    const body = await res.json().catch(() => null)
-    if (!res.ok) throw new Error((body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`)
-    const parsed = parseReply(body)
-    if (parsed === null) throw new Error('not JSON')
-    return parsed
-  } finally { clearTimeout(timer) }
+  const { res, body } = await post(ai, url, init, fetchFn, timeoutMs, wake)
+  if (!res.ok) throw new Error((body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`)
+  const parsed = parseReply(body)
+  if (parsed === null) throw new Error('not JSON')
+  return parsed
 }
 
 /** One plain-text answer (the Ask your web summary); throws with the endpoint's own message on an error or a timeout. */
-export async function askEndpointText(ai: AiEndpoint, system: string, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS, own: readonly OwnChannel[] = []): Promise<string> {
+export async function askEndpointText(ai: AiEndpoint, system: string, text: string, fetchFn: FetchLike = fetch as unknown as FetchLike, timeoutMs = AI_TIMEOUT_MS, own: readonly OwnChannel[] = [], wake: WaitOpts = {}): Promise<string> {
   const { url, init } = buildRequest(ai, text, system, 400, own)
-  const ctl = new AbortController()
-  const timer = setTimeout(() => ctl.abort(), timeoutMs)
-  try {
-    const res = await fetchFn(url, { ...init, signal: ctl.signal })
-    const body = await res.json().catch(() => null)
-    if (!res.ok) throw new Error((body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`)
-    const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
-    if (typeof content !== 'string' || !content.trim()) throw new Error('empty')
-    return content.trim()
-  } finally { clearTimeout(timer) }
+  const { res, body } = await post(ai, url, init, fetchFn, timeoutMs, wake)
+  if (!res.ok) throw new Error((body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${res.status}`)
+  const content = (body as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content
+  if (typeof content !== 'string' || !content.trim()) throw new Error('empty')
+  return content.trim()
 }
 
 export type TestOutcome =

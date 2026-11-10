@@ -5,7 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { activeEndpoint, apiBase, ENTERPRISE_MAIL, PLAN_CARDS, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, presetLabel, signUp, validEmail, type PlanId } from './ai_subscription'
-import { configured, switchPreset, testEndpoint, testResultLines } from './llm_endpoint'
+import { configured, onWake, switchPreset, testEndpoint, testResultLines, type WakeEvent } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
 
@@ -42,7 +42,29 @@ async function pollOnce(h: Pick<AiViewHooks, 'state' | 'save'>): Promise<boolean
 }
 
 /** App start: a legacy pc24 record becomes a custom one, Jakob's dev record gets pc24 as Custom, a pending sign-up is polled once. */
+/** The loading window while the server's AI computer wakes (llm_endpoint's onWake): a spinner, the wait so far, a way to hide it. */
+export function mountWakeWindow(doc: Document = document): void {
+  let box: HTMLElement | null = null
+  const close = (): void => { box?.remove(); box = null }
+  onWake((e: WakeEvent) => {
+    if (e.phase === 'ready') return close()
+    if (!box) {
+      box = el('div', { class: 'wt-modal ai-wake', role: 'status', 'aria-live': 'polite', 'data-ai-wake': '' }, [])
+      doc.body.append(box)
+    }
+    const msg = e.phase === 'failed' ? S.aiWakeFailed : S.aiWakeBody
+    box.replaceChildren(el('div', { class: 'wt-panel ai-wake-panel' }, [
+      ...(e.phase === 'waiting' ? [el('div', { class: 'ai-wake-spin', 'aria-hidden': 'true' }, [])] : []),
+      el('h3', {}, [S.aiWakeTitle]),
+      el('p', {}, [msg]),
+      ...(e.phase === 'waiting' ? [el('p', { class: 'meta', 'data-ai-wake-waited': '' }, [S.aiWakeWaited(e.waited)])] : []),
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-ai-wake-hide': '', onclick: close }, [S.aiWakeHide]),
+    ]))
+  })
+}
+
 export function bootAi(h: Pick<AiViewHooks, 'state' | 'save'> & { dev: boolean }): void {
+  mountWakeWindow()
   const s = h.state()
   const was = s.advanced?.ai
   const ai = migrateAi(was)
