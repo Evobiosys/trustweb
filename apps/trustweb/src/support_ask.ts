@@ -146,3 +146,19 @@ export const ASK_MODES: readonly AskMode[] = [AskMode.Support, AskMode.Hints, As
 export function nextAskMode(mode: unknown): AskMode {
   return ASK_MODES.find((m) => m === mode) ?? AskMode.Hints
 }
+
+/** Wave 39: the one audience control. zone = "ring:<ring>" (up to that ring) or "tag:<id>"; Closest few are always in unless `notClosest`; `include` adds any connected person, `exclude` wins over everything. "Not Closest few" drops them even from a wider zone. */
+export interface AudienceChoice { zone: string; notClosest?: boolean; include?: readonly string[]; exclude?: readonly string[] }
+
+export function audience<T extends Pick<Person, 'id' | 'ring' | 'fields' | 'peerId'>>(
+  people: readonly T[], a: AudienceChoice, hasTag: (p: T, tag: string) => boolean = () => false,
+): T[] {
+  const connected = people.filter((p) => p.peerId)
+  const closest = (p: T): boolean => ringSlot(p) === Ring.Closest
+  const inZone = a.zone.startsWith('tag:')
+    ? (p: T): boolean => audienceRings(Ring.Friend).includes(ringSlot(p)) && hasTag(p, a.zone.slice(4))
+    : (p: T): boolean => audienceRings(a.zone.slice(5)).includes(ringSlot(p))
+  const out = new Set(a.exclude)
+  const inc = new Set(a.include)
+  return connected.filter((p) => !out.has(p.id) && (inc.has(p.id) || (closest(p) ? !a.notClosest : inZone(p))))
+}
