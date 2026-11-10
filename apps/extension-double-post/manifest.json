@@ -3,7 +3,7 @@
   "name": "Also post to TrustWeb",
   "version": "0.1.0",
   "description": "After you publish on Mastodon, X, Facebook or LinkedIn: asks whether to also post the text in TrustWeb. Sends nothing anywhere.",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "permissions": ["storage", "scripting"],
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*",

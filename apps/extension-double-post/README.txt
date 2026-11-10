@@ -18,7 +18,6 @@ PRIVACY (site texts, formulated by an AI agent, to be checked by Jakob)
 
 PERMISSIONS
 - storage: the settings.
-- activeTab: declared, unused so far.
 - scripting + optional host permission: only so that you can add a Mastodon instance (the browser asks once per instance).
 - host permissions: https://x.com, https://twitter.com, https://www.facebook.com, https://www.linkedin.com (content script on these only).
 
