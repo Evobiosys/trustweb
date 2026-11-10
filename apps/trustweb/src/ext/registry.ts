@@ -33,7 +33,8 @@ export interface ExtHooks {
   redraw: () => void
   header: (title: string, opts: { back: () => void }) => HTMLElement
   leave: () => void
-  openEvent: (id: string) => void
+  /** `fromCalendar`: the event opens as a regular card without the page's Back button (wave 40). */
+  openEvent: (id: string, fromCalendar?: boolean) => void
   /** The add form, From preset to that day (default today). */
   addEvent: (fromIso?: string) => void
   /** The plain events list (search, filter, paste a link). */

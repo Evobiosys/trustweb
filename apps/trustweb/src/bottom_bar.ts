@@ -15,6 +15,8 @@ export interface UiBar {
   orderVersion?: number
   /** Wave 33: the preset last chosen (PROFILES id), or 'custom' once the bar was edited by hand. Optional, no schema bump. */
   profile?: string
+  /** Wave 40: the views (at most HALO_MAX) that wear a halo in the row, the pressable highlight. */
+  halo?: string[]
 }
 
 export const BAR_ORDER_VERSION = 2
@@ -126,6 +128,50 @@ export function moveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: BarF
   const [a, b] = [order.indexOf(id as BarId), order.indexOf(other)]
   ;[order[a], order[b]] = [order[b], order[a]]
   return { ...bar, order, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+}
+
+/** Wave 40: whether the view can take one step left (-1) or right (+1) in the row; false at either end and for views that are not in the row. */
+export function canMoveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: BarFlags): boolean {
+  const { ids } = resolveBar(bar, f)
+  const at = ids.indexOf(id as BarId)
+  return at >= 0 && at + dir >= 0 && at + dir < ids.length
+}
+
+/** Wave 40: every view in the order the arrange list shows it: the row left to right, then the ⋮ overflow top to bottom, then the views that are off. */
+export function arrangeRows(bar: UiBar | undefined, f: BarFlags, max: number): { id: BarId; slot: 'row' | 'more' | 'off' }[] {
+  const { ids, primary } = resolveBar(bar, f)
+  const { shown, overflow } = barLayout(ids, primary, max)
+  const off = offered(f, bar).filter((id) => id !== 'record' && !ids.includes(id))
+  return [...shown.map((id) => ({ id, slot: 'row' as const })), ...overflow.map((id) => ({ id, slot: 'more' as const })), ...off.map((id) => ({ id, slot: 'off' as const }))]
+}
+
+/** Wave 40: a view from the ⋮ list moves INTO the row, at the last slot the row keeps for it (the one that sat there goes to the top of the overflow); a hidden view is shown again. Record and unknown ids change nothing. */
+export function promoteBar(bar: UiBar | undefined, id: string, f: BarFlags, max: number): UiBar | undefined {
+  if (!offered(f, bar).includes(id as BarId) || id === 'record') return bar
+  const { ids, primary } = resolveBar(bar, f)
+  const rest = ids.filter((x) => x !== id)
+  let order: BarId[] = [...rest, id as BarId]
+  for (let k = Math.min(max - 1, rest.length); k >= 0; k--) {
+    order = [...rest.slice(0, k), id as BarId, ...rest.slice(k)]
+    if (barLayout(order, primary, max).shown.includes(id as BarId)) break
+  }
+  const kept = baseOrder(bar).filter((x) => !order.includes(x))
+  return { ...bar, order: [...order, ...kept], hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+}
+
+export const HALO_MAX = 2
+
+/** Wave 40: the views wearing a halo now: stored ones that are still in the row, the newest HALO_MAX. */
+export const haloOf = (bar: UiBar | undefined, ids: readonly BarId[]): BarId[] =>
+  (Array.isArray(bar?.halo) ? bar.halo : []).filter((id): id is BarId => ids.includes(id as BarId)).slice(-HALO_MAX)
+
+/** Wave 40: a press puts the halo on a view in the row (the third drops the oldest) or takes it off. Views not in the row change nothing. */
+export function toggleHalo(bar: UiBar | undefined, id: string, f: BarFlags): UiBar | undefined {
+  const { ids } = resolveBar(bar, f)
+  if (!ids.includes(id as BarId)) return bar
+  const now = haloOf(bar, ids)
+  const next = now.includes(id as BarId) ? now.filter((x) => x !== id) : [...now, id as BarId].slice(-HALO_MAX)
+  return { ...bar, halo: next }
 }
 
 /** Marks a shown view as the raised centre button; 'none' raises nothing. */
