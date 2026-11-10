@@ -247,6 +247,7 @@ import { careForCodes } from './sync_codes'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
 import { googleFlagSet, setGoogleConnect } from './google_flag'
 import { offerContacts, openServicesImport } from './services_view'
+import type { ImportedContact } from '../../crm/src/import/types'
 import type { ServicesHooks } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
 import type { OnboardingHooks } from './onboarding_whatsapp_view'
@@ -4975,6 +4976,7 @@ const twBus = createBus()
 twBus.on('save', () => save())
 twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
 twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
+twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[]; name: string }; offerContacts({ state: st, save, toast: (msg) => toast(msg), changed: render, pages }, x.contacts, x.name) })
 // wave 40 photo-rails: what a module may ask of the app (a notice, a page with Back, Back)
 twBus.on('toast', (msg) => { if (typeof msg === 'string') toast(msg) })
 twBus.on('open-page', (d) => { const p = d as { title: string; body: Node[]; mark: string }; pages.open(p.title, p.body, p.mark) })
