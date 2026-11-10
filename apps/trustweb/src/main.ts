@@ -264,6 +264,7 @@ import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
+import { createModeShell } from './ext/community_mode/shell'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createViewHost } from './ext/view_host'
 import { alphaHeading } from './alpha_heading'
@@ -353,6 +354,15 @@ enum Screen {
 /** Wave 39: which extension module view Screen.Ext shows, and the kept element it is mounted in (ext/view_host.ts). */
 let extViewId: string | null = null
 const extViews = createViewHost(() => twCtx())
+/** Wave 41 (ext/community_mode): the Personal | Community interface; its callbacks run later, so the many things they name may be declared further down. */
+const modeShell = createModeShell({
+  state: () => state, save: () => save(), ctx: twCtx, newId: () => randomId(8),
+  overview: () => (screen === Screen.Web && !webPage) || screen === Screen.People || (screen === Screen.Ext && extViewId === 'community'),
+  tabButton: (target, label, iconSvg, onclick) => { const b = tabButton(target, label, 'web', onclick); b.querySelector('svg')!.outerHTML = iconSvg; return b },
+  tabsEl: () => tabs, changed: () => { renderTabs(); render() }, settings: () => settingsSheet(),
+  openItem: (item) => { if (item === 'web') { go(Screen.Web); return } openExtView('community'); twBus.emit('community-go', item) },
+  openPersonal: () => go(Screen.Web),
+})
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
 enum RecordMode {
@@ -1203,9 +1213,11 @@ function renderTabs(): void {
   const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
-  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), ...(guest ? [] : [more]))
-  tabs.classList.toggle('four', shown.length > 3)
-  tabs.classList.toggle('many', shown.length > 5)
+  const community = guest ? null : modeShell.tabs() // wave 41: the Community interface has its own row
+  tabs.replaceChildren(...(community ?? shown.map((id) => barButton(id, id === primary))), ...(guest || community ? [] : [more]))
+  document.body.toggleAttribute('data-community-mode', community !== null)
+  tabs.classList.toggle('four', (community ?? shown).length > 3)
+  tabs.classList.toggle('many', (community ?? shown).length > 5)
   phone.classList.toggle('ask-in-bar', shown.includes('ask'))
   updateChatBadge()
 }
@@ -1824,6 +1836,8 @@ function render(): void {
   mountHeaderControls()
   mountSettingsGear()
   mountAiButton()
+  modeShell.mount(host)
+  modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   applyLayout()
@@ -6854,6 +6868,7 @@ function variationRows(s: AppState): Node[] {
     ...TW_PROFILES.map((p) => el('button', {
       class: 'radio variation' + (p.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(p.id === cur), 'data-variation': p.id, onclick: () => chooseProfile(p.id),
     }, [el('b', {}, [(p.id === cur ? '✓ ' : '') + S.var.names[p.id]]), el('small', {}, [S.var.hints[p.id] + (p.id === cur ? ` · ${S.var.current}` : '')])])),
+    ...modeShell.settingsRows(), // wave 41: default interface, Community layout, my versions
   ]
 }
 
@@ -7796,7 +7811,7 @@ window.addEventListener('storage', (e) => {
 document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
 document.body.dataset.twProfile = profileOf(state?.twSettings)
-void twRegistry.start().then(renderTabs) // wave 39: a heavy module's view joins the row once it has loaded
+void twRegistry.start().then(() => { modeShell.start(); renderTabs(); render() }) // wave 39: a heavy module's view joins the row once it has loaded
 render()
 void refreshOwnPicture()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
