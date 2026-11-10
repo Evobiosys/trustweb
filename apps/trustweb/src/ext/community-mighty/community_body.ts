@@ -6,7 +6,7 @@ import { S } from '../../strings'
 import { communityTags } from '../../trustzones'
 import type { TwCtx, TwModuleBody } from '../tw_registry'
 import { MODULE_ID, NAV, communityTagOf, type NavId } from './community_model'
-import { mountCommunity, readData, writeData } from './community_view'
+import { mountCommunity, readData, writeConsent, writeData } from './community_view'
 
 function settingsRows(ctx: TwCtx): Node[] {
   const t = ctx.strings.community
@@ -37,7 +37,7 @@ function settingsRows(ctx: TwCtx): Node[] {
     ...NAV.map(navRow),
     el('button', {
       class: 'linkbtn', 'data-community-reset-consent': '',
-      onclick: () => { const now = readData(ctx.store()); delete now.docsConsent; delete now.telegramConsent; writeData(ctx, now); done.hidden = false },
+      onclick: () => { writeConsent({}); done.hidden = false },
     }, [t.setReset]),
     done,
   ]

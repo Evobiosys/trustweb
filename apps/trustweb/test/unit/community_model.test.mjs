@@ -4,6 +4,8 @@ import {
   NAV, parseCommunity, navItems, buildPosts, buildSpaces, joinSpace, leaveSpace, buildMembers, buildEvents,
   addResource, resolveView, forkView, addToView, hideInView, moveInView, docsEmbedUrl, telegramUrl, communityTagOf,
 } from '../../src/ext/community-mighty/community_model.ts'
+import { mergeCommunity } from '../../src/ext/community-mighty/community_data.ts'
+import { mergeExtData, EXT_DATA_MERGERS } from '../../src/ext/ext_data.ts'
 
 const TAGS = [
   { id: 'iyg', colour: '#1565c0', label: 'IYG', community: true },
@@ -27,10 +29,11 @@ describe('community settings', () => {
   it('parses junk to an empty object and keeps only valid fields', () => {
     expect(parseCommunity(undefined)).toEqual({})
     expect(parseCommunity('x')).toEqual({})
-    const d = parseCommunity({ tag: 'iyg', navOff: ['chat', 'nope'], docsConsent: true, telegramUrl: 'https://t.me/x', resources: [{ id: 'r1', title: 'A', url: 'https://a.org', by: 'Ana', at: 1 }, { id: 2 }] })
+    const d = parseCommunity({ tag: 'iyg', navOff: ['chat', 'nope'], docsConsent: true, telegramUrl: 'https://t.me/x', resources: [{ id: 'r1', title: 'A', url: 'https://a.org', by: 'Ana', at: 1 }, { id: 2 }, { id: 'r3', title: 'x', url: 'javascript:alert(1)', by: 'Ana', at: 1 }] })
     expect(d.tag).toBe('iyg')
     expect(d.navOff).toEqual(['chat'])
-    expect(d.docsConsent).toBe(true)
+    expect(d).not.toHaveProperty('docsConsent')
+    expect(d.telegramUrl).toBe('https://t.me/x')
     expect(d.resources).toHaveLength(1)
   })
 
@@ -59,7 +62,7 @@ describe('posts', () => {
     const posts = buildPosts(s, TAGS)
     expect(posts.map((p) => p.id)).toEqual(['group:g1', 'co:c1', 'note:p1:l1'])
     expect(posts[0]).toMatchObject({ who: 'Ben', space: 'IYG', text: 'Hello circle' })
-    expect(posts[1]).toMatchObject({ text: 'Garden plan', at: 250 })
+    expect(posts[1]).toMatchObject({ text: 'Garden plan', at: 250, who: 'Ana, Cleo' })
     expect(posts[2]).toMatchObject({ personId: 'p1' })
   })
 
@@ -96,6 +99,21 @@ describe('spaces', () => {
     expect(s.zoneTags.self.ids).toEqual([])
     expect(() => joinSpace(s, TAGS, 'unknown', 8)).not.toThrow()
     expect(s.zoneTags.self.ids).toEqual([])
+  })
+
+  it('join goes by tag id, even when another tag is labelled like it', () => {
+    const tags = [{ id: 'a', colour: '#111111', label: 'b', community: true }, { id: 'b', colour: '#222222', label: 'B2', community: true }]
+    const s = base()
+    joinSpace(s, tags, 'b', 1)
+    expect(s.zoneTags.self.ids).toEqual(['b'])
+  })
+
+  it('a tag kept on a ring zone counts as joined, but only my own join can be left', () => {
+    const s = base()
+    s.zoneTags = { friend: { ids: ['iyg'], stamp: 1 } }
+    expect(buildSpaces(s, TAGS)[0]).toMatchObject({ joined: true, leavable: false })
+    joinSpace(s, TAGS, 'iyg', 2)
+    expect(buildSpaces(s, TAGS)[0]).toMatchObject({ joined: true, leavable: true })
   })
 })
 
@@ -163,6 +181,28 @@ describe('resource views', () => {
     expect(addResource(d, { title: 'x', url: 'javascript:alert(1)' }, 'Ana', 10)).toBe(false)
     expect(addResource(d, { title: '', url: 'https://a.org' }, 'Ana', 10)).toBe(true)
     expect(d.resources[1].title).toBe('a.org')
+  })
+})
+
+describe('device sync merge', () => {
+  const r = (id) => ({ id, title: id, url: `https://x.org/${id}`, by: 'Ana', at: 1 })
+  it('resources join by id; my order keeps mine first then theirs; hiding wins; other members\' views by owner', () => {
+    const mine = { tag: 'iyg', resources: [r('a'), r('b')], mine: { owner: 'Ana', order: ['b', 'a'], hidden: [] }, views: [{ owner: 'Ben', order: ['a'], hidden: [] }] }
+    const theirs = { tag: 'garden', resources: [r('a'), r('c')], mine: { owner: 'Ana', order: ['c'], hidden: ['b'] }, views: [{ owner: 'Ben', order: ['c', 'a'], hidden: [] }, { owner: 'Cleo', order: [], hidden: [] }] }
+    const m = mergeCommunity(mine, theirs)
+    expect(m.resources.map((x) => x.id)).toEqual(['a', 'b', 'c'])
+    expect(m.mine).toEqual({ owner: 'Ana', order: ['a', 'c'], hidden: ['b'] })
+    expect(m.views.map((v) => [v.owner, v.order.join()])).toEqual([['Ben', 'c,a'], ['Cleo', '']])
+    expect(m.tag).toBe('garden')
+  })
+
+  it('extData merges per module: a registered rule where both sides hold the module, else whichever side has it', () => {
+    EXT_DATA_MERGERS.set('t-mod', (a, b) => ({ n: a.n + b.n }))
+    expect(mergeExtData({ 't-mod': { n: 1 }, x: 1 }, { 't-mod': { n: 2 }, y: 2 })).toEqual({ 't-mod': { n: 3 }, x: 1, y: 2 })
+    expect(mergeExtData(undefined, { y: 2 })).toEqual({ y: 2 })
+    expect(mergeExtData({ z: 1 }, { z: 2 })).toEqual({ z: 2 })
+    expect(mergeExtData({ a: 1 }, 'junk')).toEqual({ a: 1 })
+    EXT_DATA_MERGERS.delete('t-mod')
   })
 })
 

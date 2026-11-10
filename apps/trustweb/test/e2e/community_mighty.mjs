@@ -23,6 +23,8 @@ try {
   for (const [vw, vp] of [['360', { width: 360, height: 780 }], ['1280', { width: 1280, height: 900 }]]) {
     const ctx = await browser.newContext({ viewport: vp }); const page = await ctx.newPage()
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)))
+    const outside = []
+    await page.route(/^https:\/\/(t\.me|docs\.google\.com)\//, (r) => { outside.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'text/html', body: '<p>stub</p>' }) })
     const shot = (n) => page.screenshot({ path: `${SHOTS}/community-mighty-${vw}-${n}.png` })
     const nav = async (n) => {
       if (await page.locator('[data-community-menu]').isVisible()) { await page.locator('[data-community-menu]').click(); await page.waitForTimeout(200) }
@@ -96,9 +98,16 @@ try {
     const pos = await page.locator('[data-community-chat]').evaluate((a) => getComputedStyle(a).position)
     check(`${vw}: chat is a ${vw === '360' ? 'bottom sheet' : 'pane'}`, vw === '360' ? pos === 'fixed' : pos === 'sticky')
     await shot('7-chat')
+    await page.locator('[data-community-chat-load]').click(); await page.waitForTimeout(500)
+    check(`${vw}: consent tap loads the Telegram frame`, (await page.locator('[data-community-chat-frame]').count()) === 1 && outside.length === 1)
+    check(`${vw}: the consent stays on this device, not in the synced record`, await page.evaluate(() => localStorage.getItem('trustweb.v1.community-mighty.consent') === '{"telegram":true}' && !/Consent/.test(localStorage.getItem('trustweb.v1.me'))))
+    await page.locator('[data-community-chat-frame]').evaluate((f) => { f.dataset.mark = '1' })
+    await nav('members'); await page.locator('button.tab[data-go="mod:community"]').click(); await page.waitForTimeout(500)
+    check(`${vw}: the frame survives a section switch and an app redraw (not reloaded)`, (await page.locator('[data-community-chat-frame][data-mark="1"]').count()) === 1 && outside.length === 1)
+    await shot('8-chat-loaded')
     check(`${vw}: no horizontal scrolling`, await noHScroll(page))
 
-    await page.locator('[data-community-chat-close]').click(); await nav('members')
+    await page.locator('[data-community-chat-close]').click(); await page.waitForTimeout(200)
     await page.locator('[data-community-member="p1"]').click(); await page.waitForTimeout(700)
     check(`${vw}: tapping a member opens the app's person card`, (await page.locator('.screen.on.web').count()) === 1 && (await page.locator('[data-community]').count()) === 0)
 

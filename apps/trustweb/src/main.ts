@@ -1414,7 +1414,7 @@ function screenGroups(): Node[] {
 function screenExt(): Node[] {
   const v = twRegistry.views().find((x) => x.id === extViewId)
   if (!v) { screen = Screen.Web; extViews.release(); return screenWeb() }
-  return [header(v.title), el('div', { class: 'scroll mod-scroll' }, [extViews.show(v)])]
+  return [header(v.title), extViews.show(v)]
 }
 function openExtView(id: string): void {
   extViewId = id
@@ -1781,7 +1781,10 @@ function render(): void {
       case Screen.Ext: return screenExt()
     }
   })()
-  host.replaceChildren(...(frame ? [frame] : []), ...body)
+  const kept = screen === Screen.Ext ? (body[body.length - 1] as Element) : null
+  // Wave 39: a mounted module view stays in place (moving it would reload any frame inside it); only what surrounds it is redrawn.
+  if (kept && kept.parentNode === host) { for (const n of [...host.childNodes]) if (n !== kept) n.remove(); kept.before(...(frame ? [frame] : []), ...body.slice(0, -1)) }
+  else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
   mountSettingsGear()
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }

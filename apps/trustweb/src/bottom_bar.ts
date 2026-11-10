@@ -71,7 +71,8 @@ export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[];
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
   const base = baseOrder(bar)
   const ids = [...base, ...(f.mods ?? []).map((m): BarId => `mod:${m}`).filter((id) => !base.includes(id))].filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
-  const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(ids)
+  // Wave 39: a module's button does not change which button is raised by default.
+  const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(ids.filter((id) => modOfBar(id) === null))
   return { ids, primary }
 }
 
@@ -173,10 +174,12 @@ export function customFrom(bar: UiBar | undefined, ids: readonly BarId[], primar
 export function activeProfile(bar: UiBar | undefined, f: BarFlags): string {
   if (bar?.profile && (bar.profile === 'custom' || PROFILES.some((p) => p.id === bar.profile))) return bar.profile
   const { ids, primary } = resolveBar(bar, f)
-  return PROFILES.find((p) => p.primary === primary && p.order.join() === ids.join())?.id ?? 'custom'
+  const core = ids.filter((id) => modOfBar(id) === null) // wave 39: a module's own button does not make the row custom
+  return PROFILES.find((p) => p.primary === primary && p.order.join() === core.join())?.id ?? 'custom'
 }
 
 /** Wave 35: the views the ⋮ button lists: offered, not in the bar. People and Map only once the user took them out of it. */
 export function overflowChoices(ids: readonly BarId[], hidden: readonly string[], f: BarFlags): BarId[] {
-  return CHOICES.filter((id) => offered(f).includes(id) && !ids.includes(id) && (id !== 'people' && id !== 'map' || hidden.includes(id)))
+  const mods = (f.mods ?? []).map((m): BarId => `mod:${m}`) // wave 39: a module view taken out of the row
+  return [...CHOICES, ...mods].filter((id) => offered(f).includes(id) && !ids.includes(id) && (id !== 'people' && id !== 'map' || hidden.includes(id)))
 }

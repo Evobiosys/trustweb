@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 39 community-mighty: a module view (`mod:<id>`) joins the bottom row while its module is on, and leaves with it. */
-import { resolveBar, toggleBar, modOfBar, barChoices } from '../../src/bottom_bar.ts'
+import { resolveBar, toggleBar, modOfBar, barChoices, overflowChoices, activeProfile } from '../../src/bottom_bar.ts'
 
 const F = { events: true, feed: false, inventory: true, people: true, map: true }
 
@@ -21,6 +21,15 @@ describe('module views in the bottom row', () => {
     expect(resolveBar(bar, f).ids).not.toContain('mod:community')
     expect(resolveBar(toggleBar(bar, 'mod:community', f), f).ids).toContain('mod:community')
     expect(resolveBar({ order: ['web', 'mod:community', 'record'] }, F).ids).toEqual(['web', 'record'])
+  })
+
+  it('a module view taken out of the row is listed under the ⋮ button; presets still match with it on', () => {
+    const f = { ...F, mods: ['community'] }
+    const bar = toggleBar(undefined, 'mod:community', f)
+    expect(overflowChoices(resolveBar(bar, f).ids, bar.hidden, f)).toContain('mod:community')
+    expect(overflowChoices(resolveBar(undefined, f).ids, [], f)).not.toContain('mod:community')
+    expect(activeProfile(undefined, f)).toBe('note_taker')
+    expect(resolveBar(undefined, f).primary).toBe('record')
   })
 
   it('modOfBar names the view of a mod entry only', () => {

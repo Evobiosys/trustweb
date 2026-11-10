@@ -68,8 +68,8 @@ select { width: auto; max-width: 100%; }
 .res.new .res-main, .res.hidden .res-main { opacity: .55; }
 .embed { width: 100%; height: 60vh; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface-1); }
 
-/* Chat: a bottom sheet on phones (half the screen), a right pane on wide views. */
-.chat { position: fixed; left: 0; right: 0; bottom: 0; height: 50vh; z-index: 70; background: var(--raised); border-radius: var(--r-sheet) var(--r-sheet) 0 0; box-shadow: var(--shadow-float); padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); overflow-y: auto; }
+/* Chat: a bottom sheet on phones (half the screen, above the app's bottom row: 86 px in styles.css .tabs), a right pane on wide views. */
+.chat { position: fixed; left: 0; right: 0; bottom: var(--tw-tabs-height, 86px); height: 50vh; z-index: 70; background: var(--raised); border-radius: var(--r-sheet) var(--r-sheet) 0 0; box-shadow: var(--shadow-float); padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); overflow-y: auto; }
 .chat h3 { margin: 0; }
 .chat .chat-frame { flex: 1; min-height: 200px; height: auto; }
 

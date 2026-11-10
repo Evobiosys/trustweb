@@ -9,63 +9,18 @@ import type { ColourTag } from '../../colour_tags'
 import { hasColourTag } from '../../colour_tags'
 import { alive } from '../../deleted_people'
 import { buildFeed, PostKind } from '../../feed'
-import { groupPosts } from '../../feed_sources'
 import type { AppState, Person, TwEvent } from '../../model'
 import { Ring } from '../../model'
+import { localDay } from '../../engagement'
+import { groupPosts, groupsOf } from '../../feed_sources'
 import { communityTags } from '../../trustzones'
-import { addZoneTag, removeZoneTag, zoneTagIds } from '../../zone_tags'
+import { removeZoneTag, zoneTagIds } from '../../zone_tags'
+import { NAV, safeUrl, type CommunityData, type NavId, type Resource, type ResourceView } from './community_data'
 
-export const MODULE_ID = 'community-mighty'
-export const NAV = ['home', 'spaces', 'events', 'members', 'docs', 'chat'] as const
-export type NavId = (typeof NAV)[number]
+export { MODULE_ID, NAV, parseCommunity, safeUrl } from './community_data'
+export type { CommunityData, NavId, Resource, ResourceView } from './community_data'
 /** The zone key that holds the spaces I joined. */
 const SELF = 'self'
-
-export interface Resource { id: string; title: string; url: string; by: string; at: number }
-/** One member's own ordering and visibility of the shared resource list. `from` = whose view it was forked from. */
-export interface ResourceView { owner: string; order: string[]; hidden: string[]; from?: string }
-
-export interface CommunityData {
-  tag?: string
-  navOff?: NavId[]
-  resources?: Resource[]
-  /** My view of the resource list. */
-  mine?: ResourceView
-  /** Other members' views that reached this device (none travel yet). */
-  views?: ResourceView[]
-  docsUrl?: string
-  docsConsent?: boolean
-  telegramUrl?: string
-  telegramConsent?: boolean
-}
-
-const isStr = (v: unknown): v is string => typeof v === 'string'
-const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter(isStr) : [])
-
-function parseView(v: unknown): ResourceView | undefined {
-  if (!v || typeof v !== 'object') return undefined
-  const o = v as Record<string, unknown>
-  if (!isStr(o.owner)) return undefined
-  return { owner: o.owner, order: strs(o.order), hidden: strs(o.hidden), ...(isStr(o.from) ? { from: o.from } : {}) }
-}
-
-/** The module's slice of the record, every field checked (it rides the device sync like any setting). */
-export function parseCommunity(raw: unknown): CommunityData {
-  if (!raw || typeof raw !== 'object') return {}
-  const o = raw as Record<string, unknown>
-  const d: CommunityData = {}
-  if (isStr(o.tag)) d.tag = o.tag
-  if (Array.isArray(o.navOff)) d.navOff = o.navOff.filter((n): n is NavId => (NAV as readonly unknown[]).includes(n))
-  if (Array.isArray(o.resources)) {
-    d.resources = o.resources.filter((r): r is Resource => !!r && typeof r === 'object' && isStr(r.id) && isStr(r.title) && isStr(r.url) && isStr(r.by) && typeof r.at === 'number' && safeUrl(r.url) !== null)
-  }
-  const mine = parseView(o.mine)
-  if (mine) d.mine = mine
-  if (Array.isArray(o.views)) d.views = o.views.map(parseView).filter((v): v is ResourceView => v !== undefined)
-  for (const k of ['docsUrl', 'telegramUrl'] as const) if (isStr(o[k])) d[k] = o[k] as string
-  for (const k of ['docsConsent', 'telegramConsent'] as const) if (o[k] === true) d[k] = true
-  return d
-}
 
 export const navItems = (d: CommunityData): NavId[] => NAV.filter((n) => !d.navOff?.includes(n))
 
@@ -86,23 +41,25 @@ export function buildPosts(s: AppState, tags: readonly ColourTag[], space?: stri
     .map((p): CommunityPost => ({ id: p.id, who: p.who, at: p.at, text: p.text, space: (p.group && names.get(p.group)) ?? p.context, ...(p.unsent ? { unsent: true as const } : {}) }))
   if (space) return groups.sort((a, b) => b.at - a.at)
   const feed = buildFeed(s).filter((p) => p.kind !== PostKind.Ask).map((p): CommunityPost => ({ id: p.id, who: p.who, ...(p.personId ? { personId: p.personId } : {}), at: p.at, text: p.text, ...(p.context ? { context: p.context } : {}) }))
-  const co = (s.coNotes ?? []).map((d): CommunityPost => ({ id: `co:${d.id}`, who: null, at: Math.max(0, ...Object.values(d.seen ?? {})), text: d.title, context: d.people.map((p) => p.name).join(', ') }))
+  const co = (s.coNotes ?? []).map((d): CommunityPost => ({ id: `co:${d.id}`, who: d.people.map((p) => p.name).join(', ') || null, at: Math.max(0, ...Object.values(d.seen ?? {})), text: d.title }))
   return [...groups, ...feed, ...co].filter((p) => p.text.trim()).sort((a, b) => b.at - a.at)
 }
 
-export interface Space { id: string; name: string; colour: string; members: number; joined: boolean }
+/** joined = a group I am in (groupsOf: the tag on any of my zones); leavable = I joined it here (my own zone), so Leave can undo it. */
+export interface Space { id: string; name: string; colour: string; members: number; joined: boolean; leavable: boolean }
 
 const visible = <P extends Pick<Person, 'deleted_at' | 'blocked'>>(people: readonly P[]): P[] => alive(people).filter((p) => !(p.blocked && p.blocked > 0))
 
 export function buildSpaces(s: AppState, tags: readonly ColourTag[]): Space[] {
-  const joined = new Set(zoneTagIds(s, SELF))
+  const own = new Set(zoneTagIds(s, SELF))
+  const groups = new Set(groupsOf(s, tags).map((g) => g.id))
   const people = visible(s.people)
-  return communityTags(tags).map((t) => ({ id: t.id, name: t.label ?? t.id, colour: t.colour, members: people.filter((p) => hasColourTag(p, t.id)).length, joined: joined.has(t.id) }))
+  return communityTags(tags).map((t) => ({ id: t.id, name: t.label ?? t.id, colour: t.colour, members: people.filter((p) => hasColourTag(p, t.id)).length, joined: groups.has(`tag:${t.id}`), leavable: own.has(t.id) }))
 }
 
 export function joinSpace(s: AppState, tags: readonly ColourTag[], id: string, now: number): void {
-  const t = tags.find((x) => x.id === id)
-  if (t) addZoneTag(s, tags, SELF, t.label ?? t.id, now)
+  const have = zoneTagIds(s, SELF)
+  if (tags.some((x) => x.id === id) && !have.includes(id)) s.zoneTags = { ...s.zoneTags, [SELF]: { ids: [...have, id], stamp: now } }
 }
 
 export function leaveSpace(s: AppState, id: string, now: number): void {
@@ -125,9 +82,9 @@ export interface EventCard { id: string; name: string; day: string; month: strin
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** Upcoming soonest first, then past newest first. Dates are the record's "YYYY-MM-DD" (a time part is ignored). */
+/** Upcoming soonest first, then past newest first. Dates are the record's "YYYY-MM-DD" (a time part is ignored); today is the local day. */
 export function buildEvents(events: readonly TwEvent[] | undefined, now: number): EventCard[] {
-  const today = new Date(now).toISOString().slice(0, 10)
+  const today = localDay(new Date(now))
   const cards = (events ?? []).filter((e) => /^\d{4}-\d{2}-\d{2}/.test(e.from)).map((e): EventCard => {
     const from = e.from.slice(0, 10)
     return {
@@ -136,14 +93,6 @@ export function buildEvents(events: readonly TwEvent[] | undefined, now: number)
     }
   })
   return [...cards.filter((c) => !c.past).sort((a, b) => a.from.localeCompare(b.from)), ...cards.filter((c) => c.past).sort((a, b) => b.from.localeCompare(a.from))]
-}
-
-/** http(s) only; the normalised link or null. */
-export function safeUrl(raw: string): string | null {
-  try {
-    const u = new URL(raw.trim())
-    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null
-  } catch { return null }
 }
 
 export interface ViewRow { item: Resource; state: 'shown' | 'new' | 'hidden' }

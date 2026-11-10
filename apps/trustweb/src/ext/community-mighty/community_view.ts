@@ -5,6 +5,7 @@
  * stands left, from 1100 px the chat is a pane on the right (container queries, no window listener). Every listener sits on an
  * element of the shadow root, so unmounting (or the module being off) leaves none behind.
  * Talks to the app only through TwCtx: bus 'save' after a record change, 'open-person' and 'open-event' to open the app's own cards.
+ * An embed (Google Docs, Telegram) loads only after a consent tap, and that consent stays on this device (localStorage), never synced.
  */
 import { el } from '../../../../demo/src/ui/dom'
 import { addGroupPost } from '../../feed_sources'
@@ -18,6 +19,20 @@ import {
 import css from './community.css?inline'
 
 export const readData = (s: AppState): CommunityData => parseCommunity(s.extData?.[MODULE_ID])
+
+const CONSENT_KEY = 'trustweb.v1.community-mighty.consent'
+export interface Consent { docs?: true; telegram?: true }
+
+export function readConsent(): Consent {
+  try {
+    const v = JSON.parse(localStorage.getItem(CONSENT_KEY) ?? '{}') as Record<string, unknown> | null
+    return { ...(v?.docs === true ? { docs: true } : {}), ...(v?.telegram === true ? { telegram: true } : {}) }
+  } catch { return {} }
+}
+
+export function writeConsent(c: Consent): void {
+  try { if (c.docs || c.telegram) localStorage.setItem(CONSENT_KEY, JSON.stringify(c)); else localStorage.removeItem(CONSENT_KEY) } catch { /* not kept: the next load asks again */ }
+}
 
 export function writeData(ctx: TwCtx, d: CommunityData): void {
   const s = ctx.store()
@@ -34,7 +49,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const box = el('div', { class: 'community-host', 'data-community': '' })
   hostEl.append(box)
   const root = box.attachShadow({ mode: 'open' })
-  const ui: { nav: NavId; space: string | null; drawer: boolean; chat: boolean; hiddenOpen: boolean; note: string } = { nav: 'home', space: null, drawer: false, chat: false, hiddenOpen: false, note: '' }
+  const ui: { nav: NavId; space: string | null; drawer: boolean; chat: boolean; hiddenOpen: boolean; note: string; chatNote: string } = { nav: 'home', space: null, drawer: false, chat: false, hiddenOpen: false, note: '', chatNote: '' }
 
   const st = (): AppState => ctx.store()
   const me = (): string => st().me.displayName || t.you
@@ -44,6 +59,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   function go(n: NavId): void {
     ui.drawer = false
     ui.note = ''
+    ui.chatNote = ''
     if (n === 'chat') ui.chat = !ui.chat
     else { ui.nav = n; ui.space = null }
     draw()
@@ -86,12 +102,14 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   }
 
   // ---- Spaces --------------------------------------------------------------
-  function joinBtn(id: string, joined: boolean): HTMLButtonElement {
-    return btn(joined ? t.leave : t.join, () => {
-      if (joined) leaveSpace(st(), id, Date.now()); else joinSpace(st(), loadColourTags(), id, Date.now())
+  /** Join, or Leave when I joined it here; a space I am in through a ring's tags has nothing to undo here. */
+  function joinBtn(x: { id: string; joined: boolean; leavable: boolean }): HTMLElement | null {
+    if (x.joined && !x.leavable) return null
+    return btn(x.joined ? t.leave : t.join, () => {
+      if (x.joined) leaveSpace(st(), x.id, Date.now()); else joinSpace(st(), loadColourTags(), x.id, Date.now())
       ctx.bus.emit('save')
       draw()
-    }, { 'data-community-join': id })
+    }, { 'data-community-join': x.id })
   }
 
   function spaces(): Kids {
@@ -104,7 +122,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       return [
         btn('‹ ' + t.allSpaces, () => { ui.space = null; draw() }, { 'data-community-all-spaces': '' }),
         el('div', { class: 'cover big', style: `--cover:${one.colour}` }, [el('h3', {}, [one.name])]),
-        el('div', { class: 'row' }, [el('span', { class: 'meta' }, [t.members(one.members), one.joined ? ` · ${t.joined}` : '']), joinBtn(one.id, one.joined)]),
+        el('div', { class: 'row' }, [el('span', { class: 'meta' }, [t.members(one.members), one.joined ? ` · ${one.leavable ? t.joined : t.joinedViaRing}` : '']), joinBtn(one)]),
         ...(one.joined ? [composer()] : []),
         ...(posts.length ? posts.map(postCard) : [el('p', { class: 'empty' }, [t.spacePostsEmpty])]),
       ]
@@ -113,7 +131,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     return [el('div', { class: 'grid' }, list.map((x) => el('article', { class: 'card space', 'data-community-space': x.id }, [
       el('div', { class: 'cover', style: `--cover:${x.colour}` }),
       btn(x.name, () => { ui.space = x.id; draw() }, { 'data-community-open-space': x.id }, 'lnk title'),
-      el('div', { class: 'row' }, [el('span', { class: 'meta' }, [t.members(x.members)]), joinBtn(x.id, x.joined)]),
+      el('div', { class: 'row' }, [el('span', { class: 'meta' }, [t.members(x.members), x.joined && !x.leavable ? ` · ${t.joinedViaRing}` : '']), joinBtn(x)]),
     ])))]
   }
 
@@ -202,20 +220,26 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
         ui.note = ''
         save({ ...data(), docsUrl: input.value.trim() })
       }, { 'data-community-docs-save': '' }, 'lnk strong'))
-    } else if (!d.docsConsent) {
+    } else if (!readConsent().docs) {
       kids.push(el('p', { class: 'meta' }, [t.docsConsent]), el('div', { class: 'row wrap' }, [
-        btn(t.docsLoad, () => save({ ...data(), docsConsent: true }), { 'data-community-docs-load': '' }, 'lnk strong'),
+        btn(t.docsLoad, () => { writeConsent({ ...readConsent(), docs: true }); draw() }, { 'data-community-docs-load': '' }, 'lnk strong'),
         el('a', { href: src, target: '_blank', rel: 'noopener noreferrer' }, [t.openNewTab]),
         btn(t.change, () => { const n = data(); delete n.docsUrl; save(n) }, { 'data-community-docs-change': '' }),
       ]))
     } else {
       kids.push(el('iframe', { class: 'embed', src, title: t.docsTitle, loading: 'lazy', referrerpolicy: 'no-referrer', sandbox: 'allow-scripts allow-same-origin allow-popups', 'data-community-docs-frame': '' }),
-        el('div', { class: 'row wrap' }, [el('a', { href: src, target: '_blank', rel: 'noopener noreferrer' }, [t.openNewTab]), btn(t.change, () => { const n = data(); delete n.docsUrl; delete n.docsConsent; save(n) }, { 'data-community-docs-change': '' })]))
+        el('div', { class: 'row wrap' }, [el('a', { href: src, target: '_blank', rel: 'noopener noreferrer' }, [t.openNewTab]), btn(t.change, () => { const n = data(); delete n.docsUrl; save(n) }, { 'data-community-docs-change': '' })]))
     }
     return el('div', { class: 'card docs' }, kids)
   }
 
   // ---- Chat (right pane on wide views, bottom sheet on phones) --------------
+  /** What the chat pane shows; the pane is rebuilt only when this changes, so a loaded Telegram frame is not reloaded by other taps. */
+  function chatKey(): string {
+    const d = data()
+    return ui.chat ? JSON.stringify([d.telegramUrl ?? '', readConsent().telegram === true, ui.chatNote]) : ''
+  }
+
   function chatPane(): HTMLElement {
     const d = data()
     const link = d.telegramUrl ? telegramUrl(d.telegramUrl) : null
@@ -223,40 +247,64 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     if (!link) {
       const input = el('input', { type: 'url', placeholder: t.chatPh, 'aria-label': t.chatPh, 'data-community-chat-url': '' })
       kids.push(input, btn(t.save, () => {
-        if (!telegramUrl(input.value)) { ui.note = t.chatBad; draw(); return }
-        ui.note = ''
+        if (!telegramUrl(input.value)) { ui.chatNote = t.chatBad; draw(); return }
+        ui.chatNote = ''
         save({ ...data(), telegramUrl: input.value.trim() })
       }, { 'data-community-chat-save': '' }, 'lnk strong'))
     } else {
       const open = el('a', { href: link, target: '_blank', rel: 'noopener noreferrer', 'data-community-chat-open': '' }, [t.chatOpen])
-      if (!d.telegramConsent) kids.push(el('p', { class: 'meta' }, [t.chatConsent]), btn(t.chatLoad, () => save({ ...data(), telegramConsent: true }), { 'data-community-chat-load': '' }, 'lnk strong'))
+      if (!readConsent().telegram) kids.push(el('p', { class: 'meta' }, [t.chatConsent]), btn(t.chatLoad, () => { writeConsent({ ...readConsent(), telegram: true }); draw() }, { 'data-community-chat-load': '' }, 'lnk strong'))
       else kids.push(el('iframe', { class: 'embed chat-frame', src: link, title: t.chatTitle, referrerpolicy: 'no-referrer', sandbox: 'allow-scripts allow-same-origin allow-popups allow-forms', 'data-community-chat-frame': '' }), el('p', { class: 'meta' }, [t.chatBlocked]))
-      kids.push(el('div', { class: 'row wrap' }, [open, btn(t.change, () => { const n = data(); delete n.telegramUrl; delete n.telegramConsent; save(n) }, { 'data-community-chat-change': '' })]))
+      kids.push(el('div', { class: 'row wrap' }, [open, btn(t.change, () => { const n = data(); delete n.telegramUrl; save(n) }, { 'data-community-chat-change': '' })]))
     }
-    if (ui.note && ui.chat) kids.push(el('p', { class: 'note' }, [ui.note]))
+    if (ui.chatNote) kids.push(el('p', { class: 'note' }, [ui.chatNote]))
     return el('aside', { class: 'chat', 'data-community-chat': '' }, kids)
   }
 
   // ---- Shell ---------------------------------------------------------------
+  // Kept elements: only the bar, the menu and the section are rebuilt on each draw; the chat pane only when chatKey() changes.
+  const style = el('style', {}, [css])
+  const cm = el('div', { class: 'cm' })
+  const bar = el('div', { class: 'bar' })
+  const shell = el('div', { class: 'grid-shell' })
+  let navEl: HTMLElement = el('nav', { class: 'nav' })
+  let mainEl: HTMLElement = el('main', { class: 'main' })
+  let veil: HTMLElement | null = null
+  let chatEl: HTMLElement | null = null
+  let shownChat = ''
+  shell.append(navEl, mainEl)
+  cm.append(bar, shell)
+  root.append(style, cm)
+
   function draw(): void {
     const items = navItems(data())
     if (!items.includes(ui.nav)) ui.nav = items.find((n) => n !== 'chat') ?? 'home'
     if (!items.includes('chat')) ui.chat = false
-    const section = ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : home()
+    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '') + (ui.chat ? ' chat-open' : '')
+    cm.dataset.nav = ui.nav
+    bar.replaceChildren(
+      btn('☰ ' + t.menu, () => { ui.drawer = !ui.drawer; draw() }, { 'aria-expanded': String(ui.drawer), 'data-community-menu': '' }, 'lnk menu'),
+      el('h3', { class: 'section' }, [t.nav[ui.nav], ' ', el('sub', { class: 'alpha', 'data-community-alpha': '' }, [ctx.strings.alphaLabel])]),
+    )
+    veil?.remove()
+    veil = ui.drawer ? el('div', { class: 'veil', 'data-community-veil': '', onclick: () => { ui.drawer = false; draw() } }) : null
+    if (veil) cm.insertBefore(veil, shell)
     const nav = el('nav', { class: 'nav', 'aria-label': t.title }, items.map((n) => btn(t.nav[n], () => go(n), {
       'data-community-nav': n, ...((n === 'chat' ? ui.chat : n === ui.nav) ? { 'aria-current': 'page' } : {}),
     }, 'navlnk')))
-    root.replaceChildren(
-      el('style', {}, [css]),
-      el('div', { class: 'cm' + (ui.drawer ? ' drawer-open' : '') + (ui.chat ? ' chat-open' : ''), 'data-nav': ui.nav }, [
-        el('div', { class: 'bar' }, [
-          btn('☰ ' + t.menu, () => { ui.drawer = !ui.drawer; draw() }, { 'aria-expanded': String(ui.drawer), 'data-community-menu': '' }, 'lnk menu'),
-          el('h3', { class: 'section' }, [t.nav[ui.nav], ' ', el('sub', { class: 'alpha', 'data-community-alpha': '' }, [ctx.strings.alphaLabel])]),
-        ]),
-        ui.drawer ? el('div', { class: 'veil', 'data-community-veil': '', onclick: () => { ui.drawer = false; draw() } }) : null,
-        el('div', { class: 'grid-shell' }, [nav, el('main', { class: 'main' }, [...section, ui.note && !ui.chat ? el('p', { class: 'note' }, [ui.note]) : null]), ui.chat ? chatPane() : null]),
-      ]),
-    )
+    navEl.replaceWith(nav)
+    navEl = nav
+    const section = ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : home()
+    const main = el('main', { class: 'main' }, [...section, ui.note ? el('p', { class: 'note' }, [ui.note]) : null])
+    mainEl.replaceWith(main)
+    mainEl = main
+    const key = chatKey()
+    if (key !== shownChat) {
+      const next = ui.chat ? chatPane() : null
+      if (chatEl && next) chatEl.replaceWith(next); else if (chatEl) chatEl.remove(); else if (next) shell.append(next)
+      chatEl = next
+      shownChat = key
+    }
   }
 
   draw()
