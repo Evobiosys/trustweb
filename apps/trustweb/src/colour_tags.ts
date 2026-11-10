@@ -1,12 +1,15 @@
 /** Colour tags: tags (Tana checkbox fields) that colour a person on the Web view. Everyone is green; each tag a person has adds its own arc around the avatar. This device's choice, set in the Curator's Settings. */
 import type { Person } from './model'
 import { FAMILY_FIELD, isFamily } from './rings_layout'
+import { resolveMembers, toTag, type TagKind } from './tags_model'
 
 export const COLOUR_TAGS_KEY = 'trustweb.v1.colourtags'
 export const COLOUR_TAGS_EVENT = 'tw-colour-tags'
 export const PERSON_GREEN = 'var(--person-default)'   // warm amber by default, not green (Jakob 2026-10-15 16:10), now the token; the name stays for the callers
 
-export interface ColourTag { id: string; colour: string; label?: string; /** Wave 39: a system tag (`import:<date>-<source>`, import_tags.ts): hidden everywhere unless Tools > "show system tags" is on. */ system?: boolean; /** Wave 28 (trustzones.ts communityTags): this tag is a #community node; the friends and community zone can add its holders. */ community?: boolean }
+export interface ColourTag { id: string; colour: string; label?: string; /** Wave 39: a system tag (`import:<date>-<source>`, import_tags.ts): hidden everywhere unless Tools > "show system tags" is on. */ system?: boolean; /** Wave 28 (trustzones.ts communityTags): this tag is a #community node; the friends and community zone can add its holders. */ community?: boolean
+  /** Wave 40 (tags_model.ts): nesting. A group's members are its children's, minus `excludes`; a managed tag has stewards; `forkedFrom` names the tag this was copied from. */
+  kind?: TagKind; parents?: string[]; excludes?: string[]; stewardIds?: string[]; forkedFrom?: string }
 
 /** Family is the preset: purple. */
 export const FAMILY_PRESET: readonly ColourTag[] = [{ id: FAMILY_FIELD, colour: '#7b1fa2', label: 'family' }]
@@ -63,4 +66,16 @@ export function arcsGradient(colours: readonly string[]): string | null {
   const step = 360 / colours.length
   const gap = colours.length > 1 ? 6 : 0
   return `conic-gradient(${colours.map((c, i) => `transparent ${i * step}deg ${i * step + gap / 2}deg, ${c} ${i * step + gap / 2}deg ${(i + 1) * step - gap / 2}deg, transparent ${(i + 1) * step - gap / 2}deg ${(i + 1) * step}deg`).join(', ')})`
+}
+
+/** Wave 40: ids of the people in a tag, groups resolved through their children (a plain tag: its holders). Unknown tag: nobody. */
+export function memberIds(people: readonly Pick<Person, 'id' | 'ring' | 'fields'>[], tags: readonly ColourTag[], tagId: string): string[] {
+  const all = tags.map(toTag)
+  const tag = all.find((t) => t.id === tagId)
+  return tag ? resolveMembers(tag, all, (id) => people.filter((p) => has(p, id)).map((p) => p.id)) : []
+}
+
+/** Wave 40: the tags a person is in, in list order: the ones it holds and the groups it resolves into. */
+export function memberTagsOf(p: Pick<Person, 'id' | 'ring' | 'fields'>, people: readonly Pick<Person, 'id' | 'ring' | 'fields'>[], tags: readonly ColourTag[]): ColourTag[] {
+  return tags.filter((t) => memberIds(people, tags, t.id).includes(p.id))
 }

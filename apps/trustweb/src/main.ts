@@ -28,7 +28,7 @@ import { ownDataImported } from './own_data'
 import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
+import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
@@ -269,6 +269,7 @@ import { createEventsView } from './events_view'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createViewHost } from './ext/view_host'
 import { alphaHeading } from './alpha_heading'
+import { tagManagerView } from './tag_manager_view'
 import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
@@ -2672,7 +2673,7 @@ function webPageScreen(page: WebPage): Node[] {
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
   return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
-    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags),
+    person: p, zone: S.ringLabel[webSlot(p)], tags: memberTagsOf(p, s.people, tags),
     visible: visibleVia(s.inventory ?? [], webSlot(p), tagsOf(p, tags), { zone: S.ringLabel[webSlot(p)], web: S.cardSharesWeb }),
     kindOf: (i) => S.cardSharesKind[kindKey(i.source?.kind)],
     onRenameResource: (id, next) => { if (renameResource(st(), id, next)) save(); render() },
@@ -6938,6 +6939,7 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       importEntry(),
+      tagManagerView({ tags: loadColourTags, saveTags: (t) => saveColourTags([...t]), people: () => st().people, toast: (m) => toast(m) }),
       // Wave 39: folded until asked for (settings redraws keep it closed; a tick does not redraw the sheet).
       el('details', { class: 'settings-adv', 'data-pin-views': '' }, [
         el('summary', { class: 'adv-toggle' }, [S.viewPinsTitle]),
