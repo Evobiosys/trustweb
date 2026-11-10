@@ -9,7 +9,7 @@ import type { AppState } from './model'
 import { autoMap, CSV_FIELDS } from '../../crm/src/import/generic_csv'
 import type { CsvField } from '../../crm/src/import/generic_csv'
 import type { ImportedContact } from '../../crm/src/import/types'
-import { exportEntry, googleGroup } from './contacts_sync_view'
+import { exportEntry, googleGroup, googleOn } from './contacts_sync_view'
 import { COMING_SOURCES, VERIFIED_SOURCES } from './import_sources'
 import { failRun, finishRun, IDLE_RUN, startRun, tickRun } from './import_run'
 import type { Run } from './import_run'
@@ -156,7 +156,7 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   }
   redraw = draw
   draw()
-  return [box, googleGroup((contacts) => offerContacts(h, contacts), h.toast), exportEntry({ state: h.state, toast: h.toast, pages: h.pages })]
+  return [box, ...(googleOn() ? [googleGroup((contacts) => offerContacts(h, contacts), h.toast)] : []), exportEntry({ state: h.state, toast: h.toast, pages: h.pages })]
 }
 
 /** The one way in from Contacts, Settings and "Import everything": the Import page (import_home_view.ts); its Contacts section is servicesGroup above. */
