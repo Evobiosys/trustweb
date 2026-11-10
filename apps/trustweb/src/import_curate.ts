@@ -179,7 +179,9 @@ export function previewUndo(s: State, batchIds: readonly string[]): UndoPreview 
 
 export function undoBatches(s: State, batchIds: readonly string[], opts: { undoEdits?: boolean } = {}): { restored: number; archived: number; kept: number; keptIds: string[] } {
   const sum = { restored: 0, archived: 0, kept: 0, keptIds: [] as string[] }
-  for (const id of batchIds) {
+  // Wave 39 review: newest first, whatever order they were ticked in: an older import's "ring before" must not bring back what a newer one wrote.
+  const at = new Map((s.serviceImports ?? []).map((b) => [b.id, b.at]))
+  for (const id of [...batchIds].sort((a, b) => (at.get(b) ?? 0) - (at.get(a) ?? 0))) {
     const r = undoBatch(s, id, opts)
     sum.restored += r.restored; sum.archived += r.archived; sum.kept += r.kept; sum.keptIds.push(...r.keptIds)
   }
