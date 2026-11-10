@@ -99,8 +99,9 @@ export function liveRecordReply(file, method, headers, body, { gapMs = 60_000, r
     if (base !== undefined && existsSync(file) && !(Number(base) >= mtimeOf(file))) return { code: 409, headers: atHeader(file), body: '' }
     mkdirSync(path.dirname(file), { recursive: true })
     if (existsSync(file)) {
-      appendEdits(editsFile, readFileSync(file, 'utf8'), r, headers.host, maxBytes, adoptedOf(headers))
-      snapshot(file, gapMs)
+      const adopted = adoptedOf(headers)
+      appendEdits(editsFile, readFileSync(file, 'utf8'), r, headers.host, maxBytes, adopted)
+      snapshot(file, adopted ? 0 : gapMs)   // review wave 40: a wholesale replace always keeps the file as it was (the stream holds one line for it)
     }
     const tmp = file + '.tmp'
     writeFileSync(tmp, body)

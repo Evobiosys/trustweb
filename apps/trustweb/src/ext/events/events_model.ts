@@ -22,11 +22,18 @@ export interface EventsData {
 export const DEFAULT_MAP_URL = 'https://andrewalan11.github.io/regen-events-map/'
 
 /** https only and no credentials; the normalised link or null. */
-export function mapEmbedUrl(raw: string): string | null {
+export function mapEmbedUrl(raw: string, selfOrigin?: string): string | null {
   const href = safeUrl(raw)
   if (!href) return null
   const u = new URL(href)
+  if (selfOrigin && u.origin === selfOrigin) return null   // review wave 40: a page of this app in the frame would run with the app's own storage
   return u.protocol === 'https:' && !u.username && !u.password ? u.href : null
+}
+
+/** Review wave 40: the stored map consent (the origin the person agreed to load) covers this address; the old global "1" asks again. */
+export function mapConsentCovers(stored: string | null, src: string): boolean {
+  if (!stored || stored === '1') return false
+  try { return new URL(src).origin === stored } catch { return false }
 }
 
 export function parseEvents(raw: unknown): EventsData {

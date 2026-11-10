@@ -51,6 +51,7 @@ export const body: TwModuleBody = {
     for (const f of [...cards.values(), ...imports]) f()
     cards.clear()
     imports.clear()
+    svc?.store.close()   // review wave 40: dispose undoes init, the database connection included
     svc = null
   },
   settings: (ctx) => [{ id: MODULE_ID, title: ctx.strings.photos.title, rows: () => settingsRows(ctx) }],

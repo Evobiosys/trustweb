@@ -11,7 +11,7 @@ import type { AppState } from '../../model'
 import type { TwCtx } from '../tw_registry'
 import communityCss from '../community-mighty/community.css?inline'
 import css from './events.css?inline'
-import { DEFAULT_MAP_URL, MODULE_ID, buildEventList, mapEmbedUrl, parseEvents, setRsvp, shareEventToTag, type EventItem, type EventsData, type Rsvp } from './events_model'
+import { DEFAULT_MAP_URL, MODULE_ID, buildEventList, mapConsentCovers, mapEmbedUrl, parseEvents, setRsvp, shareEventToTag, type EventItem, type EventsData, type Rsvp } from './events_model'
 
 export const readEvents = (s: AppState): EventsData => parseEvents(s.extData?.[MODULE_ID])
 
@@ -22,9 +22,10 @@ export function writeEvents(ctx: TwCtx, d: EventsData): void {
 }
 
 const CONSENT_KEY = 'trustweb.v1.events-view.consent'
-export const readMapConsent = (): boolean => { try { return localStorage.getItem(CONSENT_KEY) === '1' } catch { return false } }
-export function writeMapConsent(on: boolean): void {
-  try { if (on) localStorage.setItem(CONSENT_KEY, '1'); else localStorage.removeItem(CONSENT_KEY) } catch { /* not kept: the next load asks again */ }
+/** Review wave 40: consent is kept per map origin, so a new address (typed here or arriving from another device) asks again. */
+export const readMapConsent = (src: string): boolean => { try { return mapConsentCovers(localStorage.getItem(CONSENT_KEY), src) } catch { return false } }
+export function writeMapConsent(src: string | false): void {
+  try { if (src) localStorage.setItem(CONSENT_KEY, new URL(src).origin); else localStorage.removeItem(CONSENT_KEY) } catch { /* not kept: the next load asks again */ }
 }
 
 type Kids = (Node | string | null | undefined)[]
@@ -73,22 +74,22 @@ export function mountEvents(hostEl: HTMLElement, ctx: TwCtx): () => void {
   /** The map slot: paste the address once (also under Settings), nothing loads before the consent tap. */
   function mapSlot(): HTMLElement {
     const d = data()
-    const src = mapEmbedUrl(d.mapUrl ?? DEFAULT_MAP_URL)
+    const src = mapEmbedUrl(d.mapUrl ?? DEFAULT_MAP_URL, location.origin)
     const kids: Kids = [el('h3', { class: 'eyebrow' }, [t.mapTitle])]
     // Review wave 40: Change opens the address field (deleting mapUrl only brought the default map straight back).
     const change = btn(t.mapChange, () => { ui.mapEdit = true; ui.mapNote = ''; draw() }, { 'data-events-map-change': '' })
     if (!src || ui.mapEdit) {
       const input = el('input', { type: 'url', placeholder: t.mapPh, 'aria-label': t.mapPh, 'data-events-map-url': '', value: d.mapUrl ?? '' }) as HTMLInputElement
       kids.push(src ? null : el('p', { class: 'meta' }, [t.mapNone]), input, btn(t.save, () => {
-        const url = mapEmbedUrl(input.value)
+        const url = mapEmbedUrl(input.value, location.origin)
         if (!url) { ui.mapNote = t.mapBad; draw(); return }
         ui.mapNote = ''
         ui.mapEdit = false
         save({ ...data(), mapUrl: url })
       }, { 'data-events-map-save': '' }, 'lnk strong'), src ? btn(t.cancel, () => { ui.mapEdit = false; ui.mapNote = ''; draw() }, { 'data-events-map-cancel': '' }) : null, ui.mapNote ? el('p', { class: 'note' }, [ui.mapNote]) : null)
-    } else if (!readMapConsent()) {
+    } else if (!readMapConsent(src)) {
       kids.push(el('p', { class: 'meta' }, [t.mapConsent]), el('div', { class: 'row wrap' }, [
-        btn(t.mapLoad, () => { writeMapConsent(true); draw() }, { 'data-events-map-load': '' }, 'lnk strong'),
+        btn(t.mapLoad, () => { writeMapConsent(src); draw() }, { 'data-events-map-load': '' }, 'lnk strong'),
         el('a', { href: src, target: '_blank', rel: 'noopener noreferrer', 'data-events-map-open': '' }, [t.openNewTab]),
         change,
       ]))
@@ -114,7 +115,7 @@ export function mountEvents(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const rows: Kids = cards.length
       ? [...cards.filter((c) => !c.past).map(eventCard), past.length ? el('h4', { class: 'eyebrow' }, [t.past]) : null, ...past.map(eventCard)]
       : [el('p', { class: 'empty' }, [t.empty])]
-    const key = JSON.stringify([data().mapUrl ?? '', readMapConsent(), ui.mapNote, ui.mapEdit])
+    const key = JSON.stringify([data().mapUrl ?? '', readMapConsent(mapEmbedUrl(data().mapUrl ?? DEFAULT_MAP_URL, location.origin) ?? ''), ui.mapNote, ui.mapEdit])
     if (key !== mapKey) { mapHolder.replaceChildren(mapSlot()); mapKey = key }
     noteEl.replaceChildren(...(ui.note ? [el('p', { class: 'note', 'data-events-note': '' }, [ui.note])] : []))
     listEl.replaceChildren(...rows.filter((n): n is Node => n !== null && n !== undefined))

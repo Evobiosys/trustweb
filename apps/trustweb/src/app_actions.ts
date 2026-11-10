@@ -163,7 +163,8 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
     parse: (a) => {
       const field = str(a, 'field', 40)!
       if (!FIELD.test(field) || RESERVED.has(field)) throw new Error(`field "${field}" cannot be set`)
-      const value = typeof a.value === 'string' ? a.value.trim() : ''
+      if (typeof a.value !== 'string') throw new Error('value must be text ("" clears the field)')   // review wave 40: a missing value never clears
+      const value = a.value.trim()
       if (value.length > 500) throw new Error('value is too long')
       return { person: str(a, 'person', 80)!, field, value }
     },
@@ -259,11 +260,14 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
       const snap = before ? structuredClone(before) : undefined
       const ids = new Set(s.people.map((p) => p.id))
       decide(s, x.batchId, x.row.key, { do: 'accept' }, host.now(), () => host.newId(), host.tagOf?.(x) ?? tagSlug)
+      // Review wave 40: undo takes out only the person THIS accept created, and puts an existing person back only while nobody changed them since.
+      const created = new Set(s.people.filter((p) => !ids.has(p.id)).map((p) => p.id))
+      const applied = before ? JSON.stringify(before) : ''
       done()
       return () => {
         const st = host.state()
-        if (before && snap) { for (const k of Object.keys(before)) delete (before as unknown as Record<string, unknown>)[k]; Object.assign(before, snap) }
-        st.people = st.people.filter((p) => ids.has(p.id))
+        if (before && snap && JSON.stringify(before) === applied) { for (const k of Object.keys(before)) delete (before as unknown as Record<string, unknown>)[k]; Object.assign(before, snap) }
+        st.people = st.people.filter((p) => !created.has(p.id))
         const batch = (st.serviceImports ?? []).find((b) => b.id === x.batchId)
         if (batch) delete batch.done[x.row.key]
         done()
@@ -302,7 +306,8 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
   })
   reg.define({
     type: 'set-extension', doc: 'Switches a part of the app (a module) on or off.', shape: '{"module": MODULE, "on": true|false}',
-    parse: (a) => ({ module: oneOf(a, 'module', host.modules()), on: bool(a, 'on') }),
+    // Review wave 40: not the assistant itself (switching it off would take this card and every Undo with it).
+    parse: (a) => ({ module: oneOf(a, 'module', host.modules().filter((m) => m !== 'assistant')), on: bool(a, 'on') }),
     label: (a) => T.ext(a.module, a.on),
     apply: (a) => { const prev = host.isEnabled(a.module); host.setExtension(a.module, a.on); return () => host.setExtension(a.module, prev) },
   })
@@ -318,8 +323,10 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
     parse: (a) => customProfile(a, host.modules()),
     label: (a) => T.variation(a.name),
     apply: (a) => {
+      const prev = host.state().twSettings?.custom?.find((c) => c.id === a.id)   // review wave 40: a same-named one is replaced; undo brings it back
       host.saveTw(addCustom(host.state().twSettings, a))
       return () => {
+        if (prev) { host.saveTw(addCustom(host.state().twSettings, prev)); return }
         const defaults = host.defaults?.() ?? Object.fromEntries(host.modules().map((m) => [m, true]))
         host.saveTw(removeCustom(host.state().twSettings, a.id, defaults))
       }

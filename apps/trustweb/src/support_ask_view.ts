@@ -5,7 +5,7 @@ import { el } from '../../demo/src/ui/dom'
 import { Ring } from './model'
 import type { AppState, Peer, Person } from './model'
 import { askPeers } from './non_responsive'
-import { loadColourTags, memberIds } from './colour_tags'
+import { loadColourTags, memberIds, type ColourTag } from './colour_tags'
 import { tagPill } from './components/tag_pill'
 import { foldText } from './settings_search'
 import { S } from './strings'
@@ -47,6 +47,12 @@ function recipients(io: SupportIo, a: AudienceChoice): { peer: Peer; name: strin
   }
   return audience(s.people.filter((p) => p.peerId && open.has(p.peerId)), a, hasTag)
     .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name, person: p }))
+}
+
+/** Review wave 40: how many members of a tag an ask to it really reaches (connected, open to asks, Friends and closer), for its dropdown line. */
+function tagReach(io: SupportIo, tags: readonly ColourTag[], id: string): number {
+  const members = new Set(memberIds(io.st().people, tags, id))
+  return recipients(io, { zone: `tag:${id}` }).filter((r) => members.has(r.person.id)).length
 }
 
 /** The send form: the sheet and the Ask dock both show it; `sent` runs after a send. */
@@ -91,7 +97,7 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
       // One audience control: a zone or a tag; Closest few are always in unless the advanced switch says otherwise.
       el('select', { class: 'field', 'aria-label': S.supportZoneAria, 'data-support-zone': '', onchange: (e) => { pick.zone = (e.target as HTMLSelectElement).value; draw() } }, [
         ...ZONES.map((r) => el('option', { value: `ring:${r}`, ...(pick.zone === `ring:${r}` ? { selected: '' } : {}) }, [S.ringLabel[r]])),
-        ...tags.map((t) => el('option', { value: `tag:${t.id}`, ...(pick.zone === `tag:${t.id}` ? { selected: '' } : {}) }, [t.kind && t.kind !== 'personal' ? S.supportGroupTag(t.label ?? t.id, memberIds(io.st().people, tags, t.id).length) : S.supportTag(t.label ?? t.id)])),
+        ...tags.map((t) => el('option', { value: `tag:${t.id}`, ...(pick.zone === `tag:${t.id}` ? { selected: '' } : {}) }, [t.kind && t.kind !== 'personal' ? S.supportGroupTag(t.label ?? t.id, tagReach(io, tags, t.id)) : S.supportTag(t.label ?? t.id)])),
       ]),
       chosenTag ? el('div', { class: 'chips', 'data-support-zone-pill': '' }, [tagPill(chosenTag)]) : null,
       pick.notClosest ? null : el('div', { class: 'chips' }, [el('span', { class: 'chip on support-closest', 'data-support-closest-always': '' }, [S.supportClosestAlways])]),

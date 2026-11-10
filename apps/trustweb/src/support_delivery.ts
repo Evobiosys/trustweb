@@ -80,17 +80,22 @@ export function emailLink(addresses: readonly string[], subject: string, body: s
 /** Mail programs cut longer mailto links (Outlook / Windows near 2,000 characters): addresses past the cut would silently get nothing. */
 export const MAILTO_MAX = 1900
 
-/** The BCC list split into as few mails as fit under MAILTO_MAX each (one address per mail at least); every address exactly once. */
-export function emailLinks(addresses: readonly string[], subject: string, body: string, max = MAILTO_MAX): string[] {
-  const out: string[] = []
+/** The BCC list split into as few mails as fit under MAILTO_MAX each (one address per mail at least); every address exactly once, with its count. */
+export function emailBatches(addresses: readonly string[], subject: string, body: string, max = MAILTO_MAX): { href: string; count: number }[] {
+  const out: { href: string; count: number }[] = []
   let batch: string[] = []
+  const flush = (): void => { out.push({ href: emailLink(batch, subject, body), count: batch.length }); batch = [] }
   for (const a of addresses) {
-    if (batch.length && emailLink([...batch, a], subject, body).length > max) { out.push(emailLink(batch, subject, body)); batch = [] }
+    if (batch.length && emailLink([...batch, a], subject, body).length > max) flush()
     batch.push(a)
   }
-  if (batch.length) out.push(emailLink(batch, subject, body))
+  if (batch.length) flush()
   return out
 }
+
+/** The links of emailBatches. */
+export const emailLinks = (addresses: readonly string[], subject: string, body: string, max = MAILTO_MAX): string[] =>
+  emailBatches(addresses, subject, body, max).map((b) => b.href)
 
 /** The words sent over a messenger or by e-mail: plain, to one person, no recipient list. */
 export function deliveryText(name: string, a: Pick<SupportAsk, 'chips' | 'note'>, when: string, appUrl: string): string {

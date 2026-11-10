@@ -19,7 +19,7 @@ export interface FeedPost { id: string; text: string; zone: string; at: number }
 export interface FeedData {
   posts?: FeedPost[]
   /** Fetch a richer preview through my TrustWeb host (off unless the user turns it on). */
-  preview?: true
+  preview?: boolean
 }
 
 const isStr = (v: unknown): v is string => typeof v === 'string'
@@ -29,7 +29,7 @@ export function parseFeed(raw: unknown): FeedData {
   const o = raw as Record<string, unknown>
   const d: FeedData = {}
   if (Array.isArray(o.posts)) d.posts = o.posts.filter((p): p is FeedPost => !!p && typeof p === 'object' && isStr(p.id) && isStr(p.text) && isStr(p.zone) && typeof p.at === 'number').map((p) => ({ id: p.id, text: p.text, zone: p.zone, at: p.at }))
-  if (o.preview === true) d.preview = true
+  if (typeof o.preview === 'boolean') d.preview = o.preview   // review wave 40: an explicit off travels to my other devices too
   return d
 }
 

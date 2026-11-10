@@ -49,9 +49,9 @@ export function createApproval(runner: { run(a: Valid): Applied }, opts: { auto:
       undos.delete(id)
       c.state = 'undone'; changed(); return true
     },
-    /** Approves every waiting card in order; how many were tried. */
+    /** Approves every waiting card in order, except those that need their own Approve (auto: false, e.g. a tap on the page); how many were tried. */
     approveAll(): number {
-      const waiting = cards.filter((c) => c.state === 'proposed')
+      const waiting = cards.filter((c) => c.state === 'proposed' && c.action.auto)
       for (const c of waiting) apply(c)
       if (waiting.length) changed()
       return waiting.length

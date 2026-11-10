@@ -25,3 +25,14 @@ describe('shouldAsk', () => {
     expect(shouldAsk(mergeSettings({ never: ['mastodon.social'] }), 'mastodon', 'other.social')).toBe(true)
   })
 })
+
+describe('instanceHost (review wave 40)', () => {
+  it('a plain host name only; not a built-in site, not one added already', async () => {
+    const { instanceHost } = await import('../../src/settings')
+    expect(instanceHost(' Mastodon.Social ', [])).toBe('mastodon.social')
+    for (const bad of ['..a.com', '-.com', 'a..b.com', 'a.-b.com', 'https://x.org', 'x', 'a_b.com']) expect(instanceHost(bad, [])).toBeNull()
+    expect(instanceHost('www.linkedin.com', [])).toBeNull()
+    expect(instanceHost('x.com', [])).toBeNull()
+    expect(instanceHost('mastodon.social', ['mastodon.social'])).toBeNull()
+  })
+})

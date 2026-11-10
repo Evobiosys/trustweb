@@ -119,6 +119,17 @@ describe('edit stream: state taken from a linked device (wave 40)', () => {
     expect(r.code).toBe(200)
     expect(lines(path.join(d, 'dev-edits.jsonl'))).toMatchObject([{ kind: 'adopted-from-device', ids: [], after: { device: 'Phone', people: 3, notes: 1, settings: 0 } }])
   })
+  it('review: an adopted post keeps a snapshot of the file before it even inside the snapshot gap', () => {
+    const d = mkdtempSync(path.join(tmpdir(), 'tw-adopt-')); const f = path.join(d, 'dev-record.live.json')
+    const rec = (people) => JSON.stringify({ v: 1, me: { id: 'x', displayName: 'J' }, people, peers: [], inventory: [], log: [] })
+    const snaps = () => readdirSync(d).filter((n) => /^dev-record\.live\.\d+\.json$/.test(n))
+    writeFileSync(f, rec([{ id: 'a', name: 'Ann' }]))
+    liveRecordReply(f, 'POST', ok, rec([{ id: 'a', name: 'Ann B' }]), { gapMs: 3_600_000 })
+    expect(snaps()).toHaveLength(1)
+    const adopted = encodeURIComponent(JSON.stringify({ device: 'Phone', people: 1, notes: 0, settings: 0 }))
+    liveRecordReply(f, 'POST', { ...ok, 'x-tw-adopted': adopted }, rec([{ id: 'c', name: 'Cy' }]), { gapMs: 3_600_000 })
+    expect(snaps()).toHaveLength(2)
+  })
   it('a damaged X-TW-Adopted header falls back to the ordinary per-person lines', () => {
     const d = dir(); const f = path.join(d, 'rec.json')
     const rec = (people) => JSON.stringify({ v: 1, me: { id: 'x', displayName: 'J' }, people, peers: [], inventory: [], log: [] })

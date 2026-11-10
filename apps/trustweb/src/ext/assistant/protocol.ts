@@ -6,6 +6,10 @@
  * OpenAI-compatible server-sent events. Pure, no DOM.
  */
 import type { ActionSpec, Checked, Valid } from '../../actions'
+import { isUnnamed } from '../../import_tags'
+
+/** Review wave 40: the name an import row is sent to the AI under; a row named only by a phone number, a date or an e-mail address goes as "(no name)" (its key still lets the AI act on it). */
+export const aiRowName = (name: string): string => (isUnnamed({ name }) || name.includes('@') ? '(no name)' : name)
 
 export const BLOCK = 'tw-actions'
 export const MAX_ACTIONS = 50

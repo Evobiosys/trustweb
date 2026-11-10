@@ -11,13 +11,14 @@ import path from 'node:path'
 import { createInterface } from 'node:readline'
 import { createHttpServer } from './http.ts'
 import { createMcpServer } from './protocol.ts'
-import { recordTools } from './record_tools.ts'
+import { recordTools, toolAllow } from './record_tools.ts'
 
 const env = process.env
 const tools = recordTools({
   file: env.TW_RECORD || path.join(homedir(), '.cache/trustweb-dev/dev-record.live.json'),
   write: env.TW_MCP_WRITE === '1',
-  ...(env.TW_MCP_TOOLS ? { allow: env.TW_MCP_TOOLS.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
+  // Review wave 40: an empty TW_MCP_TOOLS (every tool switched off) offers none; only an absent one offers all.
+  ...(env.TW_MCP_TOOLS !== undefined ? { allow: toolAllow(env.TW_MCP_TOOLS) } : {}),
 })
 const { handle } = createMcpServer({ name: 'trustweb-mcp', version: '0.1.0' }, tools)
 

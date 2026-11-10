@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 import { normalizeBaseUrl } from './compose_link'
-import { SETTINGS_KEY, mergeSettings, type Settings } from './settings'
+import { SETTINGS_KEY, instanceHost, mergeSettings, type Settings } from './settings'
 import type { Network } from './selectors'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -62,12 +62,15 @@ $('save-base').addEventListener('click', async () => {
 })
 
 $('add-instance').addEventListener('click', async () => {
-  const raw = $<HTMLInputElement>('instance').value.trim().toLowerCase()
   const msg = $('instance-msg')
-  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(raw)) { msg.textContent = 'Enter a host name like mastodon.social.'; return }
+  const added = (await chrome.scripting.getRegisteredContentScripts()).filter((c) => c.id.startsWith(PREFIX)).map((c) => c.id.slice(PREFIX.length))
+  const raw = instanceHost($<HTMLInputElement>('instance').value, added)   // review wave 40: plain host, not built in, not added twice
+  if (!raw) { msg.textContent = 'Enter a host name like mastodon.social that is not in the list yet.'; return }
   const matches = [`https://${raw}/*`]
-  if (!(await chrome.permissions.request({ origins: matches }))) { msg.textContent = 'Permission was not granted.'; return }
-  await chrome.scripting.registerContentScripts([{ id: PREFIX + raw, matches, js: ['content.js'], runAt: 'document_idle' }])
+  try {
+    if (!(await chrome.permissions.request({ origins: matches }))) { msg.textContent = 'Permission was not granted.'; return }
+    await chrome.scripting.registerContentScripts([{ id: PREFIX + raw, matches, js: ['content.js'], runAt: 'document_idle' }])
+  } catch { msg.textContent = 'This instance could not be added.'; return }
   msg.textContent = 'Added. Reload the instance tab.'
   void render()
 })

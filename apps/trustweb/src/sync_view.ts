@@ -125,6 +125,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     persona: h.persona, storeCtx: h.storeCtx, state: h.state, save: h.save, deviceName: () => deviceNameOf(nameKey), snapshot: h.snapshots.take,
     canSend: () => shouldSend(readSyncMode(), h.isPhone()),
     archive: h.archive, onAdopted: h.adopted,
+    onWant: (name, send) => wantSheet(name, send),
     onLog: (line) => addLog(line),
     onChange: () => { if (showing()) devicesSheet() },
     askDid: h.askDid,
@@ -440,6 +441,16 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     ])
   }
 
+  /** Review wave 40: a linked device asks for this device's state; it is sent only on Send. */
+  function wantSheet(name: string, send: () => Promise<void>): void {
+    open('devices-want', [
+      el('h3', {}, [S.adWantTitle(name), ' ', alphaSub()]),
+      el('p', {}, [S.adWantLead(name)]),
+      el('button', { class: 'btn btn-electric', 'data-want-send': '1', onclick: () => { void send().then(() => h.toast(S.adWantSent(name))); devicesSheet() } }, [S.adWantSend]),
+      el('button', { class: 'btn btn-ghost', 'data-want-decline': '1', onclick: () => devicesSheet() }, [S.dvNotNow]),
+    ])
+  }
+
   /** Wave 40: the confirm sheet before another device's state replaces this one: what differs, what happens to the old state. */
   function adoptSheet(i: Incoming, a: NonNullable<Incoming['adopt']>): void {
     const name = i.from.name
@@ -454,7 +465,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   }
 
   async function adopt(a: NonNullable<Incoming['adopt']>, name: string): Promise<void> {
-    const ok = await a.run()
+    const ok = await a.run().catch(() => false)   // review wave 40: odd data or a failed save says so instead of leaving the sheet hanging
     h.toast(ok ? S.adDone(name) : S.adNotKept)
     if (ok) h.changed()
     devicesSheet()

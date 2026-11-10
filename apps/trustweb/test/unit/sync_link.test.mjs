@@ -257,16 +257,18 @@ describe('take another device\'s state (wave 40)', () => {
     const h = hub()
     const archived = []
     const adopted = []
-    const hooks = (who) => ({ archive: (reason, dev) => { archived.push({ who, reason, dev }); return true }, onAdopted: (dev, diff) => adopted.push({ who, dev, diff }), ...extra })
+    const wants = []
+    // Review wave 40: a want waits for the person on the asked device; by default these tests tap Send at once.
+    const hooks = (who) => ({ archive: (reason, dev) => { archived.push({ who, reason, dev }); return true }, onAdopted: (dev, diff) => adopted.push({ who, dev, diff }), onWant: (name, send) => { wants.push({ who, name }); void send() }, ...extra })
     const mac = await device(h, 'Mac', macState, 'mac', hooks('mac'))
     const phone = await device(h, 'Phone', phoneState, 'phone', hooks('phone'))
     const mine = await phone.api.join(await mac.api.offerCode())
     await until(() => mac.box.requests.length === 1)
     mine.confirm(); mac.box.requests[0].confirm()
-    return { h, mac, phone, archived, adopted, macDid: phone.api.pairings()[0].did, phoneDid: mac.api.pairings()[0].did }
+    return { h, mac, phone, archived, adopted, wants, macDid: phone.api.pairings()[0].did, phoneDid: mac.api.pairings()[0].did }
   }
 
-  it('Take: the other device sends its record unprompted, this one asks its person, archives first, then holds exactly that state', async () => {
+  it('Take: the other device sends its record after its person agrees, this one asks its person, archives first, then holds exactly that state', async () => {
     const t = await pair(mk('J', [person('a', 'Ada Lovelace', [line('l1')])]), mk('J', [person('b', 'Ben Carter')]))
     await t.phone.api.takeFrom(t.macDid)
     await until(() => t.phone.box.incoming.length === 1)
@@ -313,6 +315,35 @@ describe('take another device\'s state (wave 40)', () => {
     await until(() => t.phone.box.incoming.length === 1)
     expect(await t.phone.box.incoming[0].adopt.run()).toBe(false)
     expect(t.phone.state.people.map((p) => p.id)).toEqual(['b'])
+  })
+
+  it('review: a want waits for a tap on the asked device; Not now sends nothing, and no hook means no answer', async () => {
+    const pending = []
+    const t = await pair(mk('J', [person('a', 'Ada')]), mk('J', [person('b', 'Ben')]), { onWant: (name, send) => pending.push({ name, send }) })
+    await t.phone.api.takeFrom(t.macDid)
+    await until(() => pending.length === 2 || pending.length === 1)
+    await new Promise((r) => setTimeout(r, 120))
+    expect(t.phone.box.incoming).toHaveLength(0)
+    expect(pending.map((x) => x.name)).toEqual(['Phone'])
+    await pending[0].send()
+    await until(() => t.phone.box.incoming.length === 1)
+    expect(t.phone.box.incoming[0].adopt.kind).toBe('take')
+    const u = await pair(mk('J', [person('a', 'Ada')]), mk('J', []), { onWant: undefined })
+    await u.phone.api.takeFrom(u.macDid)
+    await new Promise((r) => setTimeout(r, 150))
+    expect(u.phone.box.incoming).toHaveLength(0)
+    expect(u.mac.log.some((l) => /asked for this record/.test(l))).toBe(true)
+  })
+
+  it('review: the same want delivered twice (relay replay) asks once', async () => {
+    const t = await pair(mk('J', [person('a', 'Ada')]), mk('J', []))
+    await t.phone.api.takeFrom(t.macDid)
+    await until(() => t.phone.box.incoming.length === 1)
+    const want = t.h.wires.filter((w) => w.to === t.phoneDid ? false : w.from === t.phoneDid).pop()
+    await t.h.sinks.get(want.to)?.(want.from, want.payload)
+    await new Promise((r) => setTimeout(r, 120))
+    expect(t.wants.filter((w) => w.who === 'mac')).toHaveLength(1)
+    expect(t.phone.box.incoming).toHaveLength(1)
   })
 
   it('a receive-only device does not answer a want; Send my state is refused on it', async () => {

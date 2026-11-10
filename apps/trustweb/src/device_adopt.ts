@@ -94,14 +94,17 @@ export function readArchived(store: Store, storeKey: string, now: number): Archi
 }
 
 /**
- * Keeps a copy of the record as it is now (meetings without transcript, early packs and late link, as snapshots do). Too big for storage:
- * once more without the pictures. False = nothing was kept; the caller must not go on to replace the record.
+ * Keeps a copy of the record as it is now: whole; too big for storage: meetings without transcript, early packs and late link (as snapshots do);
+ * still too big: once more without the pictures. False = nothing was kept; the caller must not go on to replace the record.
  */
 export function archiveRecord(store: Store, storeKey: string, s: AppState, why: { reason: string; device: string }, now: number): boolean {
+  // Review wave 40: whole first (meetings with their transcripts: an adoption replaces this device's meetings, Restore cannot refill them from
+  // the live record then); only when storage is too small the slim form, then without pictures.
+  const whole: AppState = structuredClone(s)
   const slim: AppState = { ...structuredClone(s), ...(s.meetings ? { meetings: s.meetings.map(slimMeeting) } : {}) }
   const bare: AppState = { ...slim, people: slim.people.map(withoutPersonImage) }
   const kept = readArchived(store, storeKey, now)
-  for (const [record, pictures] of [[slim, true], [bare, false]] as const) {
+  for (const [record, pictures] of [[whole, true], [slim, true], [bare, false]] as const) {
     const copy: ArchivedCopy = { id: `${now}-${kept.length}`, at: now, expiresAt: now + ARCHIVE_DAYS * DAY, ...why, people: alive(s.people).length, pictures, record }
     for (const list of [[copy, ...kept].slice(0, ARCHIVE_KEEP), [copy, ...kept].slice(0, 1)]) {
       try { store.setItem(storeKey, JSON.stringify(list)); return true } catch { /* full: fewer old copies, then the other form */ }

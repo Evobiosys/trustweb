@@ -8,7 +8,7 @@ import { audienceAdmits } from './model'
 import type { AppState, PinnedOrder, Person } from './model'
 import { lastContact } from './engagement'
 import { ChatDirection } from './chat'
-import { tagsOf } from './colour_tags'
+import { memberIds, tagsOf, type ColourTag } from './colour_tags'
 import { webSlot } from './rings_layout'
 
 /** Wave 26: records and bundles from before the rename carry `favourite`; it loads as `pinned` (an existing `pinned` wins). */
@@ -159,9 +159,12 @@ export function collidingLabels(boxes: readonly { l: number; t: number; r: numbe
   return hide
 }
 
-/** Keeps the people holding colour tag `id`; null = no filter. */
-export const withTag = <P extends Pick<Person, 'ring' | 'fields'>>(people: readonly P[], id: string | null): P[] =>
-  id === null ? [...people] : people.filter((p) => tagsOf(p, [{ id, colour: '#000000' }]).length > 0)
+/** Keeps the people holding colour tag `id`; null = no filter. Review wave 40: with the tag list, a group tag keeps its resolved members (children, minus left-out). */
+export function withTag<P extends Pick<Person, 'id' | 'ring' | 'fields'>>(people: readonly P[], id: string | null, tags?: readonly ColourTag[]): P[] {
+  if (id === null) return [...people]
+  if (tags?.some((t) => t.id === id)) { const ids = new Set(memberIds(people, tags, id)); return people.filter((p) => ids.has(p.id)) }
+  return people.filter((p) => tagsOf(p, [{ id, colour: '#000000' }]).length > 0)
+}
 
 /** How many of my included resources the membrane of `p` admits: what we share with them. */
 export function sharedCount(s: Pick<State, 'inventory'>, p: Pick<Person, 'ring' | 'fields' | 'ringSuggested'>): number {

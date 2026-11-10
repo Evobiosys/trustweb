@@ -73,6 +73,9 @@ export interface SyncLinkDeps {
   archive?: (reason: string, device: string) => boolean
   /** Wave 40: called once after an adoption went through. */
   onAdopted?: (device: string, diff: Differences) => void
+  /** Review wave 40: a linked device asks for this record (its "Take this device's state"). Nothing leaves before this device's person taps:
+   *  the host shows the question and calls `send` on Send. Absent = never answered. */
+  onWant?: (name: string, send: () => Promise<void>) => void
   /** Overrides how long a handshake waits (tests). */
   handshakeMs?: number
   /** Overrides the SYNC_VERSION this device announces (tests). */
@@ -125,8 +128,10 @@ export function createSyncLink(d: SyncLinkDeps) {
   /** sid -> called with the other device's SYNC_VERSION (a device older than the field sends none: 1). */
   const waiting = new Map<string, (v: number) => void>()
   const partial = new Map<string, { n: number; parts: Uint8Array[]; got: number; reply: boolean; did: string; a?: 'take' | 'give' }>()
-  /** Devices whose record I asked for ("Take this device's state") and that has not come yet. */
-  const wanted = new Set<string>()
+  /** Devices whose record I asked for ("Take this device's state") and that has not come yet: did -> until when the ask holds (review wave 40). */
+  const wanted = new Map<string, number>()
+  /** Review wave 40: wants already answered or asked about (sid -> expiry): a relay replaying one never asks twice. */
+  const seenWants = new Map<string, number>()
   let offer: { secret: string; key: CryptoKey; until: number } | null = null
   let store: Store
   let identity: Identity
@@ -184,7 +189,9 @@ export function createSyncLink(d: SyncLinkDeps) {
     partial.delete(m.sid)
     const bundle = fromChunks(acc.parts)
     if (!bundle) { d.onLog(`Ignored a damaged record from ${p.name}`); return }
-    const kind = acc.a === 'take' && wanted.delete(p.did) ? 'take' : acc.a ? 'give' : null
+    const asked = (wanted.get(p.did) ?? 0) >= now()
+    wanted.delete(p.did)
+    const kind = acc.a === 'take' && asked ? 'take' : acc.a ? 'give' : null
     d.onIncoming({
       from: p, ...(kind ? { adopt: { kind, diff: differences(d.state(), bundle), run: () => adopt(p, bundle) } } : {}), newer: bundle.schemaVersion !== undefined && bundle.schemaVersion > SCHEMA_VERSION ? bundle.schemaVersion : undefined, counts: countsOf(bundle), reply: acc.reply,
       accept: (file) => accept(p, bundle, acc.reply, file),
@@ -222,7 +229,11 @@ export function createSyncLink(d: SyncLinkDeps) {
     if (!d.archive?.(`before taking ${p.name}'s state`, p.name)) { d.onLog(`Could not keep a copy of this record: nothing was replaced`); return false }
     const t = now()
     const view = p.shareCode === false ? withoutCodes(bundle) : bundle
-    adoptBundle(s, view)
+    // Review wave 40: replaced on a copy first, so odd data that throws half-way leaves this record as it was.
+    const next = structuredClone(s)
+    adoptBundle(next, view)
+    for (const k of Object.keys(s)) if (!(k in next)) delete (s as unknown as Record<string, unknown>)[k]
+    Object.assign(s, next)
     store.stamps = stampsAfterMerge(s, store.stamps, view, t, d.deviceName(), p.name)
     p.lastSyncAt = t
     persist()
@@ -276,8 +287,12 @@ export function createSyncLink(d: SyncLinkDeps) {
         else if (m.t === 'ready') waiting.get(m.sid)?.(m.v ?? 1)
         else if (m.t === 'data') await onData(p, m)
         else if (m.t === 'want') {
+          for (const [sid, until] of seenWants) if (until < now()) seenWants.delete(sid)
+          if (seenWants.has(m.sid)) return true
+          seenWants.set(m.sid, m.exp)
           if (d.canSend?.() === false) d.onLog(`${p.name} asked for this record, but this device only receives`)
-          else await sendBundle(p, true, 'take').catch(() => d.onLog(`Could not send ours to ${p.name}`))
+          else if (!d.onWant) d.onLog(`${p.name} asked for this record; not answered`)
+          else d.onWant(p.name, () => sendBundle(p, true, 'take').catch(() => d.onLog(`Could not send ours to ${p.name}`)))
         }
       }
       return true
@@ -330,6 +345,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     unlink(did: string): void {
       store.pairings = store.pairings.filter((x) => x.did !== did)
       keys.delete(did)
+      wanted.delete(did)
       persist()
     },
     /** Starts a sync: only when the other device answers "ready" within 30 s and runs the same SYNC_VERSION. Rejects with "offline", "version", "too large" or "receive only" (and with the relay's error if a send fails). */
@@ -340,8 +356,9 @@ export function createSyncLink(d: SyncLinkDeps) {
     /** Wave 40: asks the linked device for its record; it arrives as an Incoming with adopt.kind 'take'. Rejects like syncNow (but sends nothing itself). */
     async takeFrom(did: string): Promise<void> {
       const p = await handshake(did)
-      wanted.add(did)
-      await send(did, { t: 'want', sid: randomId(12), name: d.deviceName(), exp: stamp() })
+      const exp = stamp()
+      wanted.set(did, exp)
+      try { await send(did, { t: 'want', sid: randomId(12), name: d.deviceName(), exp }) } catch (e) { wanted.delete(did); throw e }
       d.onLog(`Asked ${p.name} for its state`)
     },
     /** Wave 40: offers this record to the linked device to replace its own (its person confirms there). Rejects like syncNow. */

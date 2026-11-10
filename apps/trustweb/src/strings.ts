@@ -3931,7 +3931,8 @@ export const S = {
   },
   // Wave 40 feed-events
   feedView: {
-    title: 'Feed',
+    // Review wave 40: the switch under Extensions carries the view's name too (two switches read "Feed" before: the app's Feed and this one).
+    title: 'Timeline',
     /** The view's own name (bottom row, heading): not "Feed", which the app's own Feed view already uses. */
     viewTitle: 'Timeline',
     desc: 'A timeline in the style of Mastodon: write a post for a trust zone or tag, paste a link to a social-media post to repost it.',
@@ -3950,7 +3951,7 @@ export const S = {
     previewUnavailable: 'Preview not available from your host yet; showing the address only.',
   },
   eventsView: {
-    title: 'Events',
+    title: 'Events map',
     /** The view's own name (bottom row, heading): not "Events", which the app's own Events view already uses. */
     viewTitle: 'Events map',
     desc: 'Events as cards with going / maybe, a slot for the events map, and sharing an event to a tag.',
@@ -4002,7 +4003,7 @@ export const S = {
     cancel: 'Cancel',
     hidden: (name: string) => `${name}: not related`,
     undo: 'Undo',
-    toastNone: 'Marked as not related.',
+    toastNone: 'Marked as not related. Tap to undo.',
     toastSaved: 'Saved.',
     aria: (y: string, z: string) => `How ${y} and ${z} are connected`,
   },
@@ -4026,4 +4027,11 @@ export const S = {
   tagsCycle: 'That would put a tag inside itself.',
   // Wave 40 review fixes
   supportDeliverMailRest: (n: number) => ` (the other ${n} come in the next e-mail)`,
+  adWantTitle: (name: string) => `${name} asks for the state of this device`,
+  adWantLead: (name: string) => `If you send it, ${name} receives everything on this device (people, notes, settings) and asks there before it replaces its own. Nothing leaves before you tap Send.`,
+  adWantSend: 'Send this state',
+  adWantSent: (name: string) => `Sent to ${name}.`,
+  tagsGone: 'That tag is no longer there. The list is up to date again.',
+  supportDeliverCopyFailed: 'Your words could not be copied. Write them in the chat that opens.',
+  adCopyUnreadable: 'This copy cannot be read any more, so nothing was restored.',
 } as const

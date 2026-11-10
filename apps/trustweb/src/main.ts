@@ -250,8 +250,8 @@ import { createSyncView } from './sync_view'
 import { createArchivedCopiesView } from './archived_copies_view'
 import { thisDevice } from './device_name'
 import { careForCodes } from './sync_codes'
-import { exportEntry, resumeGoogle } from './contacts_sync_view'
-import { googleFlagSet, setGoogleConnect } from './google_flag'
+import { exportEntry, forgetGoogle, googleOn, resumeGoogle } from './contacts_sync_view'
+import { setGoogleConnect } from './google_flag'
 import { offerContacts, openServicesImport } from './services_view'
 import type { ImportedContact } from '../../crm/src/import/types'
 import type { ServicesHooks } from './services_view'
@@ -1046,7 +1046,8 @@ const pages = createPages(phone)
 const importHooks = (): ServicesHooks => ({
   state: st, save, toast, changed: render, pages, actions: appActions,
   // Wave 40: the AI button on an import row looks that person up in the assistant; without the assistant it opens Your AI as before.
-  openAi: (row) => { if (row && isEnabled('assistant')) void twRegistry.sync().then(() => twBus.emit('assistant-person', { row })); else openAiButton() },
+  // Review wave 40: like the sparkle, never a dead button: the assistant's chunk failed -> Your AI / Ask.
+  openAi: (row) => { if (row && isEnabled('assistant')) void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) twBus.emit('assistant-person', { row }); else sparkleFallback() }); else openAiButton() },
 })
 const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry])
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
@@ -2775,7 +2776,7 @@ function webPageScreen(page: WebPage): Node[] {
     const zoneTagRow = zoneTagsRow(page.ring, zoneTags, (text) => suggestZoneTags(rec, tagList, page.ring, text),
       (name) => { const out = addZoneTag(rec, tagList, page.ring, name, Date.now()); if (out.created) saveColourTags(out.tags); save(); render() },
       (id) => { removeZoneTag(rec, page.ring, id, Date.now()); save(); render() })
-    return [header(zone, { back }), el('div', { class: 'scroll' }, [zoneTagRow, restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
+    return [header(zone, { back }), el('div', { class: 'scroll' }, [zoneTagRow, restList(wholeZone(withTag(people, tagFilter, loadColourTags()), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
@@ -7370,7 +7371,8 @@ function settingsSheet(): void {
     el('h4', { class: 'eyebrow' }, alphaHeading(S.flagsTitle)),
     el('p', { class: 'meta' }, [S.flagsHint]),
     el('label', { class: 'radio', 'data-flag-toggle': 'googleConnect' }, [
-      el('input', { type: 'checkbox', ...(googleFlagSet(localStorage) ? { checked: '' } : {}), onchange: (e: Event) => { setGoogleConnect(localStorage, (e.target as HTMLInputElement).checked); settingsSheet() } }),
+      // Review wave 40: the box shows what is in force; off also revokes a live token and forgets token / secret of this tab.
+      el('input', { type: 'checkbox', ...(googleOn() ? { checked: '' } : {}), onchange: (e: Event) => { const on = (e.target as HTMLInputElement).checked; setGoogleConnect(localStorage, on); if (!on) void forgetGoogle(); settingsSheet() } }),
       el('b', {}, [S.flagGoogleConnect]), el('small', {}, [S.flagGoogleConnectHint]),
     ]),
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
@@ -7466,7 +7468,7 @@ function settingsSheet(): void {
       onclick: () => {
         if (!confirm(S.resetConfirm)) return
         dropRecording()
-        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id)]).finally(() => { clearState(persona, storeCtx); location.reload() })
+        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id), forgetGoogle({ device: true })]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
     ],

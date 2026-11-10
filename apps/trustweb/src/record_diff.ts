@@ -29,7 +29,8 @@ function personKind(before: Obj, after: Obj, keys: string[]): EditKind {
 
 /** Wave 40: the one edit-stream line for state taken from a linked device (device_adopt.ts), written instead of the per-person lines the swap would produce. */
 export function adoptedEdit(meta: { at: string; previewId: string }, device: string, d: { people: number; notes: number; settings: number }): Edit {
-  return { ...meta, kind: 'adopted-from-device', ids: [], before: null, after: { device, ...d } }
+  // Review wave 40: the four counted fields only (the header comes from any local client), a short device name.
+  return { ...meta, kind: 'adopted-from-device', ids: [], before: null, after: { device: String(device).slice(0, 80), people: d.people, notes: d.notes, settings: d.settings } }
 }
 
 /** One Edit per user change between two records of the same person list; empty when nothing changed. */

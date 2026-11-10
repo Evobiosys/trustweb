@@ -42,6 +42,13 @@ export class PhotoStore {
     return this.db
   }
 
+  /** Review wave 40: closes the connection (the module was switched off); a later call opens a fresh one. */
+  close(): void {
+    const db = this.db
+    this.db = null
+    void db?.then((d) => d.close(), () => undefined)
+  }
+
   /** Keeps the picture, its thumbnail and its meta in one transaction. False when nothing could be kept. */
   async add(p: NewPhoto): Promise<boolean> {
     try {

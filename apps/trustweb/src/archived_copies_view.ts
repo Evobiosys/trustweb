@@ -40,7 +40,7 @@ export function createArchivedCopiesView(h: ArchivedCopiesHooks): ArchivedCopies
   function restore(id: string): void {
     const c = readArchived(localStorage, listKey, Date.now()).find((x) => x.id === id)
     const record = c && parseRecord(JSON.stringify(c.record))
-    if (!c || !record) return
+    if (!c || !record) { h.toast(S.adCopyUnreadable); return }
     if (!keep(S.adRestoreReason, h.deviceName())) { h.toast(S.adNotKept); return }
     h.toast(S.adRestored)
     h.replaceRecord(restoreArchived({ ...c, record }, h.state()))
