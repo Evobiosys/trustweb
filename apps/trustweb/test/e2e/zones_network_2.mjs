@@ -27,8 +27,18 @@ try {
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(800)
 
     // ---- TrustZones: the sidebar only
-    check(`${name}: sidebar unfolded by default, left of / above the rings`, (await page.locator('[data-zone-side-toggle]').getAttribute('aria-expanded')) === 'true')
-    check(`${name}: sidebar holds expand all, add, tag filters`, (await page.locator('[data-zone-side] [data-expand]').count()) === 1 && (await page.locator('[data-zone-side] [data-add-node]').count()) === 1 && (await page.locator('[data-zone-side] [data-zone-tag-filters]').count()) === 1)
+    // Wave 39: on a phone (<= 600 px) Tools and Filters are two buttons that open an overlay sheet; wider, Tools is unfolded inline.
+    const sheetMode = opts.viewport.width <= 600
+    const holds = (root) => page.locator(`${root} [data-expand]`).count().then(async (e) => e === 1 && (await page.locator(`${root} [data-add-node]`).count()) === 1 && (await page.locator(`${root} [data-zone-tag-filters]`).count() + (sheetMode ? 1 : 0)) >= 1)
+    if (sheetMode) {
+      check(`${name}: Tools and Filters are two buttons, nothing inline`, (await page.locator('[data-zone-side-toggle]').count()) === 1 && (await page.locator('[data-zone-tags-toggle]').count()) === 1 && (await page.locator('[data-zone-side] [data-expand]').count()) === 0)
+      await page.locator('[data-zone-side-toggle]').click(); await page.waitForTimeout(400)
+      check(`${name}: the Tools sheet holds expand all and add`, await holds('.sheet.on'))
+      await page.locator('[data-sheet-home]').click(); await page.waitForTimeout(300)
+    } else {
+      check(`${name}: sidebar unfolded by default, left of / above the rings`, (await page.locator('[data-zone-side-toggle]').getAttribute('aria-expanded')) === 'true')
+      check(`${name}: sidebar holds expand all, add`, await holds('[data-zone-side]'))
+    }
     check(`${name}: nothing else (no old filter block, no zone lists, no legend)`, (await page.locator('[data-zone-filter-section], [data-zone-panel], [data-zone-legend-i], [data-zone-community]').count()) === 0)
     check(`${name}: ring fill control is the expand glyph`, (await page.locator('[data-membrane-more]').first().innerText()).trim() === '⛶')
     const dots = () => page.locator('.rings-wrap .node:not(.you)').count()
