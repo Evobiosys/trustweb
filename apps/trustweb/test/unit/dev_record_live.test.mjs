@@ -106,3 +106,24 @@ describe('liveRecordReply review hardening', () => {
     expect(readFileSync(f, 'utf8')).toContain('New')
   })
 })
+
+describe('edit stream: state taken from a linked device (wave 40)', () => {
+  const dir = () => mkdtempSync(path.join(tmpdir(), 'tw-adopt-'))
+  const lines = (f) => readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  it('X-TW-Adopted turns the swap into one adopted-from-device line instead of one per person', () => {
+    const d = dir(); const f = path.join(d, 'rec.json')
+    const rec = (people) => JSON.stringify({ v: 1, me: { id: 'x', displayName: 'J' }, people, peers: [], inventory: [], log: [] })
+    writeFileSync(f, rec([{ id: 'a', name: 'Ann' }, { id: 'b', name: 'Bo' }]))
+    const adopted = encodeURIComponent(JSON.stringify({ device: 'Phone', people: 3, notes: 1, settings: 0 }))
+    const r = liveRecordReply(f, 'POST', { ...ok, 'x-tw-adopted': adopted }, rec([{ id: 'c', name: 'Cy' }]), { gapMs: 0 })
+    expect(r.code).toBe(200)
+    expect(lines(path.join(d, 'dev-edits.jsonl'))).toMatchObject([{ kind: 'adopted-from-device', ids: [], after: { device: 'Phone', people: 3, notes: 1, settings: 0 } }])
+  })
+  it('a damaged X-TW-Adopted header falls back to the ordinary per-person lines', () => {
+    const d = dir(); const f = path.join(d, 'rec.json')
+    const rec = (people) => JSON.stringify({ v: 1, me: { id: 'x', displayName: 'J' }, people, peers: [], inventory: [], log: [] })
+    writeFileSync(f, rec([{ id: 'a', name: 'Ann' }]))
+    liveRecordReply(f, 'POST', { ...ok, 'x-tw-adopted': '%7Boops' }, rec([{ id: 'a', name: 'Ann B' }]), { gapMs: 0 })
+    expect(lines(path.join(d, 'dev-edits.jsonl')).map((e) => e.kind)).toEqual(['rename'])
+  })
+})
