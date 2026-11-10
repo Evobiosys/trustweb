@@ -17,7 +17,7 @@ import { S } from './strings'
 export interface EventsViewHooks {
   state: () => AppState
   save: () => void
-  header: (title: string, opts: { back: () => void }) => HTMLElement
+  header: (title: string, opts: { back?: () => void }) => HTMLElement
   /** Leave the Events screen (back to Web). */
   leave: () => void
   /** Redraw the screen after a change of view. */
@@ -47,7 +47,7 @@ export interface EventsView {
   /** The screen's children, for render(). */
   body: () => Node[]
   /** Show this event's page, or the list without an id (the next body() draws it). */
-  open: (eventId?: string) => void
+  open: (eventId?: string, noBack?: boolean) => void
   /** Whether the plain list would draw now (the calendar stands in for it unless showList() was asked). */
   atList: () => boolean
   /** The add form, From preset to that day. */
@@ -58,7 +58,7 @@ export interface EventsView {
   current: () => TwEvent | undefined
 }
 
-type View = { kind: 'list' } | { kind: 'page'; id: string } | { kind: 'form'; id?: string; from?: string }
+type View = { kind: 'list' } | { kind: 'page'; id: string; noBack?: boolean } | { kind: 'form'; id?: string; from?: string }
 
 const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo, core: S.eventsErrCore }
 
@@ -313,7 +313,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       class: 'chip' + (ev.attended ? ' on' : ''), role: 'switch', 'aria-checked': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
     }, [S.eventsAttended])
-    const title = h.header(ev.name, { back: () => show({ kind: 'list' }) })
+    const title = h.header(ev.name, view.kind === 'page' && view.noBack ? {} : { back: () => show({ kind: 'list' }) })   // wave 40: from the calendar it is a regular event card, no Back button
     dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
     return [title, el('div', { class: 'scroll events-page' }, [
       el('p', {}, [el('b', {}, [whenLabel(ev)])]),
@@ -345,7 +345,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     openForm: (from) => show({ kind: 'form', ...(from ? { from } : {}) }),
     showList: () => { view = { kind: 'list' }; plain = true; h.redraw() },
     current: () => (view.kind === 'page' ? find(view.id) : undefined),
-    open: (id) => { view = id ? { kind: 'page', id } : { kind: 'list' } },
+    open: (id, noBack) => { view = id ? { kind: 'page', id, ...(noBack ? { noBack } : {}) } : { kind: 'list' } },
     body: () => {
       const ev = view.kind === 'list' ? undefined : find(view.id ?? '')
       if (view.kind === 'form') return form(ev, view.from)

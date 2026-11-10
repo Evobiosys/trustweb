@@ -591,3 +591,6 @@ export function typedValue(text: string): string | null {
 
 /** The "Personal preview / Approve wave" box (bottom right) shows only while the left panel is expanded with all rows: a pill or a single focused row hides it (Jakob 2026-11-07). */
 export const approveBoxVisible = (panel: { collapsed: boolean; focused: boolean }): boolean => !panel.collapsed && !panel.focused
+
+/** Wave 40: the focused row's background alternates (0/1) after each approve that jumps to another row, so the next one reads as a different item. */
+export const approveTone = (tone: 0 | 1, pressed: string, focusAfter: string | null): 0 | 1 => (focusAfter !== null && focusAfter !== pressed ? (tone === 0 ? 1 : 0) : tone)

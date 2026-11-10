@@ -35,6 +35,8 @@ export interface SupportAsk {
   until: number
   to: string[]
   here: string[]
+  /** Wave 40 (support_delivery.ts): peer id -> the channel the sender opened for them (Signal, WhatsApp, Geb, e-mail) and when. "Here" stays for the app only. */
+  via?: Record<string, { via: 'signal' | 'whatsapp' | 'geb' | 'email'; at: number }>
 }
 
 /** An ask this phone received from `peerId`. */

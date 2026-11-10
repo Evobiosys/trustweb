@@ -7,6 +7,10 @@ const person = (o = {}) => ({ id: 'p1', name: 'Anna', context: '', ring: 'close'
 const state = (o = {}) => ({ people: [], peers: [{ id: 'pe1', connectedAt: 5_000 }], log: [], ...o })
 
 describe('cardSections', () => {
+  it('wave 40: the Photos section sits after Invitations, only while the Photos module is on', () => {
+    expect(cardSections({ connected: false, canAskLinks: false, photos: true })).toEqual(['seen', 'channels', 'knows', 'invitations', 'photos', 'other', 'notes', 'timeline', 'curate'])
+    expect(cardSections({ connected: false, canAskLinks: false })).not.toContain('photos')
+  })
   it('orders the expanded card as Jakob listed it, Curate last', () => {
     expect(cardSections({ connected: true, canAskLinks: true })).toEqual(['seen', 'channels', 'askLinks', 'passOn', 'knows', 'invitations', 'other', 'notes', 'timeline', 'curate'])
   })

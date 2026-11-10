@@ -131,12 +131,12 @@ describe('pasteTarget: which service the pasted mail is for', () => {
   it('nothing for a mail of nobody we wait for', () => expect(pasteTarget(svcs, 'From: a@b.org\nSubject: export\nhttps://b.org/x', undefined)).toBeNull())
 })
 
-describe('header: AI sits at the far right, the select tool is a pin', () => {
+describe('header: AI sits at the far right; the select tool is no pin (wave 40: it is a Tools row)', () => {
   it('headerControls no longer lists the AI inside search (it is mounted last on every view)', () => expect(headerControls('web')).not.toContain('ai'))
-  it('the select tool is a header pin, on by default; a stored list wins', () => {
-    expect(HEADER_PINS).toContain('select')
-    expect(headerPins(undefined)).toEqual(['select'])
-    expect(headerPins([])).toEqual([])
+  it('the select tool is not a header pin; the default is none and a stored list wins', () => {
+    expect(HEADER_PINS).not.toContain('select')
+    expect(headerPins(undefined)).toEqual([])
+    expect(headerPins(['select'])).toEqual([])
   })
 })
 
