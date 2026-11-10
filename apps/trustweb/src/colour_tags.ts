@@ -28,6 +28,9 @@ function loadAll(): ColourTag[] {
   }
 }
 
+/** Wave 40: every tag, system ones too (the relation sources read the import tags whether or not the Tools toggle shows them). */
+export const allColourTags = (): ColourTag[] => loadAll()
+
 /** The tags the screens use; system tags only while the Tools toggle is on. */
 export const loadColourTags = (): ColourTag[] => (showSystemTags() ? loadAll() : loadAll().filter((t) => t.system !== true))
 

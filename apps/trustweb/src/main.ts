@@ -166,6 +166,8 @@ import { activeLineDue, recordThought } from './thought_of'
 import { completeQuery, completeView, resetComplete, setCompleteQuery } from './complete_view'
 import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
+import { clearStated, setStated } from './relations_model'
+import { relationsSection } from './relations_view'
 import { personImageOk } from './person_image'
 import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
@@ -2589,6 +2591,11 @@ function pictured(face: HTMLElement, url: string | undefined): HTMLElement {
 const personFace = (p: Person): HTMLElement => pictured(avatar(p.name, p.id), personImageOk(p.image) ? p.image : undefined)
 /** People for lists and pickers: no archived contact (the Curator's hidden ids). */
 const activePeople = (): Person[] => shown(st(), curatorHiddenIds()).people
+/** Wave 40 hover-sources: the person card's "How they relate to others I know"; a change saves and redraws the card. */
+const relationsRowFor = (p: Person): HTMLElement => relationsSection(p, st(), activePeople(), (id) => openWebPage({ kind: 'card', id }), {
+  set: (a, b, kind) => { setStated(st(), a, b, kind, Date.now()); save(); personSheet(p.id) },
+  clear: (a, b) => { clearStated(st(), a, b); save(); personSheet(p.id) },
+})
 
 /** Wave 25: a tag the small card picked; the Membranes show only the people holding it. View state only. */
 let tagFilter: string | null = null
@@ -3438,6 +3445,7 @@ function personSheet(personId: string): void {
     leanRow(p),
     eventChipsRow(p),
     knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace),
+    relationsRowFor(p),
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
@@ -3470,7 +3478,7 @@ function cardMore(p: Person): Node[] {
     ],
     askLinks: () => [askLinksRow(p)],
     passOn: () => [passOnRowFor(p)],
-    knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace)],
+    knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace), relationsRowFor(p)],
     invitations: () => [cardInvitationsRow(invitationIo(), p)],
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
