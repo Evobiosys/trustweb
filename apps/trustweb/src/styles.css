@@ -1645,6 +1645,29 @@ button.outline-text{text-decoration:underline; cursor:pointer}
 .co-chat-send .field{flex:1 1 8em; min-width:0}
 [data-guest-shell] .bar-more{display:none}
 
+/* wave 39 import-curate */
+.cur-head{margin:6px 0 4px}
+.alpha-label{font-size:11px; font-weight:400; color:var(--ink-soft)}
+.cur-bar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0}
+.cur-bar .field{max-width:100%; min-width:0}
+.cur-row{min-width:0}
+.cur-name{display:flex; gap:8px; align-items:center; min-width:0}
+.cur-name b{overflow-wrap:anywhere}
+.cur-contact{overflow-wrap:anywhere}
+.cur-pills{margin:0}
+.cur-pill{padding:3px 9px; font-size:12px; text-decoration:underline}
+.cur-bulk-panel{background:var(--card); border-radius:12px; padding:10px 12px; margin:10px 0; display:flex; flex-direction:column; gap:8px}
+.cur-adv .grp-field{display:flex; flex-direction:column; gap:4px; margin:8px 0}
+.cur-adv .field, .cur-bulk-panel .field{width:100%; box-sizing:border-box}
+.cur-unnamed{margin-top:14px}
+.cur-sides{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.cur-side{display:flex; flex-direction:column; gap:3px; min-width:0; overflow-wrap:anywhere}
+.cur-pair{min-width:0}
+.cur-done{border:1.5px solid var(--teal); background:var(--tint-teal)}
+.cur-edited mark, mark.cur-edited-name{background:var(--tint-teal); color:inherit; border-radius:6px; padding:1px 6px}
+.cur-also{display:block; margin:10px 0}
+.person-contact{display:block; overflow-wrap:anywhere}
+.page-layer [data-import-home], .page-layer [data-svc-list], .page-layer [data-cur-top-bar], .page-layer [data-cur-bulk], .page-layer [data-cur-foot], .page-layer [data-cur-dupe-list]{max-width:760px}
 /* wave 39 small-ui-b */
 .page-dock[hidden]{display:none}
 /* AI button: a sparkle at the far right of every header */

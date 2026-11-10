@@ -2,7 +2,7 @@
 /** Wave 28 (trustzones.ts): the pieces the TrustZones screen draws besides the rings: the outliner triangle, the zone panel (filter, pinned, one folding list per zone), the zzz strip, the legend. */
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
-import { type ColourTag, saveColourTags } from './colour_tags'
+import { type ColourTag, saveColourTags, setShowSystemTags, showSystemTags } from './colour_tags'
 import { chipInput } from './chip_input'
 import { candidates, initial, withChip, withoutChip } from './share_page'
 import { createPerson, createTag, suggestOrCreate, tagPerson, untagPerson } from './tag_create'
@@ -204,7 +204,12 @@ export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | '
       ' ', S.closestBefore, numEdit(closestLimit(d.s.uiRings), 'data-closest-n', (raw) => { const n = Number.parseFloat(raw); if (Number.isFinite(n)) setUi(d.s, 'closestN', closestLimit({ closestN: n })); d.onChange() }), S.closestAfter,
       ...(moot ? [el('small', { class: 'moot-hint' }, [S.closestMootHint(m * rings)])] : []),
     ])
-    return [el('div', { class: 'zone-tools' }, [d.expand, d.add, ...(d.select ? [d.select] : [])]), connections, perRing, autoAdjust, closest, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
+    /** Wave 39: the import tags (#import:<date>-<source>) stay hidden unless this is on. */
+    const systemTags = el('label', { class: 'zone-check zone-row', title: S.imp39.systemTagsHint }, [
+      el('input', { type: 'checkbox', 'data-show-system-tags': '', ...(showSystemTags() ? { checked: '' } : {}), onchange: (e: Event) => { setShowSystemTags((e.target as HTMLInputElement).checked); d.onChange() } }),
+      ' ', S.imp39.systemTags,
+    ])
+    return [el('div', { class: 'zone-tools' }, [d.expand, d.add, ...(d.select ? [d.select] : [])]), connections, perRing, autoAdjust, closest, systemTags, action('data-space-out-tools', '⤧', S.spaceOutEvenly, true, d.spaceOut), el('label', { class: 'zone-check zone-row' }, [
       el('input', { type: 'checkbox', 'data-expand-buttons': '', ...(d.s.uiRings?.expandButtons ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'expandButtons', (e.target as HTMLInputElement).checked ? true : undefined); d.onChange() } }),
       ' ', S.expandButtonsLabel,
     ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted)]
