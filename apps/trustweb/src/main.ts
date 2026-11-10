@@ -127,7 +127,7 @@ import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, remov
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, moveBar, overflowChoices, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, modOfBar, moveBar, overflowChoices, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
@@ -262,7 +262,8 @@ import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary } from './ext/registry'
+import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
+import { createViewHost } from './ext/view_host'
 import { alphaHeading } from './alpha_heading'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
@@ -343,7 +344,12 @@ enum Screen {
   Notes = 'notes',
   /** Wave 36: Groups I could join or help (eye menu > Other views), a page like People. */
   Groups = 'groups',
+  /** Wave 39: an extension module's view (ext/tw_registry.ts views()), `extViewId` names which. */
+  Ext = 'ext',
 }
+/** Wave 39: which extension module view Screen.Ext shows, and the kept element it is mounted in (ext/view_host.ts). */
+let extViewId: string | null = null
+const extViews = createViewHost(() => twCtx())
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
 enum RecordMode {
@@ -1111,6 +1117,8 @@ const askIconVariant = ((typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__
 
 /** Wave 35: a bar entry's name; a `view:<id>` entry takes its view's name. */
 function barName(id: BarId): string {
+  const mod = modOfBar(id)
+  if (mod) return twRegistry.views().find((v) => v.id === mod)?.title ?? mod
   const view = viewOfBar(id)
   return view ? S.viewNames[view] ?? view : S.barNames[id] ?? S.navRecord
 }
@@ -1119,6 +1127,8 @@ function barName(id: BarId): string {
 function barOpen(id: BarId): void {
   const view = viewOfBar(id) // wave 35: a view pinned into the row
   if (view) { chooseView(view as ViewKey); return }
+  const mod = modOfBar(id) // wave 39: an extension module's view
+  if (mod) { openExtView(mod); return }
   switch (id) {
     case 'web': if (webTabAction(webPage) === 'leave-page') { cardExpanded = false; webPage = null } // wave 37: Web from a card lands on the main Web view
       if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
@@ -1135,7 +1145,8 @@ function barButton(id: BarId, primary: boolean): HTMLElement {
   if (id === 'record' && primary) return recordButton()
   const view = viewOfBar(id)
   const name = id === 'web' && state ? webTabLabel(state, S.viewNames) : barName(id) // wave 35: the Web tab carries the pinned default view's name
-  const b = tabButton(id, id === 'web' ? name : view ? barName(id) : S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : view ? viewGlyph[view] ?? 'web' : TAB_ICON[id], () => barOpen(id))
+  const mod = modOfBar(id)
+  const b = tabButton(id, id === 'web' ? name : view || mod ? barName(id) : S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : view ? viewGlyph[view] ?? 'web' : mod ? twRegistry.views().find((v) => v.id === mod)?.icon ?? 'users' : TAB_ICON[id], () => barOpen(id))
   b.setAttribute('aria-label', name)
   if (id === 'ask') b.querySelector('svg')!.outerHTML = askWebIcon(askIconVariant)
   if (primary) b.classList.add('tab-primary')
@@ -1145,7 +1156,7 @@ function barButton(id: BarId, primary: boolean): HTMLElement {
 
 function barFlags(): BarFlags {
   // HAS_MAP_VIEW is declared further down (this runs at load), so the Map is simply on.
-  return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state) }
+  return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state), mods: twRegistry.views().map((v) => v.id) }
 }
 
 function removeFromBar(id: BarId, name: string): void {
@@ -1398,6 +1409,17 @@ function screenGroups(): Node[] {
     header(S.groups.heading, { back: () => history.back() }),
     el('div', { class: 'scroll pad' }, [groupsView({ st, save, askIntro: (target) => { setIntroTarget(target); askMode = AskMode.Intros; queryOpen = true; go(Screen.Web) } })]),
   ]
+}
+/** Wave 39: the extension module view `extViewId`; gone (module off) = the Web. */
+function screenExt(): Node[] {
+  const v = twRegistry.views().find((x) => x.id === extViewId)
+  if (!v) { screen = Screen.Web; extViews.release(); return screenWeb() }
+  return [header(v.title), el('div', { class: 'scroll mod-scroll' }, [extViews.show(v)])]
+}
+function openExtView(id: string): void {
+  extViewId = id
+  eyeOpen = false
+  go(Screen.Ext)
 }
 function screenNotes(): Node[] {
   const s = st()
@@ -1722,6 +1744,7 @@ function render(): void {
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
       || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups))
       || (target === Screen.Inventory && screen === Screen.Notes)
+      || (screen === Screen.Ext && target === `mod:${extViewId}`)
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -1734,6 +1757,7 @@ function render(): void {
     recTab.insertAdjacentHTML('afterbegin', recGlyph === 'solo' ? recordIcon() : icon(recGlyph === 'waves' ? 'solo' : 'mic'))
   }
   updateChatBadge()
+  if (screen !== Screen.Ext) extViews.release()
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
   const frame = screen === Screen.Start ? null : cal?.frame?.()
   const body = (() => {
@@ -1754,6 +1778,7 @@ function render(): void {
       case Screen.People: return screenPeople()
       case Screen.Notes: return screenNotes()
       case Screen.Groups: return screenGroups()
+      case Screen.Ext: return screenExt()
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
@@ -2792,6 +2817,12 @@ function viewDrop(current: ViewKey): HTMLElement | null {
   // Wave 28: "Other views" is one collapsed group holding the views beneath it; Dex sits under its own beta label inside.
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
     ...items.filter((i) => !i.other).map(btn),
+    ...twRegistry.views().map((v) => { // wave 39: the views of the extension modules that are on
+      const b = el('button', { class: 'view-opt', role: 'menuitemradio', 'aria-checked': 'false', 'data-mod-view': v.id, onclick: () => openExtView(v.id) })
+      b.innerHTML = icon(v.icon)
+      b.append(el('b', {}, [v.title]))
+      return b
+    }),
     other.length || alt.length ? el('button', { class: 'view-drop-sep view-other-toggle', 'data-view-other': '', 'aria-expanded': String(otherViewsOpen), onclick: () => { otherViewsOpen = !otherViewsOpen; render() } }, [disclosureGlyph(otherViewsOpen) + ' ' + S.viewOther]) : null,
     ...(otherViewsOpen ? [...other.map(btn), alt.length ? el('div', { class: 'view-drop-sep', 'data-view-alt': '' }, [S.viewAlt]) : null, ...alt.map(btn)] : []),
   ])
@@ -4853,10 +4884,18 @@ const extHooks: ExtHooks = {
   guestChanged: (show) => { renderTabs(); if (!show) go(Screen.Web); else if (st().coGuest?.eventId) openEvents(st().coGuest?.eventId); else go(Screen.Chat) },
 }
 // Wave 39: the module registry reads its switches from the record (loaded above); the legacy modules are read once, a switch needs one reload.
+// Wave 39 community-mighty: one bus for every module; a module asks the app to save, or to open a person's or an event's card.
+const twBus = createBus()
+twBus.on('save', () => save())
+twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
+twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
+function twCtx(): TwCtx {
+  return { store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings) }
+}
 bindTw({
   settings: () => state?.twSettings,
   save: (t) => { st().twSettings = t; save() },
-  ctx: () => ({ store: st, strings: S, bus: createBus(), navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings) }),
+  ctx: twCtx,
 })
 const extOn = EXT_MODULES.filter((m) => isEnabled(m.id))
 const cal = extOn.find((m) => m.id === 'calendar')?.screen(extHooks)
@@ -6727,6 +6766,7 @@ function twChanged(): void {
   document.body.dataset.twProfile = profileOf(state?.twSettings)
   const s = st()
   if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
+  if (screen === Screen.Ext && !twRegistry.views().some((v) => v.id === extViewId)) screen = Screen.Web
   renderTabs(); render(); settingsSheet()
   if (twRegistry.needsReload().length) toast(S.ext.reload)
 }
@@ -7683,7 +7723,7 @@ window.addEventListener('storage', (e) => {
 document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
 document.body.dataset.twProfile = profileOf(state?.twSettings)
-void twRegistry.start()
+void twRegistry.start().then(renderTabs) // wave 39: a heavy module's view joins the row once it has loaded
 render()
 void refreshOwnPicture()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })

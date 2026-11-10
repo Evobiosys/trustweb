@@ -5,7 +5,7 @@
  * button unless another shown view is chosen. A view this build does not know, or whose feature is off, is skipped.
  * On a phone at most PHONE_MAX buttons show; the rest live in the ⋮ sheet. Pure, no DOM.
  */
-export type BarId = 'ask' | 'inventory' | 'web' | 'feed' | 'record' | 'chat' | 'events' | 'network' | 'people' | 'map' | `view:${string}`
+export type BarId = 'ask' | 'inventory' | 'web' | 'feed' | 'record' | 'chat' | 'events' | 'network' | 'people' | 'map' | `view:${string}` | `mod:${string}`
 
 export interface UiBar {
   order?: string[]
@@ -27,6 +27,8 @@ export interface BarFlags {
   map: boolean
   /** Wave 35: advanced mode on; only then the `view:<id>` entries show and are offered. */
   advanced?: boolean
+  /** Wave 39: the view ids of the extension modules that are on (ext/tw_registry.ts views()); each joins the row as `mod:<id>` at the end unless taken out. */
+  mods?: readonly string[]
 }
 
 export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
@@ -38,19 +40,22 @@ const CHOICES: readonly BarId[] = ['web', 'feed', 'chat', 'events', 'inventory',
 /** Wave 35: the view a `view:<id>` bar entry opens (a view_menu ViewKey); null for every other entry. */
 export const viewOfBar = (id: string): string | null => (id.startsWith('view:') && id.length > 5 ? id.slice(5) : null)
 
+/** Wave 39: the module view a `mod:<id>` bar entry opens; null for every other entry. */
+export const modOfBar = (id: string): string | null => (id.startsWith('mod:') && id.length > 4 ? id.slice(4) : null)
+
 /** The `view:<id>` entries kept in the saved order (they stay stored in simple mode). */
 const viewEntries = (bar: UiBar | undefined): BarId[] => [...new Set(Array.isArray(bar?.order) ? bar.order : [])].filter((id): id is BarId => typeof id === 'string' && viewOfBar(id) !== null)
 
 function offered(f: BarFlags, bar?: UiBar): BarId[] {
   const off: Partial<Record<BarId, boolean>> = { events: !f.events, feed: !f.feed, inventory: !f.inventory, people: !f.people, map: !f.map }
-  return [...(['record', ...CHOICES] as BarId[]).filter((id) => !off[id]), ...(f.advanced ? viewEntries(bar) : [])]
+  return [...(['record', ...CHOICES] as BarId[]).filter((id) => !off[id]), ...(f.advanced ? viewEntries(bar) : []), ...(f.mods ?? []).map((m): BarId => `mod:${m}`)]
 }
 
 /** The saved order (or the default) with Record in it, unknown ids and duplicates dropped; Record lands mid-row when missing. */
 function baseOrder(bar: UiBar | undefined): BarId[] {
   const known = new Set<string>(['record', ...CHOICES])
   const saved = Array.isArray(bar?.order) ? bar.order : DEFAULT_ORDER
-  const order = [...new Set(saved)].filter((id): id is BarId => typeof id === 'string' && (known.has(id) || viewOfBar(id) !== null))
+  const order = [...new Set(saved)].filter((id): id is BarId => typeof id === 'string' && (known.has(id) || viewOfBar(id) !== null || modOfBar(id) !== null))
   if (!order.includes('record')) order.splice(Math.ceil(order.length / 2), 0, 'record')
   return order
 }
@@ -64,7 +69,8 @@ export function defaultPrimary(ids: readonly BarId[], preset: BarId = 'record'):
 export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[]; primary: BarId | null } {
   const ok = new Set<string>(offered(f, bar))
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
-  const ids = baseOrder(bar).filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
+  const base = baseOrder(bar)
+  const ids = [...base, ...(f.mods ?? []).map((m): BarId => `mod:${m}`).filter((id) => !base.includes(id))].filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
   const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(ids)
   return { ids, primary }
 }
