@@ -38,7 +38,7 @@ try {
     await ext.locator('summary').first().scrollIntoViewIfNeeded(); await ext.locator('summary').first().click(); await page.waitForTimeout(300)
     const extHead = await ext.locator('summary').first().innerText()
     check(`${name}: Extensions heading carries the alpha subscript`, /Extensions/.test(extHead) && /untested alpha feature/.test(extHead))
-    check(`${name}: one switch per module (14: twelve app parts + Community + Docs & chat)`, (await page.locator('[data-ext-module]').count()) === 14)
+    check(`${name}: one switch per module (19: twelve app parts + Community, Photos, Timeline, Events map, MCP & agents, Assistant, Docs & chat)`, (await page.locator('[data-ext-module]').count()) === 19)
     check(`${name}: events, resources, feed, matches are off under IYG`, (await Promise.all(['events', 'resources', 'feed', 'matches'].map((m) => page.locator(`[data-ext-module="${m}"]`).getAttribute('aria-checked')))).every((v) => v === 'false'))
     await ext.scrollIntoViewIfNeeded()
     await page.screenshot({ path: `${SHOTS}/extensions-profiles-${name}-2-extensions.png` })

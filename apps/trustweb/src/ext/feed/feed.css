@@ -1,0 +1,12 @@
+/* SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later */
+/* Wave 40 feed-events: the Feed view, scoped to its shadow root; the base look (cards, chips, links, avatars) comes from the Community view's sheet. */
+.timeline { max-width: 600px; }
+.post .post-head { align-items: flex-start; }
+.post-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.post-who .chip { align-self: center; }
+.compose textarea { min-height: 84px; }
+.compose .opts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.linkcard { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: var(--r-control); padding: var(--s-3); background: var(--surface-1); min-width: 0; }
+.linkcard .plat { font-size: var(--fs-1); color: var(--ink-2); text-transform: uppercase; letter-spacing: .06em; }
+.linkcard a { font-weight: 600; }
+.linkcard .row { justify-content: flex-start; flex-wrap: wrap; }

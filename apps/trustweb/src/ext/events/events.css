@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later */
+/* Wave 40 feed-events: the Events view, scoped to its shadow root; the base look (cards, date block, chips) comes from the Community view's sheet. */
+.events-main { max-width: 680px; }
+.events-list { display: flex; flex-direction: column; gap: var(--s-3); }
+.rsvp { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
+.rsvp .lnk { border: 1px solid var(--line-strong); border-radius: var(--r-chip); min-height: 32px; padding: var(--s-1) var(--s-3); }
+.rsvp .lnk[aria-pressed="true"] { background: var(--shared-tint); color: var(--shared-ink); font-weight: 600; }
+.map .embed { height: 55vh; }
+.ev-body > .lnk:not(.title) { align-self: flex-start; padding-left: 0; }
