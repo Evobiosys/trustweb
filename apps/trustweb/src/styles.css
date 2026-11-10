@@ -1820,3 +1820,18 @@ button.tag-pill{cursor:pointer; text-decoration:underline}
 /* the new wave 40 text buttons are underlined like every clickable text (UI rule); filled buttons stay as they are */
 .tag-manager .btn-ghost,[data-profile-link-copy],.settings-import-bottom,[data-delivery-close]{text-decoration:underline}
 [data-flag-toggle] b,[data-want-decline]{text-decoration:underline}
+/* wave 41 community-mode */
+.mode-pill{display:inline-flex; flex:none; border:1.5px solid var(--line); border-radius:999px; overflow:hidden; background:var(--card)}
+.mode-opt{border:0; background:none; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink-soft); padding:4px 10px; cursor:pointer; text-decoration:underline; white-space:nowrap}
+.mode-opt.on{background:var(--teal); color:#fff}
+.mode-row{margin-top:2px}
+.mode-notice{display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; margin:8px 16px 0; padding:8px 12px; border-radius:12px; background:var(--tint-teal); font-size:13.5px; color:var(--ink)}
+.mode-notice span{flex:1 1 100%}
+.mode-act{border:0; background:none; font:inherit; font-size:13px; color:var(--teal); padding:2px 0; cursor:pointer; text-decoration:underline}
+.mode-act.strong{font-weight:700}
+.mode-act:disabled{color:var(--ink-soft); opacity:.5; cursor:default}
+.mode-default-row, .mode-layout-row, .mode-version, .mode-save{display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap}
+.mode-default-row span, .mode-layout-row label, .mode-version b{flex:1; min-width:0}
+.mode-default-row select, .mode-save input{max-width:100%; text-decoration:underline}
+.mode-save input{flex:1 1 10rem; min-width:0}
+body[data-community-mode] .tabs .tab{min-width:0; padding-left:2px; padding-right:2px; font-size:10.5px}
