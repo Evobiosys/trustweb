@@ -2,7 +2,7 @@
 /**
  * Take another device's state (wave 40), two browser profiles = two devices, a real RelayServer behind the Vite /relay proxy:
  *   Mac (390 px; its screenshots at 1280) holds Ada and Bo, Phone (360 px) holds Cy. Paired as in device_sync.mjs.
- *   1. Phone "Take this device's state": sheet with the difference count; confirm; Phone holds exactly Ada and Bo; a copy of the old record is under Settings > Advanced > Archived copies.
+ *   1. Phone "Take this device's state": the Mac asks its person (Send); then the sheet with the difference count; confirm; Phone holds exactly Ada and Bo; a copy of the old record is under Settings > Advanced > Archived copies.
  *   2. Restore puts Cy back (and archives the state it replaced).
  *   3. Phone "Send my state to this device": Mac is asked, shows the "give" sheet, confirms; Mac holds exactly what the Phone holds.
  * Port: Vite 5497 (TW_PORT). Run with TW_STOCK=1 from apps/demo:
@@ -91,8 +91,13 @@ async function main() {
     await phone.locator('[data-pair-confirm]').click()
     await mac.locator('[data-pair-confirm]').click()
 
-    // 1. Take
+    // 1. Take (review wave 40: the Mac's person is asked first; nothing leaves the Mac before Send)
     await phone.locator('[data-take-state]').click()
+    await mac.locator('[data-want-send]').waitFor({ timeout: 40_000 })
+    ok('the asked device shows "asks for the state" with Send / Not now', (await mac.locator('[data-want-decline]').count()) === 1)
+    await phone.waitForTimeout(1500)
+    ok('nothing reaches the Phone before the Mac taps Send', (await phone.locator('[data-adopt-confirm]').count()) === 0)
+    await mac.locator('[data-want-send]').click()
     await phone.locator('[data-adopt-confirm]').waitFor({ timeout: 40_000 })
     const diff = await phone.locator('[data-adopt-diff]').getAttribute('data-adopt-diff')
     ok('the sheet counts the differences (3 people, 0 notes, settings)', /^3,0,\d+$/.test(diff ?? ''), diff)

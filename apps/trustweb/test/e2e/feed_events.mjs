@@ -88,7 +88,8 @@ try {
     await shot('2-events')
     await page.locator('[data-events-map-load]').click(); await page.waitForTimeout(500)
     check(`${vw}: consent tap loads the frame; consent stays on the device`, (await page.locator('[data-events-map-frame]').count()) === 1 && outside.length === 1
-      && await page.evaluate(() => localStorage.getItem('trustweb.v1.events-view.consent') === '1' && !/events-view.consent/.test(localStorage.getItem('trustweb.v1.me'))))
+      // review wave 40: consent is kept per map origin (a new address asks again)
+      && await page.evaluate(() => localStorage.getItem('trustweb.v1.events-view.consent') === 'https://map.example' && !/events-view.consent/.test(localStorage.getItem('trustweb.v1.me'))))
     await page.locator('[data-events-map-frame]').evaluate((f) => { f.dataset.mark = '1' })
     await page.locator('[data-events-rsvp="e2:going"]').click(); await page.waitForTimeout(300)
     check(`${vw}: an RSVP tap does not reload the loaded map`, (await page.locator('[data-events-map-frame][data-mark="1"]').count()) === 1 && outside.length === 1)

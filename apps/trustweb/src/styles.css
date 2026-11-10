@@ -1819,3 +1819,4 @@ button.tag-pill{cursor:pointer; text-decoration:underline}
 /* wave 40 review-fixes */
 /* the new wave 40 text buttons are underlined like every clickable text (UI rule); filled buttons stay as they are */
 .tag-manager .btn-ghost,[data-profile-link-copy],.settings-import-bottom,[data-delivery-close]{text-decoration:underline}
+[data-flag-toggle] b,[data-want-decline]{text-decoration:underline}
