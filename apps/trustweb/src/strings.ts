@@ -3632,6 +3632,7 @@ export const S = {
     close: 'Close the assistant',
     expand: 'Expand',
     shrink: 'Make smaller',
+    showChat: 'Show the chat',
     watch: 'Apply as I watch',
     watchHint: 'Changes are made as they arrive; you can still undo each one.',
     placeholder: 'Tell the assistant what to change...',

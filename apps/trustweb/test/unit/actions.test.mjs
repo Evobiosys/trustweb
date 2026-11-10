@@ -73,6 +73,17 @@ describe('action registry', () => {
     expect(a.recent().map((r) => `${r.by}:${r.label}`)).toEqual(['user:Add 1', 'assistant:Add 2', 'user:Add 3'])
   })
 
+  it('onChange hears every run and every undo (open pages redraw)', () => {
+    const { a } = counter()
+    let n = 0
+    const off = a.onChange(() => n++)
+    const d = a.do('add', { n: 1 })
+    d.undo()
+    off()
+    a.do('add', { n: 1 })
+    expect(n).toBe(2)
+  })
+
   it('recent keeps the last 20', () => {
     const { a } = counter()
     for (let i = 0; i < 25; i++) a.do('add', { n: i })

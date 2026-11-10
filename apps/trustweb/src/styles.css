@@ -1739,3 +1739,15 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 /* the Theme choices are clickable: underlined like the Variations rows (the chosen one is not) */
 .look-pick .radio b{text-decoration:underline}
 .look-pick .radio.on b{text-decoration:none}
+
+/* wave 40 ai-edit-chat */
+/* "Bring me there": the place the assistant opened pulses twice. */
+.tw-pulse{outline:3px solid var(--trust); outline-offset:3px; border-radius:var(--r-control); animation:tw-pulse 1.2s ease-in-out 2}
+@keyframes tw-pulse{0%,100%{outline-color:var(--trust)} 50%{outline-color:transparent}}
+@media (prefers-reduced-motion:reduce){.tw-pulse{animation:none}}
+/* The assistant's pane on the right (900 px and wider): the app makes room for it instead of sitting under it. */
+@media (min-width:900px){
+  html.tw-assistant-pane body:has(.phone){padding-right:396px}
+  html.tw-assistant-pane body:has(.phone.fluid),html.tw-assistant-pane body:has(.phone.embedded){padding-right:380px}
+  html.tw-assistant-pane .phone.fluid,html.tw-assistant-pane .phone.embedded{width:calc(100vw - 380px)}
+}

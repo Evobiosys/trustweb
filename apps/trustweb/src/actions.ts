@@ -36,6 +36,8 @@ const isRec = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 export function createActions() {
   const specs = new Map<string, ActionSpec<never>>()
   const listeners = new Set<(a: Valid, by: By) => void>()
+  const watchers = new Set<() => void>()
+  const changed = (): void => { for (const fn of [...watchers]) fn() }
   const recent: { label: string; by: By }[] = []
 
   function check(raw: unknown): Checked {
@@ -56,8 +58,9 @@ export function createActions() {
     recent.push({ label: action.label, by })
     if (recent.length > RECENT) recent.splice(0, recent.length - RECENT)
     for (const fn of [...listeners]) fn(action, by)
+    changed()
     let undone = false
-    return { label: action.label, undo: () => { if (undone || !back) return; undone = true; back() } }
+    return { label: action.label, undo: () => { if (undone || !back) return; undone = true; back(); changed() } }
   }
 
   return {
@@ -75,6 +78,8 @@ export function createActions() {
       return run(c.action, by)
     },
     onRun(fn: (a: Valid, by: By) => void): () => void { listeners.add(fn); return () => { listeners.delete(fn) } },
+    /** After every run and every undo, whoever did it: an open page (Curate) redraws. */
+    onChange(fn: () => void): () => void { watchers.add(fn); return () => { watchers.delete(fn) } },
     /** The last 20 steps, oldest first, with who did them (the assistant's context: what the person just did by tapping). */
     recent: (): { label: string; by: By }[] => [...recent],
   }

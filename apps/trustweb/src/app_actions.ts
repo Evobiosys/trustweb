@@ -292,7 +292,7 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
   reg.define({
     type: 'set-profile', doc: 'Switches the variation (built-in or one made before).', shape: '{"profile": VARIATION}',
     parse: (a) => { const profile = str(a, 'profile', 60)!; if (!PROFILE.test(profile)) throw new Error('profile must be a variation id'); return { profile: profile as ProfileId } },
-    label: (a) => T.profile(S.var.names[a.profile] ?? host.state().twSettings?.custom?.find((c) => c.id === a.profile)?.name ?? a.profile),
+    label: (a) => T.profile(S.var.names[a.profile] ?? host.state().twSettings?.custom?.find((c) => c.id === a.profile)?.name ?? a.profile.replace(/^custom-/, '').replace(/-/g, ' ')),
     apply: (a) => {
       if (a.profile.startsWith('custom-') && !host.state().twSettings?.custom?.some((c) => c.id === a.profile)) throw new Error(`no variation "${a.profile}"`)
       const prev = host.profile()

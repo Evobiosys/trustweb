@@ -5,7 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
-import type { AppState } from './model'
+import type { AppState, ServiceRow } from './model'
 import { autoMap, CSV_FIELDS } from '../../crm/src/import/generic_csv'
 import type { CsvField } from '../../crm/src/import/generic_csv'
 import type { ImportedContact } from '../../crm/src/import/types'
@@ -19,6 +19,7 @@ import type { ServiceFile, ServicePlan } from './services_import'
 import { curatePage } from './import_curate_view'
 import { openImportHome } from './import_home_view'
 import { S } from './strings'
+import type { Actions } from './actions'
 
 export interface ServicesHooks {
   state: () => AppState
@@ -29,8 +30,10 @@ export interface ServicesHooks {
   pages: Pages
   /** Wave 39: the Import page shows the result of an import inside itself (the dialog stays in the overlay the owner is looking at). */
   done?: (text: string, review?: () => void) => void
-  /** The existing "Your AI" entry (a stub button on the Curate page opens it). */
-  openAi?: () => void
+  /** The existing "Your AI" entry; wave 40: given the row, the assistant looks that person up (a stub button on the Curate page opens it). */
+  openAi?: (row?: ServiceRow) => void
+  /** Wave 40 ai-edit-chat: the Curate page's steps go through the action registry when the host has one. */
+  actions?: Actions
 }
 
 const FILE_MAX_BYTES = 20 * 1024 * 1024
