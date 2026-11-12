@@ -12,6 +12,7 @@
 // credential — but it is NOT a full Data-Integrity / JSON-LD-canonicalization
 // (URDNA2015) implementation, so it will not verify in a conformant VC
 // processor. We canonicalize by deterministic key-sorted JSON, not RDF.
+// A credential a Keyring wallet verifies lives in vrc_di.ts (Data Integrity, export/import only).
 import { ed25519 } from "@noble/curves/ed25519.js";
 import type { Identity } from "./did_identity.js";
 import { resolveDidPeer } from "./did_identity.js";

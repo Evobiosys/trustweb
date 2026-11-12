@@ -6,6 +6,7 @@ import { EventEmitter } from "node:events";
 import { WebSocketServer, WebSocket } from "ws";
 import type { TrustLevel } from "@resource-web/protocol";
 import type { Daemon } from "../daemon/daemon.js";
+import type { VrcDiError, VrcDiService } from "./vrc_di_service.js";
 import { buildGuestListings, buildListingApiView, buildLoanApiView, buildReceivedListingApiView, buildThreadMessageApiView } from "./sanitize.js";
 import { InMemoryConnectionRecordStore, type ConnectionRecordStore } from "../store/connection_store.js";
 
@@ -145,6 +146,8 @@ export interface ServerExtras {
   didcommInbound?: (rawBody: string) => Promise<void>;
   /** Returns this daemon's signed VRCs (served at GET /api/trust/export?format=vrc). */
   trustExport?: () => unknown[];
+  /** Keyring-compatible VRC export/import (GET /api/trust/export?peer=, POST /api/trust/import); absent without a DID identity. */
+  vrcDi?: VrcDiService;
   /**
    * Bind host (Task 5). Defaults to `process.env.API_HOST ?? "127.0.0.1"`
    * inside `startServer` when omitted — kept in this options bag (rather
@@ -860,10 +863,26 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
       return;
     }
 
-    // GET /api/trust/export?format=vrc — this daemon's signed VRCs.
+    // GET /api/trust/export?peer=<id>[&subject=<did:peer:0>] — one edge as a Keyring-compatible VRC (Data Integrity).
+    // GET /api/trust/export?format=vrc — this daemon's signed VRCs (legacy envelope).
     if (method === "GET" && path === "/api/trust/export") {
+      const peer = url.searchParams.get("peer");
+      if (peer !== null) {
+        if (!extras.vrcDi) {
+          sendJson(res, 404, { error: "VRC export not available for this transport" });
+          return;
+        }
+        try {
+          sendJson(res, 200, await extras.vrcDi.exportFor(peer, url.searchParams.get("subject") ?? undefined));
+        } catch (err) {
+          const status = (err as Partial<VrcDiError>).status; // type-only import keeps the Data Integrity libs out of this module
+          if (status === undefined) throw err;
+          sendJson(res, status, { error: (err as Error).message });
+        }
+        return;
+      }
       if (url.searchParams.get("format") !== "vrc") {
-        badRequest(res, "only format=vrc is supported");
+        badRequest(res, "peer=<id> or format=vrc is required");
         return;
       }
       if (!extras.trustExport) {
@@ -871,6 +890,28 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
         return;
       }
       sendJson(res, 200, { credentials: extras.trustExport() });
+      return;
+    }
+
+    // POST /api/trust/import {vrc, display?} — verifies offline, then asks the owner (pending connect card, I4); no edge yet.
+    if (method === "POST" && path === "/api/trust/import") {
+      if (!extras.vrcDi) {
+        sendJson(res, 404, { error: "VRC import not available for this transport" });
+        return;
+      }
+      const body = (await readJsonBody(req)) as { vrc?: unknown; display?: unknown };
+      if (body.vrc === undefined) {
+        badRequest(res, "vrc is required");
+        return;
+      }
+      const result = await extras.vrcDi.verify(body.vrc);
+      if (!result.valid || result.issuer === undefined) {
+        badRequest(res, result.reason ?? "invalid VRC");
+        return;
+      }
+      const display = typeof body.display === "string" && body.display.length > 0 ? body.display : `Keyring contact …${result.issuer.slice(-6)}`;
+      const card = daemon.offerVrcConnect(result.issuer, display);
+      sendJson(res, 200, { valid: true, issuer: result.issuer, subject: result.subject, card_id: card.card_id, state: card.state });
       return;
     }
 
