@@ -120,6 +120,50 @@ try {
     check('with an endpoint and the assistant off the sparkle opens the same sheet', (await page.locator('.sheet [data-ai-plan]').count()) === 3 && (await page.locator('[data-ask-input]').count()) === 0)
     await ctx.close()
   }
+  {
+    // rf41-c C1: 1280x720 (clip under 560): no floor, so home k=1 stays reachable and a zoom-out does not zoom in
+    const { ctx, page } = await open(1280, 720)
+    await wheel(page, 120, 30)
+    check('rf41-c C1: 1280x720 zoom-out stays at k=1', (await kOf(page)) === 1, String(await kOf(page)))
+    await ctx.close()
+  }
+  {
+    // rf41-c C4: the stored zoom is re-clamped when the window grows (debounced); C8: openSettingsAt leaves Advanced alone
+    const { ctx, page } = await open(1280, 800)
+    await wheel(page, 120, 30)
+    const k0 = await kOf(page)
+    await page.setViewportSize({ width: 1600, height: 1000 }); await page.waitForTimeout(600)
+    const k1 = await kOf(page)
+    check(`rf41-c C4: growing the window raises k to the new floor (${k0} -> ${k1})`, k1 > k0 + 0.1)
+    await ctx.close()
+  }
+  {
+    // rf41-c C6: Curate page, assistant off: [data-cur-ai] opens Your AI as a page on top; C11: sign-up Back
+    const rows = ['k1', 'k2'].map((key) => ({ key, name: `Row ${key}`, source: 'vcf', file: 's.vcf', n365: 0, out: 0, in: 0, ids: [], sig: key, labels: [], emails: [`${key}@example.org`] }))
+    const { ctx, page } = await open(1280, 800, record({ twSettings: { extensions: { assistant: false } }, serviceImports: [{ id: 'b1', at: Date.now(), counts: { vcf: 2 }, rows, done: {} }] }))
+    await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(400)
+    if (!(await page.locator('[data-people-import]').first().isVisible())) { await page.locator('summary', { hasText: 'Your web' }).first().click(); await page.waitForTimeout(300) }
+    await page.locator('[data-people-import]').first().click(); await page.waitForTimeout(500)
+    await page.locator('[data-svc-curate]').first().click(); await page.waitForTimeout(500)
+    const adv = page.locator('[data-cur-advanced="k1"] > summary')
+    if (await adv.count()) { await adv.scrollIntoViewIfNeeded(); await adv.click(); await page.waitForTimeout(200) }
+    await page.locator('[data-cur-ai="k1"]').click(); await page.waitForTimeout(600)
+    await page.locator('[data-page="your-ai"] [data-ai-group="sub"]').scrollIntoViewIfNeeded(); await page.waitForTimeout(200)
+    const top = await page.evaluate(() => { const g = document.querySelector('[data-page="your-ai"] [data-ai-group="sub"]'); if (!g) return 'none'; const r = g.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(20, r.height / 2)); return t && g.contains(t) ? 'top' : 'covered' })
+    check('rf41-c C6: Curate page, assistant off: Your AI is visible and topmost', top === 'top', top)
+    await page.locator('[data-page="your-ai"] [data-ai-signup]').first().click(); await page.waitForTimeout(400)
+    check('rf41-c C11: sign-up has a Back that returns to the plan cards', (await page.locator('[data-ai-back]').count()) === 1 && (await page.locator('[data-ai-back]').evaluate((b) => getComputedStyle(b).textDecorationLine.includes('underline'))))
+    await page.locator('[data-ai-back]').click(); await page.waitForTimeout(400)
+    check('rf41-c C11: Back shows the plan cards again', await page.locator('[data-page="your-ai"] [data-ai-plan]').first().isVisible())
+    await ctx.close()
+  }
+  {
+    // rf41-c C8: a jump to Your AI no longer leaves Advanced open
+    const { ctx, page } = await open(1280, 800)
+    await page.locator('[data-ai-button]').click(); await page.waitForTimeout(300)
+    check('rf41-c C8: Advanced flag not written by the AI sheet', (await page.evaluate(() => localStorage.getItem('trustweb.ui.settings.advanced'))) !== '1')
+    await ctx.close()
+  }
 } finally { await browser.close() }
 console.log(failed ? 'FAILED' : 'ALL PASS')
 process.exit(failed ? 1 : 0)

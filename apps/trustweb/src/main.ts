@@ -175,6 +175,7 @@ import { relationsSection } from './relations_view'
 import { personImageOk } from './person_image'
 import { applyImageMode, imageMode, pictureUrl } from './image_mode'
 import { clearPhotosDb } from './ext/photos/photos_data'
+import { clearObsidianData } from './ext/obsidian/obsidian_data'
 import { faceMatchRow } from './ext/photos/photos_settings'
 import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
@@ -278,6 +279,7 @@ import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaselin
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { createModeShell } from './ext/community_mode/shell'
+import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createActions } from './actions'
 import { defineAppActions, PLACE_TARGET, type Place as AppPlace } from './app_actions'
@@ -374,7 +376,7 @@ let extViewId: string | null = null
 const extViews = createViewHost(() => twCtx())
 /** Wave 41 (ext/community_mode): the Personal | Community interface; its callbacks run later, so the many things they name may be declared further down. */
 const modeShell = createModeShell({
-  state: () => state, save: () => save(), ctx: twCtx, newId: () => randomId(8),
+  state: () => state, save: () => save(), newId: () => randomId(8), guest: () => Boolean(state?.coGuest && state.coNotesOn), toast: (m) => toast(m),
   overview: () => (screen === Screen.Web && !webPage) || screen === Screen.People || (screen === Screen.Ext && extViewId === 'community'),
   tabButton: (target, label, iconSvg, onclick) => { const b = tabButton(target, label, 'web', onclick); b.querySelector('svg')!.outerHTML = iconSvg; return b },
   tabsEl: () => tabs, changed: () => { renderTabs(); render() }, settings: () => settingsSheet(),
@@ -1057,7 +1059,13 @@ const importHooks = (): ServicesHooks => ({
   state: st, save, toast, changed: render, pages, actions: appActions,
   // Wave 40: the AI button on an import row looks that person up in the assistant; without the assistant it opens Your AI as before.
   // Review wave 40: like the sparkle, never a dead button: the assistant's chunk failed -> Your AI / Ask.
-  openAi: (row) => { if (row && isEnabled('assistant')) void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) twBus.emit('assistant-person', { row }); else sparkleFallback() }); else openAiButton() },
+  // Review fix C7: one pending flag shared with the sparkle, so a double tap while the module loads emits once.
+  openAi: (row) => {
+    if (!row || !isEnabled('assistant')) { openAiButton(); return }
+    if (assistantPending) return
+    assistantPending = true
+    void twRegistry.sync().then(() => { assistantPending = false; if (twRegistry.isActive('assistant')) twBus.emit('assistant-person', { row }); else sparkleFallback() })
+  },
 })
 const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry])
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
@@ -1238,7 +1246,7 @@ function renderTabs(): void {
   tabs.classList.toggle('four', (community ?? shown).length > 3)
   tabs.classList.toggle('many', (community ?? shown).length > 5)
   tabs.classList.toggle('pair', !community && pair.length > 0)
-  phone.classList.toggle('ask-in-bar', shown.includes('ask'))
+  phone.classList.toggle('ask-in-bar', !community && shown.includes('ask'))
   updateChatBadge()
 }
 renderTabs()
@@ -1406,7 +1414,7 @@ function barSheet(): void {
 
 /** The unread count on the Chat tab: filled in the tab's own colour, never red. */
 function updateChatBadge(): void {
-  const chat = tabs.querySelector<HTMLElement>('[data-go="chat"]')
+  const chat = tabs.querySelector<HTMLElement>('[data-go="chat"], [data-go="community:chat"]')
   if (!chat) return
   const n = state && !state.chatsHidden ? unreadTotal(state.chats ?? {}) : 0
   chat.querySelector('.tab-badge')?.remove()
@@ -1710,8 +1718,8 @@ function openAdvancedSettings(): void {
 }
 
 /** Wave 41: Your AI (Claude plans, Custom, Agent (pi)) as one block. The AI sparkle opens it as its own sheet, Settings shows the same block as its own section "AI". */
-function aiBlock(back: () => void): Node[] {
-  return [...aiSettings({ state: st, save, toast, openSheet, backToSettings: back }), ...agentSettings({ state: st, save })]
+function aiBlock(back: () => void, open: (body: (Node | null)[]) => void = openSheet): Node[] {
+  return [...aiSettings({ state: st, save, toast, openSheet: open, backToSettings: back }), ...agentSettings({ state: st, save })]
 }
 
 /** The AI button: the Your AI sheet (wave 41, screenshot 94df73a3), or the assistant chat once an AI is set up and the assistant is on (wave 40). Asking the web stays on "Ask your web". */
@@ -1735,14 +1743,20 @@ let assistantPending = false
 
 /** Wave 41: the sparkle without the assistant: the Your AI sheet (screenshot 94df73a3), with or without an endpoint. */
 function sparkleFallback(): void {
+  // Review fix C6: a page (Curate, a card) lies above the sheets (z-index 60 vs 41), so from a page the block opens as a page too, sign-up included.
+  if (phone.querySelector('.page-layer')) {
+    pages.open(S.aiTitle, aiBlock(() => history.back(), (body) => pages.open(S.aiTitle, body.filter((n): n is Node => !!n), 'your-ai-signup')), 'your-ai')
+    return
+  }
   openSheet(aiBlock(sparkleFallback))
 }
 
 /** Opens Settings at that element: its groups and sections unfold and it scrolls into view (Your AI, Variations, Extensions, Theme). */
 function openSettingsAt(anchor: string): void {
-  try { localStorage.setItem('trustweb.ui.settings.advanced', '1') } catch { /* not remembered */ }
   settingsSheet()
   const at = sheet.querySelector<HTMLElement>(anchor)
+  // Review fix C8: Advanced is remembered open only when the anchor sits inside it.
+  if (at?.closest('[data-settings-advanced]')) { try { localStorage.setItem('trustweb.ui.settings.advanced', '1') } catch { /* not remembered */ } }
   if (at instanceof HTMLDetailsElement) at.open = true
   for (let d = at?.closest('details'); d; d = d.parentElement?.closest('details')) { d.open = true; if (d.dataset.settingsGroup) settingsOpen.add(d.dataset.settingsGroup) }
   at?.scrollIntoView({ block: 'start' })
@@ -7105,12 +7119,13 @@ function twChanged(after: () => void = settingsSheet): void {
   const s = st()
   if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
   if (screen === Screen.Ext && !twRegistry.views().some((v) => v.id === extViewId)) screen = Screen.Web
+  modeShell.settle() // wave 41: Community switched off underneath = back to Personal
   renderTabs(); render(); after()
   if (twRegistry.needsReload().length) toast(S.ext.reload)
 }
 
 function chooseProfile(id: ProfileId, after?: () => void): void {
-  void twRegistry.setProfile(id).then(() => {
+  void twRegistry.setProfile(id).then(() => modeShell.profileChanged()).then(() => {
     const preset = profileDef(id, st().twSettings).barPreset
     if (preset) { st().uiBar = applyProfile(st().uiBar, preset); save() }
     twChanged(after)
@@ -7484,7 +7499,7 @@ function settingsSheet(): void {
       onclick: () => {
         if (!confirm(S.resetConfirm)) return
         dropRecording()
-        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id), forgetGoogle({ device: true })]).finally(() => { clearState(persona, storeCtx); location.reload() })
+        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id), clearObsidianData(st().me.id), forgetGoogle({ device: true })]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
     ],
@@ -7770,7 +7785,7 @@ async function sendFromDock(text: string): Promise<void> {
     void runAsk(pending.text, pending.reach)
     return
   }
-  // Drafting only through the person's own endpoint (Settings > Advanced > Your AI); any error falls back to the plain reading.
+  // Drafting only through the person's own endpoint (Settings > AI); any error falls back to the plain reading.
   const ai = st().advanced?.ai
   const read = await draftOrPlain(text, now, (t) => askEndpoint(ai!, t, undefined, undefined, ownChannels(st())), configured(ai))
   if (!read) { void runAsk(text); return }
@@ -8089,6 +8104,7 @@ document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redr
 document.body.dataset.twProfile = profileOf(state?.twSettings)
 applyVariation()
 applyImageMode()
+bindModeShell((ctx) => modeShell.attach(ctx.bus))
 void twRegistry.start().then(() => { modeShell.start(); renderTabs(); render() }) // wave 39 (+ wave 41 mode shell): a heavy module's view joins the row once it has loaded
 // Wave 40: a connection link may suggest a Variation (#tp=<id>); it applies only on a tap.
 if (linkProfile && profileOf(state?.twSettings) !== linkProfile) toast(S.w40.linkVarOffer(S.var.names[linkProfile]), { onClick: () => chooseProfile(linkProfile, () => undefined) })

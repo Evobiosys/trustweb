@@ -11,7 +11,7 @@ const people = [person('p1', 'Ben Gruber', 'close', { iyg: 'true' }), person('p2
 const tags = [{ id: 'iyg', colour: '#13847C', label: 'IYG circle', community: true }]
 const ymd = (d) => { const x = new Date(Date.now() + d * 86_400_000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
 const events = [{ id: 'e1', name: 'Community picnic', from: ymd(0), where: 'Augarten, Wien', createdAt: 1, attended: true, hosts: ['Ben Gruber'] }, { id: 'e2', name: 'Autumn circle', from: ymd(-20), where: 'Online', createdAt: 1, attended: false }]
-const record = (evs) => JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Ana' }, peers: people.map((p) => ({ id: p.peerId, displayName: p.name })), log: [], inventory: [], people, events: evs })
+const record = (evs) => JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Ana' }, peers: people.map((p) => ({ id: p.peerId, displayName: p.name })), log: [], inventory: [], people, events: evs, twSettings: { custom: [{ id: 'custom-fest', name: 'Fest', base: 'full', modules: {} }] } })
 const hide = '.twf, .twf-ok, .twp { display: none !important }'
 const noHScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
 
@@ -35,6 +35,7 @@ try {
       await page.locator(`.view-drop [data-view="${v}"]`).click(); await page.waitForTimeout(500)
     }
 
+    const openExtensions = async (page) => { await page.evaluate(() => { for (const s of ['[data-settings-group="general"]', '[data-settings-section="extensions"]']) { const d = document.querySelector(s); if (d) d.open = true } }); await page.waitForTimeout(300) } // sections remember open/closed, so set it
     // ---- no event today: plain Personal shell with the switch beside the TrustZone heading
     let page = await open([events[1]])
     check(`${vw}: Personal by default, switch beside the TrustZone heading`, (await mode(page)) === 'personal' && (await page.locator('.web-view-row [data-mode-pill]').count()) === 1)
@@ -71,7 +72,7 @@ try {
     // ---- Settings > Variations: default interface, layout, versions
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(600)
     await page.locator('[data-settings-group="variations"] > summary').click().catch(() => {}); await page.waitForTimeout(300)
-    check(`${vw}: Variations has Default interface per variation and the Community layout`, (await page.locator('[data-mode-default]').count()) === 4 && (await page.locator('[data-mode-item]').count()) === 7)
+    check(`${vw}: Variations has Default interface per variation and the Community layout`, (await page.locator('[data-mode-default]').count()) === 5 && (await page.locator('[data-mode-default="custom-fest"]').count()) === 1 && (await page.locator('[data-mode-item]').count()) === 7)
     check(`${vw}: Default interface heading carries the alpha subscript`, (await page.locator('[data-settings-group="variations"] [data-alpha-label]').count()) >= 2)
     await page.locator('[data-mode-item="docs"]').uncheck(); await page.waitForTimeout(300)
     await page.locator('[data-mode-move="web:-1"]').click().catch(() => {}); await page.waitForTimeout(200)
@@ -89,7 +90,7 @@ try {
     await page.close()
     // a new tab opens in the default interface
     page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); await page.goto(URL); await page.addStyleTag({ content: hide }); await page.waitForTimeout(1800)
-    check(`${vw}: new session opens in Community (the default)`, (await mode(page)) === 'community' && (await page.locator('[data-community]').count()) + (await page.locator('.tabs [data-go^="community:"]').count()) > 1)
+    check(`${vw}: new session opens in Community (the default)`, (await mode(page)) === 'community' && (await page.locator('[data-community]').count()) === 1 && (await page.locator('.tabs [data-go="community:home"].on').count()) === 1)
     await page.locator('[data-mode="personal"]').click(); await page.waitForTimeout(500)
     await page.close()
 
@@ -118,13 +119,23 @@ try {
     check(`${vw}: no notice once in Community`, (await page.locator('[data-mode-notice]').count()) === 0)
     await page.close()
 
+    // ---- Community module switched off while in Community: back to the Personal bar, no dead Community bar (A1)
+    page = await open(events)
+    await page.locator('[data-mode="community"]').click(); await page.waitForTimeout(1500)
+    await page.locator('[data-settings-gear]').click().catch(() => {}); await page.waitForTimeout(600)
+    await openExtensions(page)
+    await page.locator('[data-ext-module="community-mighty"]').click(); await page.waitForTimeout(800)
+    await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+    check(`${vw}: Community module off while in Community: Personal bar and switch say Personal`, (await page.locator('.tabs [data-go^="community:"]').count()) === 0 && (await page.locator('.tabs [data-go="web"]').count()) === 1 && (await mode(page)) === 'personal')
+    await page.close()
+
     // ---- Extensions switch: off = Personal only
     page = await open(events)
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(600)
-    await page.locator('[data-settings-group="general"] > summary').click().catch(() => {}); await page.waitForTimeout(300)
-    const extS = page.locator('[data-settings-section="extensions"]'); await extS.locator('summary').first().click(); await page.waitForTimeout(300)
+    await openExtensions(page)
     await page.locator('[data-ext-module="community-mode"]').click(); await page.waitForTimeout(600)
     await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+    check(`${vw}: module off: Personal bar, no dead Community bar`, (await page.locator('.tabs [data-go^="community:"]').count()) === 0)
     check(`${vw}: module off: no switch, no notice`, (await page.locator('[data-mode-pill]').count()) === 0 && (await page.locator('[data-mode-notice]').count()) === 0)
     await page.close()
     check(`${vw}: no page errors`, errors.length === 0)

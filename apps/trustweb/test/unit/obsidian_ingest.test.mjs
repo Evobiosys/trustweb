@@ -112,3 +112,34 @@ describe('progressOf', () => {
     expect(progressOf(0, 0, 0)).toEqual({ pct: 100, etaMs: 0 })
   })
 })
+
+import { S } from '../../src/strings.ts'
+
+describe('B21 a source is an exact full path of the batch', () => {
+  const paths = ['Daily/x.md', 'Journal/x.md', 'People/Solo.md']
+  const reply = (source) => ({ people: [{ name: 'Ann Lee', source }] })
+  it('the full path (with or without .md, any case) maps to that note', () => {
+    expect(validateExtraction(reply('Journal/x.md'), paths).people[0].sources).toEqual(['Journal/x.md'])
+    expect(validateExtraction(reply('journal/x'), paths).people[0].sources).toEqual(['Journal/x.md'])
+  })
+  it('a bare name that two notes share is dropped, never guessed', () => {
+    for (const bare of ['x.md', 'x', 'X']) {
+      const r = validateExtraction(reply(bare), paths)
+      expect(r.people).toEqual([])
+      expect(r.dropped).toBe(1)
+    }
+  })
+  it('a bare name that only one note has still maps', () => {
+    expect(validateExtraction(reply('Solo'), paths).people[0].sources).toEqual(['People/Solo.md'])
+  })
+  it('an exact path wins over the same text as another note\'s bare name', () => {
+    expect(validateExtraction(reply('x.md'), ['x.md', 'Journal/x.md']).people[0].sources).toEqual(['x.md'])
+  })
+})
+
+describe('B18 the words written into the note come from strings.ts', () => {
+  it('toContacts uses S.obsidian', () => {
+    const [c] = toContacts([{ name: 'Tess Ray', aliases: ['Tess'], facts: ['f'], relations: [{ name: 'Bo', relation: 'sister' }], sources: ['A/x.md'] }])
+    expect(c.note.split('\n')).toEqual([S.obsidian.noteAi, '- f', `${S.obsidian.noteAlias}: Tess`, `${S.obsidian.noteRelated}: Bo (sister)`, `${S.obsidian.noteSources}: A/x.md`])
+  })
+})

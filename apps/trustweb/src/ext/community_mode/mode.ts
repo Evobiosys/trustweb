@@ -34,10 +34,19 @@ const itemsOf = (v: unknown): CommItem[] => (Array.isArray(v) ? [...new Set(v.fi
 
 export const parseInterface = (v: unknown): UiInterface | null => (v === 'personal' || v === 'community' ? v : null)
 
-/** This session's pick, else the profile's default, else Personal. */
+/** This session's pick, else the profile's default (a custom variation without its own falls back to its base's), else Personal. */
 export function resolveInterface(tw: TwSettings | undefined, picked: unknown): UiInterface {
-  return parseInterface(picked) ?? tw?.interfaces?.[profileOf(tw)] ?? 'personal'
+  const id = profileOf(tw)
+  const base = tw?.custom?.find((c) => c.id === id)?.base
+  return parseInterface(picked) ?? tw?.interfaces?.[id] ?? (base ? tw?.interfaces?.[base] : undefined) ?? 'personal'
 }
+
+/** The interface in force: Personal when the module is off or the person is the guest of a co-note link. */
+export const activeInterface = (enabled: boolean, guest: boolean, tw: TwSettings | undefined, picked: unknown): UiInterface =>
+  enabled && !guest ? resolveInterface(tw, picked) : 'personal'
+
+/** The Community bottom row shows only when its view can open: the interface is Community, the module is on and its view registered. */
+export const communityShown = (mode: UiInterface, moduleOn: boolean, viewReady: boolean): boolean => mode === 'community' && moduleOn && viewReady
 
 export function setDefaultInterface(tw: TwSettings | undefined, profile: ProfileId, mode: unknown): TwSettings {
   const m = parseInterface(mode)
@@ -68,12 +77,13 @@ export function parseModeData(raw: unknown): ModeData {
   return d
 }
 
-/** Two of my devices: Never answers join, Not now by event, versions by id; the incoming row layout wins. */
+/** Two of my devices: Never answers join, Not now by event (the later day), versions by id; the incoming row layout wins. */
 export function mergeModeData(mineRaw: unknown, theirsRaw: unknown): ModeData {
   const a = parseModeData(mineRaw)
   const b = parseModeData(theirsRaw)
   const never = [...new Set([...(a.suggest?.never ?? []), ...(b.suggest?.never ?? [])])]
-  const notNow = { ...a.suggest?.notNow, ...b.suggest?.notNow }
+  const notNow = { ...a.suggest?.notNow }
+  for (const [id, day] of Object.entries(b.suggest?.notNow ?? {})) if (!(notNow[id] >= day)) notNow[id] = day
   const versions = [...new Map([...(a.versions ?? []), ...(b.versions ?? [])].map((v) => [v.id, v])).values()]
   const items = b.items ?? a.items
   return { ...(items ? { items } : {}), ...(never.length || Object.keys(notNow).length ? { suggest: { ...(never.length ? { never } : {}), ...(Object.keys(notNow).length ? { notNow } : {}) } } : {}), ...(versions.length ? { versions } : {}) }
@@ -96,23 +106,28 @@ export function suggestForEvent(i: SuggestInput): { id: string; name: string } |
     if (!/^\d{4}-\d{2}-\d{2}/.test(e.from)) return false
     const from = e.from.slice(0, 10)
     const to = (e.to ?? e.from).slice(0, 10)
-    const going = e.attended || i.rsvp?.[e.id] === 'going'
+    const r = i.rsvp?.[e.id] // the events module's answer wins; 'none' = not going
+    const going = r === 'going' || (r === undefined && e.attended)
     return going && from <= today && today <= to && !i.data.suggest?.never?.includes(e.id) && i.data.suggest?.notNow?.[e.id] !== today
   })
   return hit ? { id: hit.id, name: hit.name } : null
 }
 
-export function dismissSuggestion(d: ModeData, eventId: string, kind: 'later' | 'never', now: number): ModeData {
-  const sg = d.suggest ?? {}
-  return { ...d, suggest: kind === 'never'
-    ? { ...sg, never: [...new Set([...(sg.never ?? []), eventId])] }
-    : { ...sg, notNow: { ...sg.notNow, [eventId]: localDay(new Date(now)) } } }
+/** Answers the suggestion and prunes what no longer matters: Not now of other days, Never of events that ended over 90 days ago. */
+export function dismissSuggestion(d: ModeData, eventId: string, kind: 'later' | 'never', now: number, events: readonly TwEvent[] = []): ModeData {
+  const today = localDay(new Date(now))
+  const cutoff = localDay(new Date(now - 90 * 86_400_000))
+  const old = new Set(events.filter((e) => /^\d{4}-\d{2}-\d{2}/.test(e.from) && (e.to ?? e.from).slice(0, 10) < cutoff).map((e) => e.id))
+  const never = [...new Set([...(d.suggest?.never ?? []), ...(kind === 'never' ? [eventId] : [])])].filter((id) => !old.has(id))
+  const notNow = Object.fromEntries(Object.entries({ ...d.suggest?.notNow, ...(kind === 'later' ? { [eventId]: today } : {}) }).filter(([, day]) => day === today))
+  const { suggest: _s, ...rest } = d
+  return never.length || Object.keys(notNow).length ? { ...rest, suggest: { ...(never.length ? { never } : {}), ...(Object.keys(notNow).length ? { notNow } : {}) } } : rest
 }
 
-/** The Community bottom row: the chosen items in their order (all by default), without the sections the Community module's own menu switched off; Web always stays. */
+/** The Community bottom row: the chosen items in their order (all by default), without the sections the Community module's own menu switched off; Web always stays (added at the end when the layout left it out). */
 export function communityBar(d: ModeData, navOff: readonly string[]): CommItem[] {
-  const items = d.items?.length ? d.items : DEFAULT_ITEMS
-  return items.filter((i) => i === 'web' || !navOff.includes(i))
+  const items = (d.items?.length ? d.items : DEFAULT_ITEMS).filter((i) => i === 'web' || !navOff.includes(i))
+  return items.includes('web') ? items : [...items, 'web']
 }
 
 /** An empty or unusable choice falls back to every item. */
@@ -140,8 +155,8 @@ export function moveItem(d: ModeData, item: CommItem, dir: -1 | 1): ModeData {
 }
 
 /** "Save this layout as my version": the row as it is now, under a name; the same id overwrites. */
-export function saveVersion(d: ModeData, name: string, id: string): ModeData {
-  const v: Version = { id, name: name.trim().slice(0, 40) || 'My version', items: [...(d.items?.length ? d.items : DEFAULT_ITEMS)] }
+export function saveVersion(d: ModeData, name: string, id: string, fallbackName: string): ModeData {
+  const v: Version = { id, name: name.trim().slice(0, 40) || fallbackName, items: [...(d.items?.length ? d.items : DEFAULT_ITEMS)] }
   return { ...d, versions: [...(d.versions ?? []).filter((x) => x.id !== id), v] }
 }
 

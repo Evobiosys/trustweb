@@ -145,7 +145,7 @@ async function main(): Promise<void> {
     // Keyring-compatible VRCs: one relationship key per edge, beside the device identity file (never the device DID).
     vrcDi:
       identity !== undefined && cfg.didIdentityPath
-        ? createVrcDiService({ store, keys: new FileRelationshipKeyStore(`${cfg.didIdentityPath}.relationships.json`) })
+        ? createVrcDiService({ store, keys: FileRelationshipKeyStore.open(`${cfg.didIdentityPath}.relationships.json`) })
         : undefined,
     // Task 5: LAN exposure is opt-in via API_HOST — startServer reads
     // process.env.API_HOST itself when `host` is omitted here, so main.ts

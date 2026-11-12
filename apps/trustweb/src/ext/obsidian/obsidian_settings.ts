@@ -7,13 +7,15 @@ import { MODULE_ID, parseObsidian } from './obsidian_data'
 import { ingestTarget } from './obsidian_endpoint'
 import { ingestOptIn, setIngestOptIn } from './obsidian_prefs'
 import { openVaultStore } from './obsidian_cache'
+import { shutdownAll } from './obsidian_run'
 
 const T = S.obsidian
 
 /** Where complete ingestion would send, in one line; the owner reads it before switching on. */
 export function targetLine(ai: Parameters<typeof ingestTarget>[0]): string {
   const t = ingestTarget(ai)
-  return t.ok ? T.ingestTo(t.label, t.host, t.model) : t.why === 'cloud' ? T.ingestCloud : T.ingestNone
+  if (t.ok) return T.ingestTo(t.label, t.host, t.model)
+  return { cloud: T.ingestCloud, notlocal: T.ingestNotLocal, insecure: T.ingestInsecure, none: T.ingestNone }[t.why]
 }
 
 function rows(ctx: TwCtx): Node[] {
@@ -39,10 +41,13 @@ function rows(ctx: TwCtx): Node[] {
     el('button', {
       class: 'linkbtn', 'data-obsidian-forget': '', style: 'text-decoration:underline',
       onclick: () => {
+        // Stop a running ingestion first (it would write its state back), drop the opt-in, and leave a tombstone so the other device does not bring the vault back.
+        shutdownAll()
+        setIngestOptIn(false)
+        sw.className = 'radio'; sw.setAttribute('aria-checked', 'false')
         void store.forget().then(() => {
           const s = ctx.store()
-          const { [MODULE_ID]: _gone, ...rest } = s.extData ?? {}
-          s.extData = rest
+          s.extData = { ...s.extData, [MODULE_ID]: { forgotAt: Date.now() } }
           ctx.bus.emit('save')
           done.hidden = false
           showVault()

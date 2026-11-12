@@ -845,7 +845,8 @@ export class Daemon {
    * the edge forms when the owner accepts. A key-only did:peer:0 has no endpoint, so no CONNECT_ACK is sent for it.
    */
   offerVrcConnect(issuerDid: string, display: string): ConnectRecord {
-    return this.recordInboundConnect(issuerDid, randomUUID(), display, `${display} sent a Keyring-compatible VRC (self-asserted, no witness)`);
+    // I9: a stranger's VRC asks for the lowest level; the owner can raise it on accept
+    return this.recordInboundConnect(issuerDid, randomUUID(), display, `${display} sent a Keyring-compatible VRC (self-asserted, no witness)`, "contact");
   }
 
   private recordInboundConnect(from: string, requestId: string, display: string, what: string, level?: TrustLevel, relay?: string): ConnectRecord {

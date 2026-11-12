@@ -30,24 +30,31 @@ export interface ParsedNote {
 
 type Data = Record<string, string | string[]>
 
+// Lines and keys are bounded and split with indexOf: a regex over a line of spaces inside the fences was quadratic.
+const LINE_MAX = 2000
+const KEY = /^[A-Za-z][\w -]{0,63}$/
+const ATTACHMENT = /\.(?:png|jpe?g|gif|webp|svg|pdf|mp3|mp4|m4a|wav|mov|zip|csv|xlsx|docx|pptx|canvas)$/i
+
 const unquote = (v: string): string => v.trim().replace(/^(["'])(.*)\1$/, '$2').trim()
 const inline = (v: string): string[] => v.replace(/^\[|\]$/g, '').split(',').map(unquote).filter(Boolean)
 
 /** The frontmatter block at the very start of the text (after an optional BOM) and the body behind it. A block with no closing line is no frontmatter. */
 export function parseFrontmatter(text: string): { data: Data; body: string } {
   const t = text.replace(/^﻿/, '')
-  const m = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(t)
+  const m = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(t)
   if (!m) return { data: {}, body: text }
   const data: Data = {}
   let list: string[] | null = null
-  for (const line of m[1].split(/\r?\n/)) {
+  for (const line of (m[1] ?? '').split(/\r?\n/)) {
+    if (line.length > LINE_MAX) { list = null; continue }
     const item = /^\s+-\s+(.*)$/.exec(line) ?? /^-\s+(.*)$/.exec(line)
     if (item && list) { list.push(unquote(item[1])); continue }
-    const kv = /^([A-Za-z][\w -]*?)\s*:\s*(.*)$/.exec(line)
+    const colon = line.indexOf(':')
+    const name = colon > 0 ? line.slice(0, colon).trim() : ''
     list = null
-    if (!kv) continue
-    const key = kv[1].toLowerCase()
-    const raw = kv[2].trim()
+    if (!KEY.test(name)) continue
+    const key = name.toLowerCase()
+    const raw = line.slice(colon + 1).trim()
     if (raw === '') { list = []; data[key] = list } else if (raw.startsWith('[')) data[key] = inline(raw)
     else data[key] = unquote(raw)
   }
@@ -76,9 +83,8 @@ function tagsIn(body: string): string[] {
 function linksIn(body: string): string[] {
   const out: string[] = []
   for (const m of body.matchAll(WIKILINK)) {
-    const name = m[1].trim().split('/').pop()!.trim()
-    if (!name) continue
-    if (/\.[A-Za-z0-9]{2,5}$/.test(name) && !/\.md$/i.test(name)) continue
+    const name = m[1].replace(/\\+$/, '').trim().split('/').pop()!.trim()
+    if (!name || ATTACHMENT.test(name)) continue
     out.push(name.replace(/\.md$/i, ''))
   }
   return out
@@ -87,6 +93,14 @@ function linksIn(body: string): string[] {
 const excerptOf = (body: string): string => {
   const flat = body.replace(/\s+/g, ' ').trim()
   return flat.length <= EXCERPT_MAX ? flat : `${flat.slice(0, EXCERPT_MAX - 1).trimEnd()}…`
+}
+
+/** The frontmatter's addresses; the body's only when the frontmatter has none and the body names exactly one (cc lines hold other people's). */
+function emailsOf(fm: readonly string[], body: string): string[] {
+  const own = once(fm.map((e) => e.toLowerCase()))
+  if (own.length) return own
+  const found = once((body.replace(STRIP_CODE, ' ').match(EMAIL) ?? []).map((e) => e.toLowerCase()))
+  return found.length === 1 ? found : []
 }
 
 export function parseNote(path: string, text: string): ParsedNote {
@@ -100,7 +114,7 @@ export function parseNote(path: string, text: string): ParsedNote {
     path, title, name: (typeof data.name === 'string' && data.name.trim()) || title, folders: parts,
     tags: once([...fmTags, ...tagsIn(body)]),
     aliases: once(asList(data.aliases ?? data.alias)),
-    emails: once([...asList(data.emails ?? data.email ?? data.mail), ...(body.replace(STRIP_CODE, ' ').match(EMAIL) ?? [])].map((e) => e.toLowerCase())),
+    emails: emailsOf(asList(data.emails ?? data.email ?? data.mail), body),
     phones: once(phones),
     links: once(linksIn(body)),
     excerpt: excerptOf(body),

@@ -85,9 +85,10 @@ try {
     // receiving a link with a variation: offered, applied on a tap
     ;({ ctx, page } = await fresh(vp))
     await page.goto(URL + '#tp=iyg-support'); await page.reload(); await page.addStyleTag({ content: hide }); await page.waitForTimeout(1200)
-    const offer = await page.locator('.toast, [role=status]').first().innerText().catch(() => '')
+    // wave 41: the fixture's attended event of today also shows the Community mode notice (role=status); read the toast itself
+    const offer = await page.locator('.toast').first().innerText().catch(() => '')
     check(`${w}: a link with a variation is offered, not forced (${offer.slice(0, 50)})`, /suggests the IYG support only variation/.test(offer) && (await page.locator('button.tab[data-go="inventory"]').count()) === 1)
-    await page.locator('.toast, [role=status]').first().click(); await page.waitForTimeout(700)
+    await page.locator('.toast').first().click(); await page.waitForTimeout(700)
     check(`${w}: a tap applies it`, (await page.locator('button.tab[data-go="inventory"]').count()) === 0)
     await ctx.close()
 

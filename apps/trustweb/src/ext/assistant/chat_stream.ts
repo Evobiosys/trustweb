@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Wave 40 ai-edit-chat: one streamed chat call to the person's own AI (Settings > Your AI), OpenAI-compatible, the same address, key
+ * Wave 40 ai-edit-chat: one streamed chat call to the person's own AI (Settings > AI), OpenAI-compatible, the same address, key
  * and headers as llm_endpoint.ts. A reply that is not a stream (some servers ignore "stream") is read whole. The person's own
  * addresses are scrubbed from what they type, as everywhere else (channel_readers.ts).
  */

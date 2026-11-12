@@ -1334,7 +1334,7 @@ export interface AppState {
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
   features?: { events?: false; inventory?: false }
-  /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
+  /** Settings > AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
   /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
   agent?: AgentLink

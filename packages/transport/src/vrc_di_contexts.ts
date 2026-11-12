@@ -579,3 +579,14 @@ export const STANDARD_CONTEXTS: Record<string, object> = {
     }
   }
 };
+
+/** sha256 (hex) of every bundled context: JSON.stringify(document), or the published text for the DTG registry context. A test recomputes them, so a bad regeneration or edit is not silent. */
+export const BUNDLED_CONTEXT_SHA256: Record<string, string> = {
+  "https://www.w3.org/ns/credentials/v2": "bf6fd611e6773d58f649459a45dbbb81f94e8cfd058a756644cd5a4a882c4050",
+  "https://registry.trustoverip.org/dtg/context/v1": "3e1376acf401016a0162c1cdb31e44a85a7dd56749caed94a1dc0a0be6cbb448",
+  "https://w3id.org/did/v1": "e85fe9b5b52e975b4c25804a375eda1c7b44aab32abde4814d3f13e5d1a149a6",
+  "https://www.w3.org/ns/did/v1": "e85fe9b5b52e975b4c25804a375eda1c7b44aab32abde4814d3f13e5d1a149a6",
+  "https://w3id.org/security/suites/ed25519-2018/v1": "c3d1eea8c0bbf29676e3141d2f29cca3717259800f0e75caee7dbab3e782f25b",
+  "https://www.firstperson.network/hardware-evidence/v1": "c6c2be4d4ba3e23fe26866b7d67f285a11f566f7d0f91c27950941f41a9c86d5",
+  "https://www.firstperson.network/dtg/v1": "72c7bf410a8fe61fae089ed893c66f5d17a4db4bd7f3b2dea6f2f9e37908f9bc"
+};

@@ -3,6 +3,7 @@
 import {
   COMM_ITEMS, DEFAULT_ITEMS, parseInterface, resolveInterface, setDefaultInterface, parseModeData, mergeModeData,
   suggestForEvent, dismissSuggestion, communityBar, setItems, toggleItem, saveVersion, restoreVersion, removeVersion, moveItem,
+  activeInterface, communityShown,
 } from '../../src/ext/community_mode/mode.ts'
 import { switchProfile } from '../../src/ext/profiles.ts'
 
@@ -102,7 +103,7 @@ describe('community bar and saved layouts', () => {
   })
   it('Save as my version keeps the items; Use restores them; the version outlives later edits', () => {
     const d1 = setItems({}, ['events', 'members', 'web'])
-    const d2 = saveVersion(d1, '  Festival  ', 'v1')
+    const d2 = saveVersion(d1, '  Festival  ', 'v1', 'My version')
     expect(d2.versions).toEqual([{ id: 'v1', name: 'Festival', items: ['events', 'members', 'web'] }])
     const edited = setItems(d2, ['home', 'chat'])
     expect(communityBar(restoreVersion(edited, 'v1'), [])).toEqual(['events', 'members', 'web'])
@@ -110,9 +111,9 @@ describe('community bar and saved layouts', () => {
     expect(edited.versions).toHaveLength(1)
   })
   it('an empty name becomes "My version"; the same id overwrites; remove drops one', () => {
-    const d = saveVersion(setItems({}, ['home', 'web']), '', 'v1')
+    const d = saveVersion(setItems({}, ['home', 'web']), '', 'v1', 'My version')
     expect(d.versions[0].name).toBe('My version')
-    const again = saveVersion(setItems(d, ['chat', 'web']), 'Two', 'v1')
+    const again = saveVersion(setItems(d, ['chat', 'web']), 'Two', 'v1', 'My version')
     expect(again.versions).toEqual([{ id: 'v1', name: 'Two', items: ['chat', 'web'] }])
     expect(removeVersion(again, 'v1').versions).toEqual([])
   })
@@ -135,5 +136,50 @@ describe('slice check and merge', () => {
     expect(m.suggest.notNow).toEqual({ c: '2026-11-10' })
     expect(m.versions.map((v) => v.id).sort()).toEqual(['v1', 'v2'])
     expect(m.items).toEqual(['web'])
+  })
+})
+
+describe('wave 41 review fixes (rf41-a)', () => {
+  const base = { mode: 'personal', data: {}, now: NOW, rsvp: undefined }
+  it('A1: the Community bar needs the interface, the module on and its view registered', () => {
+    expect(communityShown('community', true, true)).toBe(true)
+    expect(communityShown('community', false, true)).toBe(false)
+    expect(communityShown('community', true, false)).toBe(false)
+    expect(communityShown('personal', true, true)).toBe(false)
+  })
+  it('A5: a co-note guest, or the module off, is always Personal', () => {
+    const tw = setDefaultInterface(undefined, 'full', 'community')
+    expect(activeInterface(true, false, tw, null)).toBe('community')
+    expect(activeInterface(true, true, tw, 'community')).toBe('personal')
+    expect(activeInterface(false, false, tw, 'community')).toBe('personal')
+  })
+  it('A6: a custom variation has its own default, else its base\'s', () => {
+    const custom = [{ id: 'custom-fest', name: 'Fest', base: 'iyg-support', modules: {} }]
+    const own = setDefaultInterface({ profile: 'custom-fest', custom }, 'custom-fest', 'community')
+    expect(resolveInterface(own, null)).toBe('community')
+    expect(resolveInterface({ profile: 'custom-fest', custom, interfaces: { 'iyg-support': 'community' } }, null)).toBe('community')
+    expect(resolveInterface({ profile: 'custom-fest', custom, interfaces: { 'iyg-support': 'community', 'custom-fest': 'personal' } }, null)).toBe('personal')
+  })
+  it('A8: rsvp none = not going even when attended; no answer falls back to attended; maybe does not', () => {
+    expect(suggestForEvent({ ...base, events: [ev()], rsvp: { e1: 'none' } })).toBeNull()
+    expect(suggestForEvent({ ...base, events: [ev()], rsvp: {} })?.id).toBe('e1')
+    expect(suggestForEvent({ ...base, events: [ev()], rsvp: { e1: 'maybe' } })).toBeNull()
+    expect(suggestForEvent({ ...base, events: [ev({ attended: false })], rsvp: { e1: 'going' } })?.id).toBe('e1')
+  })
+  it('A13: Not now keeps the later day per event', () => {
+    const m = mergeModeData({ suggest: { notNow: { e1: '2026-11-10', e2: '2026-11-01' } } }, { suggest: { notNow: { e1: '2026-11-09', e2: '2026-11-02' } } })
+    expect(m.suggest.notNow).toEqual({ e1: '2026-11-10', e2: '2026-11-02' })
+  })
+  it('A14: Web always stays in the bar', () => {
+    expect(communityBar({ items: ['home', 'events'] }, [])).toEqual(['home', 'events', 'web'])
+    expect(communityBar({ items: ['home', 'docs'] }, ['docs'])).toEqual(['home', 'web'])
+    expect(communityBar({ items: ['web', 'home'] }, [])).toEqual(['web', 'home'])
+  })
+  it('A16: answering prunes old Not now days and Never ids of events ended over 90 days ago', () => {
+    const d = { suggest: { never: ['old', 'recent', 'unknown'], notNow: { x: '2026-11-09', y: '2026-11-10' } } }
+    const events = [ev({ id: 'old', from: '2026-06-01' }), ev({ id: 'recent', from: '2026-10-20' })]
+    const next = dismissSuggestion(d, 'e1', 'later', NOW, events)
+    expect(next.suggest.never.sort()).toEqual(['recent', 'unknown'])
+    expect(next.suggest.notNow).toEqual({ y: '2026-11-10', e1: '2026-11-10' })
   })
 })

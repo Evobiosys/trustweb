@@ -67,3 +67,13 @@ describe('buildContacts on the synthetic vault', () => {
   })
   it('same input -> same output', () => { expect(buildContacts(all())).toEqual(r) })
 })
+
+import { S } from '../../src/strings.ts'
+
+describe('B18 the words written into the note come from strings.ts', () => {
+  it('Also known as / Mentioned in / Source', () => {
+    const r = buildContacts([parseNote('People/A.md', '---\naliases: [Al]\n---\nhi'), parseNote('Daily/d.md', '[[A]]')])
+    const a = r.contacts.find((c) => c.name === 'A')
+    expect(a.note.split('\n')).toEqual(['hi', `${S.obsidian.noteAlias}: Al`, `${S.obsidian.noteMentioned}: d`, `${S.obsidian.noteSource}: People/A.md`])
+  })
+})

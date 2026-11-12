@@ -256,7 +256,7 @@ export async function bootPersonas(personas: PersonaConfig[], opts: BootOptions)
           .filter((edge) => new Date(edge.expires_at).getTime() > now)
           .map((edge) => issueVrc(identity, { peerDid: edge.peer, relationship: "trusted" }));
       },
-      vrcDi: createVrcDiService({ store, keys: new FileRelationshipKeyStore(join(personaDir, "relationships.json")) }),
+      vrcDi: createVrcDiService({ store, keys: FileRelationshipKeyStore.open(join(personaDir, "relationships.json")) }),
       // Every persona's card advertises the shared mediator's DID (Task 10) —
       // a peer resolves it via resolveDidPeer, exactly like any other DID.
       // `relay_url` (Task 5) additionally exposes the mediator's HTTP base

@@ -5,6 +5,7 @@
  */
 import type { ImportedContact } from '../../../../crm/src/import/types'
 import type { AppState } from '../../model'
+import { S } from '../../strings'
 import { planServices } from '../../services_import'
 import type { ServicePlan } from '../../services_import'
 
@@ -12,7 +13,7 @@ type State = Pick<AppState, 'people' | 'serviceImports'>
 
 /** A plan with the vault note path on each row (it becomes the person's `obsidianNote` field on Accept), and `ai` on rows a model found. */
 export function planVault(s: State, contacts: readonly ImportedContact[], o: { me: string; now: number; ai?: boolean }): ServicePlan {
-  const plan = planServices(s, [{ name: 'Obsidian vault', text: '', contacts: [...contacts] }], o)
+  const plan = planServices(s, [{ name: S.obsidian.title, text: '', contacts: [...contacts] }], o)
   for (const r of plan.rows) {
     if (o.ai) r.ai = true
     else r.obsidianNote = r.file

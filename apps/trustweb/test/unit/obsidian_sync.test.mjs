@@ -108,3 +108,32 @@ describe('syncVault with the cache', () => {
     expect(await cache.all()).toEqual([])
   })
 })
+
+describe('B9 syncVault hands out the hash of every note now in the vault', () => {
+  it('hashes by path, for changed and unchanged notes', async () => {
+    const cache = memoryCache()
+    const a = await syncVault(entries(), cache, scanAll)
+    expect(Object.keys(a.hashes).sort()).toEqual(entries().map((e) => e.path).sort())
+    const b = await syncVault(entries({ 'People/Solo.md': 'changed' }), cache, scanAll)
+    expect(b.hashes['People/Solo.md']).not.toBe(a.hashes['People/Solo.md'])
+    expect(b.hashes['People/Alma Brandt.md']).toBe(a.hashes['People/Alma Brandt.md'])
+  })
+})
+
+describe('B20 a missing crypto.subtle is a clear error, not N unreadable notes', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+  it('scanAll rejects with needs-https', async () => {
+    vi.stubGlobal('crypto', {})
+    await expect(scanAll(entries(), {})).rejects.toThrow('needs-https')
+  })
+})
+
+import { pickerFailure } from '../../src/ext/obsidian/obsidian_files.ts'
+
+describe('B11 what a failed folder picker means', () => {
+  it('closed = silent, blocked here = folder input, anything else = say the folder was refused', () => {
+    expect(pickerFailure({ name: 'AbortError' })).toBe('cancelled')
+    expect(pickerFailure({ name: 'SecurityError' })).toBe('use-input')
+    for (const e of [{ name: 'NotFoundError' }, { name: 'NotAllowedError' }, new Error('x'), null, undefined, 'x']) expect(pickerFailure(e)).toBe('denied')
+  })
+})

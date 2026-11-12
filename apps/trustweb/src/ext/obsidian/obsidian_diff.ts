@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 41 obsidian-sync: what changed in a vault since the last sync, by sha-256 of each note's text. Pure; runs in the Web Worker and in tests. */
 
+/** Thrown when the page has no crypto.subtle (not https, not localhost): the view says so instead of "N notes could not be read". */
+export const NEEDS_HTTPS = 'needs-https'
+
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')

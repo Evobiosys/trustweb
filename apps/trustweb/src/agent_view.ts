@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Settings > Advanced > Your AI > Agent (pi): the loopback address and a Check button; a good answer unlocks the Your AI button (ai_button.ts). */
+/** Settings > AI > Agent (pi): the loopback address and a Check button; a good answer unlocks the Your AI button (ai_button.ts). */
 import { el } from '../../demo/src/ui/dom'
 import { AGENT_DEFAULT_URL, checkAgent, piConnected } from './ai_button'
 import type { AgentLink, AppState } from './model'
