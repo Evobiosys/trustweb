@@ -18,7 +18,7 @@ function settingsRows(ctx: TwCtx): Node[] {
       onclick: () => {
         const next = readEvents(ctx.store())
         const raw = input.value.trim()
-        const url = raw ? mapEmbedUrl(raw) : null
+        const url = raw ? mapEmbedUrl(raw, location.origin) : null
         note.hidden = false
         if (raw && !url) { note.textContent = t.mapBad; return }
         if (url) next.mapUrl = url; else delete next.mapUrl

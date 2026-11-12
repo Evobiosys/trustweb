@@ -6,14 +6,19 @@
 import type { KeyValueStore } from './google_contacts'
 
 export const GOOGLE_FLAG_KEY = 'tw-google-connect'
-const NUDGE_KEY = 'tw-google-nudge-dismissed'
+export const NUDGE_KEY = 'tw-google-nudge-dismissed'
 
 /** The switch itself, as stored. */
 export function googleFlagSet(store: KeyValueStore): boolean {
   try { return store.getItem(GOOGLE_FLAG_KEY) === '1' } catch { return false }
 }
 
-export const googleConnectOn = (store: KeyValueStore, clientId: string | null): boolean => !!clientId?.trim() || googleFlagSet(store)
+/** Review wave 40: switched off in Flags = off, whatever client id is stored; never switched = on once a client id is configured. */
+export function googleConnectOn(store: KeyValueStore, clientId: string | null): boolean {
+  let raw: string | null = null
+  try { raw = store.getItem(GOOGLE_FLAG_KEY) } catch { return false }
+  return raw === '1' || (raw !== '0' && !!clientId?.trim())
+}
 
 export function setGoogleConnect(store: KeyValueStore, on: boolean): void {
   try { store.setItem(GOOGLE_FLAG_KEY, on ? '1' : '0') } catch { /* not remembered */ }

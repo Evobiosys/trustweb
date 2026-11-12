@@ -21,10 +21,11 @@ describe('googleConnectOn', () => {
     setGoogleConnect(s, false)
     expect(googleConnectOn(s, null)).toBe(false)
   })
-  it('is on when a client id is configured, even with the switch off', () => {
+  it('is on when a client id is configured and the switch was never touched; switched off wins (review wave 40)', () => {
     const s = memStore()
-    setGoogleConnect(s, false)
     expect(googleConnectOn(s, '123-abc.apps.googleusercontent.com')).toBe(true)
+    setGoogleConnect(s, false)
+    expect(googleConnectOn(s, '123-abc.apps.googleusercontent.com')).toBe(false)
     expect(googleFlagSet(s)).toBe(false)
   })
   it('is off when storage is blocked', () => {

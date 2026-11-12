@@ -48,9 +48,10 @@ export function mountFeed(hostEl: HTMLElement, ctx: TwCtx): () => void {
       .catch(() => { ui.note = t.previewUnavailable; draw() })
   }
 
-  function card(c: LinkCard, repost?: () => void): HTMLElement {
+  /** `ask` false: the composer's own card (a half-typed or never posted address does not go to the host; review wave 40). */
+  function card(c: LinkCard, repost?: () => void, ask = true): HTMLElement {
     const title = previews.get(c.href) || c.title
-    if (readFeed(st()).preview) askPreview(c.href)
+    if (ask && readFeed(st()).preview) askPreview(c.href)
     return el('div', { class: 'linkcard', 'data-feed-linkcard': c.platform ?? c.host }, [
       el('span', { class: 'plat' }, [c.platform ? t.platformFrom(c.platform) : c.host]),
       el('a', { href: c.href, target: '_blank', rel: 'noopener noreferrer' }, [title]),
@@ -72,7 +73,7 @@ export function mountFeed(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const showPreview = (): void => {
       const url = firstLink(text.value)
       const c = url ? linkCard(url) : null
-      preview.replaceChildren(...(c ? [card(c)] : []))
+      preview.replaceChildren(...(c ? [card(c, undefined, false)] : []))
     }
     text.addEventListener('input', () => { ui.draft = text.value; showPreview() })
     showPreview()

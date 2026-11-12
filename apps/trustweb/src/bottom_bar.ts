@@ -74,11 +74,16 @@ export function defaultPair(ids: readonly BarId[]): BarId[] {
 }
 
 /** primary is null when no button is raised (stored as 'none'); pair = the two inner buttons raised by default for an even count (never when the user chose, or chose none). */
+/** The saved order plus the module buttons not saved yet, at the end (where resolveBar shows them). Review wave 40: moves and adds work on this, so a module's button is never an unknown neighbour. */
+function fullOrder(bar: UiBar | undefined, f: BarFlags): BarId[] {
+  const base = baseOrder(bar)
+  return [...base, ...(f.mods ?? []).map((m): BarId => `mod:${m}`).filter((id) => !base.includes(id))]
+}
+
 export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[]; primary: BarId | null; pair: BarId[] } {
   const ok = new Set<string>(offered(f, bar))
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
-  const base = baseOrder(bar)
-  const ids = [...base, ...(f.mods ?? []).map((m): BarId => `mod:${m}`).filter((id) => !base.includes(id))].filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
+  const ids = fullOrder(bar, f).filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
   // Wave 39: a module's button does not change which button is raised by default.
   const own = ids.filter((id) => modOfBar(id) === null)
   const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(own)
@@ -114,7 +119,7 @@ export function showViewInBar(bar: UiBar | undefined, view: string, on: boolean)
 /** Shows the view (new, hidden or already shown) left or right of a shown view `ref`; the place is saved in `order`. Bad input changes nothing. */
 export function addBar(bar: UiBar | undefined, id: string, ref: string, side: 'left' | 'right', f: BarFlags): UiBar | undefined {
   if (!offered(f, bar).includes(id as BarId) || id === 'record' || id === ref || !resolveBar(bar, f).ids.includes(ref as BarId)) return bar
-  const order = baseOrder(bar).filter((x) => x !== id)
+  const order = fullOrder(bar, f).filter((x) => x !== id)
   order.splice(order.indexOf(ref as BarId) + (side === 'right' ? 1 : 0), 0, id as BarId)
   return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
@@ -124,7 +129,7 @@ export function moveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: BarF
   const { ids } = resolveBar(bar, f)
   const other = ids[ids.indexOf(id as BarId) + dir]
   if (!ids.includes(id as BarId) || !other) return bar
-  const order = baseOrder(bar)
+  const order = fullOrder(bar, f)
   const [a, b] = [order.indexOf(id as BarId), order.indexOf(other)]
   ;[order[a], order[b]] = [order[b], order[a]]
   return { ...bar, order, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }

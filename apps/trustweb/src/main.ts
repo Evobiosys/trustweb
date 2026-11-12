@@ -124,7 +124,7 @@ import { guestShell } from './ext/co_notes/co_invite'
 import { deserializeIdentity } from '../../demo/src/did'
 import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
-import { profileOfLink } from './profile_link'
+import { linkableProfile, profileOfLink } from './profile_link'
 import { profileLinkSettings } from './profile_link_view'
 import { zoneLinksSettings } from './zone_share_link_view'
 import { candidates, seenBy } from './share_page'
@@ -213,7 +213,7 @@ import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
 import { mergeIncoming } from './matches'
 import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
-import { fetchEditStream, liveDevActive, liveSyncedAt, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
+import { fetchEditStream, liveDevActive, liveSyncedAt, markAdopted, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
@@ -247,9 +247,11 @@ import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
+import { createArchivedCopiesView } from './archived_copies_view'
+import { thisDevice } from './device_name'
 import { careForCodes } from './sync_codes'
-import { exportEntry, resumeGoogle } from './contacts_sync_view'
-import { googleFlagSet, setGoogleConnect } from './google_flag'
+import { exportEntry, forgetGoogle, googleOn, resumeGoogle } from './contacts_sync_view'
+import { setGoogleConnect } from './google_flag'
 import { offerContacts, openServicesImport } from './services_view'
 import type { ImportedContact } from '../../crm/src/import/types'
 import type { ServicesHooks } from './services_view'
@@ -1044,7 +1046,8 @@ const pages = createPages(phone)
 const importHooks = (): ServicesHooks => ({
   state: st, save, toast, changed: render, pages, actions: appActions,
   // Wave 40: the AI button on an import row looks that person up in the assistant; without the assistant it opens Your AI as before.
-  openAi: (row) => { if (row && isEnabled('assistant')) void twRegistry.sync().then(() => twBus.emit('assistant-person', { row })); else openAiButton() },
+  // Review wave 40: like the sparkle, never a dead button: the assistant's chunk failed -> Your AI / Ask.
+  openAi: (row) => { if (row && isEnabled('assistant')) void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) twBus.emit('assistant-person', { row }); else sparkleFallback() }); else openAiButton() },
 })
 const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry])
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
@@ -1260,7 +1263,7 @@ function barMoreTap(): void {
   openSheet([
     rest.length ? el('h3', {}, [S.barMoreViews]) : null,
     ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view' + (halo.has(id) ? ' tab-halo' : ''), 'data-bar-view': id, onclick: () => bringIntoRow(id) }, [barName(id)])),
-    el('h4', { class: 'eyebrow' }, [S.var.title]),
+    el('h4', { class: 'eyebrow' }, alphaHeading(S.var.title)),
     variationChips(barMoreTap),
     el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
   ])
@@ -1697,7 +1700,24 @@ function openAdvancedSettings(): void {
 /** Wave 37: the Web header's AI button: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
 function openAiButton(): void {
   // Wave 40 ai-edit-chat: with the assistant switched on, the sparkle opens its chat (which leads to the plans when no AI is set up).
-  if (isEnabled('assistant')) { void twRegistry.sync().then(() => twBus.emit('assistant-open')); return }
+  // Review: running -> at once (no wait behind other modules' loads); still loading -> one open after it, however often tapped meanwhile;
+  // its chunk failed (a stale preview build, offline) -> the sparkle's own behaviour below, never a dead button.
+  if (isEnabled('assistant')) {
+    if (twRegistry.isActive('assistant')) { twBus.emit('assistant-open'); return }
+    if (assistantPending) return
+    assistantPending = true
+    void twRegistry.sync().then(() => {
+      assistantPending = false
+      if (twRegistry.isActive('assistant')) twBus.emit('assistant-open'); else sparkleFallback()
+    })
+    return
+  }
+  sparkleFallback()
+}
+let assistantPending = false
+
+/** Wave 37: the sparkle without the assistant: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
+function sparkleFallback(): void {
   const to = aiButtonTarget(configured(st().advanced?.ai))
   if (to.kind === 'ask') { openQuery(); return }
   openSettingsAt(to.anchor)
@@ -2756,7 +2776,7 @@ function webPageScreen(page: WebPage): Node[] {
     const zoneTagRow = zoneTagsRow(page.ring, zoneTags, (text) => suggestZoneTags(rec, tagList, page.ring, text),
       (name) => { const out = addZoneTag(rec, tagList, page.ring, name, Date.now()); if (out.created) saveColourTags(out.tags); save(); render() },
       (id) => { removeZoneTag(rec, page.ring, id, Date.now()); save(); render() })
-    return [header(zone, { back }), el('div', { class: 'scroll' }, [zoneTagRow, restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
+    return [header(zone, { back }), el('div', { class: 'scroll' }, [zoneTagRow, restList(wholeZone(withTag(people, tagFilter, loadColourTags()), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
@@ -4940,8 +4960,13 @@ const snapshots = createSnapshotView({
   persona, storeCtx, state: () => state, sheet, openSheet, toast, when: whenLabel,
   replaceRecord: (s) => { state = s; save(); location.reload() },
 })
+const archivedCopies = createArchivedCopiesView({
+  persona, storeCtx, state: () => state, toast, when: whenLabel, deviceName: () => thisDevice() || 'This device',
+  replaceRecord: (s) => { state = s; save(); location.reload() },
+})
 const devices = createSyncView({
   persona, storeCtx, state: stateForSync, peek: () => state, save, sheet, openSheet, closeSheet, toast, when: whenLabel, changed: render, snapshots,
+  archive: archivedCopies.keep, adopted: markAdopted,
   askDid: () => state?.identity?.did,
   isPhone: () => currentLayout() === 'mobile',
   codeDeps: () => (connectEligible() && canRegister(SERVER_ORIGIN)
@@ -5155,6 +5180,7 @@ function applyVariation(): void {
   else if (lookBeforeVariation !== null) { applyLook(lookBeforeVariation, document.documentElement, localStorage); lookBeforeVariation = null }
 }
 const settingsShown = (): boolean => sheet.classList.contains('on') && sheet.dataset.kind === 'settings'
+const redrawOpenSettings = (): void => { if (settingsShown()) settingsSheet() }
 defineAppActions(appActions, {
   state: st, save, changed: render,
   open: openAppPlace,
@@ -5170,11 +5196,12 @@ defineAppActions(appActions, {
   look: () => readLook(localStorage),
   setLook: (l) => { applyLook(l, document.documentElement, localStorage); if (settingsShown()) settingsSheet() },
   profile: () => profileOf(state?.twSettings),
-  setProfile: chooseProfile,
+  // Review wave 40: the assistant (and its Undo) switch these while Settings may be closed: Settings follows only when it is open.
+  setProfile: (p) => chooseProfile(p, redrawOpenSettings),
   modules: () => listModules().map((m) => m.id),
   defaults: () => Object.fromEntries(listModules().map((m) => [m.id, m.enabledByDefault])),
   isEnabled,
-  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(() => twChanged()) },
+  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(() => twChanged(redrawOpenSettings)) },
   setting: (k) => (k === 'system-tags' ? showSystemTags() : k === 'chats-hidden' ? Boolean(st().chatsHidden) : readTheme(localStorage) === 'dark'),
   setSetting: (k, on) => {
     if (k === 'system-tags') setShowSystemTags(on)
@@ -5182,7 +5209,7 @@ defineAppActions(appActions, {
     else applyTheme(on ? 'dark' : 'light', document.documentElement, localStorage)
     render(); if (settingsShown()) settingsSheet()
   },
-  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(() => twChanged()) },
+  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(() => twChanged(redrawOpenSettings)) },
   newId: () => randomId(8),
   now: () => Date.now(),
 })
@@ -7184,7 +7211,7 @@ function settingsSheet(): void {
         el('p', { class: 'meta skins-store', 'data-skins-store': '', 'aria-disabled': 'true', title: S.setSkinsStoreHint }, [S.setSkinsStore, el('small', {}, [S.setSkinsStoreHint])]),
       ]),
     ], true),
-    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => profileOf(s.twSettings), toast: (m) => toast(m) })]),
+    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => linkableProfile(profileOf(s.twSettings), s.twSettings), toast: (m) => toast(m) })]),
     settingsSection('advanced-web', S.setAdvanced, [
     // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
     HAS_MAP_VIEW ? el('label', { class: 'radio', 'data-pin-view': 'map' }, [
@@ -7341,10 +7368,11 @@ function settingsSheet(): void {
     settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
     settingsSection('advanced', S.setAdvanced, [
     // Wave 40: flags for parts that are not ready yet.
-    el('h4', { class: 'eyebrow' }, [S.flagsTitle]),
+    el('h4', { class: 'eyebrow' }, alphaHeading(S.flagsTitle)),
     el('p', { class: 'meta' }, [S.flagsHint]),
     el('label', { class: 'radio', 'data-flag-toggle': 'googleConnect' }, [
-      el('input', { type: 'checkbox', ...(googleFlagSet(localStorage) ? { checked: '' } : {}), onchange: (e: Event) => { setGoogleConnect(localStorage, (e.target as HTMLInputElement).checked); settingsSheet() } }),
+      // Review wave 40: the box shows what is in force; off also revokes a live token and forgets token / secret of this tab.
+      el('input', { type: 'checkbox', ...(googleOn() ? { checked: '' } : {}), onchange: (e: Event) => { const on = (e.target as HTMLInputElement).checked; setGoogleConnect(localStorage, on); if (!on) void forgetGoogle(); settingsSheet() } }),
       el('b', {}, [S.flagGoogleConnect]), el('small', {}, [S.flagGoogleConnectHint]),
     ]),
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
@@ -7363,6 +7391,7 @@ function settingsSheet(): void {
     ...askWebSettings({ state: st, save }),
     ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
     ...(liveDevActive() ? [editStreamLine()] : []),
+    ...archivedCopies.block(settingsSheet),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),
@@ -7439,7 +7468,7 @@ function settingsSheet(): void {
       onclick: () => {
         if (!confirm(S.resetConfirm)) return
         dropRecording()
-        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id)]).finally(() => { clearState(persona, storeCtx); location.reload() })
+        void Promise.all([audioStore.clear(), images.clear(), clearPhotosDb(st().me.id), forgetGoogle({ device: true })]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
     ],

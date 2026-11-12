@@ -3,7 +3,7 @@
 // (src/dev_record_live.ts). Loopback Host only, no foreign Origin; the original dev-record.path file is never touched.
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { diffRecords } from './src/record_diff.ts'
+import { adoptedEdit, diffRecords } from './src/record_diff.ts'
 
 const KEEP = 10
 const EDITS_MAX = 5_000_000
@@ -40,9 +40,10 @@ const rotated = (editsFile) => {
 }
 
 /** Edit stream (src/record_diff.ts): appends one line per edit between the stored record and the posted one. Past maxBytes the file moves, whole, to dev-edits.<date>[-n].jsonl first; lines are never rewritten. A failure never blocks the record write. */
-function appendEdits(editsFile, prevText, nextRec, previewId, maxBytes) {
+function appendEdits(editsFile, prevText, nextRec, previewId, maxBytes, adopted) {
   try {
-    const edits = diffRecords(JSON.parse(prevText), nextRec, { at: new Date().toISOString(), previewId })
+    const meta = { at: new Date().toISOString(), previewId }
+    const edits = adopted ? [adoptedEdit(meta, adopted.device, adopted)] : diffRecords(JSON.parse(prevText), nextRec, meta)
     if (!edits.length) return
     mkdirSync(path.dirname(editsFile), { recursive: true })
     if (existsSync(editsFile) && statSync(editsFile).size > maxBytes) {
@@ -53,6 +54,14 @@ function appendEdits(editsFile, prevText, nextRec, previewId, maxBytes) {
     }
     appendFileSync(editsFile, edits.map((e) => JSON.stringify(e) + '\n').join(''))
   } catch (e) { console.warn('dev edits: could not be appended:', e?.message) }
+}
+
+/** The X-TW-Adopted header (URI-encoded JSON { device, people, notes, settings }, sent once after a device's state was taken): the parsed object, or null when absent or damaged. */
+function adoptedOf(headers) {
+  try {
+    const a = JSON.parse(decodeURIComponent(headers['x-tw-adopted'] ?? ''))
+    return typeof a?.device === 'string' && ['people', 'notes', 'settings'].every((k) => Number.isInteger(a[k])) ? a : null
+  } catch { return null }
 }
 
 /** { count, since }: edits kept in the stream and its rotated files, and the time of the oldest one (null when none). */
@@ -90,8 +99,9 @@ export function liveRecordReply(file, method, headers, body, { gapMs = 60_000, r
     if (base !== undefined && existsSync(file) && !(Number(base) >= mtimeOf(file))) return { code: 409, headers: atHeader(file), body: '' }
     mkdirSync(path.dirname(file), { recursive: true })
     if (existsSync(file)) {
-      appendEdits(editsFile, readFileSync(file, 'utf8'), r, headers.host, maxBytes)
-      snapshot(file, gapMs)
+      const adopted = adoptedOf(headers)
+      appendEdits(editsFile, readFileSync(file, 'utf8'), r, headers.host, maxBytes, adopted)
+      snapshot(file, adopted ? 0 : gapMs)   // review wave 40: a wholesale replace always keeps the file as it was (the stream holds one line for it)
     }
     const tmp = file + '.tmp'
     writeFileSync(tmp, body)

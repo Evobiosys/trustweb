@@ -18,7 +18,7 @@ const PEOPLE = 'https://people.googleapis.com/v1'
 const SCOPES = ['https://www.googleapis.com/auth/contacts.readonly']
 const TOKEN_KEY = 'tw_google_token'
 const SECRET_KEY = 'tw_google_client_secret'
-const CLIENT_ID_KEY = 'tw_google_client_id'
+export const CLIENT_ID_KEY = 'tw_google_client_id'
 const FILE = 'Google contacts'
 
 const b64url = (b: Uint8Array): string => {
@@ -174,7 +174,8 @@ export async function fetchAllContacts(fetchFn: FetchFn, token: string): Promise
 /** Best effort: a failed revoke must never block disconnecting. */
 export async function revokeToken(fetchFn: FetchFn, token: string): Promise<void> {
   try {
-    await fetchFn(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' })
+    // Review wave 40: the token travels in the body, never in the address (proxies and logs keep addresses).
+    await fetchFn(REVOKE_URL, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token }).toString() })
   } catch { /* ignore */ }
 }
 

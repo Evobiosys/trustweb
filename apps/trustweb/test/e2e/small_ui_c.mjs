@@ -75,6 +75,8 @@ try {
       await page.locator('[data-ext-module="embeds"]').click(); await page.waitForTimeout(1200)
       await page.keyboard.press('Escape'); await page.waitForTimeout(500)
       const tab = page.locator('button.tab[data-go="mod:docs-chat"]')
+      // review wave 40: with Timeline and Events map on too, a full phone row puts it behind ⋮; pressing it there moves it into the row (small-ui-d)
+      if (!(await tab.count())) { await page.locator('[data-bar-more]').click(); await page.waitForTimeout(300); await page.locator('.sheet.on [data-bar-view="mod:docs-chat"]').click(); await page.waitForTimeout(800) }
       check(`${w}: Docs & chat joined the bottom row`, (await tab.count()) === 1)
       await tab.click(); await page.waitForTimeout(800)
       check(`${w}: shadow root + alpha subscript`, await page.evaluate(() => { const s = document.querySelector('[data-embeds]')?.shadowRoot; return !!s && s.querySelector('[data-embeds-alpha]')?.textContent === 'untested alpha feature' }))

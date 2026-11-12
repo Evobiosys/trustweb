@@ -32,16 +32,19 @@ export function createHttpServer(handle: (line: string) => Promise<string | unde
   return createServer((req, res) => {
     const denied = checkRequest({ method: req.method, host: req.headers.host, origin: req.headers.origin, remote: req.socket.remoteAddress, authorization: req.headers.authorization }, token)
     if (denied) { res.writeHead(denied.code).end(); return }
-    let body = ''
+    // Review wave 40: chunks are kept as bytes and decoded once (a character split across two chunks stays whole); the cap counts bytes.
+    const chunks: Buffer[] = []
+    let size = 0
     let tooBig = false
     req.on('data', (c: Buffer) => {
       if (tooBig) return
-      body += c
-      if (body.length > MAX_BODY) { tooBig = true; res.writeHead(413, { connection: 'close' }).end(); req.destroy() }
+      size += c.length
+      chunks.push(c)
+      if (size > MAX_BODY) { tooBig = true; res.writeHead(413, { connection: 'close' }).end(); req.destroy() }
     })
     req.on('end', () => {
       if (tooBig) return
-      void handle(body).then((out) => {
+      void handle(Buffer.concat(chunks).toString('utf8')).then((out) => {
         if (out === undefined) res.writeHead(202).end()
         else res.writeHead(200, { 'content-type': 'application/json' }).end(out)
       })

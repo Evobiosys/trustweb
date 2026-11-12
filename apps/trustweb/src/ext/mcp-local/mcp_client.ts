@@ -9,17 +9,19 @@ import type { ImportedContact } from '../../../../crm/src/import/types'
 import { ContactSource } from '../../../../crm/src/import/types'
 import type { Person } from '../../model'
 import { stripUnsafe } from '../../safe_text'
-import type { McpServerEntry } from './mcp_config'
+import { validUrl, type McpServerEntry } from './mcp_config'
 
 export interface McpToolDef { name: string; description?: string; inputSchema?: { properties?: Record<string, unknown>; required?: string[] } }
 interface Res { ok: boolean; status: number; headers: { get(name: string): string | null }; text(): Promise<string> }
-export type Fetch = (url: string, init: { method: 'POST'; headers: Record<string, string>; body: string }) => Promise<Res>
+export type Fetch = (url: string, init: { method: 'POST'; headers: Record<string, string>; body: string; redirect: 'error' }) => Promise<Res>
 export interface McpSession { tools: McpToolDef[]; call(name: string, args: Record<string, unknown>): Promise<unknown> }
 
 const MAX_CONTACTS = 5000
 
 export async function openSession(server: McpServerEntry, fetchFn: Fetch): Promise<McpSession> {
   if (!server.url) throw new Error('this server has no address yet')
+  // Review wave 40: the key goes only where Save would let it (https, or http on this machine), also from unsaved fields.
+  if (!validUrl(server.url)) throw new Error('the address must start with https://')
   let sid: string | null = null
   let n = 0
   async function post(method: string, params: Record<string, unknown>, notify = false): Promise<unknown> {
@@ -27,7 +29,7 @@ export async function openSession(server: McpServerEntry, fetchFn: Fetch): Promi
     const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }
     if (server.token) headers.authorization = `Bearer ${server.token}`
     if (sid) headers['mcp-session-id'] = sid
-    const res = await fetchFn(server.url, { method: 'POST', headers, body: JSON.stringify(msg) })
+    const res = await fetchFn(server.url, { method: 'POST', headers, body: JSON.stringify(msg), redirect: 'error' })   // a redirect would carry the people to a third host
     if (!res.ok) throw new Error(`${server.name} answered ${res.status}`)
     sid = res.headers.get('mcp-session-id') ?? sid
     if (notify) return undefined

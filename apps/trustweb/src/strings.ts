@@ -3634,6 +3634,30 @@ export const S = {
     chatsTitle: 'Chats',
     chatsNone: 'No chats yet.',
   },
+  // wave 40 device-adopt: take another device's state, archived copies
+  adTake: "Take this device's state",
+  adGive: 'Send my state to this device',
+  adTakeTitle: (name: string) => `Take the state of ${name}?`,
+  adGiveTitle: (name: string) => `${name} wants to replace the state of this device`,
+  adDiff: (d: { people: number; notes: number; settings: number }) => (d.people + d.notes + d.settings === 0 ? 'Nothing differs.'
+    : `These differ: ${d.people} ${d.people === 1 ? 'person' : 'people'}, ${d.notes} ${d.notes === 1 ? 'note' : 'notes'}, ${d.settings} ${d.settings === 1 ? 'setting' : 'settings'}.`),
+  adTakeLead: (name: string) => `This device will show exactly what ${name} shows. What differs here is replaced.`,
+  adGiveLead: (name: string) => `${name} sends its whole state. If you take it, this device will show exactly that. What differs here is replaced.`,
+  adArchiveNote: 'First, a copy of what is here now is kept for 30 days under Settings > Advanced > Archived copies. Restore puts it back.',
+  adTakeOk: 'Take this state',
+  adGiveOk: 'Replace with this state',
+  adDone: (name: string) => `Now showing the state of ${name}. A copy of the old one is kept for 30 days.`,
+  adNotKept: 'A copy could not be kept (storage is full), so nothing was replaced.',
+  adAsked: (name: string) => `Asked ${name}. Its state arrives here and you confirm it.`,
+  adOffered: 'Sent. The other device asks before it replaces its state.',
+  adTitle: 'Archived copies',
+  adLead: 'Copies of this device as it was before it took another device\'s state or before a restore. Each stays for 30 days.',
+  adNone: 'No archived copies.',
+  adRow: (when: string, people: number, device: string, daysLeft: number) => `${when} · ${people} ${people === 1 ? 'person' : 'people'} · ${device} · ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`,
+  adNoPictures: 'Pictures are not in this copy.',
+  adRestore: 'Restore',
+  adRestoreReason: 'before restoring an archived copy',
+  adRestored: 'Restored. The state from before is kept in Archived copies.',
   /** Wave 40 small-ui-d: arrange the bottom row, halo, variations in the ⋮ list, link with a variation, communities-only chat. */
   w40: {
     barMoreDivider: 'In the ⋮ list (below the row)',
@@ -3907,7 +3931,8 @@ export const S = {
   },
   // Wave 40 feed-events
   feedView: {
-    title: 'Feed',
+    // Review wave 40: the switch under Extensions carries the view's name too (two switches read "Feed" before: the app's Feed and this one).
+    title: 'Timeline',
     /** The view's own name (bottom row, heading): not "Feed", which the app's own Feed view already uses. */
     viewTitle: 'Timeline',
     desc: 'A timeline in the style of Mastodon: write a post for a trust zone or tag, paste a link to a social-media post to repost it.',
@@ -3926,7 +3951,7 @@ export const S = {
     previewUnavailable: 'Preview not available from your host yet; showing the address only.',
   },
   eventsView: {
-    title: 'Events',
+    title: 'Events map',
     /** The view's own name (bottom row, heading): not "Events", which the app's own Events view already uses. */
     viewTitle: 'Events map',
     desc: 'Events as cards with going / maybe, a slot for the events map, and sharing an event to a tag.',
@@ -3946,6 +3971,7 @@ export const S = {
     mapConsent: 'Loading the map shows a page from another site inside TrustWeb. That site then sees your address.',
     mapLoad: 'Load the map here',
     mapChange: 'Change address',
+    cancel: 'Cancel',
     openNewTab: 'Open in a new tab',
     save: 'Save',
     setMap: 'Events map address',
@@ -3977,7 +4003,7 @@ export const S = {
     cancel: 'Cancel',
     hidden: (name: string) => `${name}: not related`,
     undo: 'Undo',
-    toastNone: 'Marked as not related.',
+    toastNone: 'Marked as not related. Tap to undo.',
     toastSaved: 'Saved.',
     aria: (y: string, z: string) => `How ${y} and ${z} are connected`,
   },
@@ -3999,4 +4025,14 @@ export const S = {
   tagsStewards: 'Stewards',
   tagsFork: 'Fork (make my own copy)',
   tagsCycle: 'That would put a tag inside itself.',
+  // Wave 40 review fixes
+  supportDeliverMailRest: (n: number) => ` (the other ${n} come in the next e-mail)`,
+  adWantTitle: (name: string) => `${name} asks for the state of this device`,
+  adWantLead: (name: string) => `If you send it, ${name} receives everything on this device (people, notes, settings) and asks there before it replaces its own. Nothing leaves before you tap Send.`,
+  adWantSend: 'Send this state',
+  adWantSent: (name: string) => `Sent to ${name}.`,
+  tagsGone: 'That tag is no longer there. The list is up to date again.',
+  supportDeliverCopyFailed: 'Your words could not be copied. Write them in the chat that opens.',
+  adCopyUnreadable: 'This copy cannot be read any more, so nothing was restored.',
+  adDiffOther: (n: number) => `Also replaced: ${n} other ${n === 1 ? 'thing' : 'things'} (resources, meetings, events, tasks, invitations, chats).`,
 } as const

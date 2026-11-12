@@ -8,9 +8,9 @@ import type { ImportedContact } from '../../crm/src/import/types'
 import { toCsv, toJson, toVCard } from './contacts_export'
 import { lastContact } from './engagement'
 import {
-  buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadClientSecret, loadToken, makePkce, parseRedirect, revokeToken, saveClientId, saveClientSecret, saveToken,
+  CLIENT_ID_KEY, buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadClientSecret, loadToken, makePkce, parseRedirect, revokeToken, saveClientId, saveClientSecret, saveToken,
 } from './google_contacts'
-import { dismissNudge, googleConnectOn, nudgeShown } from './google_flag'
+import { GOOGLE_FLAG_KEY, NUDGE_KEY, dismissNudge, googleConnectOn, nudgeShown } from './google_flag'
 import { Ring } from './model'
 import type { AppState } from './model'
 import type { Pages } from './page_view'
@@ -91,25 +91,44 @@ async function disconnect(token: string): Promise<void> {
   await revokeToken(fetchFn, token)
 }
 
+/**
+ * Review wave 40: the Flags switch turned off, or Reset this phone: a live token is revoked, token / secret / pending sign-in leave this tab;
+ * `device` (reset) also removes the switch, the client id and the nudge mark from this device.
+ */
+export async function forgetGoogle(o: { device?: boolean } = {}): Promise<void> {
+  const ss = store()
+  const token = ss ? loadToken(ss) : null
+  if (ss) { clearToken(ss); saveClientSecret(ss, ''); ss.removeItem(PKCE_KEY) }
+  if (o.device) { const l = local(); for (const k of [GOOGLE_FLAG_KEY, CLIENT_ID_KEY, NUDGE_KEY]) l?.removeItem(k) }
+  if (token) await revokeToken(fetchFn, token)
+}
+
 /** Called once at start with the address as opened (main.ts cleans the live one first): when Google sent the browser back with a code, finish the sign-in and offer the contacts. Cleans only Google's own query parameters. */
 export async function resumeGoogle(h: SyncHooks, offer: (contacts: ImportedContact[]) => void, href: string = location.href): Promise<void> {
   const ss = store()
   const pending = ss?.getItem(PKCE_KEY)
   if (!ss || !pending) return
-  const { verifier, state } = JSON.parse(pending) as { verifier: string; state: string }
-  const r = parseRedirect(href, state)
-  if (!r) return
+  // Review wave 40: switched off or no client id = nothing goes to Google; a damaged entry or a sign-in left half-way is dropped, never thrown.
+  const clientId = ((local() ? loadClientId(local()!) : null) ?? '').trim()
+  if (!googleOn() || !clientId) { ss.removeItem(PKCE_KEY); saveClientSecret(ss, ''); return }
+  let p: { verifier?: unknown; state?: unknown } | null = null
+  try { p = JSON.parse(pending) as { verifier?: unknown; state?: unknown } } catch { /* damaged */ }
+  if (typeof p?.verifier !== 'string' || typeof p.state !== 'string') { ss.removeItem(PKCE_KEY); return }
+  const { verifier } = p as { verifier: string }
+  const r = parseRedirect(href, p.state)
   ss.removeItem(PKCE_KEY)
+  if (!r) return
   const url = new URL(location.href)
   for (const k of GOOGLE_PARAMS) url.searchParams.delete(k)
   history.replaceState(history.state, '', url.pathname + url.search + url.hash)
   if ('error' in r) { h.toast(S.googleFailed); return }
   try {
-    const clientId = (local() ? loadClientId(local()!) : null) ?? ''
     const token = await exchangeCode(fetchFn, { clientId, clientSecret: loadClientSecret(ss) ?? '', redirectUri: redirectUri(), code: r.code, verifier })
+    saveClientSecret(ss, '')   // review wave 40: needed for this one step only
     saveToken(ss, token)
     offer(await load(token))
   } catch {
+    saveClientSecret(ss, '')
     h.toast(S.googleFailed)
   }
 }
