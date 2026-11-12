@@ -242,6 +242,7 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { exportEntry, resumeGoogle } from './contacts_sync_view'
+import { googleFlagSet, setGoogleConnect } from './google_flag'
 import { offerContacts, openServicesImport } from './services_view'
 import type { ServicesHooks } from './services_view'
 import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
@@ -507,6 +508,8 @@ function installedHere(): boolean {
 // Wave 27 review: the extension modules read their pairing links from this copy, taken before the clean below.
 const bootHash = location.hash
 const bootSearch = location.search
+// Wave 40: Google's return trip (?code=...) is read from the address as opened; the clean below removes it.
+const bootHref = location.href
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
 
@@ -1029,7 +1032,7 @@ const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'd
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
 mountOnboardingNotice(onboardHooks)
 // Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
-void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts))
+void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts), bootHref)
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
@@ -7116,6 +7119,13 @@ function settingsSheet(): void {
     settingsSection('features', S.setSecFeatures, isEnabled('feed') ? feed.settingsGroup() : []),
     settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
     settingsSection('advanced', S.setAdvanced, [
+    // Wave 40: flags for parts that are not ready yet.
+    el('h4', { class: 'eyebrow' }, [S.flagsTitle]),
+    el('p', { class: 'meta' }, [S.flagsHint]),
+    el('label', { class: 'radio', 'data-flag-toggle': 'googleConnect' }, [
+      el('input', { type: 'checkbox', ...(googleFlagSet(localStorage) ? { checked: '' } : {}), onchange: (e: Event) => { setGoogleConnect(localStorage, (e.target as HTMLInputElement).checked); settingsSheet() } }),
+      el('b', {}, [S.flagGoogleConnect]), el('small', {}, [S.flagGoogleConnectHint]),
+    ]),
     // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
     el('h4', { class: 'eyebrow' }, [S.headerPinsTitle]),
     ...HEADER_PINS.map((id) => el('label', { class: 'radio', 'data-header-pin-toggle': id }, [
