@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { approveBoxVisible, focusAfterApprove, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
+import { approveTone, approveBoxVisible, focusAfterApprove, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -40,7 +40,7 @@ const CSS = `
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .twc-file,.twp .twc-a,.twp .twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twp .twc-file{color:#7ee8de;background:rgba(94,234,212,.16)}.twp .twc-a{color:#ffc65c;background:rgba(251,191,36,.16)}.twp .twc-b{color:#e3a8ff;background:rgba(233,166,255,.16)}
-.twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.twp-active{background:rgba(79,215,160,.22);border-radius:4px}.twp .feat.twp-related{background:rgba(255,198,92,.2);border-radius:4px;box-shadow:inset 3px 0 #ffc65c}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
+.twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.twp-active{background:rgba(79,215,160,.22);border-radius:4px}.twp .feat.twp-related{background:rgba(255,198,92,.2);border-radius:4px;box-shadow:inset 3px 0 #ffc65c}.twp .feat.tone-0{background:rgba(79,215,160,.16);border-radius:4px}.twp .feat.tone-1{background:rgba(126,170,255,.22);border-radius:4px}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
 .twp .mini{flex:none;padding:1px 6px;font-size:10px}
 .twp .mini.walk{background:#6b6178;color:#fff}.twp .mini.alt{color:#b7a8c9;border-color:#7a6a8c}
@@ -135,6 +135,7 @@ export function initDevPreview(): void {
   let since = 0
   let prStep = ''
   let lit: string | null = null
+  let tone: 0 | 1 = 0
   // An apply running: the registry stamp last seen and when it last moved (stuck after 90 s without a change).
   let applying: { stamp: string; moved: number; stuck: boolean } | null = null
   // The assembled sha this page knows (set once the server answered): a different one in a later answer reloads the page.
@@ -269,7 +270,9 @@ export function initDevPreview(): void {
   }
   // A box or pill writes the registry (the CLI cascades requires/dependants). Approve and needs work only mark what gets pushed; the boxes assemble.
   const press = (key: string, v: 'merge' | 'needs-work'): void => {
-    focus.set(v === 'merge' && pillPress(p!.features, key, v) === 'merge' ? focusAfterApprove(p!.features, focus.get(), key) : focusAfterPress(focus.get(), key))   // wave 39: an approve jumps to the next unreviewed row
+    const jumped = v === 'merge' && pillPress(p!.features, key, v) === 'merge'
+    focus.set(jumped ? focusAfterApprove(p!.features, focus.get(), key) : focusAfterPress(focus.get(), key))   // wave 39: an approve jumps to the next unreviewed row
+    if (jumped) tone = approveTone(tone, key, focus.get())   // wave 40: the next row shows in the other background colour
     const plan = pressPlan(p!.features, key, v)   // approve on an unticked row ticks it for the owner, but never assembles (the reload hid the preview)
     const { loadFirst } = plan
     const base = v === 'merge' ? ensureLoaded(p!.features, key) : p!.features
@@ -398,7 +401,7 @@ export function initDevPreview(): void {
     changed?.querySelector('button')?.addEventListener('click', (e) => { e.stopPropagation(); approveChanges(f.key) })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); foldFor(f); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, h('span', { className: 'go', textContent: mark.prefix + f.title }), ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(changed ? [changed] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : []), ...(f.flag && !flagOn(f) ? [flagOnButton(f)] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (focus.get() === f.key ? ` tone-${tone}` : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, h('span', { className: 'go', textContent: mark.prefix + f.title }), ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(changed ? [changed] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : []), ...(f.flag && !flagOn(f) ? [flagOnButton(f)] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }

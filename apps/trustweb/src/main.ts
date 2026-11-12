@@ -124,13 +124,16 @@ import { guestShell } from './ext/co_notes/co_invite'
 import { deserializeIdentity } from '../../demo/src/did'
 import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
+import { profileOfLink } from './profile_link'
+import { profileLinkSettings } from './profile_link_view'
 import { zoneLinksSettings } from './zone_share_link_view'
 import { candidates, seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
+import { communityChatRows } from './chat_communities'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, barChoices, barLayout, customFrom, modOfBar, moveBar, overflowChoices, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, arrangeRows, barLayout, canMoveBar, customFrom, haloOf, modOfBar, moveBar, overflowChoices, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
@@ -262,7 +265,7 @@ import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './me
 import { kindKey, visibleVia } from './zone_visibility'
 import { addResourceIn, renameResource } from './resource_edit'
 import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
-import { communityOf, isArchived, zoneFor } from './trustzones'
+import { communityOf, communityTags, isArchived, zoneFor } from './trustzones'
 import { archivedPeopleView } from './archived_people_view'
 import { purgeDue, recentlyDeleted } from './deleted_people'
 import { trustZonesGroup, zoneSidebar } from './trustzones_view'
@@ -480,6 +483,8 @@ const viaCard = createViaCard()
 const personShare = pendingConnect ? parsePersonShare(location.hash) : null
 // Wave 31 (zone_share_link.ts): the same link made for a whole zone; the box names the zone and says there is more to ask for.
 const zoneShare = pendingConnect ? parseZoneShare(location.hash, Date.now()) : null
+// Wave 40 (profile_link.ts): a link may suggest a Variation (#tp=<id>); read here, before the fragment is cleared; offered at the end of boot.
+const linkProfile = profileOfLink(location.hash)
 // Wave 31 (notes_outline.ts): a link may carry an outline note with its provenance; kept on the sender's card after their tap.
 const noteShare = pendingConnect ? parseNoteShare(location.hash) : null
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
@@ -1177,7 +1182,7 @@ function barOpen(id: BarId): void {
 }
 
 /** Wave 31: one bottom-bar button. The primary view is the raised round one; a long press or right click takes a view out (with Undo). */
-function barButton(id: BarId, primary: boolean): HTMLElement {
+function barButton(id: BarId, primary: boolean, halo = false): HTMLElement {
   if (id === 'record' && primary) return recordButton()
   const view = viewOfBar(id)
   const name = id === 'web' && state ? webTabLabel(state, S.viewNames) : barName(id) // wave 35: the Web tab carries the pinned default view's name
@@ -1186,23 +1191,14 @@ function barButton(id: BarId, primary: boolean): HTMLElement {
   b.setAttribute('aria-label', name)
   if (id === 'ask') b.querySelector('svg')!.outerHTML = askWebIcon(askIconVariant)
   if (primary) b.classList.add('tab-primary')
-  if (id !== 'record') contextPress(b, () => removeFromBar(id, name))
+  if (halo) b.classList.add('tab-halo')
+  contextPress(b, barSheet)   // wave 40: a long press arranges the row (and shows the views below it); a view leaves the row from the sheet
   return b
 }
 
 function barFlags(): BarFlags {
   // HAS_MAP_VIEW is declared further down (this runs at load), so the Map is simply on.
   return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state), mods: twRegistry.views().map((v) => v.id) }
-}
-
-function removeFromBar(id: BarId, name: string): void {
-  const s = st()
-  const before = s.uiBar
-  s.uiBar = toggleBar(before, id, barFlags())
-  save()
-  renderTabs()
-  render()
-  toast(S.barRemoved(name), { onClick: () => { if (before) s.uiBar = before; else delete s.uiBar; save(); renderTabs(); render() } })
 }
 
 function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
@@ -1222,7 +1218,8 @@ function renderTabs(): void {
   const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
-  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary || pair.includes(id))), ...(guest ? [] : [more]))
+  const halo = new Set(guest ? [] : haloOf(state?.uiBar, ids))
+  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary || pair.includes(id), halo.has(id))), ...(guest ? [] : [more]))
   tabs.classList.toggle('four', shown.length > 3)
   tabs.classList.toggle('many', shown.length > 5)
   tabs.classList.toggle('pair', pair.length > 0)
@@ -1231,15 +1228,40 @@ function renderTabs(): void {
 }
 renderTabs()
 
-/** Wave 35: ⋮ lists the views that are not in the bar as direct buttons; with none to list it opens the sheet at once. */
+/** Wave 40: a view from the ⋮ list moves into the row (bottom_bar.ts promoteBar) and opens, so it does not stay at the bottom of the list. */
+function bringIntoRow(id: BarId): void {
+  const s = st()
+  const next = promoteBar(s.uiBar, id, barFlags(), barMax())
+  if (next) { s.uiBar = next; save() }
+  closeSheet()
+  renderTabs()
+  barOpen(id)
+}
+
+/** Wave 40: the Variations in one compact line of chips (the same choices as Settings > Variations), for the ⋮ list. */
+function variationChips(after: () => void): HTMLElement {
+  const cur = profileOf(st().twSettings)
+  return el('div', { class: 'var-chips', role: 'radiogroup', 'aria-label': S.var.title, 'data-var-compact': '' }, [
+    el('button', { class: 'chip', 'data-variation-compact': 'dex', onclick: () => showDesktopVersion(UiView.Dex) }, [S.var.dex]),
+    ...TW_PROFILES.map((p) => el('button', {
+      class: 'chip' + (p.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(p.id === cur), 'data-variation-compact': p.id,
+      onclick: () => chooseProfile(p.id, after),
+    }, [(p.id === cur ? '✓ ' : '') + S.var.names[p.id]])),
+  ])
+}
+
+/** Wave 35: ⋮ lists the views that are not in the bar as direct buttons (wave 40: in row order, a tap moves one into the row; Variations below, compact). */
 function barMoreTap(): void {
   const s = st()
-  const { ids, primary } = resolveBar(s.uiBar, barFlags())
-  const rest = [...barLayout(ids, primary, barMax()).overflow, ...overflowChoices(ids, s.uiBar?.hidden ?? [], barFlags())]
-  if (!rest.length) { barSheet(); return }
+  const f = barFlags()
+  const { ids, primary } = resolveBar(s.uiBar, f)
+  const rest = [...barLayout(ids, primary, barMax()).overflow, ...overflowChoices(ids, s.uiBar?.hidden ?? [], f)]
+  const halo = new Set(haloOf(s.uiBar, ids))
   openSheet([
-    el('h3', {}, [S.barMoreViews]),
-    ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view', 'data-bar-view': id, onclick: () => { closeSheet(); barOpen(id) } }, [barName(id)])),
+    rest.length ? el('h3', {}, [S.barMoreViews]) : null,
+    ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view' + (halo.has(id) ? ' tab-halo' : ''), 'data-bar-view': id, onclick: () => bringIntoRow(id) }, [barName(id)])),
+    el('h4', { class: 'eyebrow' }, [S.var.title]),
+    variationChips(barMoreTap),
     el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
   ])
 }
@@ -1254,15 +1276,15 @@ function webDefaultLine(s: AppState, changed: () => void): HTMLElement {
   return el('div', { class: 'web-default-line' }, [el('span', { class: 'meta' }, [S.webDefaultLabel + ':']), select])
 }
 
-/** The ⋮ sheet: the bubble at the left of each view turns it on or off per view, order arrows, "highlight one"; views the phone bar has no room for are marked and open from here. */
-function barSheet(): void {
-  const s = st()
-  const flags = barFlags()
-  const redraw = (next: typeof s.uiBar): void => { if (next) s.uiBar = next; else delete s.uiBar; save(); renderTabs(); render(); barSheet() }
-  const { ids, primary } = resolveBar(s.uiBar, flags)
-  const { overflow } = barLayout(ids, primary, barMax())
-  // "Add" turns into a place picker: left or right of each button now in the bar. Feed is switched on first when it was off.
-  const addPicker = (id: BarId): HTMLElement => el('select', {
+/**
+ * Wave 40: the arrange list of the ⋮ sheet: every view in the order of the row (row left to right, then the ⋮ list, then what is off).
+ * Arrows move a view in place with a slide (FLIP) and grey out at the ends; Halo rings one or two views of the row (bottom_bar.ts toggleHalo).
+ * The bubble shows or hides a view; Add picks a place for a hidden one. Those two redraw the whole sheet through `redraw`.
+ */
+function barArrangeList(s: AppState, flags: BarFlags, redraw: (next: typeof s.uiBar) => void): HTMLElement {
+  const box = el('div', { class: 'bar-arrange', 'data-bar-arrange': '' })
+  const rowEls = new Map<string, HTMLElement>()
+  const addPicker = (id: BarId, ids: readonly BarId[]): HTMLElement => el('select', {
     class: 'bar-add-pos', 'data-bar-add-pos': id, 'aria-label': S.barAddPick(barName(id)),
     onchange: (e: Event) => {
       const [side, ref] = (e.target as HTMLSelectElement).value.split(':') as ['left' | 'right', string]
@@ -1271,13 +1293,69 @@ function barSheet(): void {
       redraw(addBar(s.uiBar, id, ref, side, f))
     },
   }, [el('option', { value: '' }, [S.barAddPlace]), ...ids.flatMap((ref) => (['left', 'right'] as const).map((side) => el('option', { value: `${side}:${ref}` }, [(side === 'left' ? S.barLeftOf : S.barRightOf)(barName(ref))])))])
-  const arrow = (id: BarId, dir: -1 | 1): HTMLElement => el('button', {
-    class: 'btn btn-ghost btn-sm', 'data-bar-move': `${id}:${dir}`, 'aria-label': dir < 0 ? S.barUp(barName(id)) : S.barDown(barName(id)),
-    onclick: () => redraw(moveBar(s.uiBar, id, dir, flags)),
-  }, [dir < 0 ? '←' : '→'])
+  const arrow = (id: BarId, dir: -1 | 1): HTMLElement => {
+    const ok = canMoveBar(s.uiBar, id, dir, flags)
+    const b = el('button', {
+      class: 'btn btn-ghost btn-sm bar-arrow' + (ok ? '' : ' greyed'), 'data-bar-move': `${id}:${dir}`, 'aria-label': dir < 0 ? S.barUp(barName(id)) : S.barDown(barName(id)),
+      ...(ok ? {} : { disabled: '', 'aria-disabled': 'true' }),
+      onclick: () => { const next = moveBar(s.uiBar, id, dir, flags); if (next) { s.uiBar = next; save(); renderTabs() } draw(true) },
+    }, [dir < 0 ? '←' : '→'])
+    return b
+  }
+  const bubble = (id: BarId, on: boolean): HTMLElement => id === 'record'
+    ? el('span', { class: 'radio bar-bubble on', 'data-bar-opt': id }, [el('b', {}, [barName(id)])])
+    : el('label', { class: 'radio bar-bubble' + (on ? ' on' : ''), 'data-bar-opt': id }, [
+      el('input', { type: 'checkbox', class: 'bar-hide-input', 'aria-label': barName(id), ...(on ? { checked: '' } : {}), onchange: () => {
+        if (id === 'feed' && !flags.feed) { s.feed = { ...s.feed, on: true }; redraw(resolveBar(s.uiBar, { ...flags, feed: true }).ids.includes('feed') ? s.uiBar : toggleBar(s.uiBar, id, { ...flags, feed: true })); return }
+        redraw(toggleBar(s.uiBar, id, flags))
+      } }),
+      el('b', {}, [barName(id)]),
+    ])
+  function draw(animate: boolean): void {
+    const { ids } = resolveBar(s.uiBar, flags)
+    const rows = arrangeRows(s.uiBar, flags, barMax())
+    if (!flags.feed) rows.push({ id: 'feed', slot: 'off' })   // the Feed is always offered here; ticking it switches the feature on
+    const halo = new Set(haloOf(s.uiBar, ids))
+    const before = new Map([...rowEls].map(([id, r]) => [id, r.getBoundingClientRect().top]))
+    const kids: HTMLElement[] = []
+    rows.forEach(({ id, slot }, i) => {
+      if (slot === 'more' && rows[i - 1]?.slot !== 'more') kids.push(el('p', { class: 'meta bar-divider', 'data-bar-divider': '' }, [S.w40.barMoreDivider]))
+      const row = rowEls.get(id) ?? el('div', { 'data-bar-row': id })
+      rowEls.set(id, row)
+      row.className = 'bar-opt-row' + (halo.has(id) ? ' tab-halo' : '')
+      row.dataset.barSlot = slot
+      const on = slot !== 'off'
+      row.replaceChildren(...[
+        bubble(id, on),
+        on ? el('button', { class: 'linkbtn bar-halo-btn', 'data-bar-halo': id, 'aria-pressed': String(halo.has(id)), 'aria-label': S.w40.barHaloPick(barName(id)), onclick: () => { s.uiBar = toggleHalo(s.uiBar, id, flags); save(); renderTabs(); draw(false) } }, [S.w40.barHalo]) : null,
+        on ? el('span', { class: 'bar-opt-acts' }, [arrow(id, -1), arrow(id, 1)]) : el('button', { class: 'linkbtn', 'data-bar-add': id, onclick: (e: Event) => (e.currentTarget as HTMLElement).replaceWith(addPicker(id, ids)) }, [S.barAdd]),
+        slot === 'more' ? el('button', { class: 'linkbtn', 'data-bar-open': id, onclick: () => { closeSheet(); barOpen(id) } }, [S.barOpen]) : null,
+      ].filter((n): n is HTMLElement => n !== null))
+      kids.push(row)
+      if (id === 'web') kids.push(el('div', { 'data-bar-web-default': '' }, [webDefaultLine(s, () => { save(); renderTabs(); render(); barSheet() })]))
+    })
+    box.replaceChildren(...kids)
+    if (animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (const [id, row] of rowEls) {
+        const was = before.get(id)
+        const dy = was === undefined ? 0 : was - row.getBoundingClientRect().top
+        if (dy) row.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 220, easing: 'ease' })
+      }
+    }
+  }
+  draw(false)
+  return box
+}
+
+/** The ⋮ sheet (a long press on a bottom button opens it too): profiles and the arrange list; views the phone bar has no room for are marked and open from here. */
+function barSheet(): void {
+  const s = st()
+  const flags = barFlags()
+  const redraw = (next: typeof s.uiBar): void => { if (next) s.uiBar = next; else delete s.uiBar; save(); renderTabs(); render(); barSheet() }
+  const { ids, primary } = resolveBar(s.uiBar, flags)
   openSheet([
     el('h3', {}, [S.barSheetTitle]),
-    el('p', { class: 'hint' }, [S.barSheetHint]),
+    el('p', { class: 'hint' }, [S.barSheetHint, ' ', S.w40.barArrangeHint]),
     el('h4', { class: 'eyebrow' }, [S.barProfilesTitle]),
     el('div', { class: 'bar-profiles' }, [...PROFILES.map((prof) => {
       const name = S.barProfileNames[prof.id]
@@ -1305,25 +1383,9 @@ function barSheet(): void {
         },
       }, [el('span', { class: 'bar-profile-prev bar-profile-plus' }, ['+']), el('b', {}, [S.barProfileNames.custom])])
     })()]),
-    // The Feed is an opt-in feature: it is always offered here, and ticking it switches the feature on.
-    ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).flatMap(({ id, on }) => [el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
-      el('label', { class: 'radio bar-bubble' + (on ? ' on' : ''), 'data-bar-opt': id }, [
-        el('input', { type: 'checkbox', class: 'bar-hide-input', 'aria-label': barName(id), ...(on ? { checked: '' } : {}), onchange: () => {
-          if (id === 'feed' && !flags.feed) { s.feed = { ...s.feed, on: true }; redraw(resolveBar(s.uiBar, { ...flags, feed: true }).ids.includes('feed') ? s.uiBar : toggleBar(s.uiBar, id, { ...flags, feed: true })); return }
-          redraw(toggleBar(s.uiBar, id, flags))
-        } }),
-        el('b', {}, [barName(id)]),
-      ]),
-      on ? el('span', { class: 'bar-opt-acts' }, [arrow(id, -1), arrow(id, 1)]) : el('button', { class: 'linkbtn', 'data-bar-add': id, onclick: (e: Event) => (e.currentTarget as HTMLElement).replaceWith(addPicker(id)) }, [S.barAdd]),
-      overflow.includes(id) ? el('button', { class: 'linkbtn', 'data-bar-open': id, onclick: () => { closeSheet(); barOpen(id) } }, [S.barOpen]) : null,
-    ]), ...(id === 'web' ? [webDefaultLine(s, () => { save(); renderTabs(); render(); barSheet() })] : [])]),
-    el('h4', { class: 'eyebrow' }, [S.barHighlight]),
-    el('p', { class: 'meta' }, [S.barHighlightHint]),
-    ...(['none', ...ids] as (BarId | 'none')[]).map((id) => el('label', { class: 'radio bar-bubble' + ((id === 'none' ? primary === null : id === primary) ? ' on' : ''), 'data-bar-primary': id }, [
-      el('input', { type: 'radio', class: 'bar-hide-input', name: 'bar-primary', ...((id === 'none' ? primary === null : id === primary) ? { checked: '' } : {}), 'aria-label': S.barHighlightPick(id === 'none' ? S.barHighlightNone : barName(id)), onchange: () => redraw(setPrimary(s.uiBar, id, flags)) }),
-      el('b', {}, [id === 'none' ? S.barHighlightNone : barName(id)]),
-    ])),
-    overflow.length ? el('p', { class: 'meta' }, [S.barOverflow + ': ' + overflow.map((id) => barName(id)).join(', ')]) : null,
+    // Wave 40: one list in row order (the row left to right, then the ⋮ list, then what is off); arrows move a view with a visible slide, the end ones grey out.
+    el('p', { class: 'meta' }, [S.w40.barHaloHint]),
+    barArrangeList(s, flags, redraw),
   ])
 }
 
@@ -2171,16 +2233,20 @@ function setLayout(l: Layout): void {
   applyLayout()
 }
 
-/** Wave 39: Settings > General > Theme, next to the view picker: the look of the app (Default, Sleek, Dex-like); light or dark stays under Advanced. */
+/** Wave 39: Settings > Theme, next to the view picker: the look of the app (Default, Sleek, Dex-like); light or dark stays under Advanced. Wave 40: folded under a dropdown like the view picker. */
 function themeRow(): HTMLElement {
   const now = readLook(localStorage)
-  return el('div', { class: 'theme-row', 'data-theme-row': '' }, [
-    el('b', {}, [S.themeTitle]),
-    el('div', { class: 'look-pick', role: 'radiogroup', 'aria-label': S.themeTitle }, LOOKS.map((l: Look) => el('button', {
-      class: 'radio' + (now === l ? ' on' : ''), role: 'radio', 'aria-checked': String(now === l), 'data-look-choice': l,
-      onclick: () => appActions.do('set-look', { look: l }),
-    }, [el('b', {}, [S.themeLooks[l]]), el('small', {}, [S.themeLookHints[l]])]))),
-  ])
+  const items = LOOKS.map((l: Look) => el('button', {
+    role: 'menuitemradio', 'aria-checked': String(now === l), 'data-look-choice': l,
+    onclick: () => { appActions.do('set-look', { look: l }); settingsSheet() },
+  }, [S.themeLooks[l], el('small', {}, [' · ' + S.themeLookHints[l]])]))
+  const menu = el('div', { class: 'view-menu look-pick', role: 'menu', 'aria-label': S.themeTitle, hidden: true }, items)
+  const pill = el('button', { class: 'view-pill', 'data-theme-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `${S.themeTitle}: ${S.themeLooks[now]}`, onclick: () => {
+    menu.hidden = !menu.hidden
+    pill.setAttribute('aria-expanded', String(!menu.hidden))
+    if (!menu.hidden) items[0].focus()
+  } }, [el('span', {}, [S.themeLooks[now]]), el('span', { class: 'view-pill-half', 'aria-hidden': 'true' }, ['▾'])])
+  return el('div', { class: 'view-row theme-row', 'data-theme-row': '' }, [el('b', {}, [S.themeTitle]), el('div', { class: 'view-pick' }, [pill, menu])])
 }
 
 /** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
@@ -2976,20 +3042,49 @@ function messengerChips(p: ChatListPerson): HTMLElement {
   }))
 }
 
+/** Wave 40: Chat's "Communities only" filter (like Signal's): remembered on this device. */
+const CHAT_COMMUNITIES_KEY = 'trustweb.ui.chatCommunitiesOnly'
+let chatCommunitiesOnly = ((): boolean => { try { return localStorage.getItem(CHAT_COMMUNITIES_KEY) === '1' } catch { return false } })()
+
+/** Wave 40: the button top-left of the Chat header (where the Resources header keeps its expand button): communities only / all chats. */
+function chatCommunityButton(): HTMLElement {
+  const b = iconButton('users', chatCommunitiesOnly ? S.w40.chatAllChats : S.w40.chatCommunitiesOnly, () => {
+    chatCommunitiesOnly = !chatCommunitiesOnly
+    try { localStorage.setItem(CHAT_COMMUNITIES_KEY, chatCommunitiesOnly ? '1' : '0') } catch { /* not remembered */ }
+    render()
+  }, 'chat-comm-btn')
+  b.setAttribute('data-chat-communities', '')
+  b.setAttribute('aria-pressed', String(chatCommunitiesOnly))
+  return b
+}
+
+/** Wave 40: the community's own chat (the Community view's chat pane) as the first row, while the Community module is on. */
+function communityChatRow(): HTMLElement | null {
+  if (!isEnabled('community-mighty')) return null
+  return el('div', { class: 'prow chat-row chat-community-row', role: 'button', tabindex: '0', 'data-chat-community-row': '', onclick: () => { try { localStorage.setItem('trustweb.v1.community-mighty.open-chat', '1') } catch { /* the pane opens closed */ } openExtView('community') } }, [
+    avatar(S.community.title, 'community'),
+    el('div', { class: 'who' }, [el('b', {}, [S.w40.chatCommunityRow(S.community.title)])]),
+  ])
+}
+
 function chatListBody(): Node[] {
   const s = st()
   const now = Date.now()
   const people = chatPeople()
-  const rows = chatListRows(s.chats, people, { query: chatQuery, since: dndSince() })
+  const all = chatListRows(s.chats, people, { query: chatQuery, since: dndSince() })
+  const tags = loadColourTags()
+  const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
   const find = chatFindRows(s.chats, people, chatQuery)
+  const community = communityChatRow()
   return [
+    ...(community ? [community] : []),
     ...(rows.length ? rows.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
       avatar(r.name, r.personId),
       el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),
       messengerChips(people.find((p) => p.id === r.personId) ?? { id: r.personId, name: r.name }),
       el('span', { class: 'when' }, [ageLabel(r.at, now)]),
       r.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(r.unread) }) : null,
-    ])) : [el('p', { class: 'empty' }, [chatQuery.trim() ? S.chatNoMatch : S.chatListEmpty])]),
+    ])) : [el('p', { class: 'empty' }, [chatQuery.trim() ? S.chatNoMatch : chatCommunitiesOnly ? S.w40.chatCommunityNone : S.chatListEmpty])]),
     el('details', { class: 'chat-find', 'data-chat-find': '' }, [
       el('summary', {}, [S.chatFindTitle]),
       ...(find.length ? find.map((r) => el('button', { class: 'prow', 'data-chat-pick': r.personId, onclick: () => chatSheet(r.personId) }, [
@@ -3031,7 +3126,7 @@ function screenChat(): Node[] {
   const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
   search.addEventListener('input', () => { chatQuery = search.value; body.replaceChildren(...chatListBody()) })
   return [
-    header(view.title, { right: view.pill, after: view.dots }),
+    header(view.title, { right: view.pill, after: view.dots, glyph: chatCommunityButton() }),
     el('div', { class: 'scroll ppl' }, [
       s.chatsHidden ? el('p', { class: 'meta', 'data-chats-hidden': '' }, [S.chatDndHint]) : null,
       view.body,
@@ -3304,6 +3399,7 @@ window.addEventListener(COLOUR_TAGS_EVENT, () => { if (screen === Screen.Web) re
 
 /** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
 function openQuery(): void {
+  if (webPage) { cardExpanded = false; webPage = null }   // wave 40: a card page draws no dock, so the ask (sparkle, ⋮ list) opened nothing while one was open
   queryOpen = true
   if (screen === Screen.Web) render()
   else go(Screen.Web)
@@ -4955,7 +5051,7 @@ const eventsView = createEventsView({
 })
 const extHooks: ExtHooks = {
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
-  openEvent: (id) => { eventsView.open(id); if (screen === Screen.Events) render(); else go(Screen.Events) },
+  openEvent: (id, fromCalendar) => { eventsView.open(id, fromCalendar); if (screen === Screen.Events) render(); else go(Screen.Events) },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),
   avatar,
@@ -4995,8 +5091,12 @@ twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[
 twBus.on('toast', (msg) => { if (typeof msg === 'string') toast(msg) })
 twBus.on('open-page', (d) => { const p = d as { title: string; body: Node[]; mark: string }; pages.open(p.title, p.body, p.mark) })
 twBus.on('back', () => history.back())
+twBus.on('open-chat', (id) => { if (typeof id === 'string') chatSheet(id) })   // wave 40: the Community view lists the regular chats
 function twCtx(): TwCtx {
-  return { store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings), actions: appActions, where: whereNow }
+  return {
+    store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings), actions: appActions, where: whereNow,
+    chats: () => chatListRows(st().chats, chatPeople(), { since: dndSince() }).map((r) => ({ id: r.personId, title: r.name, last: r.last, unread: r.unread })),
+  }
 }
 bindTw({
   settings: () => state?.twSettings,
@@ -5074,7 +5174,7 @@ defineAppActions(appActions, {
   modules: () => listModules().map((m) => m.id),
   defaults: () => Object.fromEntries(listModules().map((m) => [m.id, m.enabledByDefault])),
   isEnabled,
-  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(twChanged) },
+  setExtension: (id, on) => { void twRegistry.setEnabled(id, on).then(() => twChanged()) },
   setting: (k) => (k === 'system-tags' ? showSystemTags() : k === 'chats-hidden' ? Boolean(st().chatsHidden) : readTheme(localStorage) === 'dark'),
   setSetting: (k, on) => {
     if (k === 'system-tags') setShowSystemTags(on)
@@ -5082,7 +5182,7 @@ defineAppActions(appActions, {
     else applyTheme(on ? 'dark' : 'light', document.documentElement, localStorage)
     render(); if (settingsShown()) settingsSheet()
   },
-  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(twChanged) },
+  saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(() => twChanged()) },
   newId: () => randomId(8),
   now: () => Date.now(),
 })
@@ -6955,21 +7055,21 @@ function settingsSection(key: string, title: string | (Node | string)[], childre
 }
 
 /** Wave 39: a profile or module switch changed: the bottom row, the screen and Settings follow; modules read once at load ask for one reload. */
-function twChanged(): void {
+function twChanged(after: () => void = settingsSheet): void {
   document.body.dataset.twProfile = profileOf(state?.twSettings)
   applyVariation()
   const s = st()
   if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
   if (screen === Screen.Ext && !twRegistry.views().some((v) => v.id === extViewId)) screen = Screen.Web
-  renderTabs(); render(); settingsSheet()
+  renderTabs(); render(); after()
   if (twRegistry.needsReload().length) toast(S.ext.reload)
 }
 
-function chooseProfile(id: ProfileId): void {
+function chooseProfile(id: ProfileId, after?: () => void): void {
   void twRegistry.setProfile(id).then(() => {
     const preset = profileDef(id, st().twSettings).barPreset
     if (preset) { st().uiBar = applyProfile(st().uiBar, preset); save() }
-    twChanged()
+    twChanged(after)
   })
 }
 
@@ -7084,7 +7184,7 @@ function settingsSheet(): void {
         el('p', { class: 'meta skins-store', 'data-skins-store': '', 'aria-disabled': 'true', title: S.setSkinsStoreHint }, [S.setSkinsStore, el('small', {}, [S.setSkinsStoreHint])]),
       ]),
     ], true),
-    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) })]),
+    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => profileOf(s.twSettings), toast: (m) => toast(m) })]),
     settingsSection('advanced-web', S.setAdvanced, [
     // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
     HAS_MAP_VIEW ? el('label', { class: 'radio', 'data-pin-view': 'map' }, [
@@ -7359,6 +7459,8 @@ function settingsSheet(): void {
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
     ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
+    // Wave 40: Import also stands on its own at the very bottom of Settings.
+    solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),
   ])
   sheet.dataset.kind = 'settings'
   if (settingsQuery) filterSettings(sheet, settingsQuery)
@@ -7941,6 +8043,8 @@ document.body.dataset.twProfile = profileOf(state?.twSettings)
 applyVariation()
 applyImageMode()
 void twRegistry.start().then(renderTabs) // wave 39: a heavy module's view joins the row once it has loaded
+// Wave 40: a connection link may suggest a Variation (#tp=<id>); it applies only on a tap.
+if (linkProfile && profileOf(state?.twSettings) !== linkProfile) toast(S.w40.linkVarOffer(S.var.names[linkProfile]), { onClick: () => chooseProfile(linkProfile, () => undefined) })
 render()
 void refreshOwnPicture()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
