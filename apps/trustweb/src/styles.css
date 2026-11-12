@@ -1740,6 +1740,18 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 .look-pick .radio b{text-decoration:underline}
 .look-pick .radio.on b{text-decoration:none}
 
+/* wave 40 mcp-local */
+.mcp-settings{display:flex; flex-direction:column; gap:8px; min-width:0}
+.mcp-link{text-decoration:underline; align-self:flex-start}
+.mcp-summary{cursor:pointer; text-decoration:underline; font-weight:600}
+.mcp-snippet{margin:6px 0; padding:10px 12px; background:var(--card); border:1.5px solid var(--line); border-radius:12px; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; max-width:100%; box-sizing:border-box}
+.mcp-tool{display:block}
+.mcp-tool-idle{opacity:.6}
+.mcp-server{display:flex; flex-direction:column; gap:6px; padding:10px 12px; background:var(--card); border-radius:14px; min-width:0}
+.mcp-server .field{box-sizing:border-box}
+.mcp-row{display:flex; flex-wrap:wrap; gap:6px}
+.mcp-work{display:flex; flex-direction:column; gap:6px}
+.mcp-person{display:block}
 /* wave 40 photo-rails */
 /* Tools > Images: show / grey out / hide for every picture (image_mode.ts sets body[data-tw-images]) */
 [data-images-mode]{text-decoration:underline; text-underline-offset:3px}
