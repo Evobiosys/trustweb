@@ -76,15 +76,12 @@ try {
     await page.evaluate((r) => { localStorage.setItem('trustweb.v1.me', r); localStorage.setItem('trustweb.ui.webView', 'rings') }, JSON.stringify(record()))
     await page.reload(); await page.addStyleTag({ content: hide }); await page.waitForTimeout(1200)
 
-    // 1. No AI set up: the sparkle opens the chat, which explains and leads to the plans.
-    await page.locator('[data-ai-button]').first().click(); await page.waitForTimeout(500)
+    // 1. No AI set up: the sparkle opens the Your AI sheet at the plans (wave 41 small-ui-e), not the chat.
+    await page.locator('[data-ai-button]').first().click(); await page.waitForTimeout(700)
     const panel = page.locator('[data-assistant-panel]')
-    check(`${name}: sparkle opens the assistant`, await panel.isVisible())
-    check(`${name}: no AI: the chat explains and links to the plans`, await page.locator('[data-assistant-plans]').isVisible())
+    check(`${name}: no AI: the sparkle opens Your AI at the plans`, await page.locator('[data-ai-group="sub"]').isVisible())
+    check(`${name}: no AI: the chat stays closed`, !(await panel.isVisible()))
     await page.screenshot({ path: `${SHOTS}/ai-edit-chat-${name}-1-no-ai.png` })
-    await page.locator('[data-assistant-plans]').click(); await page.waitForTimeout(700)
-    check(`${name}: "Choose your AI plan" opens Settings at the plans`, await page.locator('[data-ai-group="sub"]').isVisible())
-    check(`${name}: the chat steps aside for the plans`, !(await panel.isVisible()))
     await page.keyboard.press('Escape'); await page.waitForTimeout(300)
 
     // 2. With a (mocked) endpoint.

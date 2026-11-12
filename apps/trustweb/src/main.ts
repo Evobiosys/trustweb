@@ -321,7 +321,6 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
 import { aiSettings, bootAi } from './llm_endpoint_view'
-import { aiButtonTarget } from './ai_button'
 import { agentSettings } from './agent_view'
 import { ownChannels } from './channel_readers'
 import { readersBlock } from './channel_readers_view'
@@ -1709,12 +1708,17 @@ function openAdvancedSettings(): void {
   settingsSheet()
 }
 
-/** Wave 37: the Web header's AI button: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
+/** Wave 41: Your AI (Claude plans, Custom, Agent (pi)) as one block. The AI sparkle opens it as its own sheet, Settings shows the same block as its own section "AI". */
+function aiBlock(back: () => void): Node[] {
+  return [...aiSettings({ state: st, save, toast, openSheet, backToSettings: back }), ...agentSettings({ state: st, save })]
+}
+
+/** The AI button: the Your AI sheet (wave 41, screenshot 94df73a3), or the assistant chat once an AI is set up and the assistant is on (wave 40). Asking the web stays on "Ask your web". */
 function openAiButton(): void {
-  // Wave 40 ai-edit-chat: with the assistant switched on, the sparkle opens its chat (which leads to the plans when no AI is set up).
+  // Wave 41 merge: no AI set up -> the Your AI sheet (small-ui-e). AI set up and the assistant on -> its chat (wave 40 ai-edit-chat).
   // Review: running -> at once (no wait behind other modules' loads); still loading -> one open after it, however often tapped meanwhile;
   // its chunk failed (a stale preview build, offline) -> the sparkle's own behaviour below, never a dead button.
-  if (isEnabled('assistant')) {
+  if (isEnabled('assistant') && configured(st().advanced?.ai)) {
     if (twRegistry.isActive('assistant')) { twBus.emit('assistant-open'); return }
     if (assistantPending) return
     assistantPending = true
@@ -1728,11 +1732,9 @@ function openAiButton(): void {
 }
 let assistantPending = false
 
-/** Wave 37: the sparkle without the assistant: Ask with an endpoint, else Settings > Advanced > Your AI at the plan choice. */
+/** Wave 41: the sparkle without the assistant: the Your AI sheet (screenshot 94df73a3), with or without an endpoint. */
 function sparkleFallback(): void {
-  const to = aiButtonTarget(configured(st().advanced?.ai))
-  if (to.kind === 'ask') { openQuery(); return }
-  openSettingsAt(to.anchor)
+  openSheet(aiBlock(sparkleFallback))
 }
 
 /** Opens Settings at that element: its groups and sections unfold and it scrolls into view (Your AI, Variations, Extensions, Theme). */
@@ -7401,8 +7403,6 @@ function settingsSheet(): void {
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
     ...(isEnabled('photos') ? [faceMatchRow(s, save, settingsSheet)] : []),   // wave 40: opt-in, off unless switched on
-    ...aiSettings({ state: st, save, toast, openSheet, backToSettings: () => { sheet.dataset.kind = 'settings'; settingsSheet() } }),
-    ...agentSettings({ state: st, save }),
     ...askWebSettings({ state: st, save }),
     ...(liveDevActive() ? [el('p', { class: 'meta', 'data-dev-record-live': '' }, [liveSyncedAt(persona) ? S.devRecordSynced(liveSyncedAt(persona)!.toTimeString().slice(0, 5)) : S.devRecordNotYet])] : []),
     ...(liveDevActive() ? [editStreamLine()] : []),
@@ -7502,6 +7502,8 @@ function settingsSheet(): void {
     keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
+    // Wave 41: AI is a section of its own (it sat inside Advanced); same block as the AI sparkle's sheet.
+    el('div', { 'data-settings-group': 'ai' }, [settingsSection('ai', S.setSecAi, aiBlock(() => { sheet.dataset.kind = 'settings'; settingsSheet() }))]),
     ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
     // Wave 40: Import also stands on its own at the very bottom of Settings.
     solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),

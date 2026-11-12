@@ -46,7 +46,7 @@ import { singleOrDouble } from './press'
 import { contextPress } from './context_press'
 import { labelScale, dragRingTo } from './ring_spacing'
 import { clearDots, labelSize, type DotDisc } from './dot_clear'
-import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
+import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, minZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
 import { createCountdown } from './merge_countdown'
 import { HOLD_MS, type HoldEvent, hitDot, holdEnabled, holdStart, holdStep } from './dot_merge'
@@ -241,7 +241,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     for (ringsGeo = ringsGeometry(counts, angles, k, custom); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k, custom)) k = C / ringsGeo.extent
     ringsK = k
     const colourTags = loadColourTags()
-    const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
+    const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', 'data-rings-extent': String(ringsGeo.extent * k), ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
     const at = new Map<string, { x: number; y: number }>()
     let dragged = false
     if (!desk) {
@@ -680,20 +680,27 @@ export function createWebView(deps: WebViewDeps): WebView {
       layer.querySelector<HTMLElement>('.rings-wrap')?.setAttribute('data-rings-zoom', String(z.k))
     }
     apply(ringsZoom)
-    const view = (): ZoomView => ({ w: layer.offsetWidth, h: layer.offsetHeight, cw: clip.clientWidth, ch: clip.clientHeight })
+    // Wave 41: zooming out stops where the outermost ring fits the clip with a small margin (minZoom); phones keep 1.
+    const view = (): ZoomView => ({ w: layer.offsetWidth, h: layer.offsetHeight, cw: clip.clientWidth, ch: clip.clientHeight, minK: minZoom(Number(layer.querySelector<HTMLElement>('.rings-wrap')?.dataset.ringsExtent ?? 0), clip.clientWidth, clip.clientHeight) })
+    /** The rings centred at zoom k (the first fit, and the floor: a zoom around the pointer would leave the rings off-centre). */
+    const centred = (k: number): RingsZoom => {
+      const wrap = layer.querySelector<HTMLElement>('.rings-wrap')
+      return wrap ? zoomAt(RINGS_ZOOM_HOME, k, wrap.offsetLeft + wrap.offsetWidth / 2, wrap.offsetTop + wrap.offsetHeight / 2, view()) : RINGS_ZOOM_HOME
+    }
     // Wave 25: without the phone frame the rings fit the window once (after the layer is in the DOM); a later home (k = 1) is a copy, so it is not refit.
     if (ringsZoom === RINGS_ZOOM_HOME && currentLayout() === 'trustweb' && !solo) {
       requestAnimationFrame(() => {
         const wrap = layer.querySelector<HTMLElement>('.rings-wrap')
         if (!wrap || ringsZoom !== RINGS_ZOOM_HOME || !clip.isConnected) return
         const k = fitZoom(wrap.offsetWidth, wrap.offsetHeight, clip.clientWidth, clip.clientHeight)
-        if (k > 1) apply(zoomAt(ringsZoom, k, wrap.offsetLeft + wrap.offsetWidth / 2, wrap.offsetTop + wrap.offsetHeight / 2, view()))
+        if (k > 1) apply(centred(k))
       })
     }
     const zoom = (factor: number, e: { clientX: number; clientY: number }): void => {
       if (ringsZoom.k === 1) clip.scrollTop = 0
       const box = layer.getBoundingClientRect()
-      apply(zoomAt(ringsZoom, factor, e.clientX - box.left + ringsZoom.x, e.clientY - box.top + ringsZoom.y, view()))
+      const v = view(), next = zoomAt(ringsZoom, factor, e.clientX - box.left + ringsZoom.x, e.clientY - box.top + ringsZoom.y, v)
+      apply(next.k === v.minK && v.minK > 1 ? centred(next.k) : next)   // on the floor the rings sit centred
     }
     clip.addEventListener('wheel', (e) => {
       if (!e.ctrlKey || (e.target as HTMLElement).closest('[data-own-zoom]')) return
@@ -754,7 +761,8 @@ export function createWebView(deps: WebViewDeps): WebView {
     clip.addEventListener('dblclick', (e) => {
       if (ringsZoom.k === 1 || (e.target as HTMLElement).closest(skip)) return
       clearTimeout(addTimer)
-      apply(RINGS_ZOOM_HOME)
+      const wrap = layer.querySelector<HTMLElement>('.rings-wrap')
+      apply(centred(Math.max(view().minK ?? 1, wrap ? fitZoom(wrap.offsetWidth, wrap.offsetHeight, clip.clientWidth, clip.clientHeight) : 1)))   // home = the first fit, never under the floor
     })
   }
 

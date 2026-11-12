@@ -161,12 +161,14 @@ try {
     ;({ ctx, page } = await fresh(vp, { advanced: { ai: { baseUrl: 'http://127.0.0.1:1', model: 'm', preset: 'custom' } }, twSettings: { extensions: { assistant: false } }, uiBar: { order: ['web', 'chat', 'record', 'events', 'inventory', 'ask'], orderVersion: 2, profile: 'custom' } }))
     await page.locator('[data-pid="p2"]').last().click(); await page.waitForTimeout(500)
     await page.locator('[data-ai-button]').click(); await page.waitForTimeout(500)
-    check(`${w}: assistant off: the sparkle opens the ask even from a card page (endpoint set)`, (await page.locator('.query-dock').count()) === 1)
+    // wave 41 small-ui-e: the sparkle opens the Your AI sheet (no jump to Ask), also from a card page and with an endpoint set
+    check(`${w}: assistant off: the sparkle opens Your AI even from a card page (endpoint set)`, (await page.locator('.sheet.on [data-ai-group="sub"]').count()) === 1)
+    await page.keyboard.press('Escape'); await page.waitForTimeout(200)
     for (const tab of ['chat', 'events', 'inventory', 'web']) {
       await page.locator(`button.tab[data-go="${tab}"]`).click(); await page.waitForTimeout(400)
       await page.locator('[data-ai-button]').click(); await page.waitForTimeout(400)
-      check(`${w}: assistant off: sparkle answers on ${tab}`, (await page.locator('.query-dock').count()) === 1)
-      if (tab !== 'web') await page.locator('.query-dock .x').click().catch(() => {})
+      check(`${w}: assistant off: sparkle answers on ${tab}`, (await page.locator('.sheet.on [data-ai-group="sub"]').count()) === 1)
+      await page.keyboard.press('Escape'); await page.waitForTimeout(200)
     }
     await ctx.close()
     ;({ ctx, page } = await fresh(vp))
