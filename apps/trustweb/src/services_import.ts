@@ -44,7 +44,7 @@ export interface PlanOptions { me: string; now: number; dayFirst?: boolean }
 const IDS_KEPT = 20
 export const SERVICE_LABEL: Record<string, string> = {
   whatsapp: 'WhatsApp', linkedin: 'LinkedIn', vcard: 'Phone contacts', 'google-csv': 'Google contacts', 'facebook-json': 'Facebook',
-  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts', mcp: 'MCP server',
+  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts', mcp: 'MCP server', obsidian: 'Obsidian vault', 'obsidian-ai': 'Obsidian vault (found by AI)',
 }
 export const countsLine = (counts: Record<string, number>): string =>
   Object.entries(counts).map(([s, n]) => `${SERVICE_LABEL[s] ?? s} ${n}`).join(', ')
@@ -61,7 +61,8 @@ const reachOf = (p: Person): string[] => [
 ].filter(Boolean)
 
 const sigOf = (r: Omit<ServiceRow, 'sig'>, c: ImportedContact): string =>
-  fingerprint(JSON.stringify([r.name, c.org, c.title, c.since, c.emails, c.phones, r.n365, r.out, r.in, r.lastTs]))
+  // Wave 41: a vault note's text and tags are its content, so an edit counts as a change (other sources keep their old signature).
+  fingerprint(JSON.stringify([r.name, c.org, c.title, c.since, c.emails, c.phones, r.n365, r.out, r.in, r.lastTs, ...(c.source === ContactSource.Obsidian || c.source === ContactSource.ObsidianAi ? [c.note, c.labels] : [])]))
 
 /** key -> signature of the newest earlier row with that key. */
 function knownSigs(s: State): Map<string, string> {
@@ -197,6 +198,7 @@ function fillFrom(p: Person, r: ServiceRow, reach: boolean): Record<string, stri
   put('organization', r.org)
   put('job title', r.title)
   put('birthday', r.birthday)
+  put('obsidianNote', r.obsidianNote)
   put('note', r.note)
   if (r.labels?.length) put('labels', r.labels.join(', '))
   if (!Object.keys(f).length) delete p.fields
