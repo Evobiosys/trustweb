@@ -13,7 +13,7 @@ import type { AppState } from '../../model'
 import { loadColourTags } from '../../colour_tags'
 import type { TwCtx } from '../tw_registry'
 import {
-  MODULE_ID, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
+  MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
   joinSpace, leaveSpace, moveInView, navItems, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
 } from './community_model'
 import { legacyLinksPatch } from './community_data'
@@ -287,9 +287,12 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       shownChat = key
     }
     if (ui.chat) fillChats()
+    ctx.bus.emit('community-section', { nav: ui.nav, chat: ui.chat })
   }
 
   adoptLegacyLinks()
+  // Wave 41 (community-mode): the app's Community bottom row opens a section, and learns which one is showing.
+  const offGo = ctx.bus.on('community-go', (n) => { if ((NAV as readonly unknown[]).includes(n)) go(n as NavId) })
   draw()
-  return () => { root.replaceChildren(); box.remove() }
+  return () => { offGo(); root.replaceChildren(); box.remove() }
 }

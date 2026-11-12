@@ -10,8 +10,13 @@ export type BuiltinProfileId = 'full' | 'iyg-support' | 'reader' | 'note-taker'
 export type CustomProfileId = `custom-${string}`
 export type ProfileId = BuiltinProfileId | CustomProfileId
 
+/** Wave 41: the whole-app interface (ext/community_mode): today's shell, or the Community module as the shell. */
+export type UiInterface = 'personal' | 'community'
+
 export interface TwSettings {
   profile?: ProfileId
+  /** Wave 41: the interface the app opens in, per profile (absent = personal). */
+  interfaces?: Partial<Record<ProfileId, UiInterface>>
   extensions?: Record<string, boolean>
   byProfile?: Partial<Record<string, Record<string, boolean>>>
   /** Wave 40: variations made by talking to the assistant, listed under Settings > Variations after the built-in ones. */
@@ -130,5 +135,5 @@ export function switchProfile(tw: TwSettings | undefined, to: ProfileId, default
   if (from === to && tw?.profile === to) return tw
   const byProfile: NonNullable<TwSettings['byProfile']> = { ...tw?.byProfile, [from]: { ...tw?.extensions } }
   const own = Object.fromEntries(Object.entries(profileDef(to, tw).modules).filter(([id]) => id in defaults))
-  return { profile: to, extensions: { ...own, ...byProfile[to] }, byProfile, ...(tw?.custom ? { custom: tw.custom } : {}) }
+  return { ...tw, profile: to, extensions: { ...own, ...byProfile[to] }, byProfile }
 }
