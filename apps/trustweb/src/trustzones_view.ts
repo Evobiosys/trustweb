@@ -4,6 +4,7 @@ import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { type ColourTag, saveColourTags, setShowSystemTags, showSystemTags } from './colour_tags'
 import { chipInput } from './chip_input'
+import { tagPill } from './components/tag_pill'
 import { candidates, initial, withChip, withoutChip } from './share_page'
 import { createPerson, createTag, suggestOrCreate, tagPerson, untagPerson } from './tag_create'
 import type { CreateRow } from './tag_create'
@@ -126,9 +127,13 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
     })
     return el('div', { class: 'zone-chip-row', 'data-zone-chip-row': r }, [
       el('b', {}, [name]),
-      el('div', { class: 'chips' }, page()[r].map((id) => el('button', {
-        class: 'chip on', 'data-zone-chip': id, 'aria-label': S.shareChipRemove(label(id)), onclick: () => store(withoutChip(page(), r, id)),
-      }, [label(id) + ' ×']))),
+      el('div', { class: 'chips' }, page()[r].map((id) => {
+        const tag = id.startsWith('tag:') ? d.tags.find((x) => x.id === id.slice(4)) : undefined
+        const attrs = { 'data-zone-chip': id, 'aria-label': S.shareChipRemove(label(id)) }
+        const remove = (): void => store(withoutChip(page(), r, id))
+        // Wave 40: a tag chip is the tag pill (group tags with their ring).
+        return tag ? tagPill(tag, { class: 'chip on', attrs, text: (tag.label ?? tag.id) + ' ×', onclick: remove }) : el('button', { class: 'chip on', ...attrs, onclick: remove }, [label(id) + ' ×'])
+      })),
       input, hits,
     ])
   }
