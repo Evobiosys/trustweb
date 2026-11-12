@@ -6,6 +6,7 @@ import { EventEmitter } from "node:events";
 import { WebSocketServer, WebSocket } from "ws";
 import type { TrustLevel } from "@resource-web/protocol";
 import type { Daemon } from "../daemon/daemon.js";
+import type { VrcDiError, VrcDiService } from "./vrc_di_service.js";
 import { buildGuestListings, buildListingApiView, buildLoanApiView, buildReceivedListingApiView, buildThreadMessageApiView } from "./sanitize.js";
 import { InMemoryConnectionRecordStore, type ConnectionRecordStore } from "../store/connection_store.js";
 
@@ -145,6 +146,8 @@ export interface ServerExtras {
   didcommInbound?: (rawBody: string) => Promise<void>;
   /** Returns this daemon's signed VRCs (served at GET /api/trust/export?format=vrc). */
   trustExport?: () => unknown[];
+  /** Keyring-compatible VRC export/import (GET /api/trust/export?peer=, POST /api/trust/import); absent without a DID identity. */
+  vrcDi?: VrcDiService;
   /**
    * Bind host (Task 5). Defaults to `process.env.API_HOST ?? "127.0.0.1"`
    * inside `startServer` when omitted — kept in this options bag (rather
@@ -234,13 +237,23 @@ const CORS_METHOD_HEADERS: Record<string, string> = {
 /** Matches http(s)://localhost[:port] and http(s)://127.0.0.1[:port] — the "localhost" CORS allowlist mode. */
 const LOCALHOST_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
-async function readTextBody(req: IncomingMessage): Promise<string> {
+class BodyTooLarge extends Error {}
+
+async function readTextBody(req: IncomingMessage, maxBytes = Infinity): Promise<string> {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > maxBytes) throw new BodyTooLarge(`body exceeds ${maxBytes} bytes`);
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks).toString("utf8");
 }
+
+/** Cap for POST /api/trust/import: a VRC is a few KB; anything larger is RDF-canonicalization CPU for an attacker. */
+const IMPORT_MAX_BODY_BYTES = 64 * 1024;
+const DISPLAY_MAX_CHARS = 80;
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const raw = await readTextBody(req);
@@ -280,6 +293,20 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
         : Array.isArray(corsConfig)
           ? corsConfig
           : corsConfig.split(",").map((s) => s.trim()).filter(Boolean);
+
+  /**
+   * The VRC routes take input from any web page that can reach localhost (default CORS is "*"). With no auth token a
+   * request carrying an Origin is refused unless it is the daemon's own origin (a loopback host or the configured bind
+   * host, same host:port as the Host header). Requests without Origin (curl, other daemons) are not browsers: they pass.
+   */
+  function foreignOrigin(req: IncomingMessage): boolean {
+    const origin = req.headers.origin;
+    if (authToken !== undefined || origin === undefined) return false;
+    const hostHeader = req.headers.host ?? "";
+    const hostname = hostHeader.replace(/:\d+$/, "");
+    const own = LOOPBACK_HOSTNAMES.has(hostname) || hostname === host;
+    return !own || origin !== `http://${hostHeader}`;
+  }
 
   /**
    * Base CORS headers for a response. In wildcard mode (the default) this is
@@ -389,6 +416,11 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
     const authError = checkAuthToken(req);
     if (authError !== undefined) {
       sendJson(res, 401, { error: authError });
+      return;
+    }
+
+    if ((path === "/api/trust/export" || path === "/api/trust/import") && foreignOrigin(req)) {
+      sendJson(res, 403, { error: "cross-origin request refused: set AGENT_DAEMON_AUTH_TOKEN to allow other origins" });
       return;
     }
 
@@ -860,10 +892,26 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
       return;
     }
 
-    // GET /api/trust/export?format=vrc — this daemon's signed VRCs.
+    // GET /api/trust/export?peer=<id>[&subject=<did:peer:0>] — one edge as a Keyring-compatible VRC (Data Integrity).
+    // GET /api/trust/export?format=vrc — this daemon's signed VRCs (legacy envelope).
     if (method === "GET" && path === "/api/trust/export") {
+      const peer = url.searchParams.get("peer");
+      if (peer !== null) {
+        if (!extras.vrcDi) {
+          sendJson(res, 404, { error: "VRC export not available for this transport" });
+          return;
+        }
+        try {
+          sendJson(res, 200, await extras.vrcDi.exportFor(peer, url.searchParams.get("subject") ?? undefined));
+        } catch (err) {
+          const status = (err as Partial<VrcDiError>).status; // type-only import keeps the Data Integrity libs out of this module
+          if (status === undefined) throw err;
+          sendJson(res, status, { error: (err as Error).message });
+        }
+        return;
+      }
       if (url.searchParams.get("format") !== "vrc") {
-        badRequest(res, "only format=vrc is supported");
+        badRequest(res, "peer=<id> or format=vrc is required");
         return;
       }
       if (!extras.trustExport) {
@@ -871,6 +919,45 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
         return;
       }
       sendJson(res, 200, { credentials: extras.trustExport() });
+      return;
+    }
+
+    // POST /api/trust/import {vrc, display?} — verifies offline, then asks the owner (pending connect card, I4); no edge yet.
+    if (method === "POST" && path === "/api/trust/import") {
+      if (!extras.vrcDi) {
+        sendJson(res, 404, { error: "VRC import not available for this transport" });
+        return;
+      }
+      if (!/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? "")) {
+        sendJson(res, 415, { error: "Content-Type must be application/json" });
+        return;
+      }
+      let body: { vrc?: unknown; display?: unknown };
+      try {
+        body = JSON.parse(await readTextBody(req, IMPORT_MAX_BODY_BYTES)) as typeof body;
+      } catch (err) {
+        if (err instanceof BodyTooLarge) sendJson(res, 413, { error: err.message });
+        else badRequest(res, "body must be JSON");
+        return;
+      }
+      if (typeof body !== "object" || body === null || body.vrc === undefined) {
+        badRequest(res, "vrc is required");
+        return;
+      }
+      let result;
+      try {
+        result = await extras.vrcDi.checkImport(body.vrc);
+      } catch (err) {
+        const status = (err as Partial<VrcDiError>).status;
+        if (status === undefined) throw err;
+        sendJson(res, status, { error: (err as Error).message });
+        return;
+      }
+      // eslint-disable-next-line no-control-regex
+      const cleaned = typeof body.display === "string" ? body.display.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").slice(0, DISPLAY_MAX_CHARS).trim() : "";
+      const display = cleaned.length > 0 ? cleaned : `Keyring contact …${result.issuer.slice(-6)}`;
+      const card = daemon.offerVrcConnect(result.issuer, display);
+      sendJson(res, 200, { valid: true, issuer: result.issuer, subject: result.subject, card_id: card.card_id, state: card.state });
       return;
     }
 

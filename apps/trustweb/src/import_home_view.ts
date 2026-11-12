@@ -21,6 +21,7 @@ import { setSourceHidden, sourceCount, sourceHidden } from './sources'
 import { S } from './strings'
 import { unsortedCount } from './unsorted_count'
 import { alphaSub } from './alpha_heading'
+import { isEnabled } from './ext/registry'
 
 const T = S.imp39
 const u = { style: 'text-decoration:underline;cursor:pointer' }
@@ -92,6 +93,17 @@ export function openImportHome(base: ServicesHooks): void {
         el('button', { class: 'btn btn-ghost', 'data-import-cancel': '', onclick: () => { pending = null; draw() } }, [p.plan.add.length ? S.impCancel : S.close]),
       ])) : null,
     ])
+  }
+
+  // ---- Obsidian vault (wave 41): the page and its code load only when the module is on ----
+  function obsidian(): HTMLElement[] {
+    return [
+      el('h4', { class: 'eyebrow' }, [S.obsidian.title]),
+      el('p', { class: 'meta' }, [S.obsidian.importLead]),
+      isEnabled('obsidian')
+        ? el('button', { class: 'btn btn-ghost', 'data-import-obsidian': '', onclick: () => void import('./ext/obsidian/obsidian_body').then((m) => m.openObsidian(h)) }, [S.obsidian.importOpen])
+        : el('p', { class: 'meta', 'data-import-obsidian-off': '' }, [S.obsidian.importOff]),
+    ]
   }
 
   // ---- Tana ----
@@ -182,6 +194,7 @@ export function openImportHome(base: ServicesHooks): void {
       doneBox,
       ...contactsSection(),
       ...resources(),
+      ...obsidian(),
       ...tana(),
       ...earlier(),
     )

@@ -16,11 +16,12 @@ import type { DupePair } from './import_curate'
 import { Ring } from './model'
 import type { AppState, ServiceRow } from './model'
 import type { Pages } from './page_view'
-import { bulkAccept, decide, pendingProposals } from './services_import'
+import { bulkAccept, bulkOk, decide, pendingProposals } from './services_import'
 import type { Pending } from './services_import'
 import { S } from './strings'
-import { bulkAcceptable } from './zone_proposals'
 import { alphaSub } from './alpha_heading'
+import type { Actions } from './actions'
+import { obsidianLink } from './ext/obsidian/obsidian_card'
 
 export interface CurateHooks {
   state: () => AppState
@@ -29,8 +30,10 @@ export interface CurateHooks {
   /** After people were added or taken away: the web redraws. */
   changed: () => void
   pages: Pages
-  /** The existing "Your AI" entry (the stub button only opens it). */
-  openAi?: () => void
+  /** The existing "Your AI" entry; wave 40: given the row, the assistant looks that person up. */
+  openAi?: (row?: ServiceRow) => void
+  /** Wave 40 ai-edit-chat: Accept, Leave, Change and adding a tag go through the action registry (undoable, seen by the assistant). */
+  actions?: Actions
 }
 
 /** The zones the owner may move a person to on the Curate page (the proposal itself never goes above Friend). */
@@ -92,7 +95,7 @@ function connectBox(h: CurateHooks, o: { chips: readonly string[]; onAdd: (chip:
 }
 
 /** Writes the tag definitions the rows need (a label -> a colour tag, the import's system tag) and returns the label -> id map decide() uses. */
-function ensureTags(h: CurateHooks, rows: readonly { batchId: string; row: ServiceRow }[]): (label: string) => string {
+export function ensureTags(h: Pick<CurateHooks, 'state'>, rows: readonly { batchId: string; row: ServiceRow }[]): (label: string) => string {
   const { tags, tagOf, created } = defineLabelTags(loadColourTags(), rows.flatMap((x) => rowTags(x.row)))
   if (created.length) saveColourTags(tags)
   for (const id of new Set(rows.map((x) => (h.state().serviceImports ?? []).find((b) => b.id === x.batchId)?.tag).filter((t): t is string => Boolean(t)))) defineSystemTag(id)
@@ -120,7 +123,7 @@ export function curatePage(h: CurateHooks): void {
     const { useful, unnamed } = sortPending(filtered)
     const shownRows = [...useful, ...(ui.unnamedOpen ? unnamed : [])]
     const tags = tagCounts(all)
-    const acq = all.filter((x) => bulkAcceptable(x.proposal) && !isUnnamed(x.row))
+    const acq = all.filter((x) => bulkOk(x) && !isUnnamed(x.row))
     const free = acq.length
     const anyHistory = all.some((x) => hasHistory(x.row))
     const selRows = rowsOf(ui.sel, all)
@@ -138,7 +141,7 @@ export function curatePage(h: CurateHooks): void {
         ]),
         el('div', { class: 'cur-bar' }, [
           free ? el('button', { class: 'btn btn-electric', 'data-svc-bulk': String(free), onclick: () => { const n = acceptAllAsAcquaintances(h.state(), Date.now(), () => randomId(8), ensureTags(h, acq)); accepted(n); draw() } }, [T.acceptAcq(free)]) : null,
-          anyHistory ? el('button', { class: 'btn btn-ghost', 'data-svc-bulk-flags': '', onclick: () => { const n = bulkAccept(h.state(), Date.now(), () => randomId(8), ensureTags(h, all.filter((x) => bulkAcceptable(x.proposal)))); accepted(n); draw() } }, [S.svcAcceptAll(all.filter((x) => bulkAcceptable(x.proposal)).length)]) : null,
+          anyHistory ? el('button', { class: 'btn btn-ghost', 'data-svc-bulk-flags': '', onclick: () => { const n = bulkAccept(h.state(), Date.now(), () => randomId(8), ensureTags(h, all.filter(bulkOk))); accepted(n); draw() } }, [S.svcAcceptAll(all.filter(bulkOk).length)]) : null,
         ]),
         el('p', { class: 'meta' }, [T.acceptAcqHint]),
         el('div', { class: 'cur-bar' }, [
@@ -210,7 +213,10 @@ export function curatePage(h: CurateHooks): void {
   function rowView(x: Pending, pickTag: (label: string) => void): HTMLElement {
     const { batchId, row, proposal: p } = x
     const act = (choice: Parameters<typeof decide>[3]): void => {
-      decide(h.state(), batchId, row.key, choice, Date.now(), () => randomId(8), ensureTags(h, [x]))
+      if (h.actions) {
+        if (choice.do === 'change') h.actions.do('row-set-ring', { row: row.key, ring: choice.ring })
+        h.actions.do(choice.do === 'leave' ? 'leave-row' : 'accept-row', { row: row.key })
+      } else decide(h.state(), batchId, row.key, choice, Date.now(), () => randomId(8), ensureTags(h, [x]))
       h.save()
       if (choice.do !== 'leave') { h.changed(); h.toast(S.svcAccepted(row.name)) }
       draw()
@@ -221,6 +227,8 @@ export function curatePage(h: CurateHooks): void {
     return el('div', { class: 'conn-row cur-row', style: 'flex-direction:column;align-items:stretch;gap:6px', 'data-svc-row': row.key }, [
       el('label', { class: 'cur-name' }, [el('input', { type: 'checkbox', 'data-cur-check': row.key, ...(ui.sel.has(row.key) ? { checked: '' } : {}), 'aria-label': row.name, onchange: (e: Event) => { if ((e.target as HTMLInputElement).checked) ui.sel.add(row.key); else ui.sel.delete(row.key); draw() } }), el('b', {}, [row.name])]),
       rowContact(row),
+      row.ai ? el('span', { class: 'chip cur-ai', 'data-cur-ai-chip': '' }, [S.obsidian.aiChip]) : null,
+      obsidianLink(h.state(), row.obsidianNote ?? (row.ai ? row.file : undefined)),
       tags.length ? el('div', { class: 'chips cur-pills', 'data-cur-pills': '' }, tags.map((l) => el('button', { class: 'chip cur-pill' + (l === ui.tag ? ' on' : ''), 'data-cur-pill': l, ...u, onclick: () => pickTag(l) }, [`#${l}`]))) : null,
       el('span', { class: 'meta' }, history ? [`${S.ringLabel[row.ring ?? p.ring]} · ${S.svcScore(p.score)} · `, el('i', {}, [S.svcInferred])] : [`${S.ringLabel[row.ring ?? p.ring]} · `, el('i', { 'data-cur-nohistory': '' }, [T.noHistory])]),
       ...(history ? [el('details', { class: 'meta' }, [
@@ -256,19 +264,21 @@ export function curatePage(h: CurateHooks): void {
     return el('details', { class: 'meta cur-adv', 'data-cur-advanced': row.key, ...(ui.open.has(row.key) ? { open: '' } : {}), ontoggle: (e: Event) => { if ((e.target as HTMLDetailsElement).open) ui.open.add(row.key); else ui.open.delete(row.key) } }, [
       el('summary', { style: 'text-decoration:underline;cursor:pointer;display:inline' }, [T.notes]),
       name.box, emails.box, phones.box,
-      tagBox({ title: T.tags, known, selected: rowTags(row), attr: row.key, onAdd: (l) => keep(() => bulkAddLabels([row], [l])), onRemove: (l) => keep(() => bulkRemoveLabels([row], [l])) }),
+      tagBox({ title: T.tags, known, selected: rowTags(row), attr: row.key, onAdd: (l) => keep(() => (h.actions ? h.actions.do('row-add-tag', { row: row.key, tag: l }) : bulkAddLabels([row], [l]))), onRemove: (l) => keep(() => bulkRemoveLabels([row], [l])) }),
       el('label', { class: 'grp-field' }, [el('span', { class: 'chips-lbl' }, [T.ring]), ring]),
       note.box,
       connectBox(h, { chips: row.connected ?? [], attr: row.key, onAdd: (c) => keep(() => editRow(row, { connected: [...(row.connected ?? []), c] })), onRemove: (c) => keep(() => editRow(row, { connected: (row.connected ?? []).filter((x) => x !== c) })) }),
       el('div', { class: 'cur-bar' }, [
         el('button', { class: 'btn btn-electric btn-sm', 'data-cur-save': row.key, onclick: () => { collect(); h.save(); h.toast(T.saved); ui.open.add(row.key); draw() } }, [T.saveRow]),
-        el('button', { class: 'btn btn-ghost btn-sm', 'data-cur-ai': row.key, title: T.aiHint, ...u, onclick: () => h.openAi?.() }, [T.aiMore]),
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-cur-ai': row.key, title: T.aiHint, ...u, onclick: () => h.openAi?.(row) }, [T.aiMore]),
       ]),
     ])
   }
 
   draw()
   h.pages.open(S.svcCuratePage, [top, bulk, list, foot], 'import-curate')
+  // Wave 40: a change the assistant makes (or undoes) shows here at once; the page stops listening once it is closed.
+  const off = h.actions?.onChange(() => { if (list.isConnected) draw(); else off?.() })
 }
 
 /** One side of a pair: what the owner needs to tell two people apart. */

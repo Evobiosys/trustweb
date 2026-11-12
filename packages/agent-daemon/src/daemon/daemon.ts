@@ -836,28 +836,43 @@ export class Daemon {
    * card (latest request_id/display) rather than piling up new ones.
    */
   private async handleConnect(from: string, env: Extract<Envelope, { type: "CONNECT" }>): Promise<void> {
+    this.recordInboundConnect(from, env.request_id, env.body.display, `${env.body.display} wants to connect (they scanned your code)`, env.body.level, env.body.relay);
+  }
+
+  /**
+   * A VRC from a Keyring-style wallet verified (vrc_di.ts): surface it as the same pending inbound connect card a
+   * scanned code produces. The VRC proves "this relationship key signed this", nothing more, so it only ASKS (I4);
+   * the edge forms when the owner accepts. A key-only did:peer:0 has no endpoint, so no CONNECT_ACK is sent for it.
+   */
+  offerVrcConnect(issuerDid: string, display: string): ConnectRecord {
+    // I9: a stranger's VRC asks for the lowest level; the owner can raise it on accept
+    return this.recordInboundConnect(issuerDid, randomUUID(), display, `${display} sent a Keyring-compatible VRC (self-asserted, no witness)`, "contact");
+  }
+
+  private recordInboundConnect(from: string, requestId: string, display: string, what: string, level?: TrustLevel, relay?: string): ConnectRecord {
     const existing = this.store.getConnectByPeer(from, "inbound");
-    const cardId = existing && existing.state === "pending" ? existing.card_id : randomUUID();
+    const dup = existing !== undefined && existing.state === "pending";
     const record: ConnectRecord = {
-      card_id: cardId,
-      request_id: env.request_id,
+      card_id: dup ? existing.card_id : randomUUID(),
+      request_id: requestId,
       direction: "inbound",
       peer: from,
-      display: env.body.display,
-      requested_level: env.body.level,
-      relay: env.body.relay,
+      display,
+      requested_level: level,
+      relay,
       state: "pending",
       created_at: existing?.created_at ?? this.clock.now().toISOString(),
     };
     this.store.putConnect(record);
-    logOwner(
-      this.store,
-      this.clock,
-      env.request_id,
-      existing && existing.state === "pending" ? "connect_received_dup" : "connect_received",
-      `${env.body.display} wants to connect (they scanned your code) — peer ${from}. Awaiting owner decision.`
-    );
+    logOwner(this.store, this.clock, requestId, dup ? "connect_received_dup" : "connect_received", `${what} — peer ${from}. Awaiting owner decision.`);
     this.notifyChange();
+    return record;
+  }
+
+  /** CONNECT_ACK to the connecting peer; a key-only relationship DID (did:peer:0) has no endpoint to answer to. */
+  private async ackConnect(card: ConnectRecord, accepted: boolean): Promise<void> {
+    if (card.peer.startsWith("did:peer:0")) return;
+    await this.transport.send(card.peer, connectAckEnvelope(card.request_id, this.clock.now(), accepted ? { accepted, display: this.cfg.personaName } : { accepted }));
   }
 
   /**
@@ -877,7 +892,7 @@ export class Daemon {
     await this.addTrust({ peer: card.peer, display: card.display, level: finalLevel });
     card.state = "accepted";
     this.store.putConnect(card);
-    await this.transport.send(card.peer, connectAckEnvelope(card.request_id, this.clock.now(), { accepted: true, display: this.cfg.personaName }));
+    await this.ackConnect(card, true);
     logOwner(
       this.store,
       this.clock,
@@ -904,7 +919,7 @@ export class Daemon {
 
     card.state = "declined";
     this.store.putConnect(card);
-    await this.transport.send(card.peer, connectAckEnvelope(card.request_id, this.clock.now(), { accepted: false }));
+    await this.ackConnect(card, false);
     logOwner(this.store, this.clock, card.request_id, "connect_declined", `Declined connect from ${card.display} (${card.peer}); no edge formed, gentle CONNECT_ACK sent.`);
     this.notifyChange();
   }

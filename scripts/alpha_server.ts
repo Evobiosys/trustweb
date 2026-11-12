@@ -57,6 +57,7 @@ import { OllamaChatClient, OllamaEmbedClient } from "../packages/agent-daemon/sr
 import { DEFAULT_MATCH_THRESHOLD } from "../packages/agent-daemon/src/matcher/matcher.js";
 import { Daemon, type DaemonConfig } from "../packages/agent-daemon/src/daemon/daemon.js";
 import { startServer, type StartedServer } from "../packages/agent-daemon/src/api/server.js";
+import { createVrcDiService, FileRelationshipKeyStore } from "../packages/agent-daemon/src/api/vrc_di_service.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
@@ -255,6 +256,7 @@ export async function bootPersonas(personas: PersonaConfig[], opts: BootOptions)
           .filter((edge) => new Date(edge.expires_at).getTime() > now)
           .map((edge) => issueVrc(identity, { peerDid: edge.peer, relationship: "trusted" }));
       },
+      vrcDi: createVrcDiService({ store, keys: FileRelationshipKeyStore.open(join(personaDir, "relationships.json")) }),
       // Every persona's card advertises the shared mediator's DID (Task 10) —
       // a peer resolves it via resolveDidPeer, exactly like any other DID.
       // `relay_url` (Task 5) additionally exposes the mediator's HTTP base

@@ -22,6 +22,12 @@ export enum ContactSource {
   GenericCsv = 'generic-csv',
   /** Google People API (Connect Google, OAuth in the browser; wave 33). */
   GoogleApi = 'google-api',
+  /** People read through another service's MCP server (wave 40, ext/mcp-local). */
+  Mcp = 'mcp',
+  /** Obsidian vault notes (wave 41): a note under People/Contacts, a person tag or `type: person`. */
+  Obsidian = 'obsidian',
+  /** Obsidian vault, people a model found in any note (wave 41); the owner checks every one. */
+  ObsidianAi = 'obsidian-ai',
 }
 
 export interface ImportedContact {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Drafting through the person's OWN model endpoint (Settings > Advanced > Your AI). OpenAI-compatible chat completions only, no vendor
+ * Drafting through the person's OWN model endpoint (Settings > AI). OpenAI-compatible chat completions only, no vendor
  * SDK. The key goes to the configured endpoint and nowhere else; it is never logged.
  */
 import type { AiEndpoint } from './model'
@@ -19,7 +19,7 @@ export const PRESETS = {
   custom: { baseUrl: '', model: '' },
 } as const
 
-export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) =>
+export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal; redirect?: 'error'; credentials?: 'omit'; referrerPolicy?: 'no-referrer' }) =>
   Promise<{ ok: boolean; status: number; json: () => Promise<unknown>; text?: () => Promise<string> }>
 
 /** Drafting is on only with a base URL and a model. */

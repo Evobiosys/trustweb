@@ -9,6 +9,7 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
+import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
@@ -1139,6 +1140,8 @@ export interface AppState {
   profile?: MyProfile
   /** Wave 36 (group_fit.ts): groups I could join or help. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED), never sent. Absent: none. */
   groups?: TwGroup[]
+  /** Wave 40 (relations_model.ts): what I said about how two of my contacts relate (a kind, or none). THIS DEVICE ONLY (sync_core SYNC_EXCLUDED), never sent. Absent: nothing said. */
+  relations?: StatedRelation[]
   /** Wave 20 (profile.ts autoSendRank): peer id -> the widest zone reach whose profile slice already went to that peer automatically. */
   autoSentRank?: Record<string, number>
   /** Wave 20: Settings "Share my profile when we connect". Absent: on; only true (off) is stored. */
@@ -1331,7 +1334,7 @@ export interface AppState {
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
   features?: { events?: false; inventory?: false }
-  /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
+  /** Settings > AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
   /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
   agent?: AgentLink
@@ -1497,6 +1500,8 @@ export interface ServiceRow {
   emails?: string[]; phones?: string[]; title?: string; birthday?: string; note?: string; labels?: string[]
   /** Wave 39 (import_curate.ts): the owner's choices on the Curate page before Accept. `ring`: written instead of the proposed ring; `connected`: chips `person:<id>` / `tag:<id>` the person is connected with (no membership); `keepBoth`: counterparts the owner said are not the same (`row:<key>` / `person:<id>`). */
   ring?: Ring; connected?: string[]; keepBoth?: string[]
+  /** Wave 41 obsidian-sync: the vault note this person came from (becomes Person.fields.obsidianNote on Accept); `ai`: a model found this person in the notes, the owner checks every row. */
+  obsidianNote?: string; ai?: boolean
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
 export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean; /** Fields the decision wrote into an existing person; undo removes them while they still hold that value. */ filled?: Record<string, string>

@@ -316,6 +316,8 @@ describe('approve (merge to main) rules', () => {
     expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, tested: { ...passed.tested, ok: false }, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, pending: true, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, pending: true, blocked: 'base c0e05d4 is behind origin/main', features: [g('a', true, 'merge')] })).toEqual({ ok: false, hint: 'base c0e05d4 is behind origin/main' })   // ops `preview <id> guard`: out of date or already merged closes the button, whatever else is open
+    expect(approveGate({ ...passed, pending: true, blocked: null, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, tested: { ...passed.tested, running: true }, features: [g('a', true, 'merge')] }).hint).toBe('Tests are running')
     expect(approveGate({ ...passed, features: [g('a', true, null), g('b', false, 'merge')] }).hint).toBe('Approve first: T-a')
     expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', true, null), g('c', true, null)] })).toEqual({ ok: false, hint: 'Approve first: T-b, T-c' })

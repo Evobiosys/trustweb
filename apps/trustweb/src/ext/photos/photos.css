@@ -1,0 +1,40 @@
+/* SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later */
+/* Wave 40 photo-rails: scoped to the shadow roots of the Photos section and the folder import. Design tokens reach the root as inherited custom properties. Phone first. */
+:host { display: block; }
+* { box-sizing: border-box; }
+.ph { font-family: var(--font-sans); font-size: var(--fs-2); line-height: var(--lh-ui); color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
+button, label.btn { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.lnk { color: var(--trust-strong); text-decoration: underline; text-underline-offset: 2px; padding: var(--s-2) var(--s-1); min-height: 36px; display: inline-flex; align-items: center; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.meta { color: var(--ink-2); font-size: var(--fs-1); margin: var(--s-1) 0; }
+.warn { color: var(--attention-ink); background: var(--attention-tint); border-radius: var(--r-chip); padding: var(--s-2) var(--s-3); }
+h4 { margin: var(--s-4) 0 var(--s-2); font-size: var(--fs-3); }
+.alpha { font-size: var(--fs-1); font-weight: 400; color: var(--ink-2); margin-left: var(--s-1); }
+input[type=text], input:not([type]) { font: inherit; color: var(--ink); background: var(--raised); border: 1px solid var(--line-strong); border-radius: var(--r-control); padding: var(--s-2) var(--s-3); width: 100%; max-width: 100%; }
+input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+label.btn:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+.bar { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; }
+
+/* The grid: tiles of at least 96 px, as many per row as fit; never a horizontal scroll. */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--s-2); margin: var(--s-2) 0; }
+.tile { position: relative; aspect-ratio: 1; border-radius: var(--r-chip); overflow: hidden; background: var(--line); padding: 0; min-width: 0; display: block; }
+.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile .none { display: flex; align-items: center; justify-content: center; height: 100%; padding: var(--s-2); text-align: center; font-size: var(--fs-1); color: var(--ink-2); }
+.grey img { filter: grayscale(1) opacity(.5); }
+.tile .tick { position: absolute; top: var(--s-1); right: var(--s-1); width: 24px; height: 24px; border-radius: 12px; background: var(--raised); border: 2px solid var(--trust-strong); color: var(--trust-strong); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.tile[aria-pressed=true] { outline: 3px solid var(--trust-strong); outline-offset: -3px; }
+.tile .cap { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); color: #fff; font-size: var(--fs-1); padding: 2px var(--s-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Viewer */
+dialog { border: 0; border-radius: var(--r-control); padding: var(--s-3); max-width: min(96vw, 900px); width: 96vw; background: var(--raised); color: var(--ink); }
+dialog::backdrop { background: rgba(0,0,0,.6); }
+dialog img { width: 100%; max-height: 70vh; object-fit: contain; display: block; }
+
+/* Folder import */
+.item { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--s-2); align-items: start; padding: var(--s-2) 0; border-bottom: 1px solid var(--line); }
+.item .tile { aspect-ratio: 1; width: 72px; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: var(--s-1) 0; }
+.chip { border: 1px solid var(--line-strong); border-radius: var(--r-chip); padding: var(--s-1) var(--s-3); background: var(--raised); text-decoration: underline; text-underline-offset: 2px; min-height: 32px; }
+.chip.on { border-color: var(--trust-strong); font-weight: 600; text-decoration: none; }
+.folder { background: var(--surface-1, var(--raised)); border-radius: var(--r-chip); padding: var(--s-2) var(--s-3); margin: var(--s-2) 0; }
+progress { width: 100%; }

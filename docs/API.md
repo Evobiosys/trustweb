@@ -93,6 +93,40 @@ I9); posting again for an existing peer updates `display`/`level`/`vouched_by` *
 Removes the edge from *this persona's own* trust graph only (D1 §5: individual-scale exclusion, no
 notification to the removed peer, no appeals process). `400` if `peer` is missing.
 
+### Keyring-compatible VRC export/import (D-keyring-vrc-di)
+
+#### GET /api/trust/export `?peer=<peer_id>[&subject=<did:peer:0…>]` → VRC (JSON, not wrapped)
+One edge as a W3C VC 2.0 + DTG `RelationshipCredential` with a `DataIntegrityProof` / `eddsa-rdfc-2022` proof, the profile
+Keyring (berkmancenter/keyring-wallet, keyring-bifold) verifies. `@context` = credentials/v2, then the DTG registry context v1;
+`type` = `VerifiableCredential, DTGCredential, RelationshipCredential`; `issuerScope: "pairwise"`; `validFrom` = now,
+`validUntil` = the edge's `expires_at` (I9). `issuer` is this edge's own **relationship DID** (`did:peer:0`, key only, minted on
+first export and kept per edge; the device `did:peer:2` and its endpoint never appear). `credentialSubject.id` = the
+counterparty's relationship DID: the edge peer itself when it already is a `did:peer:0`, else `subject=`. Self-asserted, no
+witness, no revocation; the trust level is not exported (the DTG type carries only issuer and subject). `404` no edge for
+`peer` (or no DID identity on this transport); `400` subject unknown or not a `did:peer:0`, or `edge expired` (the edge's
+`expires_at` has passed); `403` the request carries an `Origin` that is not the daemon's own origin while no
+`AGENT_DAEMON_AUTH_TOKEN` is set (with a token, the token is the gate).
+`?format=vrc` (without `peer`) still returns the legacy envelope `{ "credentials": [...] }` (Ed25519Signature2020-shaped).
+
+#### POST /api/trust/import `{ "vrc": object, "display"?: string }` → `{ "valid": true, "issuer": string, "subject": string, "card_id": string, "state": "pending" }`
+Verifies the Data Integrity proof **offline** (bundled contexts, `did:peer:0` resolved from the string; unknown context or DID
+method is refused) and the `validFrom`..`validUntil` window, then opens a **pending inbound connect card** for the issuer's
+relationship DID (same card as D18; at most one pending card per issuer). No edge forms until the owner accepts via
+`POST /api/connect/accept` (I4); accept/decline send no CONNECT_ACK to a key-only DID. The card asks for level `contact` (I9).
+`validFrom` and `validUntil` are required dates (5 min clock skew tolerated on `validFrom` only); `@context` has at most 4 entries
+(the first two fixed, extras from the bundled allowlist). `display` is cut to 80 characters and stripped of control characters.
+Status codes:
+- `200` card opened.
+- `400` invalid, expired, legacy (Ed25519Signature2020) or malformed VRC; subject is not one of this wallet's relationship DIDs
+  (`credential not addressed to this wallet`); issuer is one of our own relationship keys.
+- `403` foreign `Origin` while no auth token is set (same rule as export).
+- `404` without a DID identity.
+- `409` a trust edge for the issuer exists; the same credential was imported before; the issuer was declined within 30 days.
+- `413` body over 64 KB.
+- `415` `Content-Type` is not `application/json`.
+- `429` 50 VRC cards already pending.
+Mint, export and every refused import are written to the owner audit log (I6); secret keys never are.
+
 ### Task 4 (D18) — consent-gated inbound CONNECT (origin-node onboarding)
 
 A brand-new self-sovereign peer (a browser that generated its own DID, holding **no** prior trust edge)

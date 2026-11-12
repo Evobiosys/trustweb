@@ -7,7 +7,8 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./inbound_vouch": { "types": "./dist/inbound_vouch.d.ts", "default": "./dist/inbound_vouch.js" }
+    "./inbound_vouch": { "types": "./dist/inbound_vouch.d.ts", "default": "./dist/inbound_vouch.js" },
+    "./vrc_di": { "types": "./dist/vrc_di.d.ts", "default": "./dist/vrc_di.js" }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -18,6 +19,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@digitalcredentials/data-integrity": "2.6.0",
+    "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "1.3.0",
+    "@digitalcredentials/jsonld-signatures": "12.0.1",
     "@noble/ciphers": "^2.2.0",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
