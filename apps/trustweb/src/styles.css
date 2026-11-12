@@ -1740,6 +1740,9 @@ body[data-tw-profile="reader"] .query-fab, body[data-tw-profile="reader"] [data-
 .look-pick .radio b{text-decoration:underline}
 .look-pick .radio.on b{text-decoration:none}
 
+/* wave 40 small-ui-c: an even number of bottom-row buttons raises the two inner ones together, a little smaller so both fit */
+.tabs.pair .tab.tab-primary,.tabs.pair .tab-record{width:56px; height:56px; margin-top:-22px}
+.tabs.many.pair .tab-record{flex:0 0 56px}
 /* wave 40 ai-edit-chat */
 /* "Bring me there": the place the assistant opened pulses twice. */
 .tw-pulse{outline:3px solid var(--trust); outline-offset:3px; border-radius:var(--r-control); animation:tw-pulse 1.2s ease-in-out 2}

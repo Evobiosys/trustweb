@@ -139,23 +139,5 @@ export function addResource(d: CommunityData, input: { title: string; url: strin
   return true
 }
 
-/** A published Google Doc (…/pub) on docs.google.com, with embedded=true; null for anything else. */
-export function docsEmbedUrl(raw: string): string | null {
-  const href = safeUrl(raw)
-  if (!href) return null
-  const u = new URL(href)
-  if (u.protocol !== 'https:' || u.host !== 'docs.google.com' || !/\/pub$/.test(u.pathname)) return null
-  u.search = '?embedded=true'
-  return u.href
-}
-
-const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me', 'web.telegram.org'])
-
-/** A Telegram link (https on t.me, telegram.me or web.telegram.org); a bare "t.me/x" gets https. Null for anything else. */
-export function telegramUrl(raw: string): string | null {
-  const t = raw.trim()
-  const href = safeUrl(/^[a-z][a-z0-9+.-]*:/i.test(t) ? t : `https://${t}`)
-  if (!href) return null
-  const u = new URL(href)
-  return u.protocol === 'https:' && TELEGRAM_HOSTS.has(u.host) ? u.href : null
-}
+// Wave 40: the link rules moved to the embeds module (S/ext/embeds/embeds_model.ts); re-exported for community-mighty.
+export { docsEmbedUrl, telegramUrl } from '../embeds/embeds_model'
