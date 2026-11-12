@@ -3632,6 +3632,24 @@ export const S = {
     setReset: 'Ask again before loading Google Docs and Telegram',
     setResetDone: 'Done: the next load asks first.',
   },
+  // wave 40 support-delivery
+  supportMailSubject: 'I could use some support',
+  supportMessage: (first: string, chips: string, note: string, when: string, appUrl: string) =>
+    `Hi${first ? ` ${first}` : ''}, I could use some support${chips ? ` (${chips})` : ''}.${note ? ` ${note}` : ''} This is open until ${when}. You can answer me in TrustWeb: ${appUrl}`,
+  supportViaApp: (n: number) => `${n} in the app`,
+  supportViaMsg: (n: number, label: string) => `${n} via ${label}`,
+  supportViaMail: (n: number) => `${n} by e-mail`,
+  supportViaLabel: { signal: 'Signal', whatsapp: 'WhatsApp', geb: 'Geb', email: 'e-mail' } as Record<string, string>,
+  supportDeliverTitle: 'Sent in the app. Now the other ways',
+  supportDeliverHint: 'Tap once per person. Your words are ready to send.',
+  supportDeliverNext: (name: string, label: string) => `Open ${label} for ${name}`,
+  supportDeliverCopied: 'Your words are copied. Paste them into the chat.',
+  supportDeliverProgress: (i: number, n: number) => `${i} of ${n}`,
+  supportDeliverGroupDone: (label: string) => `${label}: all opened`,
+  supportDeliverMail: (n: number) => (n === 1 ? 'Write one e-mail to 1 person' : `Write one e-mail to ${n} people`),
+  supportDeliverMailHint: 'Everybody is in the hidden-copy line, so nobody sees who else was asked.',
+  supportDeliverDone: 'Done',
+  supportSentVia: (label: string, time: string, names: string) => `Sent via ${label} at ${time}: ${names}`,
   /** Wave 40 ai-edit-chat: the assistant (the sparkle): chat panel, action cards, review, person lookup. */
   assistant: {
     title: 'Assistant',
