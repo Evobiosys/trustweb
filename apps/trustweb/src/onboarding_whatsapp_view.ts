@@ -13,7 +13,8 @@ import { VERIFIED_SOURCES } from './import_sources'
 import { readZip } from './zip_read'
 import { namesSource, phoneMessageCount, unnamedPeople, withNames } from './phone_export'
 import type { Pages } from './page_view'
-import { commitPlan, planServices } from './services_import'
+import { commitPlan } from './services_import'
+import { planFrom } from './import_pipeline'
 import type { ServiceFile, ServicePlan } from './services_import'
 import { S } from './strings'
 
@@ -88,7 +89,7 @@ async function start(h: OnboardingHooks, list: File[]): Promise<void> {
       await tick()
     }
     me ||= h.state().me.displayName
-    plan = planServices(h.state(), files, { me, now: Date.now() })
+    plan = planFrom(h.state(), files, { me, now: Date.now() })
     pct = 100
     if (!plan.counts.whatsapp) { message = message || S.onbNothing; plan = null; run = IDLE_RUN } else { message = ''; run = finishRun(run) }
   } catch {
@@ -101,7 +102,7 @@ async function start(h: OnboardingHooks, list: File[]): Promise<void> {
 function nameOne(h: OnboardingHooks, jid: string, name: string): void {
   files = files.map((f) => ({ ...f, text: withNames(f.text, { [jid]: name }) }))
   naming = null
-  plan = planServices(h.state(), files, { me, now: Date.now() })
+  plan = planFrom(h.state(), files, { me, now: Date.now() })
   emit()
 }
 
@@ -151,7 +152,7 @@ export function openOnboarding(h: OnboardingHooks): void {
     const parts: (HTMLElement | null)[] = [
       el('p', { class: 'meta' }, [S.onbIntro]),
       el('ol', { class: 'meta', 'data-onboard-steps': '' }, steps.map((t) => el('li', {}, [t]))),
-      el('label', { class: 'meta' }, [S.onbMeLabel + ' ', el('input', { class: 'field', value: me, 'data-onboard-me': '', onchange: (e: Event) => { me = (e.target as HTMLInputElement).value.trim(); if (plan) { plan = planServices(h.state(), files, { me, now: Date.now() }); emit() } } })]),
+      el('label', { class: 'meta' }, [S.onbMeLabel + ' ', el('input', { class: 'field', value: me, 'data-onboard-me': '', onchange: (e: Event) => { me = (e.target as HTMLInputElement).value.trim(); if (plan) { plan = planFrom(h.state(), files, { me, now: Date.now() }); emit() } } })]),
       input,
       phone,
       run.phase !== 'reading' && !r && !placed ? el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-choose': '', onclick: () => input.click() }, [S.onbChoose]) : null,

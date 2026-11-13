@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 31: the configurable bottom bar. Stored as AppState.uiBar {order, hidden, primary}; absent = the default
- * (Web, Chat, Record, Events, Resources; Ask your web and the Feed are opt-in from the ⋮ sheet). Record cannot be hidden and is the primary (raised)
- * button unless another shown view is chosen. A view this build does not know, or whose feature is off, is skipped.
+ * (Web, Chat, Record, Events, Resources; Ask your web and the Feed are opt-in from the ⋮ sheet). Every view, Record too, can be taken out (wave 42) as long as one stays; with an odd
+ * number of buttons the centre one is raised (Record by default), with an even number the middle pair. A view this build does not know, or whose feature is off, is skipped.
  * On a phone at most PHONE_MAX buttons show; the rest live in the ⋮ sheet. Pure, no DOM.
  */
+/** Wave 42 B04: which slots of an n-slot row are raised: the centre one when n is odd, the middle pair when n is even. */
+export function raisedIndices(n: number): number[] {
+  if (n < 1) return []
+  return n % 2 ? [(n - 1) / 2] : [n / 2 - 1, n / 2]
+}
+
 export type BarId = 'ask' | 'inventory' | 'web' | 'feed' | 'record' | 'chat' | 'events' | 'network' | 'people' | 'map' | `view:${string}` | `mod:${string}`
 
 export interface UiBar {
@@ -34,10 +40,12 @@ export interface BarFlags {
 }
 
 export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
+/** Wave 42 D2: the stock row nobody has changed: Web, Chat, Feed, Events, Resources (the centre Feed raised). Record, Community and the module views wait in the ⋮ list; Community has the heading pill. */
+export const STOCK_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory']
 export const PHONE_MAX = 6
 
-/** The sheet's checklist, in its order (Record is always on and not listed). */
-const CHOICES: readonly BarId[] = ['web', 'feed', 'chat', 'events', 'inventory', 'ask', 'network', 'people', 'map']
+/** The sheet's checklist, in its order. */
+const CHOICES: readonly BarId[] = ['web', 'feed', 'chat', 'record', 'events', 'inventory', 'ask', 'network', 'people', 'map']
 
 /** Wave 35: the view a `view:<id>` bar entry opens (a view_menu ViewKey); null for every other entry. */
 export const viewOfBar = (id: string): string | null => (id.startsWith('view:') && id.length > 5 ? id.slice(5) : null)
@@ -50,55 +58,70 @@ const viewEntries = (bar: UiBar | undefined): BarId[] => [...new Set(Array.isArr
 
 function offered(f: BarFlags, bar?: UiBar): BarId[] {
   const off: Partial<Record<BarId, boolean>> = { events: !f.events, feed: !f.feed, inventory: !f.inventory, people: !f.people, map: !f.map }
-  return [...(['record', ...CHOICES] as BarId[]).filter((id) => !off[id]), ...(f.advanced ? viewEntries(bar) : []), ...(f.mods ?? []).map((m): BarId => `mod:${m}`)]
+  return [...CHOICES.filter((id) => !off[id]), ...(f.advanced ? viewEntries(bar) : []), ...(f.mods ?? []).map((m): BarId => `mod:${m}`)]
 }
 
 /** The saved order (or the default) with Record in it, unknown ids and duplicates dropped; Record lands mid-row when missing. */
 function baseOrder(bar: UiBar | undefined): BarId[] {
-  const known = new Set<string>(['record', ...CHOICES])
-  const saved = Array.isArray(bar?.order) ? bar.order : DEFAULT_ORDER
+  const known = new Set<string>(CHOICES)
+  const unsaved = !Array.isArray(bar?.order)
+  const saved = Array.isArray(bar?.order) ? bar.order : STOCK_ORDER
   const order = [...new Set(saved)].filter((id): id is BarId => typeof id === 'string' && (known.has(id) || viewOfBar(id) !== null || modOfBar(id) !== null))
-  if (!order.includes('record')) order.splice(Math.ceil(order.length / 2), 0, 'record')
+  if (!unsaved && !order.includes('record')) order.splice(Math.ceil(order.length / 2), 0, 'record')
   return order
 }
 
-/** Wave 35: the raised button when the user never chose: none for an even number of buttons, else the preset's (Record by default). */
+/** Wave 35: the raised button when the user never chose: none for an even number of buttons, else the preset's (Record by default), else the centre one (wave 42). */
 export function defaultPrimary(ids: readonly BarId[], preset: BarId = 'record'): BarId | null {
-  return ids.length % 2 === 0 ? null : ids.includes(preset) ? preset : 'record'
+  return ids.length % 2 === 0 ? null : ids.includes(preset) ? preset : ids[raisedIndices(ids.length)[0]] ?? null
 }
 
 /** Wave 40: an even number of buttons has no single centre, so the two inner ones are raised together. */
 export function defaultPair(ids: readonly BarId[]): BarId[] {
-  const n = ids.length
-  return n >= 2 && n % 2 === 0 ? [ids[n / 2 - 1], ids[n / 2]] : []
+  return ids.length >= 2 && ids.length % 2 === 0 ? raisedIndices(ids.length).map((i) => ids[i]) : []
 }
 
 /** primary is null when no button is raised (stored as 'none'); pair = the two inner buttons raised by default for an even count (never when the user chose, or chose none). */
 /** The saved order plus the module buttons not saved yet, at the end (where resolveBar shows them). Review wave 40: moves and adds work on this, so a module's button is never an unknown neighbour. */
 function fullOrder(bar: UiBar | undefined, f: BarFlags): BarId[] {
   const base = baseOrder(bar)
+  if (!Array.isArray(bar?.order)) return base // wave 42 D2: the unsaved stock row holds no module button
   return [...base, ...(f.mods ?? []).map((m): BarId => `mod:${m}`).filter((id) => !base.includes(id))]
 }
 
-export function resolveBar(bar: UiBar | undefined, f: BarFlags): { ids: BarId[]; primary: BarId | null; pair: BarId[] } {
+export function resolveBar(bar: UiBar | undefined, f: BarFlags, max?: number): { ids: BarId[]; primary: BarId | null; pair: BarId[] } {
   const ok = new Set<string>(offered(f, bar))
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
-  const ids = fullOrder(bar, f).filter((id) => ok.has(id) && (id === 'record' || !hidden.has(id)))
-  // Wave 39: a module's button does not change which button is raised by default.
-  const own = ids.filter((id) => modOfBar(id) === null)
-  const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(own)
-  return { ids, primary, pair: primary === null && bar?.primary !== 'none' ? defaultPair(own) : [] }
+  const ids = fullOrder(bar, f).filter((id) => ok.has(id) && !hidden.has(id))
+  // Wave 42 B04: the default raise follows the buttons that show (module buttons count, the phone's ⋮ overflow does not).
+  const basis = max === undefined ? ids : ids.slice(0, max)
+  const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(basis)
+  return { ids, primary, pair: primary === null && bar?.primary !== 'none' ? defaultPair(basis) : [] }
+}
+
+/** Wave 42 D2: the first edit of the unsaved stock row saves its order and takes the module buttons out, so editing never adds buttons. */
+function seeded(bar: UiBar | undefined, f: BarFlags): UiBar | undefined {
+  if (Array.isArray(bar?.order)) return bar
+  return { ...bar, order: [...STOCK_ORDER], hidden: [...new Set([...(bar?.hidden ?? []), 'record', ...(f.mods ?? []).map((m): BarId => `mod:${m}`)])] }
 }
 
 /** Every view the sheet offers, with whether it sits in the bar now. */
 export function barChoices(bar: UiBar | undefined, f: BarFlags): { id: BarId; on: boolean }[] {
   const { ids } = resolveBar(bar, f)
-  return offered(f, bar).filter((id) => id !== 'record').map((id) => ({ id, on: ids.includes(id) }))
+  return offered(f, bar).map((id) => ({ id, on: ids.includes(id) }))
 }
 
-/** Shows the view if it is hidden or new, hides it if shown. Record and unknown ids change nothing. Hiding the primary hands it back to Record. */
+/** Wave 42 B05: whether the view may leave the bar: only the last shown one may not. A hidden view can always come back. */
+export function canHideBar(bar: UiBar | undefined, id: string, f: BarFlags): boolean {
+  const { ids } = resolveBar(bar, f)
+  return !ids.includes(id as BarId) || ids.length > 1
+}
+
+/** Shows the view if it is hidden or new, hides it if shown (Record too; the last shown one stays). Unknown ids change nothing. Hiding the primary hands the raise back to the default. */
 export function toggleBar(bar: UiBar | undefined, id: string, f: BarFlags): UiBar | undefined {
-  if (!offered(f, bar).includes(id as BarId) || id === 'record') return bar
+  const orig = bar
+  bar = seeded(bar, f)
+  if (!offered(f, bar).includes(id as BarId) || !canHideBar(bar, id, f)) return orig
   const on = resolveBar(bar, f).ids.includes(id as BarId)
   const order = baseOrder(bar)
   const hidden = (bar?.hidden ?? []).filter((h) => h !== id)
@@ -116,9 +139,19 @@ export function showViewInBar(bar: UiBar | undefined, view: string, on: boolean)
   return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
 
+/** Wave 42 (MCP): the listed views, known ones once each, are the bar in that order; every other offered view is taken out. Nothing known in the list changes nothing. */
+export function setBarOrder(bar: UiBar | undefined, order: readonly string[], f: BarFlags): UiBar | undefined {
+  const ok = offered(f, bar)
+  const want = [...new Set(order)].filter((id): id is BarId => ok.includes(id as BarId))
+  if (!want.length) return bar
+  return { ...bar, order: want, hidden: ok.filter((id) => !want.includes(id)), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+}
+
 /** Shows the view (new, hidden or already shown) left or right of a shown view `ref`; the place is saved in `order`. Bad input changes nothing. */
 export function addBar(bar: UiBar | undefined, id: string, ref: string, side: 'left' | 'right', f: BarFlags): UiBar | undefined {
-  if (!offered(f, bar).includes(id as BarId) || id === 'record' || id === ref || !resolveBar(bar, f).ids.includes(ref as BarId)) return bar
+  const orig = bar
+  bar = seeded(bar, f)
+  if (!offered(f, bar).includes(id as BarId) || id === ref || !resolveBar(bar, f).ids.includes(ref as BarId)) return orig
   const order = fullOrder(bar, f).filter((x) => x !== id)
   order.splice(order.indexOf(ref as BarId) + (side === 'right' ? 1 : 0), 0, id as BarId)
   return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
@@ -126,9 +159,11 @@ export function addBar(bar: UiBar | undefined, id: string, ref: string, side: 'l
 
 /** One step left (-1) or right (+1) among the shown views; at the end it stays. */
 export function moveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: BarFlags): UiBar | undefined {
+  const orig = bar
+  bar = seeded(bar, f)
   const { ids } = resolveBar(bar, f)
   const other = ids[ids.indexOf(id as BarId) + dir]
-  if (!ids.includes(id as BarId) || !other) return bar
+  if (!ids.includes(id as BarId) || !other) return orig
   const order = fullOrder(bar, f)
   const [a, b] = [order.indexOf(id as BarId), order.indexOf(other)]
   ;[order[a], order[b]] = [order[b], order[a]]
@@ -146,13 +181,15 @@ export function canMoveBar(bar: UiBar | undefined, id: string, dir: -1 | 1, f: B
 export function arrangeRows(bar: UiBar | undefined, f: BarFlags, max: number): { id: BarId; slot: 'row' | 'more' | 'off' }[] {
   const { ids, primary } = resolveBar(bar, f)
   const { shown, overflow } = barLayout(ids, primary, max)
-  const off = offered(f, bar).filter((id) => id !== 'record' && !ids.includes(id))
+  const off = offered(f, bar).filter((id) => !ids.includes(id))
   return [...shown.map((id) => ({ id, slot: 'row' as const })), ...overflow.map((id) => ({ id, slot: 'more' as const })), ...off.map((id) => ({ id, slot: 'off' as const }))]
 }
 
-/** Wave 40: a view from the ⋮ list moves INTO the row, at the last slot the row keeps for it (the one that sat there goes to the top of the overflow); a hidden view is shown again. Record and unknown ids change nothing. */
+/** Wave 40: a view from the ⋮ list moves INTO the row, at the last slot the row keeps for it (the one that sat there goes to the top of the overflow); a hidden view is shown again. Unknown ids change nothing. */
 export function promoteBar(bar: UiBar | undefined, id: string, f: BarFlags, max: number): UiBar | undefined {
-  if (!offered(f, bar).includes(id as BarId) || id === 'record') return bar
+  const orig = bar
+  bar = seeded(bar, f)
+  if (!offered(f, bar).includes(id as BarId)) return orig
   const { ids, primary } = resolveBar(bar, f)
   const rest = ids.filter((x) => x !== id)
   let order: BarId[] = [...rest, id as BarId]
@@ -216,23 +253,24 @@ export const PROFILES: readonly { id: string; order: readonly BarId[]; primary: 
   // { id: 'communicator', order: ['web', 'feed', 'chat', 'events', 'inventory'], primary: 'chat' },
 ]
 
-/** Sets order, primary, marker and profile from a preset; hidden is cleared. Unknown id changes nothing. */
+/** Sets order, primary, marker and profile from a preset; hidden is cleared (Record only is hidden when the preset has none, wave 42: the row is the preset's five). Unknown id changes nothing. */
 export function applyProfile(bar: UiBar | undefined, id: string): UiBar | undefined {
   const p = PROFILES.find((x) => x.id === id)
   if (!p) return bar
-  return { ...bar, order: [...p.order], hidden: [], primary: p.primary, orderVersion: BAR_ORDER_VERSION, profile: p.id }
+  return { ...bar, order: [...p.order], hidden: p.order.includes('record') ? [] : ['record'], primary: p.primary, orderVersion: BAR_ORDER_VERSION, profile: p.id }
 }
 
 /** Wave 34: starts a custom bar from the bar as it is now (the shown ids, in order, and the current primary). */
-export function customFrom(bar: UiBar | undefined, ids: readonly BarId[], primary: BarId | null): UiBar {
-  return { ...bar, order: [...ids], hidden: [], primary: primary ?? 'none', orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+export function customFrom(bar: UiBar | undefined, ids: readonly BarId[], primary: BarId | null, f?: BarFlags): UiBar {
+  const outMods = (f?.mods ?? []).map((m): BarId => `mod:${m}`).filter((id) => !ids.includes(id)) // wave 42 D2: the module buttons that were not in the row stay out of it
+  return { ...bar, order: [...ids], hidden: ids.includes('record') ? outMods : ['record', ...outMods], primary: primary ?? 'none', orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
 }
 
 /** The stored profile; without one, the preset the bar happens to match, else 'custom'. */
 export function activeProfile(bar: UiBar | undefined, f: BarFlags): string {
   if (bar?.profile && (bar.profile === 'custom' || PROFILES.some((p) => p.id === bar.profile))) return bar.profile
-  const { ids, primary } = resolveBar(bar, f)
-  const core = ids.filter((id) => modOfBar(id) === null) // wave 39: a module's own button does not make the row custom
+  const { ids, primary } = resolveBar(bar, { ...f, mods: [] }) // wave 39/42: a module's own button neither makes the row custom nor moves its raise
+  const core = ids.filter((id) => modOfBar(id) === null)
   return PROFILES.find((p) => p.primary === primary && p.order.join() === core.join())?.id ?? 'custom'
 }
 

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
+ * WAVE 42: the Wise sign-up sheet this test drives (data-ai-sent) was replaced by Stripe Checkout (test/e2e/signup_stripe.mjs); the controller side
+ * (approve, token, quota) is unchanged. Kept as the record of the old flow; its sign-up steps need the Wise sheet and no longer run.
  * Wave 36 ai-subscription, end to end on 127.0.0.1: the app (stock vite) talks to the real release controller (sibling ops worktree)
  * with a fake SMTP sink and a fake OpenAI upstream. Sign up -> mail -> operator approves -> app shows Active -> Ask your web gets
  * the relayed answer -> quota counted; plus host/origin negatives. Nothing leaves the machine; the token is never printed.

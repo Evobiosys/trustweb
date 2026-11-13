@@ -19,7 +19,8 @@ import { Channel, Ring } from './model'
 import { parsePhoneExport, readPhoneExport } from './phone_export'
 import type { PhoneExtras } from './phone_export'
 import type { AppState, Person, ServiceBatch, ServiceDone, ServiceRow } from './model'
-import { DEFAULT_IMPORT_NOTE, importTagId, rowTags, snapOf, tagSlug } from './import_tags'
+import { rowTags, snapOf, tagSlug } from './import_tags'
+import { DEFAULT_IMPORT_NOTE, SERVICE_LABEL, importTagId } from './import_registry'
 import { fingerprint } from './safe_text'
 import { bulkAcceptable, propose, writeFor } from './zone_proposals'
 import type { Choice, Proposal } from './zone_proposals'
@@ -42,10 +43,7 @@ export interface ServicePlan {
 export interface PlanOptions { me: string; now: number; dayFirst?: boolean }
 
 const IDS_KEPT = 20
-export const SERVICE_LABEL: Record<string, string> = {
-  whatsapp: 'WhatsApp', linkedin: 'LinkedIn', vcard: 'Phone contacts', 'google-csv': 'Google contacts', 'facebook-json': 'Facebook',
-  'dex-csv': 'Dex', 'generic-csv': 'Spreadsheet (CSV)', 'google-api': 'Google contacts', mcp: 'MCP server', obsidian: 'Obsidian vault', 'obsidian-ai': 'Obsidian vault (found by AI)',
-}
+export { SERVICE_LABEL }
 export const countsLine = (counts: Record<string, number>): string =>
   Object.entries(counts).map(([s, n]) => `${SERVICE_LABEL[s] ?? s} ${n}`).join(', ')
 

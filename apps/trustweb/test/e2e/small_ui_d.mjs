@@ -197,7 +197,8 @@ try {
     await ctx.close()
 
     // ---- 8: communities-only chat, Community view lists the chats --------------------------------------------------------------------
-    ;({ ctx, page } = await fresh(vp, { twSettings: { extensions: { 'community-mighty': true } } }, JSON.stringify([{ id: 'iyg', colour: '#13867e', label: 'IYG', community: true }])))
+    // wave 42 (B13): the community chat row shows only while a group chat is linked for the community, so the record links one.
+    ;({ ctx, page } = await fresh(vp, { twSettings: { extensions: { 'community-mighty': true } }, extData: { embeds: { byTag: { iyg: { telegramUrl: 'https://t.me/iyggroup' } } }, 'community-mighty': { tag: 'iyg' } } }, JSON.stringify([{ id: 'iyg', colour: '#13867e', label: 'IYG', community: true }])))
     await page.locator('button.tab[data-go="chat"]').click(); await page.waitForTimeout(600)
     check(`${w}: Chat has the communities-only button top-left (in the header, beside the title)`, (await page.locator('.hdr-left [data-chat-communities]').count()) === 1)
     check(`${w}: both chats show, and the community chat row sits on top`, (await page.locator('[data-chat-row]').count()) === 2 && (await page.locator('[data-chat-community-row]').count()) === 1)

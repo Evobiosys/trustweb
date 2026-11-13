@@ -12,6 +12,9 @@ export interface TabFlags {
   inventory: boolean
 }
 
+/** Wave 42 B04: the raise rule lives in bottom_bar.ts (the MCP server runs that file under plain node, which cannot follow an extensionless import). */
+export { raisedIndices } from './bottom_bar'
+
 export const DEFAULT_ROW: readonly TabId[] = ['web', 'chat', 'record', 'events', 'inventory']
 
 /** Every screen the Settings picker offers, in the picker's order. */

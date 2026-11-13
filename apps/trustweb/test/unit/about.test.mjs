@@ -33,3 +33,11 @@ describe('the website a build links to (wave 3: app.trustintheweb.org links to t
     expect(aboutUrl(AboutPage.Faq)).toBe(DEFAULT_SITE_URL + 'faq.html')
   })
 })
+
+describe('credit (Jakob 2026-11-10 / 2026-11-12)', () => {
+  it('Settings > About names Frank Sanborn and Social Fabric as the inspiration of the trust zones, with no link', async () => {
+    const { S } = await import('../../src/strings.ts')
+    expect(S.aboutCredit).toBe('The trust zones (Closest few, Community members) were inspired by Frank Sanborn\'s Social Fabric work.')
+    expect(S.aboutCredit).not.toMatch(/Sandborn|https?:/)
+  })
+})

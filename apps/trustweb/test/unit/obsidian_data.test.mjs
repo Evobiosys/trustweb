@@ -62,3 +62,22 @@ describe('B1 Reset this phone clears what the module remembers', () => {
     await clearObsidianData('me42', undefined, { removeItem: () => undefined })
   })
 })
+
+// Wave 42 (F05): the suggestions the owner has not decided on yet ride the slice so every device (and the MCP server) sees the same list.
+describe('suggestions in the slice', () => {
+  const s1 = { path: 'Daily/a.md', name: 'Leonie', confidence: 0.8, why: 'Coffee with Leonie' }
+  it('kept with their time; malformed entries and extra keys are dropped; capped', () => {
+    expect(parseObsidian({ suggestions: [s1, { path: 'x' }, 'junk', { ...s1, secret: 1 }], suggestedAt: 7 })).toEqual({ suggestions: [s1, s1], suggestedAt: 7 })
+    expect(parseObsidian({ suggestions: 'no' })).toEqual({})
+    expect(parseObsidian({ suggestions: Array.from({ length: 500 }, () => s1) }).suggestions).toHaveLength(200)
+  })
+  it('the list with the later time wins (an empty list written later empties it everywhere), the vault merge is unchanged', () => {
+    expect(mergeObsidian({ vault: 'V', syncedAt: 5, suggestions: [s1], suggestedAt: 6 }, { vault: 'V', syncedAt: 5, suggestions: [], suggestedAt: 9 })).toEqual({ vault: 'V', syncedAt: 5, suggestions: [], suggestedAt: 9 })
+    const a = { suggestions: [s1], suggestedAt: 3 }
+    const b = { suggestions: [{ ...s1, name: 'Other' }], suggestedAt: 3 }
+    expect(mergeObsidian(a, b)).toEqual(mergeObsidian(b, a))
+  })
+  it('Forget this vault takes the suggestions with it', () => {
+    expect(mergeObsidian({ forgotAt: 10 }, { vault: 'Old', syncedAt: 4, suggestions: [s1], suggestedAt: 4 })).toEqual({ forgotAt: 10 })
+  })
+})

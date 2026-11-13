@@ -6,24 +6,14 @@
  */
 import { EMAIL_FIELD } from './intending_reminder'
 import type { Person, ServiceRow } from './model'
+import { SYSTEM_TAG_PREFIX } from './import_registry'
 import { fingerprint } from './safe_text'
 
-export const DEFAULT_IMPORT_NOTE = 'Only focused on people; phone numbers can still be added later (maybe no longer up to date)'
-
-/** A system tag id starts with this; such tags are hidden unless the Tools toggle "show system tags" is on. */
-export const SYSTEM_TAG_PREFIX = 'import:'
+export { DEFAULT_IMPORT_NOTE, SYSTEM_TAG_PREFIX, importTagId } from './import_registry'
 export const isSystemTagId = (id: string): boolean => id.startsWith(SYSTEM_TAG_PREFIX)
 
 /** The id a label gets as a person tag (the same rule as tag_create.ts createTag, without the uniqueness suffix). */
 export const tagSlug = (label: string): string => label.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || 'tag'
-
-const SOURCE_SLUG: Record<string, string> = { vcard: 'vcf', 'google-csv': 'google-csv', 'google-api': 'google', 'facebook-json': 'facebook', 'dex-csv': 'dex', 'generic-csv': 'csv', mcp: 'mcp' }
-
-/** `import:<YYYY-MM-DD>-<source>`; several sources in one pass are joined with "+". */
-export function importTagId(at: number, sources: readonly string[]): string {
-  const names = [...new Set(sources.map((s) => SOURCE_SLUG[s] ?? s))]
-  return `${SYSTEM_TAG_PREFIX}${new Date(at).toISOString().slice(0, 10)}-${names.join('+') || 'import'}`
-}
 
 /** The tags a row carries: its card's categories, trimmed, once each. */
 export const rowTags = (r: Pick<ServiceRow, 'labels'>): string[] => [...new Set((r.labels ?? []).map((l) => l.trim()).filter(Boolean))]

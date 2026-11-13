@@ -4,8 +4,9 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { recordTools, toolAllow } from '../../../mcp/src/record_tools.ts'
-import { serverEnv } from '../../src/ext/mcp-local/mcp_config.ts'
+import { toolAllow } from '../../../mcp/src/record_tools.ts'
+import { allTools } from '../../../mcp/src/tools.ts'
+import { MCP_TOOLS, serverEnv } from '../../src/ext/mcp-local/mcp_config.ts'
 import { openSession } from '../../src/ext/mcp-local/mcp_client.ts'
 import { createActions } from '../../src/actions.ts'
 import { defineAppActions } from '../../src/app_actions.ts'
@@ -35,9 +36,10 @@ describe('mcp: switching every tool off offers no tool (fail closed)', () => {
     expect(toolAllow(' list_tags , search ')).toEqual(['list_tags', 'search'])
   })
   it('all tools off in Settings -> the server lists none', () => {
-    const env = serverEnv({ write: false, off: ['list_people', 'get_person', 'list_tags', 'list_notes', 'search'] })
+    // Data-driven (wave 42 review): every read tool switched off, whatever the tool list holds.
+    const env = serverEnv({ write: false, off: MCP_TOOLS.filter((t) => !t.write).map((t) => t.name) })
     expect(env.TW_MCP_TOOLS).toBe('')
-    expect(recordTools({ file, write: false, allow: toolAllow(env.TW_MCP_TOOLS) })).toHaveLength(0)
+    expect(allTools({ file, write: false }, toolAllow(env.TW_MCP_TOOLS))).toHaveLength(0)
   })
 })
 
@@ -135,15 +137,16 @@ describe('e-mail addresses: one card field is never several recipients', () => {
 describe('bottom row with a module on: arrows and add keep every button', () => {
   const f = { events: true, feed: false, inventory: true, people: false, map: false, mods: ['cal'] }
   it('moving a view next to the module button keeps all buttons', () => {
-    const before = resolveBar(undefined, f).ids
+    const old = { order: ['web', 'chat', 'record', 'events', 'inventory'] }
+    const before = resolveBar(old, f).ids
     const last = before.filter((x) => x !== 'mod:cal').pop()
-    const next = moveBar(undefined, last, 1, f)
+    const next = moveBar(old, last, 1, f)
     const after = resolveBar(next, f).ids
     expect([...after].sort()).toEqual([...before].sort())
     expect(after.indexOf(last)).toBe(before.indexOf(last) + 1)
   })
   it('add right of the module button lands right of it', () => {
-    const hidden = { order: undefined, hidden: ['chat'] }
+    const hidden = { order: ['web', 'chat', 'record', 'events', 'inventory'], hidden: ['chat'] }
     const next = addBar(hidden, 'chat', 'mod:cal', 'right', f)
     const ids = resolveBar(next, f).ids
     expect(ids.indexOf('chat')).toBe(ids.indexOf('mod:cal') + 1)

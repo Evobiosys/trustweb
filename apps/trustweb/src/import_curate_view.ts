@@ -4,6 +4,7 @@
  * advanced notes per row) and the dedupe page (pairs side by side, Merge / Keep both). DOM only; every rule is in import_curate.ts.
  * Nothing reaches the record before Accept (I9); the page opens as a page with Back, never an overlay.
  */
+import { metaLead } from './curate_meta'
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { chipInput } from './chip_input'
@@ -230,7 +231,7 @@ export function curatePage(h: CurateHooks): void {
       row.ai ? el('span', { class: 'chip cur-ai', 'data-cur-ai-chip': '' }, [S.obsidian.aiChip]) : null,
       obsidianLink(h.state(), row.obsidianNote ?? (row.ai ? row.file : undefined)),
       tags.length ? el('div', { class: 'chips cur-pills', 'data-cur-pills': '' }, tags.map((l) => el('button', { class: 'chip cur-pill' + (l === ui.tag ? ' on' : ''), 'data-cur-pill': l, ...u, onclick: () => pickTag(l) }, [`#${l}`]))) : null,
-      el('span', { class: 'meta' }, history ? [`${S.ringLabel[row.ring ?? p.ring]} · ${S.svcScore(p.score)} · `, el('i', {}, [S.svcInferred])] : [`${S.ringLabel[row.ring ?? p.ring]} · `, el('i', { 'data-cur-nohistory': '' }, [T.noHistory])]),
+      el('span', { class: 'meta' }, history ? [metaLead(true, S.svcScore(p.score)), el('i', {}, [S.svcInferred])] : [metaLead(false, ''), el('i', { 'data-cur-nohistory': '' }, [T.noHistory])]),
       ...(history ? [el('details', { class: 'meta' }, [
         el('summary', { style: 'text-decoration:underline;cursor:pointer;display:inline' }, [S.svcInfoMark]),
         el('p', { class: 'meta' }, [S.svcTerms(p.terms.freq, p.terms.recency, p.terms.reciprocity, p.n365)]),

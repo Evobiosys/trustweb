@@ -88,10 +88,10 @@ describe('the Feed', () => {
     }
     expect(calls).toEqual([])
   })
-  it('an empty phone has an empty Feed; the Feed is off unless switched on (wave 2, P9)', () => {
+  it('an empty phone has an empty Feed; the Feed is on unless switched off (wave 42 D2: the stock bar carries it)', () => {
     expect(buildFeed({ ...state(), people: [], inventory: [], found: [], received: [], meetings: [] })).toEqual([])
-    expect(feedOn({})).toBe(false)
-    expect(feedOn({ feed: {} })).toBe(false)
+    expect(feedOn({})).toBe(true)
+    expect(feedOn({ feed: {} })).toBe(true)
     expect(feedOn({ feed: { on: false } })).toBe(false)
     expect(feedOn({ feed: { on: true } })).toBe(true)
   })

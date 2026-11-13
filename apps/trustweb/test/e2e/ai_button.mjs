@@ -34,10 +34,9 @@ try {
     await page.locator('[data-ai-group="sub"]').waitFor()
     c.ok(`${w}: no endpoint -> Your AI plan choice`, await page.locator('[data-ai-group="sub"]').isVisible())
     const plans = await page.locator('[data-ai-plan]').allInnerTexts()
-    c.ok(`${w}: Small 5 €, Big 18 €, Enterprise in order`, plans.length === 3 && /Small[\s\S]*5 €/.test(plans[0]) && /Big[\s\S]*18 €/.test(plans[1]) && /Enterprise[\s\S]*Talk with us/.test(plans[2]), plans.join(' | '))
+    c.ok(`${w}: Regular 20 €, Friends 15 €, Own keys in order (wave 42)`, plans.length === 3 && /Regular[\s\S]*20 €/.test(plans[0]) && /Friends[\s\S]*15 €/.test(plans[1]) && /Own keys[\s\S]*Free/.test(plans[2]), plans.join(' | '))
     const boxes = await page.locator('[data-ai-plan]').evaluateAll((n) => n.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width } }))
     c.ok(`${w}: ${w >= 720 ? 'side by side' : 'stacked'}`, w >= 720 ? boxes[0].y === boxes[1].y && boxes[1].y === boxes[2].y : boxes[0].y < boxes[1].y && boxes[1].y < boxes[2].y, JSON.stringify(boxes))
-    c.ok(`${w}: Enterprise mails connect@evobiosys.org`, (await page.locator('[data-ai-enterprise]').getAttribute('href')).startsWith('mailto:connect@evobiosys.org'))
     c.ok(`${w}: buttons underlined`, (await page.locator('[data-ai-signup]').evaluateAll((b) => b.every((x) => getComputedStyle(x).textDecorationLine.includes('underline')))))
     c.ok(`${w}: no horizontal scroll`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     c.ok(`${w}: bring your own keys folded`, !(await page.locator('[data-ai-group="byok"]').evaluate((d) => d.open)))
@@ -47,8 +46,8 @@ try {
     c.ok(`${w}: disclosure shows the key fields`, await page.locator('[data-ai-field="baseUrl"]').isVisible())
     await shot(page, `${w}-byok`)
 
-    await page.locator('[data-ai-signup="light"]').click()
-    c.ok(`${w}: Choose Small opens the sign-up sheet`, (await page.locator('[data-ai-email]').count()) === 1)
+    await page.locator('[data-ai-signup="friends"]').click()
+    c.ok(`${w}: Choose Friends opens the sign-up sheet`, (await page.locator('[data-ai-email]').count()) === 1)
 
     await page.evaluate(() => {
       const r = JSON.parse(localStorage.getItem('trustweb.v1.me'))

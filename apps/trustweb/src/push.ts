@@ -9,6 +9,7 @@
 import type { PushSubscriptionJson } from './net'
 import { kindsOf } from './notify_kinds'
 import type { AppState } from './model'
+import { inboxId, inboxPut, newItem, type InboxKind } from './notify_inbox'
 import { clearPushBundle, writePushBundle } from './push_bundle'
 import type { PushBundle } from './push_bundle'
 
@@ -109,7 +110,9 @@ export function pushBundleOf(s: AppState, relayOrigin: string, appName: string, 
  * A notification from the page while it is hidden. Android Chrome allows `new Notification` from a page no longer
  * (worker only), so the registration shows it when there is one; the constructor stays the fallback for desktop browsers.
  */
-export async function showNotification(title: string, body: string, offOffer?: string): Promise<void> {
+export async function showNotification(title: string, body: string, offOffer?: string, kind: InboxKind = 'other'): Promise<void> {
+  const at = Date.now()
+  await inboxPut(newItem(kind, title, body, at, inboxId(at, 0))) // before the system shows it: the popup lists what the person missed
   const reg = pushSupported() ? await workerRegistration() : null
   if (reg) {
     // renotify is missing from the DOM lib's NotificationOptions; browsers honour it.

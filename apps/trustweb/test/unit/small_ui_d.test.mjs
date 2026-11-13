@@ -58,8 +58,7 @@ describe('promote (an overflow item enters the row)', () => {
     expect(barLayout(ids, primary, 5).shown).toContain('feed')
     expect(resolveBar(bar, F).primary).toBe('mod:community')
   })
-  it('record and unknown ids change nothing', () => {
-    expect(promoteBar(BAR, 'record', F, PHONE_MAX)).toBe(BAR)
+  it('unknown ids change nothing (Record is promoted like any view, wave 42)', () => {
     expect(promoteBar(BAR, 'nope', F, PHONE_MAX)).toBe(BAR)
   })
 })

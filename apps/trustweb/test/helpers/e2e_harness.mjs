@@ -29,11 +29,11 @@ async function waitForServer(url, ms = 30_000) {
   throw new Error('server did not come up: ' + url)
 }
 
-/** Starts relay + Vite on `port`; `stop()` ends both. */
-export async function startApp(port) {
+/** Starts relay + Vite on `port`; `stop()` ends both. `audiences`: the origins signed relay calls name, when a TLS front sits in front (the relay sees another Host). */
+export async function startApp(port, { audiences } = {}) {
   const { RelayServer } = await import('../../../../packages/transport/src/relay_server.ts')
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
-  const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
+  const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore(), ...(audiences ? { senderAuthAudiences: audiences } : {}) })
   const { port: relayPort } = await relay.listen(0, '127.0.0.1')
   const vite = spawn(process.execPath, [process.env.TW_VITE || path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,

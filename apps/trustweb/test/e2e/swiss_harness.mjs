@@ -137,6 +137,9 @@ export async function newPhone(browser, errors, { speech = false, viewport = { w
 
 export async function startPhone(page, base, name) {
   await page.goto(base)
+  // Review wave 42: a fresh dev server reloads the page once after optimising dependencies; a name typed before that is lost.
+  await page.waitForLoadState('networkidle').catch(() => {})
+  await page.waitForTimeout(1500)
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
   await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })

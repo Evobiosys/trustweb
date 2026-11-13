@@ -27,6 +27,8 @@ import { createSyncLink } from './sync_link'
 import type { Incoming, PairRequest, Pairing } from './sync_link'
 import type { Conflict } from './sync_core'
 import type { Differences } from './device_adopt'
+import { adoptIdle, adoptStep, mayArchive } from './adopt_flow'
+import type { AdoptPhase } from './adopt_flow'
 import { SCHEMA_VERSION } from './schema_version'
 import { linkButton } from './link_change_view'
 import { S } from './strings'
@@ -451,21 +453,28 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     ])
   }
 
-  /** Wave 40: the confirm sheet before another device's state replaces this one: what differs, what happens to the old state. */
-  function adoptSheet(i: Incoming, a: NonNullable<Incoming['adopt']>): void {
+  /** Wave 40, two steps since wave 42 (B17): the sheet first shows how much differs and offers "Preview"; the read-only list follows with "Adopt". Nothing is archived or replaced before Adopt. */
+  function adoptSheet(i: Incoming, a: NonNullable<Incoming['adopt']>, phase: AdoptPhase = adoptIdle): void {
     const name = i.from.name
+    const previewed = phase === 'previewed'
+    const list = (label: string, items: string[]): HTMLElement | null => (items.length ? el('p', { class: 'meta', 'data-adopt-list': label }, [`${label}: ${items.join(', ')}`]) : null)
+    const pv = previewed ? a.preview() : null
     open('devices-incoming', [
       el('h3', {}, [a.kind === 'take' ? S.adTakeTitle(name) : S.adGiveTitle(name), ' ', alphaSub()]),
       el('p', { 'data-adopt-diff': [a.diff.people, a.diff.notes, a.diff.settings].join(',') }, [S.adDiff(a.diff)]),
       a.other ? el('p', { 'data-adopt-other': String(a.other) }, [S.adDiffOther(a.other)]) : null,
+      ...(pv ? [list(S.adPreviewAdded, pv.added), list(S.adPreviewRemoved, pv.removed), list(S.adPreviewChanged, pv.changed), list(S.adPreviewSettings, pv.settings), pv.more ? el('p', { class: 'meta' }, [S.adPreviewMore(pv.more)]) : null, el('p', { class: 'meta', 'data-adopt-untouched': '1' }, [S.adPreviewUntouched])] : []),
       el('p', {}, [a.kind === 'take' ? S.adTakeLead(name) : S.adGiveLead(name)]),
       el('p', { class: 'meta' }, [S.adArchiveNote]),
-      el('button', { class: 'btn btn-electric', 'data-adopt-confirm': '1', onclick: () => void adopt(a, name) }, [a.kind === 'take' ? S.adTakeOk : S.adGiveOk]),
+      previewed
+        ? el('button', { class: 'btn btn-electric', 'data-adopt-confirm': '1', onclick: () => void adopt(a, name, adoptStep(phase, 'adopt')) }, [S.adAdopt])
+        : el('button', { class: 'btn btn-electric', 'data-adopt-preview': '1', onclick: () => adoptSheet(i, a, adoptStep(phase, 'preview')) }, [S.adPreview]),
       el('button', { class: 'btn btn-ghost', onclick: () => { i.decline(); devicesSheet() } }, [S.dvNotNow]),
     ])
   }
 
-  async function adopt(a: NonNullable<Incoming['adopt']>, name: string): Promise<void> {
+  async function adopt(a: NonNullable<Incoming['adopt']>, name: string, phase: AdoptPhase): Promise<void> {
+    if (!mayArchive(phase)) return   // B17: only the Adopt press after the preview archives and replaces
     const ok = await a.run().catch(() => false)   // review wave 40: odd data or a failed save says so instead of leaving the sheet hanging
     h.toast(ok ? S.adDone(name) : S.adNotKept)
     if (ok) h.changed()

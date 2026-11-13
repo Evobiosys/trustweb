@@ -673,3 +673,15 @@ the estimate; the most relevant goal is an overview of who is in your field, not
   rdf-canonize 35 KB, noble 45 KB).
 
 - Review fixes (wave41 rf41-d): relationship secret keys stay plaintext JSON (0600, atomic write) in this alpha, like the device identity file; never in an API response or log. Sealing them in the vault is later work (review D14, I7 box).
+
+## 2026-11-12 — Jakob's wave 42 orientation
+Recorded from Jakob's dictation of 2026-11-12 (digest: trustweb-ops DEVLOG/wave42/01_items.txt). Policy, not code. The Q&A-agent share files live in trustweb-ops DEVLOG/decisions/ and are not duplicated here.
+
+- **D-P01 Pricing policy for friends.** Orchestrator's reading (instructions-signup-stripe.txt): regular plan 20 €/month; friends plan starts at 15 €/month as the high mark (friends get half the discount, win-win). The bill is hot-adjusted to actual use: a friend who used 6 € gets the 9 € difference back as 3 € deductions over the next 3 months (no inflation adjustment) and the running bill becomes 6 €. A heads-up appears when projected cost will exceed the plan (heavy setup/import month) with an offer of an extra-credit package; extra credits are purchasable any time; TrustWeb stays token-efficient. **Numbers to be confirmed by Jakob** (dictation "15 vs 20" was ambiguous).
+- **D-P02 Design philosophy: voice + LLM first.** Users mostly engage by voice and connected services through LLMs. Every setting is reachable by an LLM/MCP. Humans see small, simple settings; advanced settings are large. Settings search stays. Every change updates the MCP in the same branch.
+- **D-P03 Keyring = bridge/interop only.** Never a dependency parent of other work or catalogue rows. Integrate further once Keyring has adoption and an active feature; until then TrustWeb builds its own.
+- **D-P04 New Year celebration.** Visible only to invitees Jakob added to that event in TrustWeb.
+- **D-P05 Priority.** Members ask each other for support within the in-person session; in-person connect must work.
+- **D-P06 Review rule.** In no state does one control overlay another (header buttons vs row content, sticky bars vs lists, popovers vs bottom bar), at 360x780 and 1280x900.
+- **D-P07 Review panel.** Rows show individually (no nesting under keyring); the approve-wave overlay returns after the last approval; "to review" glyph ⬜️, ❌ only for failures.
+- **D-Q02 Merge ledger (open).** Current rule (wave40 ops-merge-safety): a row whose Revert PR landed ends `reverted`, which lifts the re-merge ban so it may ship again. Strict "never again" would need an extra hold status. **Jakob to confirm the current rule or choose a hold status.**

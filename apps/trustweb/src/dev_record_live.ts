@@ -109,3 +109,15 @@ export async function fetchEditStream(deps: { fetch: typeof fetch } = { fetch: (
     return r.ok ? await r.json() : null
   } catch { return null }
 }
+
+/**
+ * Wave 42 mcp-parity: "Undo" on an agent's change card. The live file holds the agent's change and is newer than this page; this page's record
+ * is the one to keep. Learns the file's time (so the post is no longer a stale one), lifts the stale stop, and posts this page's record back.
+ */
+export async function keepLocalRecord(persona: string, s: AppState, deps: { fetch: typeof fetch } = { fetch: (...a) => fetch(...a) }): Promise<void> {
+  const r = await deps.fetch(PATH, { cache: 'no-store' })
+  const at = Number(r.headers.get(AT_HEADER))
+  if (at) writeAt(persona, at)
+  stale = false
+  pushLiveDevRecord(persona, s)
+}

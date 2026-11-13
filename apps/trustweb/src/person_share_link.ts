@@ -21,11 +21,22 @@ export interface PersonShare {
 
 const cleanItem = (t: string): string => stripUnsafe(t).trim().slice(0, ITEM_MAX)
 
+/** Wave 42 D1: the ticked contact channels as a fragment (no leading #); '' when nothing is ticked. A phone number needs its own tick (contact_share.ts). */
+export function contactFragment(mine: ChannelMap | undefined, settings: ShareSettings | undefined): string {
+  const built = buildContactPayload('', mine, settings)
+  return built ? contactText('', built.payload).split('#')[1] : ''
+}
+
+/** Wave 42 D1: what a pasted or scanned link (https://…/c/<code>#…) shares in its fragment; null for a bare code, a link without one, or junk. */
+export function shareOfLink(input: string): PersonShare | null {
+  const at = input.indexOf('#')
+  if (at < 0 || !/^https?:\/\//i.test(input)) return null
+  return parsePersonShare(input.slice(at))
+}
+
 /** `connectLink` (net.connectLink, may hold a fragment already) + the ticked contact + the zone's item texts. Nothing to add: unchanged. */
 export function personShareLink(connectLink: string, mine: ChannelMap | undefined, settings: ShareSettings | undefined, items: readonly string[]): string {
-  const q = new URLSearchParams()
-  const built = buildContactPayload('', mine, settings)
-  if (built) for (const [k, v] of new URLSearchParams(contactText('', built.payload).split('#')[1])) q.append(k, v)
+  const q = new URLSearchParams(contactFragment(mine, settings))
   for (const t of items.map(cleanItem).filter(Boolean).slice(0, ITEMS_MAX)) q.append(ITEM_KEY, t)
   const add = q.toString()
   if (!add) return connectLink

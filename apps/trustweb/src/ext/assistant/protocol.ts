@@ -7,6 +7,7 @@
  */
 import type { ActionSpec, Checked, Valid } from '../../actions'
 import { isUnnamed } from '../../import_tags'
+import { identityLine, type Provider } from './providers'
 
 /** Review wave 40: the name an import row is sent to the AI under; a row named only by a phone number, a date or an e-mail address goes as "(no name)" (its key still lets the AI act on it). */
 export const aiRowName = (name: string): string => (isUnnamed({ name }) || name.includes('@') ? '(no name)' : name)
@@ -90,6 +91,8 @@ export interface PromptInput {
   rows: readonly PromptRow[]
   /** People the message names. */
   people: readonly PromptPerson[]
+  /** Wave 42: the provider and model answering this turn (the AI says so when asked). */
+  who?: Provider
 }
 
 /** The system message: who the assistant is, the action catalogue, the block format, and where the person is right now. */
@@ -98,6 +101,7 @@ export function systemPrompt(o: PromptInput): string {
   const people = o.people.map((p) => `- ${p.id}: ${p.name} ring=${p.ring}${p.tags.length ? ` tags=${p.tags.join(',')}` : ''}`)
   return [
     'You are the TrustWeb assistant inside the TrustWeb app (a personal web of trust: people on rings, tags, notes, imports).',
+    ...(o.who ? [identityLine(o.who)] : []),
     'You can do everything the person can do by tapping, through the actions below. You can also explain any part of the app and help the person recreate or vary it (variations of look, parts and profile).',
     'Answer in short plain words. For every change you propose, add ONE fenced block at the end of your reply:',
     '```' + BLOCK,

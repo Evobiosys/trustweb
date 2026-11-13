@@ -9,13 +9,26 @@ export const MODULE_ID = 'obsidian'
 /** localStorage keys of this module (opt-in for complete ingestion, hosts the owner confirmed): per device, cleared by Reset this phone. */
 export const INGEST_KEY = 'trustweb.v1.obsidian.ingest'
 export const HOSTS_KEY = 'trustweb.v1.obsidian.hosts'
-export const PREF_KEYS = [INGEST_KEY, HOSTS_KEY] as const
+export const SUGGEST_KEY = 'trustweb.v1.obsidian.suggest'
+export const PREF_KEYS = [INGEST_KEY, HOSTS_KEY, SUGGEST_KEY] as const
 
 /** One database per record on this device (obsidian_cache.ts). */
 export const obsidianDbName = (meId: string): string => `trustweb-obsidian.${meId}`
 
 /** `forgotAt`: the tombstone of "Forget this vault", so the other device's vault name does not come back on the next sync. */
-export interface ObsidianData { vault?: string; syncedAt?: number; forgotAt?: number }
+export interface SuggestionData { path: string; name: string; confidence: number; why: string }
+/** Wave 42: `suggestions` = people the owner's AI proposed that wait for a tick (at most SUGGESTIONS_KEPT); `suggestedAt` decides which device's list wins. */
+export interface ObsidianData { vault?: string; syncedAt?: number; forgotAt?: number; suggestions?: SuggestionData[]; suggestedAt?: number }
+export const SUGGESTIONS_KEPT = 200
+
+function parseSuggestions(raw: unknown): SuggestionData[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  return raw.flatMap((x): SuggestionData[] => {
+    const o = x as Record<string, unknown> | null
+    return o && typeof o.path === 'string' && typeof o.name === 'string' && typeof o.confidence === 'number' && typeof o.why === 'string'
+      ? [{ path: o.path, name: o.name, confidence: o.confidence, why: o.why }] : []
+  }).slice(0, SUGGESTIONS_KEPT)
+}
 
 export function parseObsidian(raw: unknown): ObsidianData {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
@@ -24,6 +37,8 @@ export function parseObsidian(raw: unknown): ObsidianData {
     ...(typeof o.vault === 'string' && o.vault ? { vault: o.vault } : {}),
     ...(typeof o.syncedAt === 'number' ? { syncedAt: o.syncedAt } : {}),
     ...(typeof o.forgotAt === 'number' ? { forgotAt: o.forgotAt } : {}),
+    ...(parseSuggestions(o.suggestions) ? { suggestions: parseSuggestions(o.suggestions) } : {}),
+    ...(typeof o.suggestedAt === 'number' ? { suggestedAt: o.suggestedAt } : {}),
   }
 }
 
@@ -38,7 +53,16 @@ export function mergeObsidian(mine: unknown, theirs: unknown): ObsidianData {
   const syncedAt = Math.max(at, bt)
   const forgotAt = Math.max(a.forgotAt ?? 0, b.forgotAt ?? 0)
   if (forgotAt && syncedAt <= forgotAt) return { forgotAt }
-  return { ...(vault ? { vault } : {}), ...(syncedAt ? { syncedAt } : {}), ...(forgotAt ? { forgotAt } : {}) }
+  // The suggestions follow their own clock; a tie takes the list that sorts larger as JSON (the same on both devices).
+  const sa = a.suggestedAt ?? 0
+  const sb = b.suggestedAt ?? 0
+  const key = (d: ObsidianData): string => JSON.stringify(d.suggestions ?? [])
+  const pick = sb > sa ? b : sb < sa ? a : key(b) > key(a) ? b : a
+  const suggestedAt = Math.max(sa, sb)
+  return {
+    ...(vault ? { vault } : {}), ...(syncedAt ? { syncedAt } : {}), ...(forgotAt ? { forgotAt } : {}),
+    ...(pick.suggestions ? { suggestions: pick.suggestions } : {}), ...(suggestedAt ? { suggestedAt } : {}),
+  }
 }
 
 /** Reset this phone: the record's database and the module's preference keys go. Settles whatever IndexedDB does (blocked, silent). */

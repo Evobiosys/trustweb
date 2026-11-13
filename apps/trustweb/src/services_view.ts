@@ -14,7 +14,8 @@ import { COMING_SOURCES, VERIFIED_SOURCES } from './import_sources'
 import { failRun, finishRun, IDLE_RUN, startRun, tickRun } from './import_run'
 import type { Run } from './import_run'
 import type { Pages } from './page_view'
-import { commitPlan, countsLine, pendingProposals, planServices } from './services_import'
+import { commitPlan, countsLine, pendingProposals } from './services_import'
+import { planFrom } from './import_pipeline'
 import type { ServiceFile, ServicePlan } from './services_import'
 import { curatePage } from './import_curate_view'
 import { openImportHome } from './import_home_view'
@@ -55,7 +56,7 @@ let redraw: (() => void) | null = null
 export function offerContacts(h: ServicesHooks, contacts: ImportedContact[], name = 'Google contacts'): void {
   files = [{ name, text: '', contacts }]
   dayFirst = undefined
-  plan = planServices(h.state(), files, { me: me || h.state().me.displayName, now: Date.now() })
+  plan = planFrom(h.state(), files, { me: me || h.state().me.displayName, now: Date.now() })
   notRecognised = 0
   run = IDLE_RUN
   if (redraw && document.querySelector('[data-import-services]')?.isConnected) redraw()
@@ -69,7 +70,7 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   const box = el('div', { 'data-import-services': '1' })
   me ||= h.state().me.displayName
 
-  const replan = (): void => { plan = planServices(h.state(), files, { me, now: Date.now(), dayFirst }) }
+  const replan = (): void => { plan = planFrom(h.state(), files, { me, now: Date.now(), dayFirst }) }
   const input = el('input', { type: 'file', multiple: true, accept: '.txt,.csv,.vcf,.json,text/*', hidden: true, 'data-svc-file': '1' }) as HTMLInputElement
   const pick = (list: File[]): void => {
     run = startRun(Date.now())

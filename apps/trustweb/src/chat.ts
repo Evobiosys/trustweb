@@ -22,7 +22,7 @@
  */
 import { isAgreementText, parseAgreementText } from './agreements'
 import { isForgetText, parseForgetText } from './forget'
-import { isSupportText, parseHereText, parseSupportText } from './support_ask'
+import { isSupportText, parseCloseText, parseHereText, parseSupportText } from './support_ask'
 import { isKeepText, parseKeepText } from './account_keep'
 import { sanitizeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
@@ -246,7 +246,7 @@ export function routeText(appUrl: string, text: string): TextKind {
   if (isAgreementText(appUrl, text)) return parseAgreementText(appUrl, text) ? TextKind.Agreement : TextKind.Ignore
   if (isProfileText(appUrl, text)) return parseProfileText(appUrl, text, Date.now()) ? TextKind.Profile : TextKind.Ignore
   if (isForgetText(appUrl, text)) return parseForgetText(appUrl, text) ? TextKind.Forget : TextKind.Ignore
-  if (isSupportText(appUrl, text)) return parseSupportText(appUrl, text) || parseHereText(appUrl, text) ? TextKind.Support : TextKind.Ignore
+  if (isSupportText(appUrl, text)) return parseSupportText(appUrl, text) || parseHereText(appUrl, text) || parseCloseText(appUrl, text) ? TextKind.Support : TextKind.Ignore
   return text.startsWith(`${appUrl}?${SHARE_PARAM}=1#`) ? TextKind.Ignore : TextKind.Chat
 }
 

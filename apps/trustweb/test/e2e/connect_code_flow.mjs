@@ -54,6 +54,8 @@ async function newPhone(browser, server) {
 
 async function startPhone(page, name) {
   await page.goto(ORIGIN + '/')
+  await page.waitForLoadState('networkidle').catch(() => {})
+  await page.waitForTimeout(1500) // the dev server may reload once after optimising dependencies
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
   await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
@@ -107,7 +109,9 @@ async function partA(browser) {
   // a new name: the same code, updated
   server.delayMs = 0
   await page.getByRole('button', { name: 'Back' }).click()
-  await page.getByRole('button', { name: 'Ada Lovelace' }).click()
+  // wave 42: the name sits in Settings (General) now, not in the header; the row is in the page, so press it directly
+  await page.locator('.hdr [aria-label="Settings"]').click()
+  await page.locator('.name-row').first().evaluate((n) => n.click())
   await page.locator('.sheet input[aria-label="Your name"]').fill('Ada Byron')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   const updated = await until(async () => connectPosts(server).length === 2 && connectPosts(server)[1].body)
@@ -141,14 +145,18 @@ async function partB(browser) {
   // Ada's Signal username link, ticked by default (a username link is)
   await a.page.locator('.hdr [aria-label^="Show my code"]').click()
   await saveChannel(a.page, 'signal', USERNAME_LINK)
+  await a.page.locator('[data-share-row] [data-mode="trustweb-signal"]').first().click()   // the Meet row: TrustWeb + Signal (the username link is ticked by default)
   await a.page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
-  const code = await until(async () => { const c = [...server.codes.keys()][0]; return c && (await payload(a.page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)
+  // wave 42 D1: TrustWeb + Signal is in force, so the QR carries the code AND her ticked Signal link in its fragment (never to the server)
+  const code = await until(async () => { const c = [...server.codes.keys()][0]; return c && (await payload(a.page)).startsWith(`${ORIGIN}/c/${c}#`) ? c : null }, 15_000)
   t.ok('b: Ada\'s code is on screen', !!code)
+  const qrPayload = await payload(a.page)
+  t.ok('b: the QR fragment carries her Signal link, the code the server holds does not', qrPayload.includes('signal=') && !JSON.stringify([...server.codes.values()]).includes('signal.me'))
 
   const b = await newPhone(browser, server)
   await startPhone(b.page, 'Bo Builder')
   const opensBefore = server.opens.length
-  await b.page.goto(`${ORIGIN}/c/${code}#n=${encodeURIComponent('Notes from Ada')}`)
+  await b.page.goto(`${qrPayload}&n=${encodeURIComponent('Notes from Ada')}`)   // a camera scan of her QR (plus a note), as the phone opens it
   t.ok('b: Bo opens /c/<code>: the 302 reached the app', server.opens.length === opensBefore + 1)
   t.ok('b: the add sheet opens, naming Ada (from the link)', await addSheetOpen(b.page))
   t.ok('b: title "Add Ada Lovelace to your web?" and the name field holds her name', (await b.page.locator('.sheet.on [data-connect-add-title]').innerText()) === 'Add Ada Lovelace to your web?' && (await b.page.locator('.sheet.on [data-connect-add-name]').inputValue()) === 'Ada Lovelace')
@@ -163,7 +171,7 @@ async function partB(browser) {
   const afterAdd = await record(b.page)
   t.ok('b: she is in the Friend ring, on the person AND on the connection', afterAdd.people[0].ring === 'friend' && afterAdd.peers[0].ring === 'friend')
   const msg = b.page.locator('.sheet.on a', { hasText: 'Message on Signal' })
-  t.ok('b: the card shows "Message on Signal" with Ada\'s username link (it arrives with the handshake)', !!(await until(async () => (await msg.count()) === 1 && (await msg.getAttribute('href')) === USERNAME_LINK)))
+  t.ok('b: the card shows "Message on Signal" with Ada\'s username link (it came in the QR fragment, wave 42 D1; messenger links never leave at connect time otherwise)', !!(await until(async () => (await msg.count()) === 1 && (await msg.getAttribute('href')) === USERNAME_LINK)))
   t.ok('b: marked "Shared by Ada Lovelace when you connected"', /Shared by Ada Lovelace when you connected/.test(await b.page.locator('.sheet.on').innerText()))
   t.ok('b: the "no link yet" line is gone once the link is there', (await b.page.locator('[data-no-messenger]').count()) === 0)
   await shot(b.page, 'cc_b_card_molly.png')
@@ -303,7 +311,7 @@ async function partE(browser) {
 }
 
 async function main() {
-  const app = await startApp(PORT)
+  const app = await startApp(PORT, { audiences: [ORIGIN] })
   let front = null
   let browser = null
   try {

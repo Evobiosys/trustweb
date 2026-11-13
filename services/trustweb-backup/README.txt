@@ -167,3 +167,13 @@ Devices (wave 15): one account code across linked devices
   An OLD server (before this wave) ignores `move` and `rotate`: it answers a move as a plain READ (200 with the unchanged names, so the
      client sees no change and reports a server error) and a rotate with a 400 (no url); nothing is lost. Deploy the server first.
   The app also touches a code with a plain GET /c/<code> (read-only, no body) to keep it from expiring; the url is written only when it changed.
+
+  /api/billing/*  (wave 42) paid AI plans through Stripe Checkout (billing.mjs; BILLING_FILE, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, see config.mjs).
+                  POST checkout {plan: regular|friends, email, claim} -> {ref, url} (hosted Checkout, subscription, email prefilled);
+                  POST webhook (Stripe-Signature HMAC verified, 5 min tolerance) activates/ends the sign-up; GET status?ref=&X-TW-Claim.
+                  Keys: env only. Mac Keychain -> server env (run on the Mac; the values never print):
+                    security find-generic-password -s stripe-test-secret -w | ssh questhub 'sudo install -m 600 /dev/stdin /etc/trustweb/stripe.env.secret'
+                  then in the unit's EnvironmentFile: STRIPE_SECRET_KEY=<that>, STRIPE_WEBHOOK_SECRET=<whsec_ of the endpoint
+                  https://app.trustweb.one/api/billing/webhook, events checkout.session.completed + customer.subscription.deleted>.
+                  The publishable key is not needed: Checkout is hosted. Mollie: same BillingProvider interface, stub until wired.
+

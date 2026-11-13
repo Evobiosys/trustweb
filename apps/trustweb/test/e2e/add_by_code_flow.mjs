@@ -45,6 +45,8 @@ async function newPhone(browser, server) {
 
 async function startPhone(page, name) {
   await page.goto(ORIGIN + '/')
+  await page.waitForLoadState('networkidle').catch(() => {})
+  await page.waitForTimeout(1500) // the dev server may reload once after optimising dependencies
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
   await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
@@ -77,7 +79,7 @@ const requestsTo = (page, re) => {
 }
 
 async function main() {
-  const app = await startApp(PORT)
+  const app = await startApp(PORT, { audiences: [ORIGIN] })
   let front = null
   let browser = null
   try {

@@ -6,6 +6,7 @@ import { Ring } from './model'
 import type { AppState, Person } from './model'
 import { peopleByZone, pinnedPeople, zoneOpen } from './people_list'
 import { S } from './strings'
+import { emptyState } from './empty_state'
 import { personRow } from './people_row_view'
 import { archivePerson, restorePerson } from './archived_people'
 import { BULK_RINGS, clearSelection, restoreSnapshot, selectGroup, snapshot, toggle } from './multi_select'
@@ -101,6 +102,7 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
       ...(open ? (people.length ? people.map(row) : [el('p', { class: 'meta', 'data-zone-empty': '' }, [S.peopleZoneEmpty])]) : []),
     ])
   }))
+    emptyState(groups, query, pinned.length + peopleByZone(state(), query).reduce((n, z) => n + z.people.length, 0))
   }
   // Wave 36b: the select tool sits in the top strip (data-top-tools); the bottom tool bar shows only while it is on: then Move to ring, Add tag, Archive, Done. It wraps, never scrolls sideways.
   const bar = el('div', { class: 'select-bar', 'data-select-bar': '' })

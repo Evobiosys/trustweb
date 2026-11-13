@@ -37,8 +37,8 @@ export function kindOfWire(t: string): NotifyKind | null {
  * What the service worker shows for the wires it could read (names are the connections' display names, as stored on this
  * device; a wire from an unknown sender has none). One line per kind, nothing for a kind that is off.
  */
-export function workerLines(arrivals: { kind: NotifyKind; name: string | null }[], kinds: NotifyKinds): string[] {
-  const lines: string[] = []
+export function workerItems(arrivals: { kind: NotifyKind; name: string | null }[], kinds: NotifyKinds): { kind: NotifyKind; body: string }[] {
+  const items: { kind: NotifyKind; body: string }[] = []
   for (const kind of NOTIFY_KINDS) {
     if (kind === 'reminder' || kind === 'event' || !kinds[kind]) continue // a reminder or event notice is this page's own, never a waiting wire
     const of = arrivals.filter((a) => a.kind === kind)
@@ -46,11 +46,15 @@ export function workerLines(arrivals: { kind: NotifyKind; name: string | null }[
     const names = [...new Set(of.map((a) => a.name).filter((n): n is string => Boolean(n)))]
     const who = names.length === 0 ? 'Someone' : names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `${names[0]} and ${names.length - 1} others`
     const n = of.length
-    if (kind === 'connect') lines.push(n === 1 ? `${who} wants to connect.` : `${who} want to connect.`)
-    else if (kind === 'ask') lines.push(n === 1 ? `${who} is sending you a query.` : `${who} sent you ${n} queries.`)
-    else lines.push(n === 1 ? `${who} sent you a message.` : `${who} sent you ${n} messages.`)
+    if (kind === 'connect') items.push({ kind, body: n === 1 ? `${who} wants to connect.` : `${who} want to connect.` })
+    else if (kind === 'ask') items.push({ kind, body: n === 1 ? `${who} is sending you a query.` : `${who} sent you ${n} queries.` })
+    else items.push({ kind, body: n === 1 ? `${who} sent you a message.` : `${who} sent you ${n} messages.` })
   }
-  return lines
+  return items
+}
+
+export function workerLines(arrivals: { kind: NotifyKind; name: string | null }[], kinds: NotifyKinds): string[] {
+  return workerItems(arrivals, kinds).map((i) => i.body)
 }
 
 /** When a wake arrives but no wire could be read (no keys yet, the drain did not answer in time): one line, if anything is on. */

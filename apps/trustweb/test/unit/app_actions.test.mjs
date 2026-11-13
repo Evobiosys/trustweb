@@ -52,6 +52,27 @@ function setup() {
 const ok = (a, type, args) => { const r = a.check({ type, args }); if (!r.ok) throw new Error(r.error); return r.action }
 
 describe('app actions: people', () => {
+  it('remove-person tombstones the person (30 days, like the dustbin); undo puts them back on their ring', () => {
+    const { a, s } = setup()
+    const d = a.run(ok(a, 'remove-person', { person: 'Bo Tester' }))
+    expect(d.label).toBe('Remove Bo Tester')
+    expect(s.people[1].deleted_at).toBeTypeOf('string')
+    expect(s.people[1].ring).toBe(Ring.None)
+    expect(s.people[1].prevRing).toBe(Ring.Acquaintance)
+    expect(s.people).toHaveLength(2)   // a tombstone, never a hard delete
+    expect(() => a.run(ok(a, 'remove-person', { person: 'Bo Tester' }))).toThrow('no person "Bo Tester"')
+    d.undo()
+    expect(s.people[1].deleted_at).toBeUndefined()
+    expect(s.people[1].ring).toBe(Ring.Acquaintance)
+  })
+
+  it('remove-person is undoable, needs its own Approve even while watching (a person is no small change)', () => {
+    const { a } = setup()
+    const c = a.check({ type: 'remove-person', args: { person: 'p1' } })
+    expect(c.ok && c.action.undoable).toBe(true)
+    expect(c.ok && c.action.auto).toBe(false)
+  })
+
   it('set-ring by id or by unique name; undo puts the ring back', () => {
     const { a, s } = setup()
     const d = a.run(ok(a, 'set-ring', { person: 'Ada Lovelace', ring: 'close' }))

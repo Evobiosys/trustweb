@@ -5,7 +5,7 @@ import { S } from '../../strings'
 import type { TwCtx, TwSettingsSection } from '../tw_registry'
 import { MODULE_ID, parseObsidian } from './obsidian_data'
 import { ingestTarget } from './obsidian_endpoint'
-import { ingestOptIn, setIngestOptIn } from './obsidian_prefs'
+import { ingestOptIn, setIngestOptIn, setSuggestOptIn, suggestOptIn } from './obsidian_prefs'
 import { openVaultStore } from './obsidian_cache'
 import { shutdownAll } from './obsidian_run'
 
@@ -26,6 +26,12 @@ function rows(ctx: TwCtx): Node[] {
     setIngestOptIn(next)
     sw.className = 'radio' + (next ? ' on' : ''); sw.setAttribute('aria-checked', String(next))
   })
+  const sg = el('button', { class: 'radio' + (suggestOptIn() ? ' on' : ''), role: 'switch', 'aria-checked': String(suggestOptIn()), 'data-obsidian-suggest-switch': '' }, [el('b', {}, [T.setSuggest]), el('small', {}, [T.setSuggestHint])])
+  sg.addEventListener('click', () => {
+    const next = !suggestOptIn()
+    setSuggestOptIn(next)
+    sg.className = 'radio' + (next ? ' on' : ''); sg.setAttribute('aria-checked', String(next))
+  })
   const vault = el('p', { class: 'meta', 'data-obsidian-vault': '' }, [T.setNoVault])
   const done = el('small', { class: 'meta', hidden: true }, [T.setForgot])
   const store = openVaultStore(ctx.store().me.id)
@@ -36,6 +42,7 @@ function rows(ctx: TwCtx): Node[] {
   showVault()
   return [
     sw,
+    sg,
     el('p', { class: 'meta', 'data-obsidian-target': '' }, [targetLine(ctx.store().advanced?.ai)]),
     vault,
     el('button', {
@@ -44,6 +51,8 @@ function rows(ctx: TwCtx): Node[] {
         // Stop a running ingestion first (it would write its state back), drop the opt-in, and leave a tombstone so the other device does not bring the vault back.
         shutdownAll()
         setIngestOptIn(false)
+        setSuggestOptIn(false)
+        sg.className = 'radio'; sg.setAttribute('aria-checked', 'false')
         sw.className = 'radio'; sw.setAttribute('aria-checked', 'false')
         void store.forget().then(() => {
           const s = ctx.store()

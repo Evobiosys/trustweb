@@ -9,6 +9,8 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
+import type { AssistantCfg } from './ext/assistant/providers'
+import type { InboxItem } from './notify_inbox'
 import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
@@ -378,6 +380,20 @@ export interface TwEvent {
   icsUid?: string
   /** E3 (events.ts revealedBy): how much of my name my links for this event tell other attendees. Absent = 'full'. This device only; never in an event link (event_link.ts whitelist). */
   nameReveal?: NameReveal
+  /** Wave 42 community-event: the community (colour tag id) this event was made in. */
+  community?: string
+  /** Wave 42: the free-text documents of the event (event_plan.ts). */
+  docs?: { description?: string; followup?: string }
+  /** Wave 42: the sign-up sheet: who joined with one tap ('me' or a person id). */
+  signup?: string[]
+  /** Wave 42: named slots; who = 'me' or a person id once taken. */
+  roles?: { name: string; who?: string }[]
+  /** Wave 42: what the event needs; by = the volunteer ('me' or a person id) once someone brings it (visible, I4). */
+  resources?: { id: string; text: string; by?: string }[]
+  /** Wave 42 (P04): identities (did) of the people the celebration is shown to. Never in an event link. */
+  invitees?: string[]
+  /** Wave 42 (P04): the event has a celebration, shown only per celebrationVisible. */
+  celebration?: true
 }
 
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
@@ -1056,6 +1072,10 @@ export interface AppState {
   inventory: InventoryItem[]
   log: LogEntry[]
   notificationsOn: boolean
+  /** Wave 42 (notify_inbox.ts): "Popup for missed notifications" is on unless this is true. Only "off" is stored. */
+  missedPopupOff?: true
+  /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
+  notifInbox?: InboxItem[]
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
   /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */
@@ -1112,6 +1132,8 @@ export interface AppState {
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
+  /** Wave 42 mcp-parity: "MCP applies directly" (Settings > Advanced > MCP and agents): an agent's change through MCP is taken at once in a personal preview. */
+  mcpApplyDirectly?: boolean
   /** Wave 31 (matches.ts): what I can offer (edited like My Resources) and the matches the pc24 service found, with my answers. This device only (not in sync_core's bundle). */
   offers?: Offer[]
   matches?: Match[]
@@ -1335,7 +1357,7 @@ export interface AppState {
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
   features?: { events?: false; inventory?: false }
   /** Settings > AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
-  advanced?: { ai?: AiEndpoint }
+  advanced?: { ai?: AiEndpoint; /** Wave 42: the assistant's provider chain settings (ext/assistant/providers.ts). */ assistant?: AssistantCfg }
   /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
   agent?: AgentLink
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
@@ -1382,12 +1404,23 @@ export interface AiSubscription {
   token?: string
 }
 
+/** Wave 42 signup-stripe: a paid plan bought through Stripe Checkout. The claim stays on the device like AiSubscription's. */
+export interface BillingState {
+  plan: 'regular' | 'friends'
+  ref: string
+  email: string
+  claim: string
+  state: 'pending' | 'active' | 'ended'
+}
+
 export interface AiEndpoint {
   /** 'pc24' is a legacy read value only: ai_subscription.ts migrateAi turns it into custom + name 'pc24'. */
   preset: 'tw-subscription' | 'openai' | 'claude' | 'ollama' | 'pc24' | 'custom'
   /** Label of a custom endpoint (Jakob's: 'pc24'). */
   name?: string
   sub?: AiSubscription
+  /** Wave 42: the paid plan bought through Stripe Checkout. */
+  bill?: BillingState
   /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
   baseUrl: string
   /** Empty: no Authorization header. */
@@ -1429,12 +1462,12 @@ export const moduleOff = (tw: Pick<TwSettings, 'extensions'> | undefined, id: st
 
 /** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */
 export function feedOn(s: Pick<AppState, 'feed' | 'twSettings'>): boolean {
-  return s.feed?.on === true && !moduleOff(s.twSettings, 'feed')
+  return s.feed?.on !== false && !moduleOff(s.twSettings, 'feed')
 }
 
 export type FeatureKey = 'events' | 'inventory' | 'feed'
 
-/** Whether a Settings > Features switch is on: events and inventory default on, the Feed defaults off (feedOn). */
+/** Whether a Settings > Features switch is on: events, inventory and (wave 42 D2, the stock bar) the Feed default on (feedOn). */
 /** Wave 39: a profile or the Extensions list can switch the module off (Resources is the module `resources`). */
 export function featureOn(s: Pick<AppState, 'feed' | 'features' | 'twSettings'>, key: FeatureKey): boolean {
   return key === 'feed' ? feedOn(s) : s.features?.[key] !== false && !moduleOff(s.twSettings, key === 'inventory' ? 'resources' : key)

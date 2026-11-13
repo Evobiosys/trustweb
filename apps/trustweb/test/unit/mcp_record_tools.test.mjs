@@ -28,7 +28,7 @@ function fixture(over = {}) {
 
 describe('read tools', () => {
   it('with writes off only the read tools exist', () => {
-    expect(fixture().tools.map((t) => t.name).sort()).toEqual(['get_person', 'list_notes', 'list_people', 'list_tags', 'search'])
+    expect(fixture().tools.map((t) => t.name).sort()).toEqual(['bar_list', 'community_list', 'community_settings_get', 'connect_code', 'connect_redeem', 'get_person', 'list_notes', 'list_people', 'list_tags', 'notifications_inbox_list', 'search', 'settings_get', 'settings_list', 'settings_search', 'support_inbox'])
   })
   it('list_people hides deleted people and filters by tag and zone', () => {
     const { by } = fixture()
@@ -180,5 +180,46 @@ describe('over stdio', () => {
     expect(r.result.isError).toBeUndefined()
     expect(statSync(path.join(dir, 'dev-edits.jsonl')).size).toBeGreaterThan(0)
     await s.close()
+  })
+})
+
+describe('wave 42 push-popup: notifications inbox', () => {
+  const item = (id, at, seenAt = null) => ({ id, kind: 'chat', title: 'TrustWeb', body: `b${id}`, at, seenAt })
+  const withInbox = (over = {}) => {
+    const f = fixture({ write: true, ...over })
+    writeFileSync(f.file, JSON.stringify({ ...base(), notifInbox: [item('a', 1), item('b', 3), item('c', 2, 9)] }))
+    return f
+  }
+  it('inbox_list returns the setting and the items newest first; unseen only on request', () => {
+    const { by } = withInbox()
+    expect(by.notifications_inbox_list.run({})).toEqual({ popup: true, items: [item('b', 3), item('c', 2, 9), item('a', 1)] })
+    expect(by.notifications_inbox_list.run({ unseenOnly: true }).items.map((i) => i.id)).toEqual(['b', 'a'])
+  })
+  it('an old record without an inbox lists nothing', () => {
+    expect(fixture().by.notifications_inbox_list.run({})).toEqual({ popup: true, items: [] })
+  })
+  it('mark_seen sets seenAt on the named ids (or all) and changes nothing else', () => {
+    const { by, file } = withInbox()
+    expect(by.notifications_inbox_mark_seen.run({ ids: ['a'] })).toEqual({ marked: 1 })
+    expect(JSON.parse(readFileSync(file, 'utf8')).notifInbox.map((i) => [i.id, i.seenAt !== null])).toEqual([['a', true], ['b', false], ['c', true]])
+    expect(by.notifications_inbox_mark_seen.run({ all: true })).toEqual({ marked: 1 })
+    expect(by.notifications_inbox_mark_seen.run({ all: true })).toEqual({ marked: 0 })
+    expect(JSON.parse(readFileSync(file, 'utf8')).people).toHaveLength(5)
+  })
+  it('mark_seen needs ids or all', () => {
+    expect(() => withInbox().by.notifications_inbox_mark_seen.run({})).toThrow(/ids/)
+  })
+  it('popup_set stores only "off" (missedPopupOff true) and removes it for on', () => {
+    const { by, file } = withInbox()
+    expect(by.notifications_popup_set.run({ on: false })).toEqual({ popup: false })
+    expect(JSON.parse(readFileSync(file, 'utf8')).missedPopupOff).toBe(true)
+    expect(by.notifications_inbox_list.run({}).popup).toBe(false)
+    expect(by.notifications_popup_set.run({ on: true })).toEqual({ popup: true })
+    expect('missedPopupOff' in JSON.parse(readFileSync(file, 'utf8'))).toBe(false)
+  })
+  it('the write tools exist only with writes on', () => {
+    const names = fixture().tools.map((t) => t.name)
+    expect(names).toContain('notifications_inbox_list')
+    expect(names).not.toContain('notifications_inbox_mark_seen')
   })
 })
