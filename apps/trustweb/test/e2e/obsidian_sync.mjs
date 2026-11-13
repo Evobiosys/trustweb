@@ -25,7 +25,7 @@ async function run(label, viewport, touch) {
   const b = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
   const ctx = await b.newContext({ viewport, deviceScaleFactor: 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' })
   const page = await ctx.newPage()
-  const errs = []; const requests = []; const workers = []; const aiCalls = []
+  const errs = []; const requests = []; const workers = []; const aiCalls = []; const suggestCalls = []
   page.on('pageerror', (e) => errs.push(String(e)))
   page.on('request', (r) => requests.push(r.url()))
   page.on('worker', (w) => workers.push(w.url()))
@@ -36,11 +36,18 @@ async function run(label, viewport, touch) {
     const body = JSON.parse(route.request().postData() ?? '{}')
     aiCalls.push(body)
     const files = [...String(body.messages?.[1]?.content ?? '').matchAll(/### FILE: (\S+)/g)].map((m) => m[1])
+    if (/suggest which notes/.test(body.messages?.[0]?.content ?? '')) {
+      suggestCalls.push(body)
+      const people = files.filter((f) => /^(Daily|Journal)\//.test(f)).slice(0, 2).map((f) => ({ path: f, name: 'Leonie Weiss', confidence: 0.8, why: 'Coffee with Leonie' }))
+      return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ people }) } }] }) })
+    }
     const people = files.filter((f) => /^(Daily|Journal)\//.test(f)).map((f, i) => ({ name: `Found Person ${aiCalls.length}${i}`, aliases: [], facts: [`named in ${f}`], relations: [{ name: 'Alma Brandt', relation: 'friend' }], source: f }))
     people.push({ name: 'Ghost Source', facts: [], source: 'not/in/batch.md' })
     await new Promise((r) => setTimeout(r, 1500))
     return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ people }) } }] }) })
   })
+  let otherCalls = 0
+  await page.route('https://llm.example.org/**', async (route) => { otherCalls++; return route.fulfill({ status: 500, body: '{}' }) })
   const hit = (loc) => (touch ? loc.tap() : loc.click())
   const wait = (ms = 300) => page.waitForTimeout(ms)
   const shot = (n) => page.screenshot({ path: `${SHOTS}/obsidian-sync-${viewport.width}-${n}.png` })
@@ -50,6 +57,8 @@ async function run(label, viewport, touch) {
   const setRecord = async (rec) => { await page.evaluate((r) => localStorage.setItem('trustweb.v1.me', JSON.stringify(r)), rec); await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await wait(1000) }
   const openImport = async () => {
     await hit(page.locator('[data-settings-gear]')); await wait(500)
+    // wave 42 settings-llm-first: the rest of Settings sits under Advanced
+    if (!(await page.locator('[data-people-import]').first().isVisible())) { if (!(await page.locator('[data-settings-advanced-all]').evaluate((d) => d.open).catch(() => true))) await page.locator('[data-settings-advanced-all] > summary').click().catch(() => {}); await wait(300) }
     if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your web' }).first()); await wait(300) }
     await hit(page.locator('[data-people-import]').first()); await wait(500)
   }
@@ -67,6 +76,7 @@ async function run(label, viewport, touch) {
   // 2. switch on in Settings > General > Extensions
   const settings = async () => {
     await hit(page.locator('[data-settings-gear]')); await wait(600)
+    if (!(await page.locator('[data-settings-advanced-all]').evaluate((d) => d.open).catch(() => true))) { await page.locator('[data-settings-advanced-all] > summary').click().catch(() => {}); await wait(300) }
     const sw = page.locator('[data-ext-module="obsidian"]')
     if (!(await sw.isVisible())) { await page.locator('[data-settings-group="general"] > summary').click().catch(() => {}); await wait(300) }
     if (!(await sw.isVisible())) { const sum = page.locator('[data-settings-section="extensions"] summary').first(); await sum.scrollIntoViewIfNeeded(); await sum.click().catch(() => {}); await wait(300) }
@@ -153,16 +163,30 @@ async function run(label, viewport, touch) {
   await withAi(PC24); await reopen()
   ck('pc24 preset: target line names it, run button shows batches', /pc24 \(localhost:11435\)/.test(await page.locator('[data-obs-target]').innerText()) && (await page.locator('[data-obs-run]').count()) === 1, await page.locator('[data-obs-ingest]').innerText())
   await shot('10-ingest-ready')
+  // Q01: another host the owner typed is not automatically own: it asks per host, naming host and model
+  await withAi({ preset: 'custom', baseUrl: 'https://llm.example.org/v1', apiKey: '', model: 'big-model' }); await reopen()
   await hit(page.locator('[data-obs-run]'))
   await page.waitForSelector('[data-obs-confirm]', { timeout: 5000 })
   const askText = await page.locator('[data-obs-confirm]').innerText()
-  ck('first run to a host asks: names host and model, nothing sent yet, no progress', /localhost:11435/.test(askText) && /qwen3\.6:35b/.test(askText) && aiCalls.length === 0 && (await page.locator('[data-obs-ai-progress]').count()) === 0, askText)
+  ck('another host: asks first, names host and model, nothing sent yet, no progress', /llm\.example\.org/.test(askText) && /big-model/.test(askText) && otherCalls === 0 && aiCalls.length === 0 && (await page.locator('[data-obs-ai-progress]').count()) === 0, askText)
   await shot('10b-ingest-confirm')
   await noHScroll('confirm')
   await hit(page.locator('[data-obs-confirm-no]')); await wait(300)
-  ck('Cancel: back to the Run button, still nothing sent', (await page.locator('[data-obs-run]').count()) === 1 && (await page.locator('[data-obs-confirm]').count()) === 0 && aiCalls.length === 0)
-  await hit(page.locator('[data-obs-run]')); await page.waitForSelector('[data-obs-confirm]', { timeout: 5000 })
-  await hit(page.locator('[data-obs-confirm-yes]'))
+  ck('Cancel: back to the Run button, still nothing sent', (await page.locator('[data-obs-run]').count()) === 1 && (await page.locator('[data-obs-confirm]').count()) === 0 && otherCalls === 0 && aiCalls.length === 0)
+  await withAi({ preset: 'custom', baseUrl: 'http://llm.example.org/v1', apiKey: '', model: 'big-model' }); await reopen()
+  ck('plain http to another host: refused, no run button', (await page.locator('[data-obs-run]').count()) === 0 && /plain http/.test(await page.locator('[data-obs-target]').innerText()))
+  // Jakob 2026-11-12: loopback that is not the pc24 preset asks too, and the question explains loopback in one plain sentence
+  await withAi({ preset: 'custom', baseUrl: 'http://localhost:11434/v1', apiKey: '', model: 'local-model' }); await reopen()
+  await hit(page.locator('[data-obs-run]'))
+  await page.waitForSelector('[data-obs-confirm]', { timeout: 5000 })
+  const loopText = await page.locator('[data-obs-confirm]').innerText()
+  ck('loopback (not the pc24 preset): asks, names host and model, explains loopback, nothing sent', /localhost:11434/.test(loopText) && /local-model/.test(loopText) && /Loopback \(localhost, 127\.0\.0\.1\) means a program on this very device\./.test(loopText) && aiCalls.length === 0 && (await page.locator('[data-obs-ai-progress]').count()) === 0, loopText)
+  await hit(page.locator('[data-obs-confirm-no]')); await wait(300)
+  // the allow-list: the pc24 preset only runs at once, no question
+  await withAi(PC24); await reopen()
+  await hit(page.locator('[data-obs-run]'))
+  await wait(300)
+  ck('pc24 (allow-listed): no confirmation, the run starts at once', (await page.locator('[data-obs-confirm]').count()) === 0 && (await page.locator('[data-obs-ai-progress]').count()) === 1)
   await page.waitForSelector('[data-obs-ai-progress]', { timeout: 15000 })
   await hit(page.locator('[data-obs-ai-pause]'))
   await wait(3500)
@@ -186,6 +210,37 @@ async function run(label, viewport, touch) {
   ck('an AI row names its source note, with an Open in Obsidian link', (await ai.first().locator('[data-open-obsidian]').count()) === 1 && /Found by AI in your notes; check it\./.test(await ai.first().locator('textarea[data-cur-field="note"]').inputValue().catch(() => '')))
   await shot('14-curate-ai')
   await noHScroll('curate (ai)')
+
+  // 8. F05: let my AI look for more people (opt-in; suggestions the owner ticks)
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await wait(300)
+  await openImport(); await hit(page.locator('[data-import-obsidian]')); await wait(500)
+  ck('suggestions: off by default (own section says how to switch it on), nothing asked', (await page.locator('[data-obs-suggest-off]').count()) === 1 && suggestCalls.length === 0)
+  await page.keyboard.press('Escape'); await wait(300)
+  await settings(); await hit(page.locator('[data-obsidian-suggest-switch]')); await wait(300)
+  ck('suggest switch on', (await page.locator('[data-obsidian-suggest-switch]').getAttribute('aria-checked')) === 'true')
+  await page.keyboard.press('Escape'); await wait(300)
+  await reopen()
+  await hit(page.locator('[data-obs-suggest-run]')); await page.waitForSelector('[data-obs-suggestion]', { timeout: 15000 }); await wait(300)
+  const sg = await page.locator('[data-obs-suggestions]').innerText()
+  ck('suggestions listed with name, confidence and reason; none ticked; nobody added', /Leonie Weiss/.test(sg) && /80% sure/.test(sg) && /Coffee with Leonie/.test(sg) && (await page.locator('[data-obs-suggestion-tick]:checked').count()) === 0 && (await record()).people.length === 1, sg)
+  ck('only titles and short excerpts were sent (no note longer than 300 characters of text)', suggestCalls.length > 0 && suggestCalls.every((c) => c.messages[1].content.split('### FILE: ').slice(1).every((n) => n.length < 420)))
+  ck('every suggestion call went to pc24 only', requests.filter((u) => !/^(http:\/\/127\.0\.0\.1|data:|blob:)/.test(u)).every((u) => u.startsWith('http://localhost:11435/') || u.startsWith('https://llm.example.org/')))
+  await noHScroll('suggestions'); await shot('15-suggestions')
+  // P06: nothing overlays anything: the box, its rows and the action bar do not intersect
+  ck('P06: the rows and the action bar do not overlap', await page.evaluate(() => {
+    const rs = [...document.querySelectorAll('[data-obs-suggestion]')].map((e) => e.getBoundingClientRect())
+    const bar = document.querySelector('[data-obs-suggest-dismiss]')?.getBoundingClientRect()
+    const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+    return rs.length > 0 && !!bar && rs.every((r, i) => !hit(r, bar) && rs.every((o, j) => i === j || !hit(r, o)))
+  }))
+  await hit(page.locator('[data-obs-suggestion-tick]').first()); await wait(200)
+  ck('ticking shows the review button with the count', (await page.locator('[data-obs-suggest-add="1"]').count()) === 1)
+  await noHScroll('suggestions ticked'); await shot('16-suggestions-ticked')
+  await hit(page.locator('[data-obs-suggest-add]')); await wait(700)
+  const leo = page.locator('[data-svc-row]', { hasText: 'Leonie Weiss' })
+  ck('Curate: Leonie as a "from AI, check" row; still not a person in the record', (await leo.count()) === 1 && (await leo.locator('[data-cur-ai-chip]').count()) === 1 && (await record()).people.every((x) => x.name !== 'Leonie Weiss'))
+  await noHScroll('curate (suggestion)'); await shot('17-curate-suggestion')
+  await page.keyboard.press('Escape'); await wait(300)
 
   ck('no page errors', errs.length === 0, errs.join(' | '))
   await b.close()

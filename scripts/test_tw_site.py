@@ -156,6 +156,17 @@ class Subpages(unittest.TestCase):
         self.assertIn('<a href="faq.html">All questions', section)
         self.assertNotIn("<!--", section.replace("<!-- ===", "").replace("=== -->", ""))
 
+    def test_history_credits_frank_sanborn_for_the_trust_zones_without_a_link(self) -> None:
+        # Jakob 2026-11-10 (question answer) and 2026-11-12: Social Fabric trust zones, credit on /history and in the app's About; no URL known yet.
+        page = pages(site.Site.ORG)["history.html"]
+        self.assertIn("Voices and inspirations", page)
+        credit = re.search(r"<p>[^<]*Frank Sanborn[^<]*</p>", page)
+        self.assertIsNotNone(credit)
+        self.assertIn("Closest few", credit.group(0))
+        self.assertIn("Community members", credit.group(0))
+        self.assertIn("Social Fabric", credit.group(0))
+        self.assertNotIn("Sandborn", page)
+
     def test_the_waitlist_copy_is_exactly_what_jakob_dictated(self) -> None:
         self.assertEqual(
             site.WAITLIST_COPY,

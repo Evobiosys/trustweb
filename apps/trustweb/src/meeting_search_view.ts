@@ -9,6 +9,7 @@ import type { PastMeeting } from './model'
 import { searchMeetings, SearchField } from './search'
 import type { SearchHit } from './search'
 import { S } from './strings'
+import { noMatchLine } from './empty_state'
 
 export interface MeetingSearchOptions {
   meetings: () => PastMeeting[]
@@ -41,7 +42,7 @@ function resultsView(o: MeetingSearchOptions, query: string): HTMLElement[] {
   if (!all.length) return [el('p', { class: 'empty' }, [S.searchPastNone])]
   if (!query.trim()) return [el('p', { class: 'empty' }, [S.searchPastLead(all.length)])]
   const found = searchMeetings(all, query, o.dateLabels)
-  if (!found.length) return [el('p', { class: 'empty' }, [S.searchPastNothing(query.trim())])]
+  if (!found.length) return [noMatchLine()]
   return found.map(({ meeting: m, hits }) => el('div', { class: 'ms-result', 'data-meeting': m.id }, [
     el('button', { class: 'pm-row', onclick: () => o.onOpen(m, null) }, [
       el('b', {}, [m.about, o.dummy(m)]),

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 37: the search field at the top of Settings. The matcher is pure; filterSettings hides the rows that miss. */
 
+import { emptyState } from './empty_state'
+
 /** Lower case, accents removed, white space collapsed. */
 export function foldText(s: string): string {
   return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
@@ -35,5 +37,7 @@ export function filterSettings(root: Element, query: string): void {
     if (q && any && box.matches('details')) (box as HTMLDetailsElement).open = true
     return any
   }
-  for (const g of Array.from(root.querySelectorAll('[data-settings-group]'))) (g as HTMLElement).hidden = !walk(g, query)
+  let shown = 0
+  for (const g of Array.from(root.querySelectorAll('[data-settings-group]'))) { const any = walk(g, query); (g as HTMLElement).hidden = !any; if (any) shown++ }
+  emptyState(root, query, shown)
 }

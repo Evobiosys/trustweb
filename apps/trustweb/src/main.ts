@@ -39,9 +39,13 @@ import type { IntroLink } from './intro_link'
 import { introAskText } from './intro_ask'
 import { cardInvitationsRow, invitationSheet, invitationsSection } from './invitations_view'
 import type { InvitationIo } from './invitations_view'
-import { addSupportIn, supportCards, supportForm, supportLine } from './support_ask_view'
+import { addSupportIn, supportCards, supportForm, supportInbox, supportLine } from './support_ask_view'
+import { applyCancel, categoryAsk } from './support_inbox'
+import { planFlush } from './support_flush'
+import { communityChatLive } from './ext/community_mode/chat_row'
+import { addMember, metaOf, parseCommunity, rememberAudience } from './ext/community-mighty/community_data'
 import type { SupportIo } from './support_ask_view'
-import { ASK_MODES, AskMode, nextAskMode, parseHereText, parseSupportText, recordHere } from './support_ask'
+import { ASK_MODES, AskMode, closeText, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
 import { PROVIDERS, guessProvider, validateEmail, composeHref, senderHint, providerLabel, type PrimaryEmail } from './primary_email'
@@ -82,6 +86,7 @@ import { PASS_ON_DEFAULT_NOTICE, dismissNotice, namePreviousId, noticeShown, not
 import { cardPopAction, webTabAction } from './page_stack'
 import { shouldShowBrowserOnly } from './browser_only_notice'
 import { filterSettings } from './settings_search'
+import { advancedBlock, simpleBlock, upgradeSwitches } from './settings_page'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit } from './card_view'
@@ -116,7 +121,7 @@ import {
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
-import { parsePersonShare, personShareLink } from './person_share_link'
+import { contactFragment, parsePersonShare, personShareLink, shareOfLink } from './person_share_link'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
 import { pollRelay, postNote, readRelayOn, type RelayDeps } from './notes_relay'
@@ -133,8 +138,9 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import { communityChatRows } from './chat_communities'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, arrangeRows, barLayout, canMoveBar, customFrom, haloOf, modOfBar, moveBar, overflowChoices, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, overflowChoices, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
+import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { groupsView } from './groups_view'
@@ -214,7 +220,8 @@ import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
 import { mergeIncoming } from './matches'
 import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
-import { fetchEditStream, liveDevActive, liveSyncedAt, markAdopted, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
+import { fetchEditStream, keepLocalRecord, liveDevActive, liveSyncedAt, markAdopted, pushLiveDevRecord, seedLiveDevRecord } from './dev_record_live'
+import { startMcpLive } from './mcp_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
@@ -282,6 +289,7 @@ import { createModeShell } from './ext/community_mode/shell'
 import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createActions } from './actions'
+import { chainOf } from './ext/assistant/providers'
 import { defineAppActions, PLACE_TARGET, type Place as AppPlace } from './app_actions'
 import { ensureTags } from './import_curate_view'
 import { curatePage as curateImportPage } from './services_view'
@@ -297,6 +305,9 @@ import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './eve
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
+import { eventPlanSection } from './event_plan_view'
+import { defineEventActions } from './event_actions'
+import { templatePrompt } from './event_plan'
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
 import type { LinkedEvent } from './event_link'
@@ -336,6 +347,7 @@ import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
+import { createMissedPopup } from './notify_popup_view'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
 import { createToast, fadeHost, type ToastOpts } from './toast'
@@ -377,7 +389,7 @@ const extViews = createViewHost(() => twCtx())
 /** Wave 41 (ext/community_mode): the Personal | Community interface; its callbacks run later, so the many things they name may be declared further down. */
 const modeShell = createModeShell({
   state: () => state, save: () => save(), newId: () => randomId(8), guest: () => Boolean(state?.coGuest && state.coNotesOn), toast: (m) => toast(m),
-  overview: () => (screen === Screen.Web && !webPage) || screen === Screen.People || (screen === Screen.Ext && extViewId === 'community'),
+  overview: () => (screen === Screen.Web && !webPage) || screen === Screen.People || screen === Screen.Chat || (screen === Screen.Ext && extViewId === 'community'),
   tabButton: (target, label, iconSvg, onclick) => { const b = tabButton(target, label, 'web', onclick); b.querySelector('svg')!.outerHTML = iconSvg; return b },
   tabsEl: () => tabs, changed: () => { renderTabs(); render() }, settings: () => settingsSheet(),
   openItem: (item) => { if (item === 'web') { go(Screen.Web); return } openExtView('community'); twBus.emit('community-go', item) },
@@ -999,11 +1011,15 @@ function ownDoorDid(): string | null {
 /** Wave 11: every arrival has a kind, each with its own switch (notify_kinds.ts); shown only while the page is hidden. */
 function notify(kind: NotifyKind, body: string, offerOff = false): void {
   if (!state || !wantsKind(state, kind) || !document.hidden || typeof Notification === 'undefined') return
-  if (Notification.permission === 'granted') { void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined); arrivalHome = notifyHome(kind) }
+  if (Notification.permission === 'granted') { void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined, kind); arrivalHome = notifyHome(kind) }
 }
 /** Wave 27 (notify_route.ts): the screen that owns the last arrival told while the page was hidden; the person lands there on return, unless something is open. */
 let arrivalHome: NotifyHome | null = null
 const HOME_SCREEN: Record<NotifyHome, Screen> = { chat: Screen.Chat, inventory: Screen.Inventory, web: Screen.Web, events: Screen.Events }
+/** Wave 42 (notify_popup_view.ts): the popup for notifications that came while the app was away, on open, on return and after a notification tap. */
+const missedPopup = createMissedPopup({ state: () => state, save: () => save(), open: (home) => { if (state && !solo && screen !== HOME_SCREEN[home]) go(HOME_SCREEN[home]) } })
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void missedPopup.check() })
+window.addEventListener('focus', () => void missedPopup.check())
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !arrivalHome) return
   const home = HOME_SCREEN[arrivalHome]
@@ -1019,7 +1035,7 @@ function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onO
   if (!state || !kindsOf(state)[kind]) return false
   if (document.hidden) {
     if (!wantsKind(state, kind) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
-    void showNotification(S.appName, title)
+    void showNotification(S.appName, title, undefined, kind)
     onShown?.()
     return true
   }
@@ -1235,7 +1251,7 @@ function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
   // Wave 37 (co-notes-link): a guest of a co-note link gets the nested shell instead (Web, Chat in the centre, Resources; Events too for an event note).
   const guest = state?.coGuest && state.coNotesOn ? guestShell(Boolean(state.coGuest.eventId)) : null
-  const { ids, primary, pair } = guest ? { ids: guest.tabs, primary: guest.primary, pair: [] } : resolveBar(state?.uiBar, barFlags())
+  const { ids, primary, pair } = guest ? { ids: guest.tabs, primary: guest.primary, pair: [] } : resolveBar(state?.uiBar, barFlags(), barMax())
   const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
@@ -1325,11 +1341,11 @@ function barArrangeList(s: AppState, flags: BarFlags, redraw: (next: typeof s.ui
     }, [dir < 0 ? '←' : '→'])
     return b
   }
-  const bubble = (id: BarId, on: boolean): HTMLElement => id === 'record'
-    ? el('span', { class: 'radio bar-bubble on', 'data-bar-opt': id }, [el('b', {}, [barName(id)])])
-    : el('label', { class: 'radio bar-bubble' + (on ? ' on' : ''), 'data-bar-opt': id }, [
+  const bubble = (id: BarId, on: boolean): HTMLElement =>
+    el('label', { class: 'radio bar-bubble' + (on ? ' on' : ''), 'data-bar-opt': id }, [
       el('input', { type: 'checkbox', class: 'bar-hide-input', 'aria-label': barName(id), ...(on ? { checked: '' } : {}), onchange: () => {
         if (id === 'feed' && !flags.feed) { s.feed = { ...s.feed, on: true }; redraw(resolveBar(s.uiBar, { ...flags, feed: true }).ids.includes('feed') ? s.uiBar : toggleBar(s.uiBar, id, { ...flags, feed: true })); return }
+        if (!canHideBar(s.uiBar, id, flags)) { toast(S.barLastKept); draw(false); return }
         redraw(toggleBar(s.uiBar, id, flags))
       } }),
       el('b', {}, [barName(id)]),
@@ -1401,7 +1417,7 @@ function barSheet(): void {
       return el('button', {
         class: 'bar-profile bar-profile-custom' + (on ? ' on' : ''), 'data-bar-profile': 'custom', 'aria-label': S.barProfilePick(S.barProfileNames.custom), 'aria-pressed': String(on),
         onclick: () => {
-          s.uiBar = customFrom(s.uiBar, ids, primary); save(); renderTabs(); render(); barSheet()
+          s.uiBar = customFrom(s.uiBar, ids, primary, flags); save(); renderTabs(); render(); barSheet()
           document.querySelector<HTMLElement>('[data-bar-row]')?.scrollIntoView({ block: 'start' })
         },
       }, [el('span', { class: 'bar-profile-prev bar-profile-plus' }, ['+']), el('b', {}, [S.barProfileNames.custom])])
@@ -1713,7 +1729,7 @@ function dndButton(): HTMLElement {
 
 /** Opens Settings on the Advanced part of the group of the screen it is pressed on. */
 function openAdvancedSettings(): void {
-  try { localStorage.setItem(`trustweb.ui.settings.${advancedKeyOf(sectionOfScreen(screen))}`, '1') } catch { /* not remembered */ }
+  try { localStorage.setItem(`trustweb.ui.settings.${advancedKeyOf(sectionOfScreen(screen))}`, '1'); localStorage.setItem('trustweb.ui.settings.advanced-all', '1') } catch { /* not remembered */ }
   settingsSheet()
 }
 
@@ -1727,7 +1743,7 @@ function openAiButton(): void {
   // Wave 41 merge: no AI set up -> the Your AI sheet (small-ui-e). AI set up and the assistant on -> its chat (wave 40 ai-edit-chat).
   // Review: running -> at once (no wait behind other modules' loads); still loading -> one open after it, however often tapped meanwhile;
   // its chunk failed (a stale preview build, offline) -> the sparkle's own behaviour below, never a dead button.
-  if (isEnabled('assistant') && configured(st().advanced?.ai)) {
+  if (isEnabled('assistant') && chainOf(st().advanced).length) {
     if (twRegistry.isActive('assistant')) { twBus.emit('assistant-open'); return }
     if (assistantPending) return
     assistantPending = true
@@ -2359,6 +2375,7 @@ function createMe(name: string): void {
     ? { ...seedState(persona as Persona, Date.now(), ctx), me: { id: randomId(12), displayName } }
     : { v: 1, me: { id: randomId(12), displayName }, peers: [], people: [], inventory: [], log: [], notificationsOn: false }
   if (solo) markDemo(state.people, state.inventory)
+  dismissNotice(state, PASS_ON_DEFAULT_NOTICE) // that note tells an UPGRADING phone about a changed default; a new account never had the old one
   save()
   renderTabs()
 }
@@ -2436,7 +2453,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     addedToast(person, ring)
   } else {
     if (ring === Ring.Intending) addedToast(person, ring, peer.displayName)
-    else toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
+    else if (solo) toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring])) // otherwise the add sheet right below says it, and a toast would cover its zone choices
   }
   render()
   if (treeLink) {
@@ -2531,6 +2548,8 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
   autoShareToPerson(person)
   if (admitted.legacy) person.connectedVia = 'legacy-code'
   save()
+  const shared = shareOfLink(input.trim())   // wave 42 D1: a pasted QR link brings the other side's ticked contact (a phone number too)
+  if (shared?.contact && mergeContact(person, shared.contact, Date.now())) save()
   applyHeldContact(peer, person)
   return { person, existed, ...(out.previous ? { previous: out.previous } : {}) }
 }
@@ -2879,6 +2898,12 @@ function notificationsCard(s: AppState): HTMLElement {
     s.notificationsOn ? el('div', { class: 'notif-kinds' }, NOTIFY_KINDS.map(kindRow)) : null,
     hint ? el('p', { class: 'meta', 'data-push-state': pushState ?? '' }, [hint]) : null,
     el('button', { class: 'btn btn-ghost btn-sm', onclick: () => void toggle() }, [s.notificationsOn ? S.notifTurnOff : S.notifTurnOn]),
+    // Wave 42 push-popup: only "off" is stored; absent means on.
+    el('button', {
+      class: 'radio' + (s.missedPopupOff ? '' : ' on'), 'aria-pressed': String(!s.missedPopupOff), 'data-missed-setting': '',
+      onclick: () => { if (s.missedPopupOff) delete s.missedPopupOff; else s.missedPopupOff = true; save(); settingsSheet() },
+    }, [el('b', {}, [S.missedSetting]), el('small', {}, [S.missedSettingHint])]),
+    s.notificationsOn ? el('button', { class: 'btn btn-ghost btn-sm', 'data-notif-test': '', onclick: () => void showNotification(S.appName, S.notifTestBody) }, [S.notifTestButton]) : null,
   ])
 }
 
@@ -3111,7 +3136,7 @@ function chatCommunityButton(): HTMLElement {
 
 /** Wave 40: the community's own chat (the Community view's chat pane) as the first row, while the Community module is on. */
 function communityChatRow(): HTMLElement | null {
-  if (!isEnabled('community-mighty')) return null
+  if (!isEnabled('community-mighty') || !communityChatLive(st().extData, st().uiRings?.community)) return null // wave 42: an empty community chat has no row; the top button reaches the Community view
   return el('div', { class: 'prow chat-row chat-community-row', role: 'button', tabindex: '0', 'data-chat-community-row': '', onclick: () => { try { localStorage.setItem('trustweb.v1.community-mighty.open-chat', '1') } catch { /* the pane opens closed */ } openExtView('community') } }, [
     avatar(S.community.title, 'community'),
     el('div', { class: 'who' }, [el('b', {}, [S.w40.chatCommunityRow(S.community.title)])]),
@@ -3135,7 +3160,7 @@ function chatListBody(): Node[] {
       messengerChips(people.find((p) => p.id === r.personId) ?? { id: r.personId, name: r.name }),
       el('span', { class: 'when' }, [ageLabel(r.at, now)]),
       r.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(r.unread) }) : null,
-    ])) : [el('p', { class: 'empty' }, [chatQuery.trim() ? S.chatNoMatch : chatCommunitiesOnly ? S.w40.chatCommunityNone : S.chatListEmpty])]),
+    ])) : [chatQuery.trim() ? noMatchLine() : el('p', { class: 'empty' }, [chatCommunitiesOnly ? S.w40.chatCommunityNone : S.chatListEmpty])]),
     el('details', { class: 'chat-find', 'data-chat-find': '' }, [
       el('summary', {}, [S.chatFindTitle]),
       ...(find.length ? find.map((r) => el('button', { class: 'prow', 'data-chat-pick': r.personId, onclick: () => chatSheet(r.personId) }, [
@@ -3343,7 +3368,7 @@ function dismissWanted(peerId: string): void {
   void curator.hide(p.id).then(archivedNotice, (e: unknown) => console.warn('archive reach-out', e))
 }
 
-function addPersonSheet(ring: Ring, presetHint = false): void {
+function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): void {
   let picked = ring
   let busy = false
   const name = el('input', { class: 'field', placeholder: S.addNamePh, maxlength: '40', 'aria-label': S.addNamePh })
@@ -3373,6 +3398,7 @@ function addPersonSheet(ring: Ring, presetHint = false): void {
       return
     }
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
+    if (communityTag && addMember(st().people, out.person.id, communityTag)) save()
     render()
     // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.
     const noteId = out.previous === undefined ? null : namePreviousId(out.previous)
@@ -3392,7 +3418,7 @@ function addPersonSheet(ring: Ring, presetHint = false): void {
     const n = name.value.trim()
     if (!n) { name.focus(); return }
     const s = st()
-    s.people.push({ id: randomId(8), name: n.slice(0, 40), context: where.value.trim().slice(0, 80), ring: picked, metAt: Date.now(), lines: [] })
+    s.people.push({ id: randomId(8), name: n.slice(0, 40), context: where.value.trim().slice(0, 80), ring: picked, metAt: Date.now(), lines: [], ...(communityTag ? { fields: { [communityTag]: 'true' } } : {}) })
     save()
     closeSheet()
     toast(S.savedToast(n, S.ringLabel[picked]))
@@ -4570,8 +4596,23 @@ function onSupportText(peer: Peer, text: string): void {
     if (screen === Screen.Web) render()
     return
   }
+  const closed = parseCloseText(APP_URL, text)
+  if (closed) { s.supportIn = applyCancel(s.supportIn, closed, peer.id); save(); if (screen === Screen.Web) render(); return }
   const id = parseHereText(APP_URL, text)
   if (id && recordHere(s.supportAsks ?? [], id, peer.id, Date.now())) { save(); if (screen === Screen.Web) render() }
+}
+
+/** Wave 42 (support_flush.ts): asks the MCP server wrote into the record are sent now; cancelled ones are withdrawn. */
+function flushQueuedAsks(): void {
+  if (!state) return // no account yet: nothing was queued
+  const s = st()
+  const plan = planFlush(s.supportAsks, Date.now())
+  if (!plan.send.length && !plan.withdraw.length && plan.keep.length === (s.supportAsks?.length ?? 0)) return
+  const tell = (ids: readonly string[], text: string): void => { for (const id of ids) { const peer = s.peers.find((p) => p.id === id); if (peer) void net.sendText(peer, text).catch(() => undefined) } }
+  for (const a of plan.send) tell(a.to, supportText(APP_URL, a))
+  for (const a of plan.withdraw) tell(a.to, closeText(APP_URL, a.id))
+  s.supportAsks = plan.keep
+  save()
 }
 
 /** Wave 27 (forget.ts): the sender owns what it shared here, so its forget request is accepted as is, then acknowledged. */
@@ -5102,6 +5143,7 @@ const eventsView = createEventsView({
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
   showQr: (ev) => eventQr(ev),
+  plan: (ev) => eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }),
   extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),
 })
@@ -5147,10 +5189,29 @@ twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[
 twBus.on('toast', (msg) => { if (typeof msg === 'string') toast(msg) })
 twBus.on('open-page', (d) => { const p = d as { title: string; body: Node[]; mark: string }; pages.open(p.title, p.body, p.mark) })
 twBus.on('back', () => history.back())
+twBus.on('support-ask', (d) => {   // wave 42: the Community view's "Ask for support", scoped to its community
+  const tag = (d as { tag?: string } | undefined)?.tag
+  if (!tag) return
+  const meta = metaOf(parseCommunity(st().extData?.['community-mighty']), tag)
+  const used = (key: string): void => { st().extData = { ...st().extData, 'community-mighty': rememberAudience(parseCommunity(st().extData?.['community-mighty']), tag, key) }; save() }
+  openSheet([el('h3', {}, [S.supportTitle]), supportForm(supportIo, closeSheet, { tag, remembered: meta.audiences ?? [], used })])
+})
+twBus.on('add-member', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) addPersonSheet(Ring.Friend, false, tag) })   // wave 42: the add-person flow, scoped to a community
+/** Wave 42 community-event: "New event" in a community opens the assistant with the event template; its cards are approved one by one. */
+let eventCommunity: string | undefined
+twBus.on('new-event', (d) => {
+  const tag = (d as { tag?: string } | undefined)?.tag
+  if (!tag) return
+  eventCommunity = tag
+  if (!isEnabled('assistant') || !chainOf(st().advanced).length) { toast(S.w42ev.assistantNeeded); sparkleFallback(); return }   // review wave 42: the same test as the sparkle (any provider of the chain)
+  const send = (): void => twBus.emit('assistant-prefill', templatePrompt(loadColourTags().find((x) => x.id === tag)?.label ?? tag))
+  if (twRegistry.isActive('assistant')) { send(); return }
+  void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) send(); else sparkleFallback() })
+})
 twBus.on('open-chat', (id) => { if (typeof id === 'string') chatSheet(id) })   // wave 40: the Community view lists the regular chats
 function twCtx(): TwCtx {
   return {
-    store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings), actions: appActions, where: whereNow,
+    store: st, strings: S, bus: twBus, navigate: (id) => { if (Object.values(Screen).includes(id as Screen)) go(id as Screen) }, profile: () => profileOf(state?.twSettings), actions: appActions, where: whereNow, save,
     chats: () => chatListRows(st().chats, chatPeople(), { since: dndSince() }).map((r) => ({ id: r.personId, title: r.name, last: r.last, unread: r.unread })),
   }
 }
@@ -5243,6 +5304,15 @@ defineAppActions(appActions, {
   saveTw: (tw) => { st().twSettings = tw; save(); void twRegistry.sync().then(() => twChanged(redrawOpenSettings)) },
   newId: () => randomId(8),
   now: () => Date.now(),
+})
+defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity })
+// Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
+if (!solo && liveDevActive()) startMcpLive({
+  fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,
+  adopt: () => seedLiveDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } }),
+  keepMine: () => keepLocalRecord(persona, st()),
+  show: (title, body, buttons) => showNotice(title, body, buttons.map((b) => el('button', { class: 'btn btn-ghost btn-sm', [b.attr]: '', onclick: b.run }, [b.label]))),
+  hide: hideNotice,
 })
 appActions.onRun((a, by) => {
   if (by === 'assistant' && a.type === 'open') window.setTimeout(() => pulse(PLACE_TARGET[(a.args as { place: AppPlace }).place]), 120)
@@ -6137,7 +6207,9 @@ function meetTrustWebPage(): HTMLElement {
   let appliedFrag: string | null = null
   const apply = (ticksOnly = false): void => {
     const mode = shareModeNow()
-    const frag = [baseFrag, viaFragment(mode)].filter(Boolean).join('&')
+    const ch = modeChannel()   // wave 42 D1: a mode that offers a messenger also carries that link when ticked (a phone number needs its own tick), so a scan lands it on the card
+    const contact = ch ? contactFragment({ [ch]: mine()[ch] }, st().contactShare) : ''
+    const frag = [baseFrag, contact, viaFragment(mode)].filter(Boolean).join('&')
     if (link && frag !== appliedFrag) { appliedFrag = frag; view.setLink(link, frag) }
     // Only Signal / Only WhatsApp: the QR, Copy and NFC carry the messenger's own link; none (number not ticked) -> no QR, Copy / NFC off.
     view.setOverride(isOnlyMessenger(mode) ? modePayload(mode, '', mine(), st().contactShare) ?? '' : null)
@@ -7510,6 +7582,15 @@ function settingsSheet(): void {
       class: 'field', type: 'search', 'data-settings-search': '', placeholder: S.setSearchPh, 'aria-label': S.setSearchAria, autocomplete: 'off', value: settingsQuery,
       oninput: (e) => { settingsQuery = (e.target as HTMLInputElement).value; filterSettings(sheet, settingsQuery) },
     }),
+    // Wave 42 settings-llm-first: the short page is drawn from settings_registry.ts; everything else sits under Advanced.
+    simpleBlock({
+      state: () => st() as unknown as Record<string, unknown>, save, render: () => { renderTabs(); render() }, redraw: settingsSheet,
+      actions: {
+        'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
+        'ui.import': () => openServicesImport(importHooks()), 'ui.help': () => openSheet([el('h3', {}, [S.setTitle]), ...aboutGroup()]),
+      },
+    }),
+    advancedBlock([
     viewRow(),
     themeRow(),
     apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
@@ -7523,8 +7604,10 @@ function settingsSheet(): void {
     ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
     // Wave 40: Import also stands on its own at the very bottom of Settings.
     solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),
+    ]),
   ])
   sheet.dataset.kind = 'settings'
+  upgradeSwitches(sheet)
   if (settingsQuery) filterSettings(sheet, settingsQuery)
 }
 
@@ -7646,6 +7729,7 @@ function screenInventory(): Node[] {
       onlyChip,
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
+      invQuery.trim() && s.inventory.length > 0 && shown.length === 0 ? noMatchLine() : null,
       // Jakob's sketch (10-07, #21/#22): the X top right of the item, the on/off switch below it on the right;
       // under the text first who can ask, then how far it may travel.
       ...shown.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
@@ -7696,8 +7780,10 @@ function requestsSheet(): void {
     el('h3', {}, [S.reqTitle]),
     waiting ? el('div', { class: 'conn-row' }, [
       el('b', {}, [S.reqWaiting(waiting)]),
-      el('button', { class: 'btn btn-electric btn-sm', onclick: () => { closeSheet(); if (!askShowing) showNextAsk() } }, [S.reqOpen]),
+      // Wave 42: "something waiting" never opens empty: the ask on show comes back, else the next one, else a sentence says it is gone.
+      el('button', { class: 'btn btn-electric btn-sm', onclick: () => { closeSheet(); if (askShowing) renderAsk(); else showNextAsk(); if (!askShowing) toast(S.w42.waitingGone) } }, [S.reqOpen]),
     ]) : null,
+    supportInbox(supportIo),
     // Demo accounts waiting for the owner's yes (owner 2026-10-06: their asks and requests live here too).
     ...pendingDemo.map((t) => demoAccountRow(t, requestsSheet)),
     // Meetings other phones sent inside TrustWeb (owner 2026-10-06).
@@ -7908,6 +7994,16 @@ function queryDock(s: AppState): HTMLElement {
       onResult: (target, r) => recordFound(introAskText(target), [r]),
       link: async (target, why) => encodeIntroLink(linkOrigin(location.origin), { by: st().me.displayName, target, ...(why.trim() ? { why: why.trim() } : {}), connect: await (async () => { await net.start(); return net.connectLink(CONNECT_URL) })() }),
       copy: (text) => copyLink(text, S.meetCopied),
+      skill: (category, people) => {
+        const ask = categoryAsk(category, people, Date.now(), randomId(12))
+        const s = st()
+        s.supportAsks = [ask, ...(s.supportAsks ?? [])]
+        save()
+        const text = supportText(APP_URL, ask)
+        for (const id of ask.to) { const peer = s.peers.find((p) => p.id === id); if (peer) void net.sendText(peer, text).catch(() => undefined) }
+        toast(S.w42.skillAlert(ask.to.length))
+        render()
+      },
     }))
   }
   return dock
@@ -8105,7 +8201,7 @@ document.body.dataset.twProfile = profileOf(state?.twSettings)
 applyVariation()
 applyImageMode()
 bindModeShell((ctx) => modeShell.attach(ctx.bus))
-void twRegistry.start().then(() => { modeShell.start(); renderTabs(); render() }) // wave 39 (+ wave 41 mode shell): a heavy module's view joins the row once it has loaded
+void twRegistry.start().then(() => { modeShell.start(); flushQueuedAsks(); renderTabs(); render() }) // wave 39 (+ wave 41 mode shell): a heavy module's view joins the row once it has loaded
 // Wave 40: a connection link may suggest a Variation (#tp=<id>); it applies only on a tap.
 if (linkProfile && profileOf(state?.twSettings) !== linkProfile) toast(S.w40.linkVarOffer(S.var.names[linkProfile]), { onClick: () => chooseProfile(linkProfile, () => undefined) })
 render()
@@ -8160,3 +8256,5 @@ if (state && !state.testOf?.handedOverAt) {
   const pending = demoAccounts().find((t) => t.pending)
   if (pending) showAllowCard(pending)
 }
+// Wave 42 push-popup: a notification missed before this open.
+void missedPopup.check()

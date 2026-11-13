@@ -54,6 +54,16 @@ export interface GraphNode {
 export interface Forces { link: number; charge: number; gravity: number; collide: number; labelZoom: number }
 export const DEFAULT_FORCES: Forces = { link: 1, charge: 260, gravity: 0.002, collide: 0, labelZoom: 1.5 }
 
+/** Wave 42: Network dots grow linearly with the zoom k, kept between these bounds (a readable floor, no giant discs); names grow from 1x to LABEL_K_MAX. */
+export const DOT_K_MIN = 0.7
+export const DOT_K_MAX = 3
+export const LABEL_K_MAX = 2.4
+const clampK = (k: number, lo: number, hi: number): number => (Number.isFinite(k) ? Math.min(hi, Math.max(lo, k)) : 1)
+/** Dot radius (px) at zoom k for a dot of `radius` at zoom 1; `boost` (a search match) multiplies after the clamp. */
+export const dotRadiusAt = (radius: number, k: number, boost = 1): number => radius * clampK(k, DOT_K_MIN, DOT_K_MAX) * boost
+/** Name font size (px) at zoom k for a name of `base` px at zoom 1. */
+export const labelPx = (base: number, k: number): number => base * clampK(k, 1, LABEL_K_MAX)
+
 /** `knows`: a connection between members (a knows b; mutual = both list each other). */
 export interface GraphEdge { a: number; b: number; rest: number; dashed: boolean; thin?: boolean; knows?: 'mutual' | 'oneway' }
 export interface Graph { nodes: GraphNode[]; edges: GraphEdge[] }

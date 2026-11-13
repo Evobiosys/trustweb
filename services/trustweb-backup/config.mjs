@@ -47,6 +47,22 @@
 //   TRANSCRIBE_QUEUE_WAIT_MS         240000       longest wait for the slot (then 429 busy): wait + job stay inside Caddy's 15 min
 //   TRANSCRIBE_UPLOADS_PER_IP        1            audio uploads in flight per client (IPv6: per /64)
 //   TRANSCRIBE_MAX_BYTES             21600000     1 h at 48 kbps
+//   BILLING_FILE                     wave 42: the paid-plan sign-up store (JSON, 0600). Unset = /api/billing/* answers 503 not_configured.
+//   BILLING_PROVIDER                 stripe (default) | mollie (a stub: 503 until wired)
+//   STRIPE_SECRET_KEY                sk_test_... / sk_live_... from the ENVIRONMENT only (systemd EnvironmentFile); never in the repo, never logged
+//   STRIPE_PUBLISHABLE_KEY           pk_test_... / pk_live_... (environment only; Checkout is hosted, so nothing sends it yet)
+//   STRIPE_WEBHOOK_SECRET            whsec_... of the webhook endpoint https://app.trustweb.one/api/billing/webhook; without it the webhook answers 503
+//   BILLING_RETURN_URL               where Checkout returns to (default https://app.trustweb.one/); ?billing=done|cancelled is appended
+//   BILLING_PER_HOUR                 5         POST /api/billing/checkout per network address
+//   BILLING_MAX                      20000     stored sign-ups; beyond it 507 storage_full
+//   BILLING_FILE                     wave 42: the paid-plan sign-up store (JSON, 0600). Unset = /api/billing/* answers 503 not_configured.
+//   BILLING_PROVIDER                 stripe (default) | mollie (a stub: 503 until wired)
+//   STRIPE_SECRET_KEY                sk_test_... / sk_live_... from the ENVIRONMENT only (systemd EnvironmentFile); never in the repo, never logged
+//   STRIPE_PUBLISHABLE_KEY           pk_test_... / pk_live_... (environment only; Checkout is hosted, so nothing sends it yet)
+//   STRIPE_WEBHOOK_SECRET            whsec_... of the webhook endpoint https://app.trustweb.one/api/billing/webhook; without it the webhook answers 503
+//   BILLING_RETURN_URL               where Checkout returns to (default https://app.trustweb.one/); ?billing=done|cancelled is appended
+//   BILLING_PER_HOUR                 5         POST /api/billing/checkout per network address
+//   BILLING_MAX                      20000     stored sign-ups; beyond it 507 storage_full
 //   FEEDBACK_FILE                    path of the 0600 JSON-lines file. Unset = feedback off.
 //   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site plus the TrustInTheWeb sites
 //                                    (trustintheweb.org, trustintheweb.com, app.trustintheweb.org, app.trustweb.one; production also sets it in a
@@ -250,6 +266,14 @@ export function loadConfig(options = {}) {
     transcribeUploadsPerIp: pick(options, 'transcribeUploadsPerIp', 'TRANSCRIBE_UPLOADS_PER_IP', 1),
     transcribeMaxBytes: pick(options, 'transcribeMaxBytes', 'TRANSCRIBE_MAX_BYTES', 21_600_000),
 
+    billingProvider: pick(options, 'billingProvider', 'BILLING_PROVIDER', 'stripe', String),
+    billingFile: pick(options, 'billingFile', 'BILLING_FILE', '', String),
+    billingMax: pick(options, 'billingMax', 'BILLING_MAX', 20000),
+    billingPerHour: pick(options, 'billingPerHour', 'BILLING_PER_HOUR', 5),
+    billingReturnUrl: pick(options, 'billingReturnUrl', 'BILLING_RETURN_URL', 'https://app.trustweb.one/', String),
+    stripeSecretKey: pick(options, 'stripeSecretKey', 'STRIPE_SECRET_KEY', '', String),
+    stripePublishableKey: pick(options, 'stripePublishableKey', 'STRIPE_PUBLISHABLE_KEY', '', String),
+    stripeWebhookSecret: pick(options, 'stripeWebhookSecret', 'STRIPE_WEBHOOK_SECRET', '', String),
     feedbackFile,
     feedbackConfigured: feedbackFile !== '',
     feedbackOrigins: options.feedbackOrigins ?? list(process.env.FEEDBACK_ORIGINS ?? DEFAULT_FEEDBACK_ORIGINS),

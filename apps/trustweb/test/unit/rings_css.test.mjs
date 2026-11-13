@@ -25,4 +25,18 @@ describe('rings.css', () => {
       expect(tokens.one.dark, n).toHaveProperty(n)
     }
   })
+  // wave 42 web-zoom-dots
+  it('wave 42: the label size has ONE rule (styles.css, var(--lbl)); rings.css no longer carries the --rz twin', () => {
+    expect(css).not.toContain('--rz')
+    expect(read('../../src/styles.css')).toContain('.rings-zoom .rings-wrap .node:not(.you) span{font-size:var(--lbl')
+  })
+  it('wave 42: the zoomable Web body blocks browser pinch (touch-action pan-x pan-y), so the web zooms, not the page', () => {
+    expect(read('../../src/styles.css')).toMatch(/\.scroll\.zoomable\{[^}]*touch-action:\s*pan-x pan-y/)
+  })
+  it('wave 42: ring card titles wrap at word boundaries only', () => {
+    const rule = read('../../src/styles.css').match(/\.ring-card\{[^}]*\}/)[0]
+    expect(rule).toContain('overflow-wrap:normal')
+    expect(rule).toContain('hyphens:manual')
+    expect(rule).not.toContain('anywhere')
+  })
 })

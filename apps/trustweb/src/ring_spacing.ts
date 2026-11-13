@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Room for dots and labels on one ring while the web is zoomed (Jakob 2026-10-29: "the people should still adjust"). Pure; the view applies it. */
 
-/** Wave 39: names zoom with the web like the bubbles (the layer's transform scales both), so no counter-scale: always 1. */
+/**
+ * Wave 39: names zoom with the web like the bubbles (the layer's transform scales both), so no counter-scale: always 1.
+ * Wave 42: the ONE label-size rule lives in styles.css (`.rings-zoom .rings-wrap .node:not(.you) span{font-size:var(--lbl)}`, --lbl from dot_clear.labelSize);
+ * the twin `calc(11.5px*var(--rz))` rule in components/rings.css is archived (DEVLOG/wave42/archive/web-zoom-dots). --rz stays set on the layer, unread.
+ */
 export const labelScale = (_zoom: number): number => 1
 
 /** The arc room (layout px) a label of `base` px asks for on the ring at this zoom. */

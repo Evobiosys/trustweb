@@ -27,6 +27,8 @@ export interface TwCtx {
   actions?: Actions
   /** Wave 40: the screen or page the person is on, in plain words. */
   where?: () => string
+  /** Wave 42: saves the record after a module changed its own settings (the assistant's provider chain). */
+  save?: () => void
 }
 
 export interface TwView { id: string; title: string; icon: string; mount(host: HTMLElement, ctx: TwCtx): () => void }

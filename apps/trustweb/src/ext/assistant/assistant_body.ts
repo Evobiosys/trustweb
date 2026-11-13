@@ -15,6 +15,7 @@ export const body: TwModuleBody = {
     const get = (): ReturnType<typeof createPanel> => (panel ??= createPanel(ctx))
     offs = [
       ctx.bus.on('assistant-open', () => get().toggle()),
+      ctx.bus.on('assistant-prefill', (t) => { if (typeof t === 'string') get().prefill(t) }),
       ctx.bus.on('assistant-person', (t) => { if (t && typeof t === 'object') get().person(t as LookTarget) }),
     ]
   },

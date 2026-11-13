@@ -10,15 +10,18 @@ export async function openAdvanced(page) {
   await page.locator('.advanced-panel').waitFor({ state: 'visible', timeout: 10_000 })
 }
 
-/** Saves a link in the contact box of the Meet page (Advanced): 'signal' | 'whatsapp' | 'matrix'. Returns with the box redrawn. */
+/** Saves a link in the contact box of the Meet page: 'signal' | 'whatsapp' | 'matrix'. Returns with the box redrawn.
+ *  Review wave 42: the box sits openly on the Meet page ([data-contact-box-on-meet]) since the Advanced disclosure went; the old panel is still opened when a build has it. */
 export async function saveChannel(page, channel, value) {
-  await openAdvanced(page)
-  const add = page.locator(`.advanced-panel [data-cb-add="${channel}"]`)
+  const box = page.locator('[data-contact-box-on-meet]')
+  const scope = (await box.count()) ? '[data-contact-box-on-meet]' : '.advanced-panel'
+  if (scope === '.advanced-panel') await openAdvanced(page)
+  const add = page.locator(`${scope} [data-cb-add="${channel}"]`)
   if (await add.count()) await add.click()
-  else await page.locator(`.advanced-panel [data-cb-edit="${channel}"]`).click()
-  await page.locator(`.advanced-panel [data-cb-input="${channel}"]`).fill(value)
-  await page.locator(`.advanced-panel [data-cb-save="${channel}"]`).click()
-  await page.locator(`.advanced-panel [data-cb-value="${channel}"]`).waitFor({ timeout: 10_000 })
+  else await page.locator(`${scope} [data-cb-edit="${channel}"]`).click()
+  await page.locator(`${scope} [data-cb-input="${channel}"]`).fill(value)
+  await page.locator(`${scope} [data-cb-save="${channel}"]`).click()
+  await page.locator(`${scope} [data-cb-value="${channel}"]`).waitFor({ timeout: 10_000 })
 }
 
 /** The same in Settings (the box there is the same module). */

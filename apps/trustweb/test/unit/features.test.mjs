@@ -7,7 +7,8 @@ describe('features', () => {
     expect(featureOn({}, 'events')).toBe(true)
     expect(featureOn({ features: { events: false } }, 'events')).toBe(false)
     expect(featureOn({ features: { events: false } }, 'inventory')).toBe(true)
-    expect(featureOn({}, 'feed')).toBe(false)
+    expect(featureOn({}, 'feed')).toBe(true) // wave 42 D2: the stock bar carries the Feed
+    expect(featureOn({ feed: { on: false } }, 'feed')).toBe(false)
     expect(featureOn({ feed: { on: true } }, 'feed')).toBe(true)
   })
   it('switching on removes the key and the empty record', () => {

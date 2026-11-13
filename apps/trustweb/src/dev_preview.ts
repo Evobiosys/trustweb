@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { approveTone, approveBoxVisible, focusAfterApprove, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, hintParts, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
+import { POPOUT_BEAT_MS, POPOUT_CHANNEL, afterKeys, conflictView, rerunOffered, flatRows, popoutHides, popoutIdle, popoutStep, rowState, sessionIdOf, waveReady, type ConflictView, type GateInfo, type PopoutMsg, approveTone, approveBoxVisible, focusAfterApprove, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
 
 interface Preview {
@@ -27,6 +27,8 @@ interface Preview {
   queued?: number
   compat?: Compat
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean; head?: string; mergeCommit?: string } | null
+  /** The ops approve gate (`preview <id> gate`): kind "squashed-in-main" + action "mark-merged <key>" (wave 42); absent on an older ops build. */
+  gate?: GateInfo | null
   next?: { id: string; port: number }
   tested?: Tested | null
   session?: { id: string; path: string }
@@ -36,8 +38,8 @@ declare const __TW_BUILD__: { mode: string } | null | undefined
 
 const CSS = `
 .twp{position:fixed;left:8px;top:8px;z-index:100000;width:300px;max-width:calc(100vw - 16px);max-height:calc(100vh - 110px);overflow:hidden auto;scrollbar-width:thin;scrollbar-color:#7a6a8c transparent;border-radius:10px;background:#241b2e;color:#fff;font:11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)}
-.twp header{display:flex;align-items:baseline;gap:6px;padding:6px 10px;cursor:grab;touch-action:none;user-select:none;position:sticky;top:0;z-index:2;background:#241b2e}
-.twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
+.twp header{display:flex;align-items:flex-start;gap:6px;min-height:44px;padding:0 0 0 10px;cursor:grab;touch-action:none;user-select:none;position:sticky;top:0;z-index:2;background:#241b2e}
+.twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .twc-file,.twp .twc-a,.twp .twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twp .twc-file{color:#7ee8de;background:rgba(94,234,212,.16)}.twp .twc-a{color:#ffc65c;background:rgba(251,191,36,.16)}.twp .twc-b{color:#e3a8ff;background:rgba(233,166,255,.16)}
 .twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.twp-active{background:rgba(79,215,160,.22);border-radius:4px}.twp .feat.twp-related{background:rgba(255,198,92,.2);border-radius:4px;box-shadow:inset 3px 0 #ffc65c}.twp .feat.tone-0{background:rgba(79,215,160,.16);border-radius:4px}.twp .feat.tone-1{background:rgba(126,170,255,.22);border-radius:4px}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
@@ -74,6 +76,12 @@ const CSS = `
 .twp .sec{font:700 10px system-ui;letter-spacing:.04em;opacity:.7;margin:4px 0 2px}
 .see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}
+/* wave 42 review-panel: header = text block + a fixed 44 px button strip, never overlapping; every row at one level */
+.twp .hl{flex:1 1 0;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;padding:12px 0;overflow-wrap:anywhere}
+.twp .hbtns{flex:none;display:flex;height:44px;align-items:center}.twp .hbtns button{width:34px;height:44px;padding:0;border-radius:0;display:flex;align-items:center;justify-content:center}
+.twp .btns.hdr{flex-wrap:wrap}.twp .state{flex:none;width:1.4em;text-align:center}.twp .after{color:#b7a8c9}
+.twp .conf{display:grid;gap:5px}.twp .conf details>div{margin-top:3px;font-weight:400}.twp .why{opacity:.8}
+.twp-popout .twp{left:0!important;top:0!important;width:100vw;max-width:none;max-height:100vh;border-radius:0}.twp-popout .twf-ok,.twp-popout .twf,.twp-popout .twf-dot{display:none!important}
 /* wave 33 panel */
 .twp header{position:sticky;top:0;z-index:2;background:#241b2e}
 .twp .toggle{display:block;width:calc(100% - 20px);margin:2px 10px;text-align:left;background:none;color:#fff;text-decoration:underline;padding:3px 0}
@@ -142,6 +150,8 @@ export function initDevPreview(): void {
   let known: string | null = null
   let error = ''
   let prText = ''
+  /** The status file's own text ("CI failed on PR #n: ..."), for rerunOffered. */
+  let prRawText = ''
   let prUrl = ''
   let prNum: number | null = null
   let prEta = 0
@@ -169,6 +179,22 @@ export function initDevPreview(): void {
     if (due === 'now') void apply()
   }, APPLY_DELAY_MS)
   const root = h('div')
+  const isPopout = window.name === POPOUT_CHANNEL   // the pop-out window is opened under this name (the app strips unknown query parameters at boot)
+  let pop = popoutIdle
+  const popped = (): boolean => !isPopout && popoutHides(pop, Date.now())
+  const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(POPOUT_CHANNEL)
+  if (isPopout) document.documentElement.classList.add('twp-popout')
+  if (channel && isPopout) {
+    const say = (type: PopoutMsg['type']): void => { channel.postMessage({ type } satisfies PopoutMsg) }
+    say('open'); setInterval(() => { say('beat') }, POPOUT_BEAT_MS); addEventListener('pagehide', () => { say('close') })
+  } else if (channel) {
+    channel.onmessage = (e: MessageEvent<PopoutMsg>) => {
+      if (!['open', 'beat', 'close'].includes(e.data?.type)) return
+      const was = popped(); pop = popoutStep(pop, e.data, Date.now())
+      if (was !== popped()) render()
+    }
+    setInterval(() => { if (pop.open && !popped()) { pop = popoutIdle; render() } }, POPOUT_BEAT_MS)
+  }
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
   document.body.appendChild(root)
@@ -354,10 +380,11 @@ export function initDevPreview(): void {
     known ??= q.assembled?.sha ?? null
     const stamp = JSON.stringify(q)
     if (stamp !== last) { last = stamp; p = q; render() }
-    if (autoApply(q, applying, hold.get()) && !applyLater.waiting()) void apply()
+    if (autoApply(q, applying, hold.get()) && !applyLater.waiting() && !popped()) void apply()
   }
 
   let related = new Set<string>()
+  const stateGlyph = (f: PreviewFeature): string => ({ review: S.panelStateReview, approved: S.panelStateApproved, 'needs-work': S.panelStateNeedsWork })[rowState(f)]
   function row(n: TreeNode, shown: PreviewFeature[]): HTMLElement {
     const f = n.feature, d = shown.find((x) => x.key === f.key)!
     const hint = needsHint(shown, f.key)
@@ -401,9 +428,44 @@ export function initDevPreview(): void {
     changed?.querySelector('button')?.addEventListener('click', (e) => { e.stopPropagation(); approveChanges(f.key) })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); foldFor(f); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (focus.get() === f.key ? ` tone-${tone}` : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, h('span', { className: 'go', textContent: mark.prefix + f.title }), ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(changed ? [changed] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : []), ...(f.flag && !flagOn(f) ? [flagOnButton(f)] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (focus.get() === f.key ? ` tone-${tone}` : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, h('span', { className: 'state', textContent: stateGlyph(f), title: S.panelStateTip[rowState(f)] }), h('span', { className: 'go', textContent: mark.prefix + f.title }), ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(afterKeys(f) ? [' ', h('small', { className: 'after', textContent: S.panelAfter(afterKeys(f)!) })] : []), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(changed ? [changed] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : []), ...(f.flag && !flagOn(f) ? [flagOnButton(f)] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
+  }
+
+  const fixStore = (key: string) => ({ get: (): string => { try { return sessionStorage.getItem(`twp-fix-${p!.id}-${key}`) ?? '' } catch { return '' } }, set: (v: string): void => { try { sessionStorage.setItem(`twp-fix-${p!.id}-${key}`, v) } catch { /* not remembered */ } } })
+
+  /** Wave 42 B01/B16: a failed assembly or closed gate as one sentence and one tap: "Mark as merged" when the row is already in main, else the first conflict line + details + "Fix it in a pi session". */
+  function conflictRow(cv: ConflictView): HTMLElement {
+    if (cv.kind === 'mark-merged') {
+      const b = h('button', { textContent: S.panelMarkMerged, disabled: loading() })
+      b.dataset.markMerged = cv.key
+      b.addEventListener('click', () => { void act(cv.key, () => call('POST', '/mark-merged', { feature: cv.key })) })
+      return h('div', { className: 'row warn conf' }, cv.text, b)
+    }
+    const launched = cv.fixKey ? fixStore(cv.fixKey).get() : ''
+    const fix = cv.fixKey ? h('button', { textContent: S.panelFixSession, disabled: !!launched }) : null
+    if (fix && cv.fixKey) {
+      fix.dataset.fixConflict = cv.fixKey
+      fix.addEventListener('click', () => { void fixConflict(cv.fixKey!) })
+    }
+    return h('div', { className: 'row warn conf' }, cv.head, h('details', {}, h('summary', { textContent: S.panelConflictDetails }), h('div', {}, ...conflictNodes(cv.detail))), ...(fix ? [fix] : []), ...(launched ? [h('small', { className: 'launched', textContent: S.panelFixLaunched(launched) })] : []))
+  }
+
+  /** POST /__tw/preview/fix-conflict (the ops launcher): starts a pi session on the conflict and answers its id; a server without the route says so. */
+  async function fixConflict(key: string): Promise<void> {
+    try {
+      const r = await fetch('/__tw/preview/fix-conflict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p!.id, key }), signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) })
+      if (r.status === 404 || r.status === 400 || r.status === 405) { toast(S.panelFixUnavailable); return }
+      const j = await r.json().catch(() => ({})) as { error?: string }
+      if (!r.ok) { error = j.error ?? 'HTTP ' + r.status; render(); return }
+      fixStore(key).set(sessionIdOf(j) ?? 'started'); render()
+    } catch (e) { error = callError(e as Error, WRITE_TIMEOUT_MS); render() }
+  }
+
+  /** F11: the panel in its own window (second screen). The window beats on a BroadcastChannel; this page hides its inline panel meanwhile and shows it again when the window closes or goes silent. */
+  function popOut(): void {
+    if (!window.open(location.href, POPOUT_CHANNEL, 'popup,width=380,height=820')) toast(S.panelPopBlocked)
   }
 
   function slow(): HTMLElement {
@@ -415,7 +477,7 @@ export function initDevPreview(): void {
   // The status file's answer as panel state. On the ready step the tab opens dev after 3 s (once per PR: a reload only shows the links).
   function applyStatus(status: ApprovalStatus, live: boolean): void {
     const j = prStatusView(status, Date.now())   // a flow that stopped answering ends as a visible failure, not a spinner for good
-    prStep = j.step; prText = stepText(j.step, j.text, p!.short, j.pr); prUrl = j.url ?? ''; prNum = j.pr ?? null
+    prStep = j.step; prRawText = j.text ?? ''; prText = stepText(j.step, j.text, p!.short, j.pr); prUrl = j.url ?? ''; prNum = j.pr ?? null
     prEta = j.etaSeconds ?? 0; prStarted = j.started ?? ''
     if (j.step === 'ready') void call('GET', '').then((q) => { p = q; render() }).catch(() => { /* links come from the status */ })
     if (j.step === 'ready' && j.url) {
@@ -482,7 +544,13 @@ export function initDevPreview(): void {
       if (s) { void copy(`${s.id}\n${s.path}`, 'session id and path copied'); return }
       void fetch('/__tw/ci/devlog').then((r) => r.text()).then((dir) => { window.open('file://' + dir); void copy(dir, 'DEVLOG folder copied') }, () => { toast('no DEVLOG folder') })
     })
-    return h('div', { className: 'btns' }, diag, open)
+    // Review wave 42 (ops step d): one tap re-runs the failed CI jobs of the PR (`preview <id> rerun-failed`).
+    const rerun = rerunOffered({ step: prStep, text: prRawText }) ? h('button', { textContent: S.panelRerunFailed }) : null
+    if (rerun) {
+      rerun.dataset.rerunFailed = ''
+      rerun.addEventListener('click', () => { rerun.disabled = true; void call('POST', '/rerun-failed', {}).then(() => toast(S.panelRerunStarted), (e: Error) => { rerun.disabled = false; error = e.message; render() }) })
+    }
+    return h('div', { className: 'btns' }, ...(rerun ? [rerun] : []), diag, open)
   }
 
   // Runs the CLI's checks (no vite touched, the preview keeps showing) and polls until a run newer than this click is done.
@@ -557,13 +625,13 @@ export function initDevPreview(): void {
   function render(): void {
     const q = p!
     related = new Set(lit ? relatedRows(q.features, lit) : [])
-    root.hidden = tab.hidden()
+    root.hidden = tab.hidden() || popped()
     const pill = collapsed()
     root.className = 'twp' + (pill ? ' pill' : '')
     document.documentElement.classList.toggle('twp-devmode', mode !== 'personal')   // stock/dev: the overlays use inverse colours
     root.replaceChildren()
     // The Approve box (dev_feature.ts) hides while this panel is a pill or shows a single row (wave 36b).
-    const boxOn = (focused: boolean): void => { document.documentElement.classList.toggle('twp-compact', !approveBoxVisible({ collapsed: pill, focused })) }
+    const boxOn = (focused: boolean, ready = false): void => { document.documentElement.classList.toggle('twp-compact', !approveBoxVisible({ collapsed: pill, focused, ready })) }
     boxOn(false)
     if (pill) {
       const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand · double-click copies the id' }))
@@ -584,7 +652,11 @@ export function initDevPreview(): void {
         expand.innerHTML = EXPAND_SVG
         expand.addEventListener('click', () => { lastFocus.set(ftHead!.last); focus.set(ftHead!.focus); if (ftHead!.to === 'full') loadOpen.set(true); render() })
       }
-      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', { title: (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'Saving your press on the preview server; the seconds show how long it has taken.' : '' }, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : '', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links())), ...(expand ? [expand] : []), x, close)
+      const status = h('span', { title: (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'Saving your press on the preview server; the seconds show how long it has taken.' : '' }, applying ? 'assembling...' : (busy !== null || inflight > 0) && elapsed() >= WORKING_AFTER_S ? 'working…' : busy ? 'saving...' : loading() ? 'creating PR...' : '', ...(loading() || (inflight > 0 && elapsed() >= WORKING_AFTER_S) ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() || inflight > 0 ? [] : links()))
+      // Wave 42 B06/P06: the text block and the buttons never share a row: the buttons sit in a fixed 44 px strip to the right.
+      const pop = isPopout ? null : h('button', { className: 'x', textContent: '⧉', title: S.panelPopOutTip })
+      if (pop) { pop.dataset.panelPopout = ''; pop.setAttribute('aria-label', S.panelPopOut); pop.addEventListener('click', popOut) }
+      const header = h('header', {}, h('div', { className: 'hl' }, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), status), h('div', { className: 'hbtns' }, ...(pop ? [pop] : []), ...(expand ? [expand] : []), x, close))
       const hs = drag(root.appendChild(header))
       // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
@@ -607,7 +679,7 @@ export function initDevPreview(): void {
       assembleNow.dataset.assembleNow = ''
       assembleNow.addEventListener('click', () => { void apply() })
       const fs = focusSplit(shown, focus.get())
-      boxOn(fs !== null)
+      boxOn(fs !== null, waveReady(q.features))   // wave 42 B14: derived from the rows, so the last approve shows the box at once
       // One toggle with arrows both ways: focus -> the full list; full list -> back to the last focused row (wave 33).
       const ft = focusToggle(shown, focus.get(), lastFocus.get())
       const toggle = ft ? h('button', { className: 'toggle', textContent: '⇅ ' + (ft.to === 'full' ? S.panelShowAll : S.panelBackToRow(ft.row.title)) }) : null
@@ -629,9 +701,10 @@ export function initDevPreview(): void {
       all.addEventListener('click', () => { void pressAll() })
       const approveAllBtn = h('button', { textContent: 'Approve all', disabled: loading() || waiting.length === 0 })
       approveAllBtn.addEventListener('click', () => { void approveAll() })
+      const cv = conflictView(q)
       const tail = [
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
-        ...(q.assembled?.error ? [h('div', { className: 'row warn' }, hintParts('Fix the conflict first: ' + q.assembled.error).head, h('details', {}, h('summary', { textContent: 'details' }), h('div', {}, ...conflictNodes(q.assembled.error))))] : []),
+        ...(cv ? [conflictRow(cv)] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
       ]
       // Focus mode (wave 37): only the focused row; the compat line and the toggle belong to the full list (the header's expand button leaves). Each row shows once, in the list.
@@ -643,7 +716,8 @@ export function initDevPreview(): void {
         ...(open ? [h('div', { className: 'btns hdr' }, approveAllBtn, all)] : []),
         ...(toggle ? [toggle] : []),
         h('div', { className: 'loadrow' }, loadHead, assembleNow),
-        ...((open || query) ? allRows(sections(tree(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
+        ...(assembleNow.disabled ? [h('div', { className: 'row why', textContent: S.panelAssembleWhy })] : []),
+        ...((open || query) ? allRows(sections(flatRows(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
         ...tail,
         ...(prStatusEl ? [prStatusEl] : []), h('div', { className: 'btns' }, sw, h('details', { className: 'adv' }, h('summary', { textContent: 'advanced' }), gate())), ...(bar ? [bar] : []),
       )
@@ -668,7 +742,7 @@ export function initDevPreview(): void {
   window.addEventListener('resize', () => { clearTimeout(resizing); resizing = setTimeout(() => { if (p) render() }, 150) })
   // A reload while "Approve personal view" runs: show the spinner and text again.
   void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
-    if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if (j.step === 'ready' && j.url) applyStatus(j, false)
+    if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if ((j.step === 'ready' && j.url) || rerunOffered(j)) applyStatus(j, false)   // review wave 42: a red CI stays visible after a reload, with its re-run
   }).catch(() => { /* no status: no flow to show */ })
   void call('GET', '').then((q) => {
     p = q

@@ -13,9 +13,11 @@ import { deliveryPanel } from './support_delivery_view'
 import type { DeliveryIo } from './support_delivery_view'
 import { planDelivery, sentVia } from './support_delivery'
 import {
-  SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, audience, buildSupport, emergencyNumber, hereText, isOpen, openAsks, supportText,
+  BUNDLES, SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, audience, buildSupport, bundlePeople, closeText, emergencyNumber, hereText, isOpen, openAsks, supportText,
 } from './support_ask'
-import type { AudienceChoice, SupportIn } from './support_ask'
+import type { AudienceChoice, Bundle, SupportIn } from './support_ask'
+import { cancelAsk, inboxRows } from './support_inbox'
+import { agentAsks, approveAgentAsk, discardAgentAsk } from './support_flush'
 
 export interface SupportIo {
   st: () => AppState
@@ -55,9 +57,17 @@ function tagReach(io: SupportIo, tags: readonly ColourTag[], id: string): number
   return recipients(io, { zone: `tag:${id}` }).filter((r) => members.has(r.person.id)).length
 }
 
+/** Wave 42: the community an ask is made in: its tag is the default audience; `remembered` = the last audiences used (keys, newest first); `used` stores one. */
+export interface AskScope { tag: string; remembered: readonly string[]; used: (key: string) => void }
+
+/** An audience as one remembered key: the zone, then the bundles pressed ("tag:iyg+closest-allies"). */
+const audienceKey = (zone: string, bundles: ReadonlySet<Bundle>): string => [zone, ...BUNDLES.filter((b) => bundles.has(b))].join('+')
+
 /** The send form: the sheet and the Ask dock both show it; `sent` runs after a send. */
-export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
-  const pick: AudienceChoice = { zone: `ring:${Ring.Closest}` }
+export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): HTMLElement {
+  const pick: AudienceChoice = { zone: scope ? `tag:${scope.tag}` : `ring:${Ring.Closest}` }
+  const bundles = new Set<Bundle>()
+  const bundleLabel = (b: Bundle): string => (b === 'closest-few' ? S.w42.bundleFew : S.w42.bundleAllies)
   const include = new Set<string>()
   const exclude = new Set<string>()
   const chosen = new Set<string>()
@@ -85,8 +95,17 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
     el('span', { class: 'chips-lbl' }, [label]),
     ...[...ids].map((id) => el('button', { class: 'chip on', type: 'button', 'aria-label': S.supportRemove(nameOf(id)), onclick: () => { ids.delete(id); draw() } }, [nameOf(id) + ' ×'])),
   ])
+  const zoneName = (zone: string): string => (zone.startsWith('tag:') ? loadColourTags().find((t) => t.id === zone.slice(4))?.label ?? zone.slice(4) : S.ringLabel[zone.slice(5) as Ring] ?? zone)
+  const keyLabel = (key: string): string => key.split('+').map((k, i) => (i === 0 ? zoneName(k) : bundleLabel(k as Bundle))).join(' + ')
+  const applyKey = (key: string): void => {
+    const [zone, ...rest] = key.split('+')
+    pick.zone = zone
+    bundles.clear()
+    for (const b of rest) if ((BUNDLES as readonly string[]).includes(b)) bundles.add(b as Bundle)
+    draw()
+  }
   const draw = (): void => {
-    pick.include = [...include]
+    pick.include = [...new Set([...include, ...[...bundles].flatMap((b) => bundlePeople(io.st().people, b).map((p) => p.id))])]
     pick.exclude = [...exclude]
     const to = recipients(io, pick)
     const tags = loadColourTags()
@@ -100,6 +119,15 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
         ...tags.map((t) => el('option', { value: `tag:${t.id}`, ...(pick.zone === `tag:${t.id}` ? { selected: '' } : {}) }, [t.kind && t.kind !== 'personal' ? S.supportGroupTag(t.label ?? t.id, tagReach(io, tags, t.id)) : S.supportTag(t.label ?? t.id)])),
       ]),
       chosenTag ? el('div', { class: 'chips', 'data-support-zone-pill': '' }, [tagPill(chosenTag)]) : null,
+      // Wave 42: the trust-zone bundles are always there; they add their people on top of any audience.
+      el('div', { class: 'chips', 'data-support-bundles': '', role: 'group', 'aria-label': S.w42.bundles }, BUNDLES.map((b) => el('button', {
+        class: 'chip' + (bundles.has(b) ? ' on' : ''), type: 'button', 'data-support-bundle': b, 'aria-pressed': String(bundles.has(b)),
+        onclick: () => { if (bundles.has(b)) bundles.delete(b); else bundles.add(b); draw() },
+      }, [bundleLabel(b)]))),
+      scope?.remembered.length ? el('div', { class: 'chips', 'data-support-remembered': '' }, [
+        el('span', { class: 'chips-lbl' }, [S.w42.recent]),
+        ...scope.remembered.map((k) => el('button', { class: 'chip', type: 'button', 'data-support-remembered-key': k, onclick: () => applyKey(k) }, [keyLabel(k)])),
+      ]) : null,
       pick.notClosest ? null : el('div', { class: 'chips' }, [el('span', { class: 'chip on support-closest', 'data-support-closest-always': '' }, [S.supportClosestAlways])]),
       find,
       found,
@@ -135,6 +163,7 @@ export function supportForm(io: SupportIo, sent: () => void): HTMLElement {
     io.save()
     const text = supportText(io.appUrl, ask)
     for (const t of to) void io.send(t.peer, text).catch(() => { /* the card shows who answered; nobody else is told */ })
+    scope?.used(audienceKey(pick.zone, bundles))
     sent()
     io.toast(S.supportSent(to.length))
     io.render()
@@ -164,6 +193,38 @@ export function supportLine(io: SupportIo): HTMLElement | null {
     ...sentVia(mine).map((v) => el('span', { class: 'support-via', 'data-support-via': v.via }, [
       ' ' + S.supportSentVia(S.supportViaLabel[v.via], new Date(v.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }), v.peerIds.map(name).filter(Boolean).join(', ')),
     ])),
+    ' ',
+    el('button', { class: 'lnk', type: 'button', 'data-support-cancel': mine.id, onclick: () => cancelMine(io, mine.id) }, [S.w42.cancelAsk]),
+  ])
+}
+
+/** Wave 42: closes my own ask and tells the people it went to (their copy goes away). */
+export function cancelMine(io: SupportIo, id: string): void {
+  const s = io.st()
+  const out = cancelAsk(s.supportAsks, id, Date.now())
+  if (!out.cancelled) return
+  s.supportAsks = out.asks
+  io.save()
+  for (const peerId of out.cancelled.to) {
+    const peer = s.peers.find((p) => p.id === peerId)
+    if (peer) void io.send(peer, closeText(io.appUrl, id)).catch(() => { /* their copy ends by itself at its time */ })
+  }
+  io.toast(S.w42.cancelled)
+  io.render()
+}
+
+/** Wave 42: every open ask in one list, mine (with Cancel) and the ones sent to me; the empty state says so in words. */
+export function supportInbox(io: SupportIo): HTMLElement {
+  const s = io.st()
+  const rows = inboxRows({ supportAsks: s.supportAsks, supportIn: s.supportIn, people: s.people }, Date.now())
+  const until = (ms: number): string => new Date(ms).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+  return el('div', { class: 'support-inbox', 'data-support-inbox': '' }, [
+    el('h4', { class: 'eyebrow' }, [S.w42.inboxTitle]),
+    ...(rows.length ? rows.map((r) => el('div', { class: 'conn-row support-inbox-row', 'data-support-inbox-row': r.id, 'data-kind': r.kind }, [
+      el('b', {}, [r.kind === 'mine' ? S.w42.inboxMine(r.asked ?? 0, r.answered ?? 0) : S.w42.inboxTheirs(r.who ?? '')]),
+      el('span', { class: 'meta' }, [' ' + [r.chips.map((c) => S.supportChip[c]).join(', '), r.note, S.w42.inboxUntil(until(r.until))].filter(Boolean).join(' · ')]),
+      r.kind === 'mine' ? el('button', { class: 'lnk', type: 'button', 'data-support-inbox-cancel': r.id, onclick: () => { cancelMine(io, r.id); io.render() } }, [S.w42.cancelAsk]) : null,
+    ])) : [el('p', { class: 'empty', 'data-support-inbox-none': '' }, [S.w42.inboxNone])]),
   ])
 }
 
@@ -172,11 +233,32 @@ export function addSupportIn(list: SupportIn[] | undefined, a: SupportIn, now: n
   return [a, ...openAsks(list, now).filter((x) => !(x.id === a.id && x.peerId === a.peerId))].slice(0, SUPPORT_IN_MAX)
 }
 
+/** Review wave 42 (I9): asks an agent prepared over MCP. Nothing leaves until the person taps Send; Discard drops it unsent. */
+export function agentAskCards(io: SupportIo): HTMLElement[] {
+  const s = io.st()
+  return agentAsks(s.supportAsks, Date.now()).map((a) => el('div', { class: 'card support-card agent-ask-card', 'data-agent-ask': a.id }, [
+    el('p', {}, [S.w42.agentAsk(a.note)]),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-agent-ask-send': a.id, onclick: () => {
+        const out = approveAgentAsk(s.supportAsks, a.id)
+        if (!out.ask) return
+        s.supportAsks = out.asks
+        io.save()
+        const sent = out.ask
+        for (const peerId of sent.to) { const peer = s.peers.find((p) => p.id === peerId); if (peer) void io.send(peer, supportText(io.appUrl, sent)).catch(() => undefined) }
+        io.toast(S.w42.agentSent)
+        io.render()
+      } }, [S.w42.agentSend]),
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-agent-ask-discard': a.id, onclick: () => { s.supportAsks = discardAgentAsk(s.supportAsks, a.id); io.save(); io.toast(S.w42.agentDiscarded); io.render() } }, [S.w42.agentDiscard]),
+    ]),
+  ]))
+}
+
 /** The helper's calm cards: "<name> could use support: <chips>" with "I'm here" and "Not now" (silent). */
 export function supportCards(io: SupportIo): HTMLElement[] {
   const s = io.st()
   const now = Date.now()
-  return (s.supportIn ?? []).filter((a) => isOpen(a, now)).flatMap((a) => {
+  return [...agentAskCards(io), ...(s.supportIn ?? []).filter((a) => isOpen(a, now)).flatMap((a) => {
     const person = s.people.find((p) => p.peerId === a.peerId)
     const peer = s.peers.find((p) => p.id === a.peerId)
     if (!person || !peer) return []
@@ -193,5 +275,5 @@ export function supportCards(io: SupportIo): HTMLElement[] {
         el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-support-notnow': a.id, onclick: drop }, [S.supportNotNow]),
       ]),
     ])]
-  })
+  })]
 }

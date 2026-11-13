@@ -53,6 +53,23 @@ function keepPictures<T extends { id: string }>(incoming: T[], local: T[], key: 
   return incoming.map((x) => (pics.has(x.id) ? { ...x, [key]: pics.get(x.id) } : x))
 }
 
+export interface ChangePreview { added: string[]; removed: string[]; changed: string[]; settings: string[]; /** People beyond PREVIEW_NAMES in the three lists. */ more: number }
+export const PREVIEW_NAMES = 12
+
+/** Wave 42 B17: what taking `theirs` would do, by name, read-only: people added, removed, changed (a picture aside) and the settings that differ. Touches neither argument. */
+export function previewChanges(mine: AppState, theirs: SyncBundle): ChangePreview {
+  const a = byId(alive(mine.people).map(withoutPersonImage))
+  const b = byId(theirs.people.map(withoutPersonImage))
+  const added = [...b].filter(([id]) => !a.has(id)).map(([, p]) => p.name)
+  const removed = [...a].filter(([id]) => !b.has(id)).map(([, p]) => p.name)
+  const changed = [...a].filter(([id, p]) => b.has(id) && !same(p, b.get(id))).map(([, p]) => p.name)
+  const mySettings = settingsOf(mine)
+  const theirSettings = theirs.settings ?? mySettings
+  const settings = [...new Set([...Object.keys(mySettings), ...Object.keys(theirSettings)])].filter((k) => !same(mySettings[k], theirSettings[k]))
+  const cap = (l: string[]): string[] => l.slice(0, PREVIEW_NAMES)
+  return { added: cap(added), removed: cap(removed), changed: cap(changed), settings, more: [added, removed, changed].reduce((n, l) => n + Math.max(0, l.length - PREVIEW_NAMES), 0) }
+}
+
 /** Replaces, in place, what the bundle carries with the bundle's version. Running it again with the same bundle changes nothing. */
 /**
  * Review wave 40: the other things taking `theirs` replaces, counted for the confirm sheet: resources (the per-device picture aside), meetings,

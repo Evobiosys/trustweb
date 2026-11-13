@@ -17,8 +17,8 @@ import { communityTags } from '../../trustzones'
 import { removeZoneTag, zoneTagIds } from '../../zone_tags'
 import { NAV, safeUrl, type CommunityData, type NavId, type Resource, type ResourceView } from './community_data'
 
-export { MODULE_ID, NAV, parseCommunity, safeUrl } from './community_data'
-export type { CommunityData, NavId, Resource, ResourceView } from './community_data'
+export { MODULE_ID, NAV, parseCommunity, safeUrl, metaOf, listCommunities, createCommunity, setKind, canEditSettings, setSettings, leftNav, rememberAudience, addMember, adoptMetaTags, communityAudience, REMEMBER_MAX } from './community_data'
+export type { CommunityData, CommunityKind, CommunityMeta, CommunityRow, NavId, Resource, ResourceView } from './community_data'
 /** The zone key that holds the spaces I joined. */
 const SELF = 'self'
 

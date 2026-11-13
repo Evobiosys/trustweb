@@ -13,8 +13,9 @@ import type { Identity } from '../../../demo/src/did'
 import { deriveEcdhPairKey } from '../../../demo/src/crypto'
 import { decryptEnvelope, parseOuterWire } from '../../../demo/src/relay'
 import { decodeFromQr } from '../../../demo/src/wire'
-import { kindOfWire, workerLines, NOTIFY_KINDS, WORKER_FALLBACK } from '../notify_kinds'
+import { kindOfWire, workerItems, NOTIFY_KINDS, WORKER_FALLBACK } from '../notify_kinds'
 import type { NotifyKind } from '../notify_kinds'
+import { inboxId, inboxPut, newItem, type InboxKind } from '../notify_inbox'
 import { readPushBundle } from '../push_bundle'
 import type { PushBundle } from '../push_bundle'
 
@@ -115,18 +116,22 @@ async function onPush(): Promise<void> {
   let identity: Identity | null = null
   try { identity = deserializeIdentity(bundle.identity) } catch { identity = null }
   const arrivals = identity ? await peekDrain(bundle, identity) : null
-  let lines = arrivals ? workerLines(arrivals, bundle.kinds) : [WORKER_FALLBACK]
+  const fallback: { kind: InboxKind; body: string }[] = [{ kind: 'other', body: WORKER_FALLBACK }]
+  let lines: { kind: InboxKind; body: string }[] = arrivals ? workerItems(arrivals, bundle.kinds) : fallback
   const icon = new URL('icons/icon-192.png', bundle.relayOrigin + appBase()).toString()
   if (!lines.length) {
     // Nothing readable (the app in the background took it already, or every kind that arrived is off). A push that shows
     // nothing counts against this site in Chrome and the subscription gets throttled: show the fallback unless one of ours is up.
     const shown = await sw.registration.getNotifications().catch(() => [] as NotificationLike[])
     if (shown.some((n) => n.tag.startsWith('trustweb-'))) return
-    lines = [WORKER_FALLBACK]
+    lines = fallback
   }
   // One notification per arrival, each ringing on its own (Jakob 2026-10-16): a unique tag, never replacing an earlier one silently.
   const stamp = Date.now()
-  await Promise.all(lines.map((body, i) => sw.registration.showNotification(bundle.appName, { body, tag: `trustweb-arrival-${stamp}-${i}`, renotify: true, icon })))
+  await Promise.all(lines.map(async ({ kind, body }, i) => {
+    await inboxPut(newItem(kind, bundle.appName, body, stamp, inboxId(stamp, i))) // first into the inbox: the app lists it when the person returns
+    await sw.registration.showNotification(bundle.appName, { body, tag: `trustweb-arrival-${stamp}-${i}`, renotify: true, icon })
+  }))
 }
 
 /**

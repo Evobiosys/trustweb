@@ -2,6 +2,13 @@
 import { EXCERPT_MAX, parseFrontmatter, parseNote } from '../../src/ext/obsidian/obsidian_parse.ts'
 import { NOTES } from '../fixtures/synthetic_vault.mjs'
 
+// Algorithmic bound instead of a wall clock: T(4n)/T(n) stays below SCALE_RATIO_MAX (linear-ish; quadratic would give ~16),
+// plus a generous absolute ceiling as a freeze guard. Best of 3 per size damps scheduler noise; a 5 ms floor damps timer jitter.
+const SCALE_RATIO_MAX = 10   // linear ~4, observed up to ~7 in a loaded full run; quadratic ~16
+const FREEZE_MS = 10_000
+const best = (fn, n) => { let m = Infinity; for (let i = 0; i < 3; i++) { const t0 = performance.now(); fn(n); m = Math.min(m, performance.now() - t0) } return m }
+const scaling = (fn, n) => ({ small: Math.max(best(fn, n), 5), big: best(fn, 4 * n) })
+
 describe('parseFrontmatter', () => {
   it('reads scalars, quoted values, inline lists and block lists', () => {
     const { data, body } = parseFrontmatter(NOTES['People/Bruno Cesar.md'])
@@ -68,22 +75,24 @@ describe('parseNote', () => {
     expect(parseNote('x.md', 'Hello [[B]]')).toEqual(a)
     expect(JSON.stringify(a).length).toBeLessThan(1500)
   })
-  it('a pathological note (1 MB of one word, of [[, of base64) is read in well under a second', () => {
-    for (const body of ['a'.repeat(1_000_000), '[['.repeat(500_000), 'QUJD'.repeat(250_000) + '\n' + '#'.repeat(100_000), '`'.repeat(500_000), '---\n'.repeat(200_000)]) {
-      const t0 = performance.now()
-      parseNote('x.md', body)
-      expect(performance.now() - t0).toBeLessThan(1000)
+  it('a pathological note (1 MB of one word, of [[, of base64) scales linearly and never freezes', () => {
+    for (const make of [n => 'a'.repeat(n), n => '[['.repeat(n / 2), n => 'QUJD'.repeat(n / 4) + '\n' + '#'.repeat(n / 10), n => '`'.repeat(n / 2), n => '---\n'.repeat(n / 5)]) {
+      const { small, big } = scaling(n => parseNote('x.md', make(n)), 250_000)
+      expect(big / small).toBeLessThan(SCALE_RATIO_MAX)
+      expect(big).toBeLessThan(FREEZE_MS)
     }
   })
 })
 
 describe('B2 a line of spaces inside the frontmatter cannot freeze the reader', () => {
-  it('900,000 spaces after a key, inside the fences, in under 200 ms', () => {
-    for (const line of ['a' + ' '.repeat(900_000), 'a' + ' '.repeat(900_000) + ':', ' '.repeat(900_000) + 'a: b', 'a: ' + 'b '.repeat(450_000)]) {
-      const t0 = performance.now()
-      const { data } = parseFrontmatter(`---\n${line}\nname: Z\n---\nbody`)
-      expect(performance.now() - t0).toBeLessThan(200)
-      expect(data.name).toBe('Z')
+  it('900,000 spaces after a key, inside the fences, scales linearly and never freezes', () => {
+    for (const line of [n => 'a' + ' '.repeat(n), n => 'a' + ' '.repeat(n) + ':', n => ' '.repeat(n) + 'a: b', n => 'a: ' + 'b '.repeat(n / 2)]) {
+      const { small, big } = scaling(n => {
+        const { data } = parseFrontmatter(`---\n${line(n)}\nname: Z\n---\nbody`)
+        expect(data.name).toBe('Z')
+      }, 225_000)
+      expect(big / small).toBeLessThan(SCALE_RATIO_MAX)
+      expect(big).toBeLessThan(FREEZE_MS)
     }
   })
   it('a normal key with spaces still reads; an over-long key or line is skipped', () => {

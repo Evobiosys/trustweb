@@ -493,9 +493,11 @@ export function conflictParts(text: string): Array<string | ConflictName> {
 }
 
 /** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve wave opens with no test run going, every loaded row approved (>= 1 row) and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
-export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean; baseSha?: string; compat?: Compat; blocked?: string | null }): { ok: boolean; hint: string } {
+export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean; baseSha?: string; compat?: Compat; blocked?: string | null; gate?: GateInfo | null }): { ok: boolean; hint: string } {
+  const merged = conflictView(p)   // wave 42 B01: a conflict only because the row is already in main says so (ops gate.kind squashed-in-main)
   const hint = p.blocked ? p.blocked   // ops `preview <id> guard`: base behind origin/main, a row's branch moved, or a row already merged
     : p.tested?.running ? 'Tests are running'
+    : merged?.kind === 'mark-merged' ? merged.text
     : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
     : unapproved(p.features).length ? `Approve first: ${unapproved(p.features).map((f) => f.title).join(', ')}`
     : approvedKeys(p.features).length === 0 ? 'Approve at least one feature'
@@ -591,7 +593,71 @@ export function typedValue(text: string): string | null {
 }
 
 /** The "Personal preview / Approve wave" box (bottom right) shows only while the left panel is expanded with all rows: a pill or a single focused row hides it (Jakob 2026-11-07). */
-export const approveBoxVisible = (panel: { collapsed: boolean; focused: boolean }): boolean => !panel.collapsed && !panel.focused
+/** Wave 42 B14: a focused single row hides the box, except once every loaded row is approved (`ready`, derived from the rows): then it returns at once. */
+export const approveBoxVisible = (panel: { collapsed: boolean; focused: boolean; ready?: boolean }): boolean => !panel.collapsed && (!panel.focused || panel.ready === true)
 
 /** Wave 40: the focused row's background alternates (0/1) after each approve that jumps to another row, so the next one reads as a different item. */
 export const approveTone = (tone: 0 | 1, pressed: string, focusAfter: string | null): 0 | 1 => (focusAfter !== null && focusAfter !== pressed ? (tone === 0 ? 1 : 0) : tone)
+
+// ---- wave 42 review-panel (B01, B03, B12/P07, B14, B16, F11) ----
+
+/** B12/P07: every row at one level. `requires` still drives the load cascade (toggled) but never nests the list; the chip names it (afterKeys). */
+export function flatRows(features: PreviewFeature[]): TreeNode[] {
+  return features.map((feature) => ({ feature, depth: 0, children: [] }))
+}
+
+/** The small "after <key>" chip: the keys this row requires, null when none. */
+export const afterKeys = (f: PreviewFeature): string | null => (f.requires.length ? f.requires.join(', ') : null)
+
+export type RowState = 'review' | 'approved' | 'needs-work'
+/** B03: "to review" (empty box), approved, and "it did not work"; one state per row from the verdict the panel shows. */
+export const rowState = (f: PreviewFeature): RowState => { const v = shownVerdict(f); return v === 'merge' ? 'approved' : v === 'needs-work' ? 'needs-work' : 'review' }
+
+/** B14: every loaded row carries the verdict merge (at least one row loaded): derived from the rows, never from a press event. */
+export const waveReady = (features: PreviewFeature[]): boolean => loadedRows(features).length > 0 && unapproved(features).length === 0
+
+/** The ops gate fields the panel consumes (instructions-ops-cicd.txt): kind "squashed-in-main" with action "mark-merged <key>". Both absent on an older ops build. */
+export interface GateInfo { ok?: boolean; hint?: string; kind?: string; action?: string }
+export type ConflictView =
+  | { kind: 'mark-merged'; key: string; text: string }
+  | { kind: 'conflict'; head: string; detail: string; fixKey: string | null }
+
+/** B01/B16: what the panel says about a failed assembly or a closed gate; null = nothing to say. The one-tap button needs gate.action; else the first conflict line + details. */
+export function conflictView(p: { assembled?: { error: string | null } | null; gate?: GateInfo | null; features: PreviewFeature[]; pending?: boolean }): ConflictView | null {
+  const m = /^mark-merged\s+(\S+)$/.exec(p.gate?.action ?? '')
+  if (p.gate?.kind === 'squashed-in-main' && m && !p.pending) return { kind: 'mark-merged', key: m[1], text: p.gate.hint || `${m[1]} is already in main` }
+  const error = p.assembled?.error
+  if (!error) return null
+  return { kind: 'conflict', head: `Fix the conflict first: ${error.split('\n')[0]}`, detail: error, fixKey: conflictKey(p.features, error) }
+}
+
+/** The loaded row a conflict text names (by key or branch); null when none is recognised. */
+export function conflictKey(features: PreviewFeature[], error: string): string | null {
+  const names = conflictParts(error).flatMap((x) => (typeof x === 'string' || x.kind === 'file' ? [] : [x.text.replace(/:$/, '')]))
+  for (const n of names) { const f = features.find((x) => x.key === n || x.branch === n); if (f) return f.key }
+  return features.find((f) => f.checked && (error.includes(f.branch) || error.includes(f.key)))?.key ?? null
+}
+
+/** Review wave 42 (ops step d, mirror of preview_lib.mjs approveGate kind "ci-failed"): the PR's CI ended red, so the panel offers
+ *  "Re-run the failed checks" (`preview <id> rerun-failed`). Read from the approvals status the panel already polls. */
+export const rerunOffered = (j: { step: string; text?: string }): boolean => j.step === 'failed' && /^CI failed/.test(j.text ?? '')
+
+/** The launched session's id from the fix-conflict answer (ops-cicd: POST /__tw/preview/fix-conflict returns it); null when the answer names none. */
+export const sessionIdOf = (j: unknown): string | null => {
+  const o = (j ?? {}) as Record<string, unknown>
+  const v = o.sessionId ?? o.session ?? o.id ?? o.window   // ops-cicd answers {started, brief, window}
+  return typeof v === 'string' && v ? v : null
+}
+
+/** F11: the panel in its own window. The pop-out announces itself on a BroadcastChannel every second; the main window hides its inline panel while the last beat is fresh. */
+export const POPOUT_CHANNEL = 'twp-popout'
+export const POPOUT_BEAT_MS = 1000
+export const POPOUT_STALE_MS = 3500
+export type PopoutMsg = { type: 'open' | 'beat' | 'close' }
+export interface PopoutState { open: boolean; last: number }
+export const popoutIdle: PopoutState = { open: false, last: 0 }
+export function popoutStep(_s: PopoutState, m: PopoutMsg, now: number): PopoutState {
+  return m.type === 'close' ? popoutIdle : { open: true, last: now }
+}
+/** The inline panel stays hidden while a pop-out beat is fresh; a window that died without "close" gives the panel back after POPOUT_STALE_MS. */
+export const popoutHides = (s: PopoutState, now: number): boolean => s.open && now - s.last < POPOUT_STALE_MS

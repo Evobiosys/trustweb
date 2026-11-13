@@ -1,7 +1,9 @@
+// Review wave 42: the tools import app modules (community_data, event_plan), whose types reach DOM code and enums: DOM lib on, erasableSyntaxOnly off
+// (it flagged the app's enums, which node never loads). The runtime guard is the unit test that boots server.ts under plain node (mcp_parity.test.mjs).
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -10,9 +12,9 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true,
+    "erasableSyntaxOnly": false,
     "typeRoots": ["../../node_modules/.pnpm/@types+node@22.20.1/node_modules/@types"],
     "types": ["node"]
   },
-  "include": ["src", "../trustweb/src/record_diff.ts"]
+  "include": ["src", "../trustweb/src/env.d.ts", "../trustweb/src/record_diff.ts", "../trustweb/src/billing/pricing.ts"]
 }

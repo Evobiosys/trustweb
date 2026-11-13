@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 40 mcp-local proof (headless): PORT=5460 EXE=<chromium> PW=<playwright-core index.js> SHOTS=<dir> node mcp_local.mjs. Synthetic record and a faked https MCP server only. */
+/** Wave 40 mcp-local proof (headless); since wave 42 the commands carry the checkout's absolute path, so it needs a personal preview (dev server with TW_DEV_RECORD + TW_DEV_LIVE set, e.g. to /tmp copies): PORT=5460 EXE=<chromium> PW=<playwright-core index.js> SHOTS=<dir> node mcp_local.mjs. Synthetic record and a faked https MCP server only. */
 const pw = await import(process.env.PW ?? 'playwright-core'); const chromium = (pw.default ?? pw).chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5460}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
@@ -38,6 +38,7 @@ try {
     await page.reload(); await page.addStyleTag({ content: hide }); await page.waitForTimeout(900)
 
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(600)
+    await page.locator('[data-settings-advanced-all] > summary').click(); await page.waitForTimeout(400)   // wave 42: Advanced holds the groups
     await page.locator('[data-settings-group="general"] > summary').click().catch(() => {}); await page.waitForTimeout(300)
     const ext = page.locator('[data-settings-section="extensions"]')
     await ext.locator('summary').first().scrollIntoViewIfNeeded(); await ext.locator('summary').first().click(); await page.waitForTimeout(300)
@@ -49,15 +50,12 @@ try {
     check(`${vw}: pi, Claude Code and Mistral are listed; OpenAI, Gemini and Grok sit under Others`,
       (await page.locator('[data-mcp-client]').evaluateAll((n) => n.map((x) => x.dataset.mcpClient))).join() === 'pi,claude-code,mistral,openai,gemini,grok'
       && await page.evaluate(() => { const o = document.querySelector('[data-mcp-others]'); return ['openai', 'gemini', 'grok'].every((id) => !!(o.compareDocumentPosition(document.querySelector(`[data-mcp-client="${id}"]`)) & Node.DOCUMENT_POSITION_FOLLOWING)) && !(o.compareDocumentPosition(document.querySelector('[data-mcp-client="mistral"]')) & Node.DOCUMENT_POSITION_FOLLOWING) }))
-    await page.locator('[data-mcp-client="claude-code"] summary').click()
     const cc = () => page.locator('[data-mcp-snippet="claude-code"]').innerText()
-    check(`${vw}: read-only snippet has no write switch`, /^claude mcp add trustweb -- node /.test(await cc()))
+    check(`${vw}: read-only snippet has no write switch`, /^claude mcp add trustweb( -e TW_RECORD=\S+)? -- node --disable-warning=\S+ \/\S+\/apps\/mcp\/src\/server\.ts$/.test(await cc()) && !(await cc()).includes('TW_MCP_WRITE'))
     await page.locator('[data-mcp-write]').click(); await page.waitForTimeout(200)
-    await page.locator('[data-mcp-client="claude-code"] summary').click()
-    check(`${vw}: Allow writes puts TW_MCP_WRITE=1 into the snippet`, /--env TW_MCP_WRITE=1/.test(await cc()))
+    check(`${vw}: Allow writes puts TW_MCP_WRITE=1 into the snippet`, / -e TW_MCP_WRITE=1 /.test(await cc()))
     await page.locator('[data-mcp-tool-row="search"] input').uncheck(); await page.waitForTimeout(200)
-    await page.locator('[data-mcp-client="claude-code"] summary').click()
-    check(`${vw}: unticking a tool narrows TW_MCP_TOOLS`, /TW_MCP_TOOLS=list_people,get_person,list_tags,list_notes,add_note,add_tag/.test(await cc()))
+    { const t = await cc(); check(`${vw}: unticking a tool narrows TW_MCP_TOOLS`, /TW_MCP_TOOLS=list_people,get_person,list_tags,list_notes,/.test(t) && !/TW_MCP_TOOLS=\S*\bsearch\b/.test(t) && /\badd_note\b/.test(t)) }
     await page.locator('[data-mcp-client="grok"] summary').click()
     check(`${vw}: no horizontal scrolling with a snippet open`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
     await page.locator('[data-mcp-write]').scrollIntoViewIfNeeded(); await page.screenshot({ path: `${SHOTS}/mcp-local-${vw}-1-settings.png` })

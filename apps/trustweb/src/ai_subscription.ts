@@ -32,18 +32,18 @@ export function makeClaim(bytes: Uint8Array = crypto.getRandomValues(new Uint8Ar
 // eslint-disable-next-line no-control-regex
 export const validEmail = (email: string): boolean => /^[^\s@<>,"\x00-\x1f\x7f]+@[^\s@<>,"\x00-\x1f\x7f]+\.[^\s@<>,"\x00-\x1f\x7f]+$/.test(email.trim()) && email.trim().length <= 254
 
-type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
+export type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
 
 export interface SignUpReply { ref: string; plan: PlanId; amount_eur: number; state: 'pending'; mail: 'sent' | 'not-sent' }
 export interface PollReply { state: 'pending' | 'active' | 'revoked'; plan?: PlanId; quota?: number; used?: number; month?: string; token?: string }
 
 /** One call; throws with the server's own message (error string or error.message). */
-async function call<T>(fetchFn: Fetch, url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<T> {
+export async function call<T>(fetchFn: Fetch, url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<T> {
   const res = await fetchFn(url, init)
-  const body = await res.json().catch(() => null) as { error?: string | { message?: string } } | null
+  const body = await res.json().catch(() => null) as { message?: string; error?: string | { message?: string } } | null
   if (!res.ok) {
     const e = body?.error
-    throw new Error((typeof e === 'string' ? e : e?.message) ?? `HTTP ${res.status}`)
+    throw new Error(body?.message ?? (typeof e === 'string' ? e : e?.message) ?? `HTTP ${res.status}`)
   }
   return body as T
 }

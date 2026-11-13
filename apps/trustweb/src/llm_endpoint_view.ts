@@ -4,12 +4,14 @@
  * Custom (the person's own endpoint: base URL, key, model and a Test button; Ollama on this device and pc24 are presets inside it, wave 39). Kept on this phone and in the sealed record.
  */
 import { el } from '../../demo/src/ui/dom'
-import { activeEndpoint, apiBase, ENTERPRISE_MAIL, PLAN_CARDS, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, signUp, validEmail, type PlanId } from './ai_subscription'
+import { activeEndpoint, apiBase, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, validEmail, type Fetch } from './ai_subscription'
+import { billingStatus, planNote, startCheckout } from './billing/billing_client'
+import { BILLING_PLANS, type BillingPlan } from './billing/pricing'
 import { configured, CUSTOM_PRESETS, customPreset, customPresetOf, onWake, testEndpoint, testResultLines, type WakeEvent } from './llm_endpoint'
 import type { AiEndpoint, AppState } from './model'
 import { S } from './strings'
 
-const net: Parameters<typeof signUp>[0] = (url, init) => fetch(url, init)
+const net: Fetch = (url, init) => fetch(url, init)
 /** One poll per open, not a timer: a draw within this window of the last poll does not ask again. */
 const POLL_GAP_MS = 30_000
 let lastPoll = 0
@@ -35,6 +37,21 @@ async function pollOnce(h: Pick<AiViewHooks, 'state' | 'save'>): Promise<boolean
     ;(h.state().advanced ??= {}).ai = r.ai
     if (r.quota !== undefined) quota = { used: r.used, quota: r.quota }
     if (JSON.stringify(r.ai) === was) return false
+    h.save()
+    return true
+  } catch { return false }
+}
+
+/** Polls a paid plan's state once (pending, or active in case it ended); stores the change; never throws. True when the record changed. */
+async function pollBill(h: Pick<AiViewHooks, 'state' | 'save'>): Promise<boolean> {
+  const ai = h.state().advanced?.ai
+  const bill = ai?.bill
+  if (!ai || !bill || bill.state === 'ended') return false
+  lastPoll = Date.now()
+  try {
+    const r = await billingStatus(net, apiBase(), bill.ref, bill.claim)
+    if (r.state === bill.state) return false
+    ai.bill = { ...bill, state: r.state }
     h.save()
     return true
   } catch { return false }
@@ -70,6 +87,7 @@ export function bootAi(h: Pick<AiViewHooks, 'state' | 'save'> & { dev: boolean }
   if (ai !== was) { (s.advanced ??= {}).ai = ai; h.save() }
   if (!ai && h.dev) { (s.advanced ??= {}).ai = devPc24Seed(); h.save() }
   if (ai?.sub?.state === 'pending') void pollOnce(h)
+  if (ai?.bill && ai.bill.state !== 'ended') void pollBill(h)
 }
 
 export function aiSettings(h: AiViewHooks): HTMLElement[] {
@@ -85,53 +103,66 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
     return input
   }
 
-  const signUpSheet = (id: PlanId): void => {
+  const signUpSheet = (id: Exclude<BillingPlan, 'own'>): void => {
     const email = el('input', { class: 'field', type: 'email', placeholder: S.aiSubEmail, 'aria-label': S.aiSubEmail, autocomplete: 'email', 'data-ai-email': '' }) as HTMLInputElement
     const err = el('p', { class: 'meta ai-error', 'data-ai-signup-error': '', role: 'alert' })
-    const send = el('button', {
-      class: 'btn btn-sm', 'data-ai-sent': '',
+    const go = el('button', {
+      class: 'btn btn-sm', 'data-ai-checkout': '',
       onclick: async () => {
         err.textContent = ''
         if (!validEmail(email.value)) { err.textContent = S.aiSubEmailBad; return }
         const claim = makeClaim()
-        send.setAttribute('disabled', '')
-        send.textContent = S.aiSubSending
+        go.setAttribute('disabled', '')
+        go.textContent = S.billOpening
         try {
-          const r = await signUp(net, apiBase(), { plan: id, email: email.value, claim })
-          ai().sub = { plan: id, ref: r.ref, email: email.value.trim(), claim, state: 'pending' }
-          h.save(); h.backToSettings()
+          const r = await startCheckout(net, apiBase(), { plan: id, email: email.value, claim })
+          ai().bill = { plan: id, ref: r.ref, email: email.value.trim(), claim, state: 'pending' }
+          h.save()
+          window.location.assign(r.url)
         } catch (e) {
           err.textContent = (e as Error).message
-          send.removeAttribute('disabled')
-          send.textContent = S.aiSubSent
+          go.removeAttribute('disabled')
+          go.textContent = S.billContinue
         }
       },
-    }, [S.aiSubSent])
+    }, [S.billContinue])
+    const note = planNote(id)
     h.openSheet([
       el('button', { class: 'btn btn-ghost btn-sm ai-back', type: 'button', 'data-ai-back': '', onclick: () => h.backToSettings() }, ['← ' + S.back]),
-      el('h3', {}, [S.aiSubSheetTitle(S.aiSubPlans[id])]),
-      el('p', {}, [S.aiSubWise(PLANS[id].euro)]),
-      email, err, send,
+      el('h3', {}, [S.billSheetTitle(S.billPlans[id].name)]),
+      el('p', {}, [`${S.billPlans[id].price} ${S.aiPlanPerMonth}`]),
+      ...(note ? [el('p', { class: 'meta', 'data-ai-note': '' }, [note])] : []),
+      email, err, go,
     ])
   }
 
   const subGroup = (): HTMLElement => {
     const sub = ai().sub
-    const canSignUp = !sub || sub.state === 'revoked'
-    const card = (c: (typeof PLAN_CARDS)[number]): HTMLElement => {
-      const text = S.aiPlanCards[c.id]
-      const action = c.id === 'enterprise'
-        ? el('a', { class: 'btn btn-sm ai-plan-btn', href: ENTERPRISE_MAIL, 'data-ai-enterprise': '' }, [text.button!])
-        : canSignUp ? el('button', { class: 'btn btn-sm ai-plan-btn', 'data-ai-signup': c.id, onclick: () => signUpSheet(c.id as PlanId) }, [S.aiPlanChoose(text.name)]) : null
+    const bill = ai().bill
+    const canSignUp = (!sub || sub.state === 'revoked') && (!bill || bill.state === 'ended')
+    const card = (c: (typeof BILLING_PLANS)[number]): HTMLElement => {
+      const text = S.billPlans[c.id]
+      const action = c.id === 'own'
+        ? el('button', { class: 'btn btn-sm ai-plan-btn', 'data-ai-own': '', onclick: () => { byokOpen = true; draw() } }, [text.button!])
+        : canSignUp ? el('button', { class: 'btn btn-sm ai-plan-btn', 'data-ai-signup': c.id, onclick: () => signUpSheet(c.id as Exclude<BillingPlan, 'own'>) }, [S.aiPlanChoose(text.name)]) : null
       return el('div', { class: 'ai-plan', 'data-ai-plan': c.id }, [
         el('h6', { class: 'ai-plan-name' }, [text.name]),
         el('p', { class: 'ai-plan-price' }, [text.price]),
-        ...(c.euro === null ? [] : [el('p', { class: 'meta' }, [S.aiPlanPerMonth])]),
+        ...(c.euro === 0 ? [] : [el('p', { class: 'meta' }, [S.aiPlanPerMonth])]),
         ...text.lines.map((l) => el('p', { class: 'meta' }, [l])),
-        ...(c.euro === null ? [] : [el('p', { class: 'meta' }, [S.aiSubQuota(PLANS[c.id as PlanId].quota)])]),
         action,
       ])
     }
+    const billState = bill && bill.state !== 'ended' ? el('div', { 'data-ai-bill-state': bill.state }, [
+      el('p', { class: 'meta' }, [bill.state === 'pending' ? S.billPending : S.billActive(S.billPlans[bill.plan].name)]),
+      ...(bill.state === 'pending' ? [
+        el('p', { class: 'meta' }, [S.aiSubRef(bill.ref)]),
+        el('button', {
+          class: 'btn btn-ghost btn-sm', 'data-ai-check-now': '',
+          onclick: async (ev: Event) => { (ev.currentTarget as HTMLElement).textContent = S.aiSubChecking; await pollBill(h); draw() },
+        }, [S.aiSubCheck]),
+      ] : []),
+    ]) : bill ? el('p', { class: 'meta', 'data-ai-bill-state': 'ended' }, [S.billEnded]) : null
     const state = sub && sub.state !== 'revoked' ? el('div', { 'data-ai-sub-state': sub.state }, [
       el('p', { class: 'meta' }, [sub.state === 'pending' ? S.aiSubPending : S.aiSubActive(quota?.used, quota?.quota ?? PLANS[sub.plan].quota)]),
       ...(sub.state === 'pending' ? [
@@ -148,8 +179,9 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
       el('h5', { class: 'eyebrow' }, [S.aiClaudeTitle]),
       el('p', { class: 'meta' }, [S.aiSubTitle]),
       el('h4', { class: 'ai-plans-title' }, [S.aiPlansTitle]),
-      el('div', { class: 'ai-plans' }, PLAN_CARDS.map(card)),
+      el('div', { class: 'ai-plans' }, BILLING_PLANS.map(card)),
       el('p', { class: 'meta', 'data-ai-plan-text': '' }, [`${S.aiSubUses} ${S.aiSubPrivacy}`]),
+      billState,
       state,
     ])
   }
@@ -190,5 +222,6 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
   }
   draw()
   if (pollsOnOpen(h.state().advanced?.ai?.sub) && Date.now() - lastPoll > POLL_GAP_MS) void pollOnce(h).then((changed) => { if (changed) draw() })
+  if (h.state().advanced?.ai?.bill && Date.now() - lastPoll > POLL_GAP_MS) void pollBill(h).then((changed) => { if (changed) draw() })
   return [box]
 }

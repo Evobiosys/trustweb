@@ -16,6 +16,7 @@ import type { AppState, Person } from './model'
 import { decide, pendingProposals, personFor, type Pending } from './services_import'
 import { S } from './strings'
 import { createTag, tagPerson, untagPerson } from './tag_create'
+import { deletePersonSoft, putBack } from './deleted_people'
 
 /** Where "open" can bring the person; PLACE_TARGET is what pulses there once it is open. */
 export const PLACES = ['web', 'chat', 'people', 'resources', 'events', 'feed', 'notes', 'settings', 'variations', 'extensions', 'theme', 'your-ai', 'import', 'curate', 'person'] as const
@@ -121,6 +122,18 @@ export function defineAppActions(reg: Actions, host: AppActionHost): void {
   })
 
   // ---- people ----
+  reg.define({
+    type: 'remove-person', doc: 'Removes a person from the web (kept 30 days under Settings > Recently deleted; undoable).', shape: '{"person": id or name}',
+    parse: (a) => ({ person: str(a, 'person', 80)! }),
+    label: (a) => T.removePerson(nameOf(a.person)),
+    apply: (a) => {
+      const p = person(a.person)
+      deletePersonSoft(p, host.now())
+      done()
+      return () => { if (p.deleted_at === undefined) return; putBack(p); done() }
+    },
+    auto: false,
+  })
   reg.define({
     type: 'set-ring', doc: 'Moves a person to a ring.', shape: `{"person": id or name, "ring": ${RINGS.map((r) => `"${r}"`).join('|')}}`,
     parse: (a) => ({ person: str(a, 'person', 80)!, ring: oneOf(a, 'ring', RINGS) }),

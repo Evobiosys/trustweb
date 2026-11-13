@@ -8,6 +8,7 @@ import { el } from '../../../../demo/src/ui/dom'
 import { randomId } from '../../../../demo/src/crypto'
 import { curatePage } from '../../import_curate_view'
 import { commitPlan } from '../../services_import'
+import { planFrom } from '../../import_pipeline'
 import type { ServicesHooks } from '../../services_view'
 import { S } from '../../strings'
 import { alphaSub } from '../../alpha_heading'
@@ -16,17 +17,20 @@ import { workerScanner } from './obsidian_client'
 import { openVaultStore } from './obsidian_cache'
 import { MODULE_ID, parseObsidian } from './obsidian_data'
 import { NEEDS_HTTPS } from './obsidian_diff'
-import { ingestTarget, makeAsk } from './obsidian_endpoint'
+import { ingestTarget, makeAsk, mayRun } from './obsidian_endpoint'
 import { fromInput, pickerFailure, walkHandle } from './obsidian_files'
 import type { DirHandleLike, FileLike, VaultFile, VaultFiles } from './obsidian_files'
 import { BATCH_DEFAULTS, planBatches, toContacts } from './obsidian_ingest'
 import type { ExtractedPerson } from './obsidian_ingest'
 import { buildContacts } from './obsidian_people'
-import { confirmHost, hostConfirmed, ingestOptIn } from './obsidian_prefs'
+import { confirmHost, hostConfirmed, ingestOptIn, suggestOptIn } from './obsidian_prefs'
 import { claimRun, createIngest, onShutdown, resumable } from './obsidian_run'
 import type { IngestProgress, StoredRun } from './obsidian_run'
 import { syncVault } from './obsidian_scan'
-import { planVault } from './obsidian_stage'
+import { obsidianAdapter, obsidianAiAdapter, planVault } from './obsidian_stage'
+import { snippetsOf, suggestPeople } from './obsidian_suggest'
+import type { Suggestion } from './obsidian_suggest'
+import type { ParsedNote } from './obsidian_parse'
 import type { ServicePlan } from '../../services_import'
 import { targetLine } from './obsidian_settings'
 
@@ -40,6 +44,13 @@ interface Run { people: ExtractedPerson[]; donePaths: string[] }
 /** The run state is written to IndexedDB every this many batches (and when the run pauses, stops or ends). */
 const SNAPSHOT_EVERY = 10
 const errorText = (e: unknown): string => { const m = e instanceof Error ? e.message : String(e); return m.includes(NEEDS_HTTPS) ? T.needsHttps : T.syncError(m) }
+
+/** The suggestions kept in the record (extData.obsidian), so every device and the MCP server see the same waiting list. */
+function keepSuggestions(h: ServicesHooks, list: readonly Suggestion[]): void {
+  const s = h.state()
+  s.extData = { ...s.extData, [MODULE_ID]: { ...parseObsidian(s.extData?.[MODULE_ID]), suggestions: [...list], suggestedAt: Date.now() } }
+  h.save()
+}
 
 const eta = (ms: number | null): string => {
   if (ms === null) return ''
@@ -59,6 +70,10 @@ export function openObsidian(h: ServicesHooks): void {
     /** The run kept on this device (any vault) and the hash of every note now in the vault: `run` is what of it still counts (B9). */
     stored: undefined as Partial<StoredRun> | undefined, hashes: {} as Record<string, string>,
     scan: null as AbortController | null,
+    /** Notes of the last read (title + excerpt only), for the suggestion step. */
+    notes: [] as ParsedNote[],
+    /** F05: waiting suggestions (from the record), the ticked paths, the run in progress, whether the owner is asked about the host. */
+    sg: { list: parseObsidian(h.state().extData?.[MODULE_ID]).suggestions ?? [], ticked: new Set<string>(), running: null as null | { done: number; total: number }, failed: 0, ran: false, error: false, confirm: false, ctl: null as AbortController | null },
     /** Set while the owner is asked whether the notes may go to the host (B4); `resume` is the run to start on yes. */
     confirm: null as null | { resume: Run | null },
     /** Counts resets (Forget, page left): a run started before one never writes its state afterwards. */
@@ -68,11 +83,12 @@ export function openObsidian(h: ServicesHooks): void {
   const live = (): boolean => root.isConnected && isEnabled(MODULE_ID)
   const syncBox = el('div', { 'data-obs-sync': '' })
   const ingestBox = el('div', { 'data-obs-ingest': '' })
+  const suggestBox = el('div', { 'data-obs-suggest': '' })
   const lead = el('p', { class: 'meta' }, [T.pageLead])
   const root = el('div', { 'data-obsidian-page': '' }, [
     el('p', { class: 'cur-head' }, [alphaSub()]),
     lead,
-    syncBox, ingestBox,
+    syncBox, ingestBox, suggestBox,
   ])
 
   // ---- pick and sync ----
@@ -102,11 +118,12 @@ export function openObsidian(h: ServicesHooks): void {
       ui.hashes = r.hashes
       ui.run = resumable(ui.stored, ui.vault, ui.hashes)
       const built = buildContacts(r.notes)
-      ui.sync = { plan: planVault(s, built.contacts, { me: s.me.displayName, now: Date.now() }), notes: built.notes, people: built.contacts.length, diff: r.diff, skipped: v.skipped, failed: r.failed.length }
+      ui.notes = r.notes
+      ui.sync = { plan: planFrom(s, [{ adapter: obsidianAdapter, input: r.notes }], { me: s.me.displayName, now: Date.now() }), notes: built.notes, people: built.contacts.length, diff: r.diff, skipped: v.skipped, failed: r.failed.length }
     } catch (e) { if (scan.signal.aborted) return; ui.error = errorText(e) }
     ui.scan = null
     ui.reading = null
-    drawSync(); drawIngest()
+    drawSync(); drawIngest(); drawSuggest()
   }
 
   async function pickFolder(): Promise<void> {
@@ -172,7 +189,7 @@ export function openObsidian(h: ServicesHooks): void {
   function requestRun(resume: Run | null): void {
     const t = ingestTarget(h.state().advanced?.ai)
     if (!t.ok) return
-    if (hostConfirmed(t.host)) void startIngest(resume)
+    if (mayRun(t, hostConfirmed)) void startIngest(resume)
     else { ui.confirm = { resume }; drawIngest() }
   }
 
@@ -181,7 +198,7 @@ export function openObsidian(h: ServicesHooks): void {
     const target = ingestTarget(ai)
     const ask = makeAsk(ai)
     // The confirmation is checked here too, not only in the buttons: nothing is sent to a host the owner has not confirmed.
-    if (!ask || !target.ok || !hostConfirmed(target.host) || ui.ingest) return
+    if (!ask || !mayRun(target, hostConfirmed) || ui.ingest) return
     const release = await claimRun()
     ui.busy = !release
     if (!release) { drawIngest(); return }
@@ -249,7 +266,7 @@ export function openObsidian(h: ServicesHooks): void {
       target.ok && !ui.files.length ? el('p', { class: 'meta' }, [T.ingestNeedPick]) : null,
       ui.busy ? el('p', { class: 'warn', 'data-obs-busy': '' }, [T.ingestBusy]) : null,
       idle && target.ok && ui.confirm ? el('div', { 'data-obs-confirm': target.host }, [
-        el('p', {}, [T.confirmHost(target.host, target.model)]),
+        el('p', {}, [T.confirmHost(target.host, target.model, target.loopback)]),
         el('div', { class: 'cur-bar' }, [
           el('button', { class: 'btn btn-electric', 'data-obs-confirm-yes': '', onclick: () => { const c = ui.confirm; ui.confirm = null; confirmHost(target.host); void startIngest(c?.resume ?? null) } }, [T.confirmYes(target.host)]),
           el('button', { class: 'btn btn-ghost', 'data-obs-confirm-no': '', ...u, onclick: () => { ui.confirm = null; drawIngest() } }, [T.cancel]),
@@ -275,17 +292,102 @@ export function openObsidian(h: ServicesHooks): void {
     ]))
   }
 
+  // ---- F05: let my AI look for more people (opt-in, own endpoint, suggestions only) ----
+  function requestSuggest(): void {
+    const t = ingestTarget(h.state().advanced?.ai)
+    if (!t.ok) return
+    if (mayRun(t, hostConfirmed)) void startSuggest()
+    else { ui.sg.confirm = true; drawSuggest() }
+  }
+
+  async function startSuggest(): Promise<void> {
+    const ai = h.state().advanced?.ai
+    const ask = makeAsk(ai)
+    // As in startIngest: nothing leaves for a host that is neither allow-listed nor confirmed.
+    if (!ask || !mayRun(ingestTarget(ai), hostConfirmed) || ui.sg.running || !ui.notes.length) return
+    const gen = ui.gen
+    const ctl = new AbortController()
+    Object.assign(ui.sg, { ctl, running: { done: 0, total: 1 }, failed: 0, error: false, confirm: false })
+    drawSuggest()
+    try {
+      const r = await suggestPeople(snippetsOf(ui.notes), ask, { signal: ctl.signal, onProgress: (done, total) => { if (gen === ui.gen) { ui.sg.running = { done, total }; drawSuggest() } } })
+      if (gen !== ui.gen || !live()) return
+      // New finds join the waiting ones; a note already waiting keeps its entry.
+      const have = new Set(ui.sg.list.map((x) => x.path))
+      ui.sg.list = [...ui.sg.list, ...r.suggestions.filter((x) => !have.has(x.path))]
+      ui.sg.failed = r.failed
+      ui.sg.ran = true
+      keepSuggestions(h, ui.sg.list)
+    } catch { if (!ctl.signal.aborted) ui.sg.error = true }
+    ui.sg.running = null; ui.sg.ctl = null
+    drawSuggest()
+  }
+
+  function reviewSuggestions(): void {
+    const picked = ui.sg.list.filter((x) => ui.sg.ticked.has(x.path))
+    if (!picked.length) return
+    const s = h.state()
+    const now = Date.now()
+    commitPlan(s, planFrom(s, [{ adapter: obsidianAiAdapter, input: picked }], { me: s.me.displayName, now }), randomId(8), now)
+    ui.sg.list = ui.sg.list.filter((x) => !ui.sg.ticked.has(x.path))
+    ui.sg.ticked.clear()
+    keepSuggestions(h, ui.sg.list)
+    drawSuggest()
+    curatePage(h)
+  }
+
+  function drawSuggest(): void {
+    const ai = h.state().advanced?.ai
+    const target = ingestTarget(ai)
+    const g = ui.sg
+    if (!suggestOptIn() && !g.list.length) { suggestBox.replaceChildren(el('h4', { class: 'eyebrow' }, [T.suggestTitle]), el('p', { class: 'meta', 'data-obs-suggest-off': '' }, [T.suggestOff])); return }
+    const idle = suggestOptIn() && target.ok && !g.running
+    suggestBox.replaceChildren(...some([
+      el('h4', { class: 'eyebrow' }, [T.suggestTitle]),
+      el('p', { class: 'meta' }, [T.suggestLead]),
+      suggestOptIn() ? el('p', { class: 'meta', 'data-obs-suggest-target': '' }, [targetLine(ai)]) : null,
+      suggestOptIn() && target.ok && !ui.notes.length ? el('p', { class: 'meta' }, [T.suggestNeedRead]) : null,
+      idle && target.ok && g.confirm ? el('div', { 'data-obs-sg-confirm': target.host }, [
+        el('p', {}, [T.confirmHost(target.host, target.model, target.loopback)]),
+        el('div', { class: 'cur-bar' }, [
+          el('button', { class: 'btn btn-electric', 'data-obs-sg-confirm-yes': '', onclick: () => { confirmHost(target.host); void startSuggest() } }, [T.confirmYes(target.host)]),
+          el('button', { class: 'btn btn-ghost', 'data-obs-sg-confirm-no': '', ...u, onclick: () => { g.confirm = false; drawSuggest() } }, [T.cancel]),
+        ]),
+      ]) : null,
+      idle && !g.confirm && ui.notes.length ? el('button', { class: 'btn btn-ghost', 'data-obs-suggest-run': '', ...u, onclick: requestSuggest }, [T.suggestRun]) : null,
+      g.running ? el('div', { 'data-obs-suggest-progress': `${g.running.done}/${g.running.total}` }, [
+        el('progress', { max: String(g.running.total), value: String(g.running.done), style: 'width:100%' }),
+        el('p', { class: 'meta' }, [T.suggestProgress(g.running.done, g.running.total)]),
+      ]) : null,
+      g.error ? el('p', { class: 'warn' }, [T.suggestError]) : null,
+      g.failed ? el('p', { class: 'warn' }, [T.suggestFailed(g.failed)]) : null,
+      g.ran && !g.list.length && !g.running ? el('p', { class: 'meta', 'data-obs-suggest-none': '' }, [T.suggestNone]) : null,
+      g.list.length ? el('div', { 'data-obs-suggestions': String(g.list.length) }, some([
+        el('p', { class: 'meta' }, [T.suggestFound(g.list.length)]),
+        ...g.list.map((x) => el('label', { class: 'cur-row', 'data-obs-suggestion': x.path, style: 'display:flex;gap:8px;align-items:flex-start;padding:6px 0' }, [
+          el('input', { type: 'checkbox', checked: g.ticked.has(x.path), 'data-obs-suggestion-tick': x.path, onchange: (e: Event) => { if ((e.target as HTMLInputElement).checked) g.ticked.add(x.path); else g.ticked.delete(x.path); drawSuggest() } }),
+          el('span', { style: 'flex:1;min-width:0;overflow-wrap:anywhere' }, [el('b', {}, [x.name]), ' ', el('small', { class: 'meta' }, [T.suggestConf(Math.round(x.confidence * 100))]), el('br'), el('small', { class: 'meta' }, [x.why ? `${x.why} · ${x.path}` : x.path])]),
+        ])),
+        el('div', { class: 'cur-bar' }, some([
+          g.ticked.size ? el('button', { class: 'btn btn-electric', 'data-obs-suggest-add': String(g.ticked.size), onclick: reviewSuggestions }, [T.suggestAdd(g.ticked.size)]) : null,
+          el('button', { class: 'btn btn-ghost btn-sm', 'data-obs-suggest-dismiss': '', ...u, onclick: () => { g.list = []; g.ticked.clear(); keepSuggestions(h, []); drawSuggest() } }, [T.suggestDismiss]),
+        ])),
+      ])) : null,
+    ]))
+  }
+
   // ---- ending what this page started: the page left, the module switched off, "Forget this vault" ----
-  const stopAll = (): void => { ui.ingest?.stop(); ui.scan?.abort() }
+  const stopAll = (): void => { ui.ingest?.stop(); ui.scan?.abort(); ui.sg.ctl?.abort() }
   const unregister = onShutdown(() => {
     stopAll(); ui.gen++
-    Object.assign(ui, { files: [], vault: '', reading: null, error: '', sync: null, handle: null, progress: null, paused: false, stopping: false, busy: false, run: null, stored: undefined, hashes: {}, scan: null, confirm: null, finished: '' as const })
-    drawSync(); drawIngest()
+    Object.assign(ui, { files: [], vault: '', reading: null, error: '', sync: null, handle: null, progress: null, paused: false, stopping: false, busy: false, run: null, stored: undefined, hashes: {}, scan: null, confirm: null, finished: '' as const, notes: [] })
+    Object.assign(ui.sg, { list: [], ticked: new Set<string>(), running: null, failed: 0, ran: false, error: false, confirm: false, ctl: null })
+    drawSync(); drawIngest(); drawSuggest()
   })
   const onPop = (): void => { if (!root.isConnected) { stopAll(); window.removeEventListener('popstate', onPop); unregister() } }
   window.addEventListener('popstate', onPop)
 
-  drawSync(); drawIngest()
+  drawSync(); drawIngest(); drawSuggest()
   void store.getMeta<PermHandle>('handle').then((hd) => { if (hd) { ui.handle = hd; drawSync() } }).catch(() => undefined)
   void store.getMeta<Partial<StoredRun>>('run').then((r) => { ui.stored = r; ui.run = resumable(r, ui.vault, ui.hashes); drawIngest() }).catch(() => undefined)
   h.pages.open(T.title, [root], 'import-obsidian')

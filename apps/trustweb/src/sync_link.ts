@@ -27,8 +27,8 @@ import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, countsOf, fingerprin
 import type { Counts, MergeResult, Stamps, SyncBundle } from './sync_core'
 import { mergeCodes, withoutCodes } from './sync_code'
 import type { CodeMerge } from './sync_code'
-import { adoptBundle, differences, otherDifferences } from './device_adopt'
-import type { Differences } from './device_adopt'
+import { adoptBundle, differences, otherDifferences, previewChanges } from './device_adopt'
+import type { ChangePreview, Differences } from './device_adopt'
 
 export interface Pairing {
   did: string; name: string; fp: string; linkedAt: number; lastSyncAt: number
@@ -44,7 +44,7 @@ interface Store { identity: SerializedIdentityV1; pairings: Pairing[]; stamps: S
 export interface PairRequest { name: string; fp: string; confirm(opts?: { shareCode?: boolean }): void; cancel(): void }
 
 /** A record that arrived complete and waits for the person's "Confirm". `file`: also hand the person the pre-merge snapshot as an encrypted file (snapshot_view.ts). */
-export interface Incoming { from: Pairing; /** Wave 40: set when the record comes to replace this one (take = I asked for it, give = the other device offers it); `accept` then still merges. */ adopt?: { kind: 'take' | 'give'; diff: Differences; /** Review wave 40: resources, meetings, events, tasks, invitations, chats replaced too. */ other: number; run(): Promise<boolean> }; /** Schema version of a bundle from a newer build: nothing to accept (schema_version.ts). */ newer?: number; counts: Counts; reply: boolean; accept(file: boolean): Promise<MergeResult>; decline(): void }
+export interface Incoming { from: Pairing; /** Wave 40: set when the record comes to replace this one (take = I asked for it, give = the other device offers it); `accept` then still merges. */ adopt?: { kind: 'take' | 'give'; diff: Differences; /** Review wave 40: resources, meetings, events, tasks, invitations, chats replaced too. */ other: number; /** Wave 42 B17: the read-only difference by name; nothing is archived or replaced by it. */ preview(): ChangePreview; run(): Promise<boolean> }; /** Schema version of a bundle from a newer build: nothing to accept (schema_version.ts). */ newer?: number; counts: Counts; reply: boolean; accept(file: boolean): Promise<MergeResult>; decline(): void }
 
 export interface SyncLinkDeps {
   persona: string
@@ -193,7 +193,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     wanted.delete(p.did)
     const kind = acc.a === 'take' && asked ? 'take' : acc.a ? 'give' : null
     d.onIncoming({
-      from: p, ...(kind ? { adopt: { kind, diff: differences(d.state(), bundle), other: otherDifferences(d.state(), bundle), run: () => adopt(p, bundle) } } : {}), newer: bundle.schemaVersion !== undefined && bundle.schemaVersion > SCHEMA_VERSION ? bundle.schemaVersion : undefined, counts: countsOf(bundle), reply: acc.reply,
+      from: p, ...(kind ? { adopt: { kind, diff: differences(d.state(), bundle), other: otherDifferences(d.state(), bundle), preview: () => previewChanges(d.state(), bundle), run: () => adopt(p, bundle) } } : {}), newer: bundle.schemaVersion !== undefined && bundle.schemaVersion > SCHEMA_VERSION ? bundle.schemaVersion : undefined, counts: countsOf(bundle), reply: acc.reply,
       accept: (file) => accept(p, bundle, acc.reply, file),
       decline: () => d.onLog(`Declined the record from ${p.name}`),
     })

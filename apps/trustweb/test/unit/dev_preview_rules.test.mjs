@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
+import { approveMergeRoute, fixConflictRoute, launchError, mergeStatusFile, opsDevlogRoot } from '../../dev_preview_rules.mjs'
 import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, mergeResume, mergeResult, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
@@ -681,5 +681,61 @@ describe('wave 34: approved rows keep their approval when the ref moves', () => 
   it('changesToApprove counts visible loaded rows with changes since approval', () => {
     const c = { verdict: 'merge', updated: true, approvedRef: 'aaaaaaaa1', ref: 'bbbbbbbb2' }
     expect(changesToApprove([r('a', c), r('b', c), r('c', { ...c, merged: true }), r('d', { ...c, checked: false }), r('e', { verdict: 'merge' })])).toBe(2)
+  })
+})
+
+describe('fix-conflict launcher (B16)', () => {
+  const preview = { id: 'tw261112_1000', baseSha: 'abc1234', worktree: '/wt/preview-x', features: [{ key: 'ai-sub', branch: 'wave36/ai-subscription' }, { key: 'other', branch: 'w/other' }] }
+  const call = async (over = {}, { method = 'POST', body = { id: preview.id, key: 'ai-sub' } } = {}) => {
+    const written = {}, launched = [], merged = []
+    const route = fixConflictRoute({
+      loopback: () => true, preview: () => preview, devlog: () => '/devlog/wave42', readBody: async () => body,
+      mergeTree: async (...a) => { merged.push(a); return 'tree-sha\nCONFLICT (content): Merge conflict in a.ts\n' },
+      write: (f, t) => { written[f] = t }, launch: async (f, task) => { launched.push([f, task]); return { window: '4711' } }, ...over,
+    })
+    const res = { statusCode: 0, headers: {}, setHeader(k, v) { this.headers[k] = v }, end(b) { this.body = b ? JSON.parse(b) : null } }
+    await route({ method }, res)
+    return { res, written, launched, merged }
+  }
+  it('writes the brief (branch, base, merge-tree output, rules) and launches the Sonnet session with the task; answers 202 with the brief path and window', async () => {
+    const { res, written, launched, merged } = await call()
+    expect(res.statusCode).toBe(202)
+    expect(res.body).toEqual({ started: true, brief: '/devlog/wave42/conflict-ai-sub.txt', window: '4711' })
+    expect(merged).toEqual([['/wt/preview-x', 'abc1234', 'wave36/ai-subscription']])
+    const brief = written['/devlog/wave42/conflict-ai-sub.txt']
+    for (const part of ['wave36/ai-subscription', 'abc1234', 'Merge conflict in a.ts', 'NEVER: push, touch main', 'fallback ladder']) expect(brief).toContain(part)
+    expect(launched).toEqual([['/devlog/wave42/conflict-ai-sub.txt', 'fix the conflict of ai-sub']])
+  })
+  it('only POST from loopback, only for a row of this preview; a launcher failure is a 500 with its reason and nothing is hidden', async () => {
+    expect((await call({}, { method: 'GET' })).res.statusCode).toBe(405)
+    expect((await call({ loopback: () => false })).res.statusCode).toBe(403)
+    for (const body of [{ id: preview.id, key: 'nope' }, { id: 'tw1', key: 'ai-sub' }, null]) expect((await call({}, { body })).res.statusCode).toBe(400)
+    const bad = await call({ launch: async () => { throw new Error('another trustweb session is active: pi261112a (ACTIVE)') } })
+    expect(bad.res.statusCode).toBe(500)
+    expect(bad.res.body.error).toMatch(/another trustweb session is active/)
+    expect((await call({}, { body: { id: preview.id, key: '../../etc/x' } })).res.statusCode).toBe(400)
+  })
+  // Review wave 42: pi_new_session.sh exits 3 when another session of the project is active; that is a refusal, not a server fault.
+  it('a busy project (launcher exit 3) is a 409 with one sentence, not a 500', async () => {
+    const busy = await call({ launch: async () => { throw launchError({ code: 3, stdout: 'refused: another session of trustweb is ACTIVE: pi261112a\n' }) } })
+    expect(busy.res.statusCode).toBe(409)
+    expect(busy.res.body.error).toMatch(/^Another pi session of this project is active \(pi261112a\)\. Finish or close it, then press again\.$/)
+    const other = await call({ launch: async () => { throw launchError({ code: 1, stderr: 'boom\nlast line' }) } })
+    expect(other.res.statusCode).toBe(500)
+    expect(other.res.body.error).toBe('last line')
+  })
+})
+
+describe('fix-conflict brief folder (review wave 42)', () => {
+  const WOT = '/u/web-of-trust'
+  const has = (...dirs) => (p) => dirs.includes(p)
+  it('the newest wave of trustweb-ops/DEVLOG, found from a preview worktree and from the primary repo; never the stale web-of-trust/DEVLOG', () => {
+    const ops = `${WOT}/Code/trustweb-ops/DEVLOG`
+    expect(opsDevlogRoot(`${WOT}/Code/worktrees/preview-tw261112_1520/apps/trustweb`, has(ops, `${WOT}/DEVLOG`))).toBe(ops)
+    expect(opsDevlogRoot(`${WOT}/Code/primary-repo/apps/trustweb`, has(ops))).toBe(ops)
+  })
+  it('TW_DEVLOG wins; no ops folder anywhere: null (the route then answers 500, nothing is written)', () => {
+    expect(opsDevlogRoot('/x/apps/trustweb', has(), '/tmp/devlog')).toBe('/tmp/devlog')
+    expect(opsDevlogRoot('/x/apps/trustweb', has())).toBeNull()
   })
 })

@@ -42,4 +42,6 @@ Do not relicense either way without asking.
 ## Process
 - Milestones m0…m5 tagged in git. [S]-marked work only after M5 passes.
 - Decisions → DECISIONS.md (append-only). Temptations → FUTURE.md. Never claim more privacy than implemented.
+- Gate (D-P02): every user action or setting a branch adds or changes is also reachable through `apps/mcp` in the same branch, with a unit test.
+- Gate (D-P06): no control overlays another in any state at 360x780 and 1280x900; one e2e bounding-box assertion per new overlay.
 - `make demo` must work from a fresh clone, deterministically (recorded fixture embeddings for CI).

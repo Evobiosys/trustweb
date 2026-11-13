@@ -52,6 +52,7 @@ import { createCountdown } from './merge_countdown'
 import { HOLD_MS, type HoldEvent, hitDot, holdEnabled, holdStart, holdStep } from './dot_merge'
 import { onRingLine, ringStrokeOpacity, ringStrokeWidth } from './ring_hit'
 import { makeResizable } from './overlay_resize'
+import { fitOverlays } from './overlay_fit'
 
 /** The rings' own layout size (px): the viewBox, and the box a pointer is read against. */
 export const RINGS_SIZE = 352
@@ -449,7 +450,8 @@ export function createWebView(deps: WebViewDeps): WebView {
       box.addEventListener('pointerenter', () => step({ type: 'enter-card' }))
       box.addEventListener('pointerleave', () => step({ type: 'leave' }))
       wrap.appendChild(box)
-      makeResizable(box, r, wrap.getBoundingClientRect().width / RINGS_SIZE)
+      makeResizable(box, r, () => wrap.getBoundingClientRect().width / RINGS_SIZE)
+      fitOverlays(wrap, wrap.closest('.scroll') ?? wrap)
       cardShown(true)
       document.addEventListener('keydown', onEsc)
     }
@@ -673,11 +675,17 @@ export function createWebView(deps: WebViewDeps): WebView {
     if (layer.querySelector('[data-own-zoom]')) return
     // [data-own-zoom] (the Network view) pans and zooms itself in its draw loop, so it stays crisp: this layer leaves it alone.
     const skip = '.node, .ctx-menu, .desire, .hint-i, button, a, input, textarea, [data-own-zoom]'
+    clip.classList.add('zoomable')   // touch-action: pan-x pan-y: a phone pinch zooms the web, never the page (wave 42, H2)
+    // A two-finger touch must not reach the browser's page zoom even where touch-action is not honoured.
+    const guard = (e: TouchEvent): void => { if (e.touches.length > 1 && !(e.target as HTMLElement).closest('[data-own-zoom]')) e.preventDefault() }
+    clip.addEventListener('touchstart', guard, { passive: false })
+    clip.addEventListener('touchmove', guard, { passive: false })
     const apply = (z: RingsZoom): void => {
       ringsZoom = z
       layer.style.transform = transformOf(z)
       layer.style.setProperty('--rz', String(labelScale(z.k)))
       clip.classList.toggle('zoomed', z.k !== 1)
+      fitOverlays(layer, clip)   // wave 42: open cards and menus follow the zoom and stay inside the clip, above the bottom bar
       layer.querySelector<HTMLElement>('.rings-wrap')?.setAttribute('data-rings-zoom', String(z.k))
     }
     apply(ringsZoom)
@@ -1057,6 +1065,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       menu.style.left = place.left + 'px'
       menu.style.top = place.top + 'px'
       wrap.appendChild(menu)
+      fitOverlays(wrap, wrap.closest('.scroll') ?? wrap)
       document.addEventListener('pointerdown', (d) => { if (!menu.contains(d.target as Node)) menu.remove() }, { once: true })
     }
     const stop = (): void => { clearTimeout(timer); timer = undefined }

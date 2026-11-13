@@ -12,23 +12,27 @@ import { searchEngineUrl } from '../../ask_web_search'
 import { ownChannels } from '../../channel_readers'
 import { loadColourTags } from '../../colour_tags'
 import { allProfiles } from '../profiles'
+import { piConnected } from '../../ai_button'
 import { askEndpointText, configured } from '../../llm_endpoint'
+import type { AiEndpoint } from '../../model'
 import { readLook } from '../../look'
 import { pendingProposals } from '../../services_import'
 import { listModules } from '../registry'
 import type { TwCtx } from '../tw_registry'
 import css from './assistant.css?inline'
 import { createApproval, type Card } from './approval'
-import { streamChat, type ChatMessage } from './chat_stream'
+import { streamChain, streamChat, type ChatMessage } from './chat_stream'
 import { lookupQuestion, quickLook, type LookTarget } from './person_context'
 import { aiRowName, mentionedPeople, parseAssistantReply, systemPrompt, visibleText } from './protocol'
+import { applyModel, chainOf, ChainError, parseCommand, PRESET, PROVIDER_IDS, THINKING, TIER_MODEL, type AssistantCfg, type Provider, type ProviderId, type Thinking } from './providers'
 
 const WATCH_KEY = 'tw-assistant-watch'
-const PANE = 'tw-assistant-pane'
+/** The one attribute the layout reads (styles.css): set while the panel shows at 900 px and wider, removed on every way out. */
+const OPEN = 'data-assistant-open'
 const HISTORY = 12
 
 interface Look { title: string; quick: string[]; longer: string; longerState: 'none' | 'busy' | 'done' | 'failed'; name: string; image?: { src: string; page?: string } | 'asking' | 'consent' | 'none' }
-interface Msg { role: 'user' | 'assistant'; text: string; raw?: string; cards?: number[]; rejected?: number; done?: boolean; look?: Look; noAi?: boolean }
+interface Msg { role: 'user' | 'assistant'; text: string; raw?: string; cards?: number[]; rejected?: number; done?: boolean; look?: Look; noAi?: boolean; /** Wave 42: the turn ended in the heads-up; Retry asks this text again. */ retry?: string }
 
 export function createPanel(ctx: TwCtx) {
   const T = ctx.strings.assistant
@@ -43,6 +47,11 @@ export function createPanel(ctx: TwCtx) {
   /** Phone only: min = just the header (the assistant brought me somewhere and I look at it), normal, big. */
   let size: 'min' | 'normal' | 'big' = 'normal'
   let reviewOpen = false
+  let gearOpen = false
+  let setupOpen = false
+  /** Wave 42: who answered the last turn, and the last lines of the chain's own log (I6). */
+  let answered: Provider | null = null
+  const audit: string[] = []
 
   const hostEl = el('div', { 'data-assistant': '' })
   const root = hostEl.attachShadow({ mode: 'open' })
@@ -53,11 +62,16 @@ export function createPanel(ctx: TwCtx) {
   const sendBtn = el('button', { class: 'send', 'data-assistant-send': '', onclick: () => (busy ? busy.abort() : send()) }, [T.send])
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!busy) send() } })
   const head = el('header', { class: 'head' })
-  wrap.append(head, log, foot, el('div', { class: 'composer' }, [input, sendBtn]))
+  const gearHost = el('div', { 'data-assistant-gearhost': '' })
+  wrap.append(head, gearHost, log, foot, el('div', { class: 'composer' }, [input, sendBtn]))
   root.append(el('style', {}, [css]), wrap)
   approval.onChange(() => draw())
 
-  const ai = () => ctx.store().advanced?.ai
+  const cfg = (): AssistantCfg => ctx.store().advanced?.assistant ?? {}
+  const chain = (): Provider[] => chainOf(ctx.store().advanced)
+  const saveCfg = (next: AssistantCfg): void => { const s = ctx.store(); s.advanced = { ...s.advanced, assistant: next }; ctx.save?.(); draw() }
+  /** The first link of the chain as one endpoint: the person lookup and the picture search use it. */
+  const ai = (): AiEndpoint | undefined => { const p = chain()[0]; return p && { preset: 'custom', baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model } }
   const wide = (): boolean => window.matchMedia('(min-width: 900px)').matches
   const lnk = (label: string, onclick: () => void, attrs: Record<string, string> = {}, cls = 'lnk'): HTMLElement => el('button', { class: cls, onclick, ...attrs }, [label])
 
@@ -67,6 +81,7 @@ export function createPanel(ctx: TwCtx) {
       el('h2', {}, [T.title, el('sub', { class: 'alpha', 'data-alpha-label': '' }, [ctx.strings.alphaLabel])]),
       el('label', { class: 'watch', title: T.watchHint }, [box, T.watch]),
       lnk(size === 'min' ? T.showChat : size === 'big' ? T.shrink : T.expand, () => resize(size === 'normal' ? 'big' : 'normal'), { 'data-assistant-expand': size }, 'lnk expand'),
+      lnk('⚙', () => { gearOpen = !gearOpen; draw() }, { 'aria-label': T.gear, 'aria-expanded': String(gearOpen), 'data-assistant-gear': '' }, 'lnk gear'),
       lnk('✕', close, { 'aria-label': T.close, 'data-assistant-close': '' }),
     )
   }
@@ -129,6 +144,7 @@ export function createPanel(ctx: TwCtx) {
       ...cards.map(cardView),
       waiting > 1 ? lnk(T.approveAll(waiting), () => approval.approveAll(), { 'data-assistant-approve-all': '' }) : null,
       m.rejected ? el('p', { class: 'warn', 'data-assistant-rejected': String(m.rejected) }, [T.rejected(m.rejected)]) : null,
+      m.retry ? lnk(T.retry, () => { msgs.splice(msgs.indexOf(m), 1); void turn(m.retry!) }, { 'data-assistant-retry': '' }, 'lnk strong') : null,
     ])
   }
 
@@ -146,20 +162,89 @@ export function createPanel(ctx: TwCtx) {
     ])
   }
 
+  const pname = (id: ProviderId): string => (id === 'pc24' ? chain().find((p) => p.id === 'pc24')?.name ?? 'pc24' : PRESET[id].name)
+
+  /** The gear menu: a block between the header and the chat (it pushes the chat down, it never lies over a control). */
+  function gearView(): HTMLElement {
+    const live = chain()
+    const field = (id: 'berget' | 'infomaniak', key: 'baseUrl' | 'model' | 'apiKey', label: string, type = 'text'): HTMLElement => {
+      const c = cfg().providers?.[id]
+      return el('label', { class: 'f' }, [label, el('input', { type, 'data-assistant-field': `${id}-${key}`, autocomplete: 'off', value: (c?.[key] ?? '') || (key === 'apiKey' ? '' : PRESET[id][key]), placeholder: key === 'apiKey' && c?.apiKey ? '••••' : '' })])
+    }
+    const read = (id: 'berget' | 'infomaniak', key: 'baseUrl' | 'model' | 'apiKey'): string => (root.querySelector(`[data-assistant-field="${id}-${key}"]`) as HTMLInputElement | null)?.value.trim() ?? ''
+    const saveProvider = (id: 'berget' | 'infomaniak'): void => {
+      const old = cfg().providers?.[id]
+      const next = { baseUrl: read(id, 'baseUrl'), model: read(id, 'model'), apiKey: read(id, 'apiKey') || old?.apiKey || '' }
+      saveCfg({ ...cfg(), providers: { ...cfg().providers, [id]: next } })
+    }
+    const model = el('input', { type: 'text', 'data-assistant-model': '', placeholder: T.modelOwn, 'aria-label': T.modelOwn, autocomplete: 'off' }) as HTMLInputElement
+    const think = el('select', { 'data-assistant-thinking': '', 'aria-label': T.thinkingLabel, onchange: (e: Event) => saveCfg({ ...cfg(), thinking: (e.target as HTMLSelectElement).value as Thinking }) },
+      THINKING.map((t) => el('option', { value: t, ...((cfg().thinking ?? 'off') === t ? { selected: '' } : {}) }, [T.thinkingLevels[t]])))
+    return el('div', { class: 'gearmenu', 'data-assistant-gearmenu': '' }, [
+      el('b', {}, [T.gearTitle]),
+      ...PROVIDER_IDS.map((id) => {
+        const p = live.find((x) => x.id === id)
+        return el('div', { class: 'row', 'data-assistant-provider-row': id }, [
+          el('span', {}, [`${pname(id)} · ${p ? p.model : T.notSetUp}`]),
+          p && live[0] !== p ? lnk(T.pick, () => saveCfg(applyModel(cfg(), id)), { 'data-assistant-pick': id }) : null,
+          p && live[0] === p ? el('span', { class: 'meta' }, [T.first]) : null,
+        ])
+      }),
+      lnk(T.setUp, () => { setupOpen = !setupOpen; draw() }, { 'data-assistant-setup': '' }),
+      ...(setupOpen ? (['berget', 'infomaniak'] as const).flatMap((id) => [
+        el('b', {}, [PRESET[id].name]), field(id, 'baseUrl', T.address), field(id, 'model', T.model), field(id, 'apiKey', T.key, 'password'),
+        lnk(T.saveProvider, () => saveProvider(id), { 'data-assistant-save': id }, 'lnk strong'),
+      ]).concat([el('span', { class: 'meta' }, [T.ownAi]), lnk(T.ownAiLink, () => { close(); actions!.do('open', { place: 'your-ai' }) }, { 'data-assistant-own': '' })]) : []),
+      el('div', { class: 'row' }, [model, lnk(T.modelUse, () => { if (model.value.trim()) saveCfg(applyModel(cfg(), model.value)) }, { 'data-assistant-model-use': '' })]),
+      el('label', { class: 'f' }, [T.thinkingLabel, think]),
+      lnk(T.clearChat, clearChat, { 'data-assistant-clear': '' }),
+      ...(audit.length ? [el('span', { class: 'meta' }, [T.audit]), el('ul', { class: 'meta', 'data-assistant-audit': '' }, audit.slice(-5).map((l) => el('li', {}, [l])))] : []),
+    ])
+  }
+
+  function clearChat(): void { msgs.length = 0; reviewOpen = false; gearOpen = false; draw() }
+  const notice = (text: string): void => { msgs.push({ role: 'assistant', text }); draw() }
+
+  /** Slash commands: handled here, never sent to the AI. */
+  function command(text: string): boolean {
+    const c = parseCommand(text)
+    if (!c) return false
+    msgs.push({ role: 'user', text })
+    if (c.cmd === 'clear') { clearChat(); return true }
+    if (c.cmd === 'unknown') { notice(T.unknownCommand(c.name)); return true }
+    if (c.cmd === 'tier') {
+      if (!piConnected(ctx.store().agent, Date.now())) { notice(T.piNotConnected); return true }
+      saveCfg(applyModel(cfg(), TIER_MODEL[c.tier]))
+      notice(T.tierNow(c.tier, TIER_MODEL[c.tier])); return true
+    }
+    if (!c.id) { notice(T.modelNeeds); return true }
+    saveCfg(applyModel(cfg(), c.id))
+    const first = chain()[0]
+    notice(first ? T.modelNow(first.name, first.model) : T.noAi)
+    return true
+  }
+
   function draw(): void {
     const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 40
     log.replaceChildren(
-      ...(msgs.length ? [] : [el('p', { class: 'meta', 'data-assistant-hello': '' }, [configured(ai()) ? T.hello : T.noAi])]),
-      ...(!msgs.length && !configured(ai()) ? [lnk(T.noAiLink, () => { close(); actions!.do('open', { place: 'your-ai' }) }, { 'data-assistant-plans': '' }, 'lnk strong')] : []),
+      ...(msgs.length ? [] : [el('p', { class: 'meta', 'data-assistant-hello': '' }, [chain().length ? T.hello : T.noAi])]),
+      ...(!msgs.length && !chain().length ? [lnk(T.noAiLink, () => { close(); actions!.do('open', { place: 'your-ai' }) }, { 'data-assistant-plans': '' }, 'lnk strong')] : []),
       ...msgs.map(msgView),
       ...(reviewOpen ? [reviewView()] : []),
     )
-    foot.replaceChildren(...(approval.cards().length && !reviewOpen ? [lnk(T.review, () => { reviewOpen = true; draw(); log.scrollTop = log.scrollHeight }, { 'data-assistant-review-open': '' })] : []))
+    drawHead()
+    gearHost.replaceChildren(...(gearOpen ? [gearView()] : []))
+    wrap.classList.toggle('gearing', gearOpen)
+    const names = chain().map((p) => p.name)
+    foot.replaceChildren(
+      ...(names.length ? [el('span', { class: 'meta', 'data-assistant-provider': answered?.id ?? '' }, [answered ? T.answeredBy(answered.name, answered.model) : T.order(names)])] : []),
+      ...(approval.cards().length && !reviewOpen ? [lnk(T.review, () => { reviewOpen = true; draw(); log.scrollTop = log.scrollHeight }, { 'data-assistant-review-open': '' })] : []),
+    )
     sendBtn.textContent = busy ? T.stop : T.send
     if (atEnd) log.scrollTop = log.scrollHeight
   }
 
-  function context(text: string) {
+  function context(text: string, who?: Provider) {
     const s = ctx.store()
     const tags = loadColourTags()
     return systemPrompt({
@@ -167,34 +252,46 @@ export function createPanel(ctx: TwCtx) {
       variations: allProfiles(s.twSettings).map((p) => p.id), modules: listModules().map((m) => m.id), places: PLACES,
       recent: actions!.recent().map((r) => `${r.by}: ${r.label}`),
       rows: pendingProposals(s, Date.now()).slice(0, 60).map((x) => ({ key: x.row.key, name: aiRowName(x.row.name), labels: x.row.labels, ring: x.row.ring ?? x.proposal.ring, note: x.row.note })),
+      who,
       people: mentionedPeople(s.people.filter((p) => !p.deleted_at && p.ring !== 'none'), text, 20).map((p) => ({ id: p.id, name: p.name, ring: p.ring, tags: tags.filter((t) => String(p.fields?.[t.id]) === 'true').map((t) => t.label ?? t.id) })),
     })
   }
 
-  async function send(): Promise<void> {
+  function send(): void {
     const text = input.value.trim()
     if (!text) return
     input.value = ''
     reviewOpen = false
+    if (command(text)) return
     msgs.push({ role: 'user', text })
-    const endpoint = ai()
-    if (!configured(endpoint)) { msgs.push({ role: 'assistant', text: T.noAi, noAi: true }); draw(); return }
+    void turn(text)
+  }
+
+  /** One turn over the provider chain. It always ends in a visible assistant message: the answer, or the heads-up with Retry. */
+  async function turn(text: string): Promise<void> {
+    const providers = chain()
+    if (!providers.length) { msgs.push({ role: 'assistant', text: T.noAi, noAi: true }); draw(); return }
     const m: Msg = { role: 'assistant', text: '', raw: '' }
     const history: ChatMessage[] = msgs.filter((x) => !x.look && !x.noAi && (x.role === 'user' || x.raw)).slice(-HISTORY).map((x) => ({ role: x.role, content: x.role === 'user' ? x.text : x.raw ?? '' }))
     msgs.push(m)
     busy = new AbortController()
     draw()
     try {
-      const full = await streamChat(endpoint, [{ role: 'system', content: context(text) }, ...history], (t) => { m.raw = t; m.text = visibleText(t); draw() }, busy.signal, ownChannels(ctx.store()))
-      const r = parseAssistantReply(full, actions!.check)
-      m.raw = full
-      m.text = r.say
-      m.rejected = r.rejected.length
+      const r = await streamChain(providers, (p) => [{ role: 'system', content: context(text, p) }, ...history], (t) => { m.raw = t; m.text = visibleText(t); draw() }, busy.signal, ownChannels(ctx.store()), {
+        thinking: cfg().thinking, log: (line) => { audit.push(line); if (audit.length > 50) audit.shift() },
+      })
+      answered = r.provider
+      const parsed = parseAssistantReply(r.text, actions!.check)
+      m.raw = r.text
+      m.text = parsed.say
+      m.rejected = parsed.rejected.length
       busy = null
-      m.cards = approval.add(r.actions).map((c) => c.id)
-      if (r.done) reviewOpen = true
+      m.cards = approval.add(parsed.actions).map((c) => c.id)
+      if (parsed.done) reviewOpen = true
     } catch (e) {
-      m.text = T.failed((e as Error).name === 'AbortError' ? T.stop : (e as Error).message)
+      m.raw = ''
+      if ((e as Error).name === 'AbortError') m.text = T.failed(T.stop)
+      else { m.text = e instanceof ChainError ? T.noProvider(e.tried, e.reason) : T.failed((e as Error).message); m.retry = text }
     } finally { busy = null; draw() }
   }
 
@@ -240,7 +337,7 @@ export function createPanel(ctx: TwCtx) {
     hostEl.hidden = false
     if (size === 'min') size = 'normal'
     wrap.classList.remove('min')
-    document.documentElement.classList.toggle(PANE, wide())
+    layout()
     drawHead(); draw()
     input.focus({ preventScroll: true })
   }
@@ -248,9 +345,11 @@ export function createPanel(ctx: TwCtx) {
     busy?.abort()
     lookCtl?.abort()
     hostEl.hidden = true
-    document.documentElement.classList.remove(PANE)
+    layout()
   }
-  const onResize = (): void => { if (!hostEl.hidden && hostEl.isConnected) document.documentElement.classList.toggle(PANE, wide()) }
+  /** B10: the one place that tells the page whether the pane takes room: shown and wide = attribute on, every other state = off. */
+  function layout(): void { document.documentElement.toggleAttribute(OPEN, !hostEl.hidden && hostEl.isConnected && wide()) }
+  const onResize = (): void => layout()
   window.addEventListener('resize', onResize)
 
   return {
@@ -258,6 +357,8 @@ export function createPanel(ctx: TwCtx) {
     close,
     toggle(): void { if (hostEl.isConnected && !hostEl.hidden && size !== 'min') close(); else open() },
     person(target: LookTarget): void { open(); void lookUp(target) },
-    dispose(): void { close(); offRun(); window.removeEventListener('resize', onResize); hostEl.remove() },
+    /** Wave 42 community-event: opens the chat with a first message ready to send (the person reads it, then sends). */
+    prefill(text: string): void { open(); input.value = text; input.focus({ preventScroll: true }) },
+    dispose(): void { close(); offRun(); window.removeEventListener('resize', onResize); hostEl.remove(); layout() },
   }
 }

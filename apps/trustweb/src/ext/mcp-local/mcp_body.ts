@@ -4,7 +4,7 @@ import { el } from '../../../../demo/src/ui/dom'
 import { alphaSub } from '../../alpha_heading'
 import type { TwCtx, TwModuleBody } from '../tw_registry'
 import { callableForImport, contactsFromResult, openSession, pushArgs, pushableTools, type McpSession } from './mcp_client'
-import { CLIENTS, MCP_TOOLS, SERVERS_KEY, SERVER_PATH_HINT, SETTINGS_KEY, SUMBIOS_ID, parseServers, parseSettings, removeServer, snippet, upsertServer, validUrl, type ClientId, type McpServerEntry, type McpSettings } from './mcp_config'
+import { CLIENTS, MCP_TOOLS, SERVERS_KEY, SETTINGS_KEY, SUMBIOS_ID, parseServers, parseSettings, removeServer, piFallback, snippet, upsertServer, validUrl, type ClientId, type McpInfo, type McpServerEntry, type McpSettings } from './mcp_config'
 
 const store = (): Storage | null => { try { return localStorage } catch { return null } }
 const loadSettings = (): McpSettings => parseSettings(store()?.getItem(SETTINGS_KEY) ?? null)
@@ -13,16 +13,23 @@ const put = (key: string, v: unknown): void => { try { store()?.setItem(key, JSO
 const fetchFn = (url: string, init: RequestInit) => fetch(url, init)
 const link = (label: string, onclick: () => void, attrs: Record<string, string> = {}): HTMLButtonElement => el('button', { class: 'btn btn-ghost mcp-link', type: 'button', ...attrs, onclick }, [label])
 
-function clientBlock(id: ClientId, ctx: TwCtx, s: McpSettings): HTMLElement {
+/** One client's command (or block) with a copy button; pi also gets its fallback text. `info` is what the dev server says about this checkout. */
+function clientBlock(id: ClientId, ctx: TwCtx, s: McpSettings, info: McpInfo): HTMLElement {
   const t = ctx.strings.mcp
-  const text = snippet(id, s, SERVER_PATH_HINT)
+  const text = snippet(id, s, info.server, info.record)
   const copied = el('small', { class: 'meta', hidden: true }, [t.copied])
-  return el('details', { class: 'mcp-client', 'data-mcp-client': id }, [
+  const fallback = id === 'pi' ? piFallback(s, info.server, info.record) : ''
+  return el('details', { class: 'mcp-client', 'data-mcp-client': id, ...(id === 'pi' || id === 'claude-code' ? { open: '' } : {}) }, [
     el('summary', { class: 'mcp-summary' }, [t.clients[id]]),
     el('p', { class: 'meta' }, [t.where[id]]),
     el('pre', { class: 'mcp-snippet', 'data-mcp-snippet': id }, [text]),
-    link(t.copy, () => { void navigator.clipboard?.writeText(text).then(() => { copied.hidden = false }) }, { 'data-mcp-copy': id }),
+    link(ctx.strings.mcpLive.copyCommand, () => { void navigator.clipboard?.writeText(text).then(() => { copied.hidden = false }) }, { 'data-mcp-copy': id }),
     copied,
+    ...(fallback ? [
+      el('p', { class: 'meta' }, [ctx.strings.mcpLive.piFallbackTitle]),
+      el('pre', { class: 'mcp-snippet', 'data-mcp-snippet': 'pi-fallback' }, [fallback]),
+      link(t.copy, () => { void navigator.clipboard?.writeText(fallback) }, { 'data-mcp-copy': 'pi-fallback' }),
+    ] : []),
   ])
 }
 
@@ -103,9 +110,20 @@ function serverBlock(e: McpServerEntry, ctx: TwCtx, redraw: () => void): HTMLEle
   ])
 }
 
+/** GET /__tw/mcp-info (dev server only): the absolute path of this checkout's MCP program. null elsewhere: a page cannot know it. */
+async function loadInfo(): Promise<McpInfo | null> {
+  try {
+    const r = await fetch('/__tw/mcp-info', { cache: 'no-store' })
+    const j = r.ok ? ((await r.json()) as Partial<McpInfo>) : null
+    return j && typeof j.server === 'string' && j.server.startsWith('/') ? { server: j.server, ...(typeof j.record === 'string' ? { record: j.record } : {}) } : null
+  } catch { return null }
+}
+
 function rows(ctx: TwCtx): Node[] {
   const t = ctx.strings.mcp
   const box = el('div', { class: 'mcp-settings', 'data-mcp-settings': '' }, [])
+  let info: McpInfo | null = null
+  void loadInfo().then((i) => { info = i; draw() })
   const draw = (): void => {
     const s = loadSettings()
     const change = (next: McpSettings): void => { put(SETTINGS_KEY, next); draw() }
@@ -123,10 +141,12 @@ function rows(ctx: TwCtx): Node[] {
       el('button', { class: 'radio' + (s.write ? ' on' : ''), role: 'switch', 'aria-checked': String(s.write), 'data-mcp-write': '', onclick: () => change({ ...s, write: !s.write }) }, [el('b', {}, [t.writeTitle]), el('small', {}, [t.writeHint])]),
       el('h5', { class: 'eyebrow' }, [t.toolsTitle]), el('p', { class: 'meta' }, [t.toolsHint]),
       ...MCP_TOOLS.map(toolRow),
-      el('h5', { class: 'eyebrow' }, [t.connectTitle]), el('p', { class: 'meta' }, [t.pathHint]),
-      ...main.map((c) => clientBlock(c.id, ctx, s)),
-      el('h5', { class: 'eyebrow', 'data-mcp-others': '' }, [t.othersTitle]),
-      ...others.map((c) => clientBlock(c.id, ctx, s)),
+      el('button', { class: 'radio' + (ctx.store().mcpApplyDirectly ? ' on' : ''), role: 'switch', 'aria-checked': String(ctx.store().mcpApplyDirectly === true), 'data-mcp-direct': '', onclick: () => { ctx.store().mcpApplyDirectly = ctx.store().mcpApplyDirectly ? undefined : true; ctx.save?.(); draw() } }, [el('b', {}, [ctx.strings.mcpLive.directTitle]), el('small', {}, [ctx.strings.mcpLive.directHint])]),
+      el('h5', { class: 'eyebrow' }, [ctx.strings.mcpLive.commandTitle]),
+      ...(s.write ? [] : [el('p', { class: 'meta', 'data-mcp-writes-off': '' }, [ctx.strings.mcpLive.writesOff])]),
+      ...(info ? [el('p', { class: 'meta' }, [t.pathHint]), ...main.map((c) => clientBlock(c.id, ctx, s, info!)),
+        el('h5', { class: 'eyebrow', 'data-mcp-others': '' }, [t.othersTitle]),
+        ...others.map((c) => clientBlock(c.id, ctx, s, info!))] : [el('p', { class: 'meta', 'data-mcp-need-dev': '' }, [ctx.strings.mcpLive.needDev])]),
       el('h5', { class: 'eyebrow' }, [t.serversTitle]), el('p', { class: 'meta' }, [t.serversHint]),
       ...loadServers().map((e) => serverBlock(e, ctx, draw)),
       link(t.addServer, () => { put(SERVERS_KEY, upsertServer(loadServers(), { id: `srv-${Date.now().toString(36)}`, name: t.newName, url: '', token: '' })); draw() }, { 'data-mcp-add-server': '' }),

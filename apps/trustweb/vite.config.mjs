@@ -15,8 +15,8 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { matchesReply } from './vite_matches.mjs'
-import { editStreamReply, liveRecordReply } from './vite_dev_record.mjs'
-import { approveMergeRoute, diagnosticsFor, ghBin, jobQueue, readyToGo } from './dev_preview_rules.mjs'
+import { editStreamReply, liveRecordReply, mcpEventsReply, mcpInfoReply } from './vite_dev_record.mjs'
+import { approveMergeRoute, diagnosticsFor, fixConflictRoute, ghBin, jobQueue, launchError, opsDevlogRoot, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 // execFile ignores `stdio`, so stdin stays an open pipe: close it, a command that reads stdin (a git/gh prompt) gets EOF instead of waiting out its timeout.
@@ -219,6 +219,19 @@ function devRecordLiveApi() {
         if (r.body) res.setHeader('Content-Type', 'application/json')
         res.end(r.body)
       })
+      server.middlewares.use('/__tw/mcp-info', (req, res) => {
+        const r = mcpInfoReply(req.method ?? '', req.headers, { serverPath: path.resolve(here, '../mcp/src/server.ts'), recordFile: process.env.TW_DEV_LIVE ? file : undefined, remote: req.socket.remoteAddress })
+        res.statusCode = r.code
+        if (r.body) res.setHeader('Content-Type', 'application/json')
+        res.end(r.body)
+      })
+      server.middlewares.use('/__tw/mcp-events', (req, res) => {
+        const r = mcpEventsReply(file, req.method ?? '', req.headers, (req.url ?? '').split('?')[1] ?? '', { remote: req.socket.remoteAddress })
+        res.statusCode = r.code
+        res.setHeader('Cache-Control', 'no-store')
+        if (r.body) res.setHeader('Content-Type', 'application/json')
+        res.end(r.body)
+      })
       server.middlewares.use('/__tw/dev-record', (req, res) => {
         let text = ''
         req.on('data', (c) => { text += c })
@@ -351,6 +364,19 @@ function previewApi() {
         } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
       })
       const run = queue.run
+      // Wave 42 B01: while an assembly shows a conflict, the ops gate (`preview <id> gate`, JSON on stdout, exit 1 when closed) may say why (kind/action); cached per assembly, absent on an older ops build.
+      let gateSeen = { key: '', gate: null }
+      const gateOf = async (pv) => {
+        if (!pv.assembled?.error) return null
+        const key = `${pv.assembled.sha}|${pv.assembled.at}|${pv.pending}`
+        if (gateSeen.key === key) return gateSeen.gate
+        let out = ''
+        try { out = (await execClosed(bin(), [pv.id, 'gate'], { encoding: 'utf8', timeout: 20000 })).stdout } catch (e) { out = String(e.stdout ?? '') }
+        let gate = null
+        try { const j = JSON.parse(out.trim().split('\n').pop()); gate = { ok: j.ok, hint: j.hint, kind: j.kind, action: j.action } } catch { /* no gate answer */ }
+        gateSeen = { key, gate }
+        return gate
+      }
       server.middlewares.use('/__tw/wait', (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -373,12 +399,28 @@ function previewApi() {
         const run = async (bin, a) => (await execClosed(bin, a, { encoding: 'utf8', maxBuffer: 50e6, timeout: 60000, env: { ...process.env, HOME: process.env.HOME || os.homedir() } })).stdout
         try { text(await diagnosticsFor(pr, ghBin(process.env, existsSync), run)) } catch (e) { fail(e.message, 500) }
       })
+      // POST /__tw/preview/fix-conflict {id, key} (B16): a conflict brief in DEVLOG/<newest wave>/conflict-<key>.txt, then a background Sonnet session on it (pi_new_session.sh).
+      server.middlewares.use('/__tw/preview/fix-conflict', fixConflictRoute({
+        loopback, preview: readPreview, readBody: body,
+        // Review wave 42: the ops repo's DEVLOG (newest wave), never web-of-trust/DEVLOG (stale at wave20, where the first brief landed).
+        devlog: () => { const root = opsDevlogRoot(here, existsSync, process.env.TW_DEVLOG); if (!root) throw new Error('trustweb-ops/DEVLOG not found (set TW_DEVLOG)'); return path.join(root, readdirSync(root).filter((n) => /^wave\d+$/.test(n)).sort((a, b) => Number(a.slice(4)) - Number(b.slice(4))).pop() ?? '') },
+        mergeTree: async (wt, base, branch) => { try { return (await execClosed('git', ['-C', wt, 'merge-tree', '--write-tree', base, branch], { encoding: 'utf8', timeout: 60000 })).stdout } catch (e) { return String(e.stdout || e.message) } },   // exit 1 = conflicts: the output is the point
+        write: (file, text) => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text) },
+        launch: async (file, task) => {
+          const script = process.env.TW_NEW_SESSION ?? path.join(os.homedir(), '.pi/scripts/pi_new_session.sh')
+          try {
+            const out = (await execClosed(script, [file, '--task', task, '--model', 'claude-bridge/claude-sonnet-5-5', '--thinking', 'medium'], { encoding: 'utf8', timeout: 120000 })).stdout
+            return { window: /LAUNCHED window (\S+)/.exec(out)?.[1] ?? '' }
+          } catch (e) { throw launchError(e) }   // exit 3 = another session of the project is busy: 409 with a sentence (dev_preview_rules.mjs)
+        },
+      }))
       server.middlewares.use('/__tw/preview', async (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
         const sub = (req.url ?? '/').split('?')[0]
-        if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted, queued: queue.size() }); return }
+        if (req.method === 'GET' && sub === '/') { const pv = readPreview(); json(res, { ...pv, serverStarted, queued: queue.size(), gate: (await gateOf(pv)) ?? pv.gate ?? null }); return }
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
-        if (sub === '/pr' || sub === '/test' || sub === '/apply') {   // /apply = `preview <id> apply`: assemble the approved set (the panel's "Reload with approved")
+        // /rerun-failed (review wave 42, ops gate kind ci-failed): `preview <id> rerun-failed`, the same set again; the failed CI jobs re-run once.
+        if (sub === '/pr' || sub === '/test' || sub === '/apply' || sub === '/rerun-failed') {   // /apply = `preview <id> apply`: assemble the approved set (the panel's "Reload with approved")
           spawn(bin(), [readPreview().id, sub.slice(1)], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
           json(res, { started: true })
           return
@@ -390,6 +432,7 @@ function previewApi() {
         if (sub === '/' && b?.set && keys.length === Object.keys(b.set).length && keys.every((k) => typeof b.set[k] === 'boolean')) args = ['set', keys.map((k) => `${k}=${b.set[k] ? 'on' : 'off'}`).join(',')]
         if (sub === '/verdict' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature) && [null, 'merge', 'needs-work', 'changes'].includes(b.verdict)) args = ['verdict', b.feature, b.verdict ?? 'clear']
         if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
+        if (sub === '/mark-merged' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature)) args = ['mark-merged', b.feature]   // wave 42 B01: the row is already in main (ops gate.action "mark-merged <key>")
         if (!args) { json(res, { error: 'bad request' }, 400); return }
         const error = await run(args)
         if (error !== null) json(res, { error }, 500)

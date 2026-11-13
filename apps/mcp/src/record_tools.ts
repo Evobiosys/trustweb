@@ -8,11 +8,17 @@
 import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { diffRecords } from '../../trustweb/src/record_diff.ts'
+import type { AssistantCfg } from '../../trustweb/src/ext/assistant/providers.ts'
+import { barTools } from './bar_tools.ts'
+import { communityTools } from './community_tools.ts'
+import { eventTools } from './event_tools.ts'
 import type { Tool } from './protocol.ts'
+import { settingsTools } from './settings_tools.ts'
 
 type Obj = Record<string, unknown>
-interface Person extends Obj { id: string; name: string; ring: string; context?: string; fields?: Record<string, unknown>; generalNote?: string; lines?: { text: string; notedAt?: number }[]; deleted_at?: string }
-interface Rec extends Obj { v: number; people: Person[] }
+export interface Person extends Obj { id: string; name: string; ring: string; prevRing?: string; context?: string; fields?: Record<string, unknown>; generalNote?: string; lines?: { text: string; notedAt?: number }[]; deleted_at?: string }
+export interface InboxRow extends Obj { id: string; at: number; seenAt: number | null }
+export interface Rec extends Obj { v: number; people: Person[]; advanced?: { assistant?: AssistantCfg } & Obj; notifInbox?: InboxRow[]; missedPopupOff?: true }
 
 export interface RecordToolsOptions {
   file: string
@@ -24,21 +30,26 @@ export interface RecordToolsOptions {
 }
 
 const MAX_NOTE = 5000
+/** The connect code (connect_code.ts CONNECT_CODE_RE) and the app origins that serve /c/<code> (short_link.ts SHORT_LINK_ORIGINS): repeated here because this file runs under plain node, which cannot load the app's extension-less imports. */
+const CODE_RE = /^[A-Za-z0-9_-]{22}$/
+const CODE_ORIGIN = 'https://app.trustweb.one'
+const CODE_HOSTS = ['app.trustintheweb.org', 'app.trustweb.one']
+const heldCode = (r: Rec): string | null => { const c = (r.connectCode as { code?: unknown } | undefined)?.code; return typeof c === 'string' && CODE_RE.test(c) ? c : null }
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
-const needText = (v: unknown, what: string): string => { const s = str(v).trim(); if (!s) throw new Error(`${what} is required`); return s }
+export const needText = (v: unknown, what: string): string => { const s = str(v).trim(); if (!s) throw new Error(`${what} is required`); return s }
 /** The same rule as import_tags.ts tagSlug (a person tag is the field `fields[<slug>] = 'true'`), without its 'tag' fallback. */
-const slug = (label: string): string => label.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '')
+export const slug = (label: string): string => label.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '')
 const tagsOf = (p: Person): string[] => Object.entries(p.fields ?? {}).filter(([, v]) => String(v) === 'true').map(([k]) => k).sort()
 const alive = (r: Rec): Person[] => r.people.filter((p) => p.deleted_at === undefined)
 const limitOf = (v: unknown, dflt: number): number => (typeof v === 'number' && v > 0 ? Math.floor(v) : dflt)
 
-function load(file: string): Rec {
+export function load(file: string): Rec {
   const r = JSON.parse(readFileSync(file, 'utf8')) as Rec
   if (r?.v !== 1 || !Array.isArray(r.people)) throw new Error(`${file} is not a TrustWeb record`)
   return r
 }
 
-function findPerson(r: Rec, who: unknown): Person {
+export function findPerson(r: Rec, who: unknown): Person {
   const key = needText(who, 'person')
   const live = alive(r)
   const byId = live.find((p) => p.id === key)
@@ -50,32 +61,68 @@ function findPerson(r: Rec, who: unknown): Person {
 }
 
 const row = (p: Person): Obj => ({ id: p.id, name: p.name, zone: p.ring, tags: tagsOf(p) })
-const schema = (properties: Obj, required: string[] = []): Obj => ({ type: 'object', properties, required, additionalProperties: false })
-const S = (description: string): Obj => ({ type: 'string', description })
+export const schema = (properties: Obj, required: string[] = []): Obj => ({ type: 'object', properties, required, additionalProperties: false })
+export const S = (description: string): Obj => ({ type: 'string', description })
 
 /** TW_MCP_TOOLS as an allow list: absent = every tool; set (also empty, i.e. every tool switched off in Settings) = only those named. */
 export function toolAllow(v: string | undefined): string[] | undefined {
   return v === undefined ? undefined : v.split(',').map((s) => s.trim()).filter(Boolean)
 }
 
+/** Applies `change` to a copy of the record, logs the edit, replaces the file. Returns false when nothing changed. */
+export function commitTo(file: string, now: () => Date, change: (r: Rec) => void): boolean {
+  const prev = load(file)
+  const next = structuredClone(prev)
+  change(next)
+  const edits = diffRecords(prev as never, next as never, { at: now().toISOString(), previewId: 'mcp' })
+  // Wave 42: a change outside the people (communities, asks for support) has no edit line but is written all the same.
+  if (!edits.length && JSON.stringify(prev) === JSON.stringify(next)) return false
+  if (edits.length) appendFileSync(path.join(path.dirname(file), 'dev-edits.jsonl'), edits.map((e) => JSON.stringify(e) + '\n').join(''))
+  const tmp = file + '.tmp'
+  writeFileSync(tmp, JSON.stringify(next))
+  renameSync(tmp, file)
+  return true
+}
+
 export function recordTools(o: RecordToolsOptions): Tool[] {
   const now = o.now ?? (() => new Date())
 
-  /** Applies `change` to a copy of the record, logs the edit, replaces the file. Returns false when nothing changed. */
-  function commit(change: (r: Rec) => void): boolean {
-    const prev = load(o.file)
-    const next = structuredClone(prev)
+  const commit = (change: (r: Rec) => void): boolean => commitTo(o.file, now, change)
+
+  /** A setting or the notification inbox: the record file is replaced, nothing goes to the edit stream (it logs people only). */
+  function commitSetting(change: (r: Rec) => void): void {
+    const next = load(o.file)
     change(next)
-    const edits = diffRecords(prev as never, next as never, { at: now().toISOString(), previewId: 'mcp' })
-    if (!edits.length) return false
-    appendFileSync(path.join(path.dirname(o.file), 'dev-edits.jsonl'), edits.map((e) => JSON.stringify(e) + '\n').join(''))
     const tmp = o.file + '.tmp'
     writeFileSync(tmp, JSON.stringify(next))
     renameSync(tmp, o.file)
-    return true
   }
 
   const read: Tool[] = [
+    {
+      name: 'connect_code', description: 'This phone\'s connect code and the link it makes (https://<app>/c/<code>): show it as a QR or read it out; the other person types it under Add person. Never returns the secret.',
+      inputSchema: schema({}),
+      run: () => {
+        const r = load(o.file)
+        const code = heldCode(r)
+        if (!code) return { code: null, note: 'No code yet: open Meet on the phone once, it makes one.' }
+        const name = (r.connectCode as { name?: unknown }).name
+        return { code, link: `${CODE_ORIGIN}/c/${code}`, ...(typeof name === 'string' && name ? { name } : {}) }
+      },
+    },
+    {
+      name: 'connect_redeem', description: 'Checks a code someone gave you (bare, or their /c/ link) and returns the link to open on the phone, where the add sheet connects after your tap. Connecting needs the phone (relay handshake); this changes nothing in the record.',
+      inputSchema: schema({ code: S('the 22-character code or the https://<app>/c/<code> link') }, ['code']),
+      run: (a) => {
+        const raw = str(a.code).trim()
+        let code = raw
+        const link = /^https:\/\/([^/]+)\/c\/([^/?#]+)/.exec(raw)
+        if (link) code = CODE_HOSTS.includes(link[1]) ? link[2] : ''
+        if (!CODE_RE.test(code)) return { ok: false, error: 'That is not a TrustWeb code: it has 22 letters and digits, or is a link like https://app.trustweb.one/c/<code>.' }
+        if (code === heldCode(load(o.file))) return { ok: false, error: 'That is your own code: give it to the other person instead.' }
+        return { ok: true, code, link: `${CODE_ORIGIN}/c/${code}` }
+      },
+    },
     {
       name: 'list_people', description: 'People in the web (not deleted): id, name, zone (trust ring) and tags. Filter by tag and/or zone.',
       inputSchema: schema({ tag: S('tag name or id'), zone: S('trust zone, e.g. closest, close, friend, acquaintance, intending, none'), limit: { type: 'number', description: 'default 500' } }),
@@ -128,6 +175,15 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
         return hits.slice(0, limitOf(a.limit, 50))
       },
     },
+    {
+      name: 'notifications_inbox_list', description: 'The notifications this phone showed (newest first) with seenAt (null: not seen yet), and whether the "Popup for missed notifications" setting is on.',
+      inputSchema: schema({ unseenOnly: { type: 'boolean', description: 'only items not seen yet' } }),
+      run: (a) => {
+        const r = load(o.file)
+        const items = [...(r.notifInbox ?? [])].sort((x, y) => y.at - x.at).filter((i) => a.unseenOnly !== true || i.seenAt === null)
+        return { popup: r.missedPopupOff !== true, items }
+      },
+    },
   ]
 
   const write: Tool[] = [
@@ -160,7 +216,64 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
         return { id: who!.id, name: who!.name, tag, added }
       },
     },
+    {
+      name: 'remove_person', description: 'Remove a person from the web: a 30-day tombstone (Settings > Recently deleted), never a hard delete. restore_person takes it back.',
+      inputSchema: schema({ person: S('id or exact name') }, ['person']),
+      run: (a) => {
+        let who: Person | undefined
+        commit((r) => {
+          who = findPerson(r, a.person)
+          // The same tombstone as src/deleted_people.ts deletePersonSoft (that file imports the app's model, which node cannot load).
+          if (who.ring !== 'none') who.prevRing = who.ring
+          who.ring = 'none'
+          who.deleted_at = now().toISOString()
+        })
+        return { id: who!.id, name: who!.name, removed: true }
+      },
+    },
+    {
+      name: 'restore_person', description: 'Put a removed person back (within their 30 days) on the ring they had.',
+      inputSchema: schema({ person: S('id or exact name of the removed person') }, ['person']),
+      run: (a) => {
+        const key = needText(a.person, 'person')
+        let who: Person | undefined
+        commit((r) => {
+          const gone = r.people.filter((p) => p.deleted_at !== undefined && (p.id === key || p.name.trim().toLowerCase() === key.toLowerCase()))
+          if (gone.length > 1) throw new Error(`more than one removed person is named "${key}": use the id (${gone.map((p) => p.id).join(', ')})`)
+          who = gone[0]
+          if (!who) throw new Error(`no removed person "${key}"`)
+          who.ring = typeof who.prevRing === 'string' && who.prevRing !== 'none' ? who.prevRing : 'unsorted'
+          delete who.prevRing
+          delete who.deleted_at
+        })
+        return { id: who!.id, name: who!.name, restored: true }
+      },
+    },
+    {
+      name: 'notifications_inbox_mark_seen', description: 'Mark notifications as seen: the named ids, or all of them. Returns how many changed.',
+      inputSchema: schema({ ids: { type: 'array', items: { type: 'string' }, description: 'notification ids' }, all: { type: 'boolean', description: 'every unseen one' } }),
+      run: (a) => {
+        const ids = Array.isArray(a.ids) ? a.ids.map(String) : []
+        if (a.all !== true && !ids.length) throw new Error('ids or all is required')
+        let marked = 0
+        commitSetting((r) => {
+          for (const i of r.notifInbox ?? []) if (i.seenAt === null && (a.all === true || ids.includes(i.id))) { i.seenAt = now().getTime(); marked++ }
+        })
+        return { marked }
+      },
+    },
+    {
+      name: 'notifications_popup_set', description: 'Switch "Popup for missed notifications" on or off (on by default).',
+      inputSchema: schema({ on: { type: 'boolean', description: 'true: show the popup' } }, ['on']),
+      run: (a) => {
+        if (typeof a.on !== 'boolean') throw new Error('on must be true or false')
+        commitSetting((r) => { if (a.on) delete r.missedPopupOff; else r.missedPopupOff = true })
+        return { popup: a.on }
+      },
+    },
   ]
 
-  return [...read, ...(o.write ? write : [])].filter((t) => !o.allow || o.allow.includes(t.name))
+  const community = communityTools({ load: () => load(o.file) as never, commit: commit as never, write: o.write, now })
+  const events = eventTools({ load: () => load(o.file) as never, commit: commit as never, now })
+  return [...read, ...community.read, ...(o.write ? [...write, ...community.write, ...events.write] : []), ...barTools(o), ...settingsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

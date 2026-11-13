@@ -13,6 +13,8 @@ import type { Person } from './model'
 
 export const SUPPORT_PARAM = 'support'
 export const HERE_PARAM = 'support-here'
+/** Wave 42: the asker closed the ask early: `<app url>?support-cancel=<id>`; the helper's copy goes away. */
+export const CANCEL_PARAM = 'support-cancel'
 
 /** What would help, in the order they show. */
 export const SUPPORT_CHIPS = ['listen', 'call', 'meet', 'sit', 'practical', 'know'] as const
@@ -37,6 +39,12 @@ export interface SupportAsk {
   here: string[]
   /** Wave 40 (support_delivery.ts): peer id -> the channel the sender opened for them (Signal, WhatsApp, Geb, e-mail) and when. "Here" stays for the app only. */
   via?: Record<string, { via: 'signal' | 'whatsapp' | 'geb' | 'email'; at: number }>
+  /** Wave 42: written by the MCP server (the record file has no network): the app sends it on its next start, then clears this. */
+  queued?: true
+  /** Review wave 42 (I9): the MCP server wrote it for an agent. It waits for a tap in the app (Send | Discard) and is never sent by itself. */
+  agent?: true
+  /** Wave 42: closed over MCP; the app tells the people it went to, then drops the ask. */
+  cancelled?: true
 }
 
 /** An ask this phone received from `peerId`. */
@@ -98,7 +106,30 @@ export function hereText(appUrl: string, id: string): string {
 
 /** Does this text claim to be a support text (well formed or not)? */
 export function isSupportText(appUrl: string, text: string): boolean {
-  return typeof text === 'string' && (text.startsWith(`${appUrl}?${SUPPORT_PARAM}=`) || text.startsWith(`${appUrl}?${HERE_PARAM}=`))
+  return typeof text === 'string' && (text.startsWith(`${appUrl}?${SUPPORT_PARAM}=`) || text.startsWith(`${appUrl}?${HERE_PARAM}=`) || text.startsWith(`${appUrl}?${CANCEL_PARAM}=`))
+}
+
+export const closeText = (appUrl: string, id: string): string => `${appUrl}?${CANCEL_PARAM}=${encodeURIComponent(id)}`
+
+export function parseCloseText(appUrl: string, text: string): string | null {
+  const head = `${appUrl}?${CANCEL_PARAM}=`
+  if (typeof text !== 'string' || !text.startsWith(head)) return null
+  try {
+    const id = decodeURIComponent(text.slice(head.length))
+    return id && id.length <= 40 ? id : null
+  } catch {
+    return null
+  }
+}
+
+/** Wave 42: the two trust-zone bundle buttons of the ask form; they add their people on top of any audience. */
+export const BUNDLES = ['closest-few', 'closest-allies'] as const
+export type Bundle = (typeof BUNDLES)[number]
+
+/** Closest few = the Closest ring; Closest allies = Closest and Close (the ring labelled "Close friends and allies"); connected people only. */
+export function bundlePeople<T extends Pick<Person, 'ring' | 'fields' | 'peerId'>>(people: readonly T[], b: Bundle): T[] {
+  const rings: readonly Ring[] = b === 'closest-few' ? [Ring.Closest] : [Ring.Closest, Ring.Close]
+  return people.filter((p) => p.peerId && rings.includes(ringSlot(p)))
 }
 
 export function parseSupportText(appUrl: string, text: string): Pick<SupportAsk, 'id' | 'chips' | 'note' | 'until'> | null {

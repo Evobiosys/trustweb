@@ -4,6 +4,7 @@
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { adoptedEdit, diffRecords } from './src/record_diff.ts'
+import { readEvents } from '../mcp/src/events.ts'
 
 const KEEP = 10
 const EDITS_MAX = 5_000_000
@@ -108,4 +109,21 @@ export function liveRecordReply(file, method, headers, body, { gapMs = 60_000, r
     renameSync(tmp, file)
     return { code: 200, headers: atHeader(file), body: '' }
   } catch { return { code: 400, headers: {}, body: '' } }
+}
+
+/** Wave 42 mcp-parity: GET /__tw/mcp-info -> { server: absolute path of apps/mcp/src/server.ts, record?: the live file when it is not the default }. Same loopback guards as the record. */
+export function mcpInfoReply(method, headers, { serverPath, recordFile, remote = '127.0.0.1' }) {
+  if (!localClient(remote) || !loopback(headers)) return { code: 403, body: '' }
+  if (method !== 'GET') return { code: 405, body: '' }
+  return { code: 200, body: JSON.stringify({ server: serverPath, ...(recordFile ? { record: recordFile } : {}) }) }
+}
+
+/** Wave 42 mcp-parity: GET /__tw/mcp-events?from=<n> -> { events, next } from dev-mcp-events.jsonl beside the live file (apps/mcp/src/events.ts). No `from` = no events, only the cursor: a page starts at "now". */
+export function mcpEventsReply(file, method, headers, query, { remote = '127.0.0.1' } = {}) {
+  if (!localClient(remote) || !loopback(headers)) return { code: 403, body: '' }
+  if (method !== 'GET') return { code: 405, body: '' }
+  const from = new URLSearchParams(query).get('from')
+  const n = from !== null && /^\d+$/.test(from) ? Number(from) : null
+  const { events, next } = readEvents(file, n ?? Number.MAX_SAFE_INTEGER)
+  return { code: 200, body: JSON.stringify({ events: n === null ? [] : events, next }) }
 }

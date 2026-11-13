@@ -14,7 +14,7 @@ import { ringColor } from './ring_palette'
 import { needleAt, needleHead, settleTarget, startUnpin, unpinAt } from './network_pin'
 import type { UnpinTween } from './network_pin'
 import type { ColourTag } from './colour_tags'
-import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, isArchived, labelAt, mutualIds, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR } from './network_graph'
+import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, dotRadiusAt, labelPx, applyPins, buildGraph, isArchived, labelAt, mutualIds, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR } from './network_graph'
 import type { Forces, Graph, GraphEdge, GraphNode, LabelBox, Pins } from './network_graph'
 import { fitBounds, refitCamera } from './network_fit'
 import type { Camera, Size } from './network_fit'
@@ -165,7 +165,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     let bestD = Infinity
     for (const v of g.nodes) {
       const d = Math.hypot(v.x * c.k + c.x - px, v.y * c.k + c.y - py)
-      if (d <= Math.max(v.r * c.k, 10) + 4 && d < bestD) { best = v; bestD = d }
+      if (d <= Math.max(dotRadiusAt(v.r, c.k), 10) + 4 && d < bestD) { best = v; bestD = d }
     }
     return best
   }
@@ -230,10 +230,13 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     }
     ctx.setLineDash([])
     ctx.lineWidth = baseWidth
-    ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'
+    ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'   // the names are drawn below with labelPx(…, k)
     ctx.textAlign = 'center'
     const fade = Math.min(1, c.k / settings.forces.labelZoom)
+    canvas.dataset.k = String(c.k); canvas.dataset.labelPx = String(labelPx(lq ? 10 : 11, c.k))   // measurement hook (wave 42): name px at this zoom
     needles = []
+    let refD = Infinity
+    delete canvas.dataset.dotR
     const labels: { id: string; text: string; x: number; y: number; alpha: number; fill: string; pinned: boolean }[] = [] // drawn after every dot and edge, above the dot
     g.nodes.forEach((v, i) => {
       const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.tier === undefined
@@ -241,7 +244,9 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       const y = v.y * c.k + c.y
       if (x < -20 || y < -20 || x > w + 20 || y > h + 20) return
       const look = rings && !lq ? dotLook(v.name, v.tier) : null
-      const rad = look ? look.radius * Math.sqrt(c.k) * (matches.has(v.id) ? 1.2 : 1) : lq ? (1.5 + Math.sqrt(near[i].size) * 1.1) * Math.sqrt(c.k) * (matches.has(v.id) ? 1.6 : 1) : v.r * Math.sqrt(c.k) * (matches.has(v.id) ? 1.5 : 1)
+      // Wave 42: dots grow linearly with the zoom (clamped, dotRadiusAt), like the Rings view; a search match is a little larger
+      const match = matches.has(v.id)
+      const rad = look ? dotRadiusAt(look.radius, c.k, match ? 1.2 : 1) : lq ? dotRadiusAt(1.5 + Math.sqrt(near[i].size) * 1.1, c.k, match ? 1.6 : 1) : dotRadiusAt(v.r, c.k, match ? 1.5 : 1)
       ctx.globalAlpha = lit ? (!lq && v.faint ? 0.4 : 1) : 0.15
       ctx.fillStyle = lq ? (v === hover || matches.has(v.id) ? LOGSEQ.lit : LOGSEQ.node) : colour(v)
       if (look?.you) { // the you dot: gradient face inside a white halo, as on the Web rings
@@ -251,6 +256,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
         ctx.fillStyle = grad
       }
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
+      if (v.tier !== undefined && Math.hypot(x - w / 2, y - h / 2) < refD) { refD = Math.hypot(x - w / 2, y - h / 2); canvas.dataset.dotR = String(rad) }   // measurement hook (wave 42): radius of the person dot nearest the centre
       if (look && rad >= 7) {
         ctx.fillStyle = look.ink; ctx.font = `700 ${Math.round(rad * 0.84)}px system-ui, sans-serif`; ctx.textBaseline = 'middle'
         ctx.fillText(look.initial, x, y + 0.5); ctx.textBaseline = 'alphabetic'
@@ -276,7 +282,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     const pinnedFont = css.getPropertyValue('--font-pinned').trim() || 'ui-monospace, Menlo, monospace'
     shown = []
     for (const l of labels) {
-      ctx.font = `${l.pinned ? '500' : lq ? '400' : '600'} ${lq ? 10 : 11}px ${l.pinned ? pinnedFont : bodyFont}`
+      ctx.font = `${l.pinned ? '500' : lq ? '400' : '600'} ${labelPx(lq ? 10 : 11, c.k)}px ${l.pinned ? pinnedFont : bodyFont}`
       ctx.globalAlpha = l.alpha; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = l.fill; ctx.fillText(l.text, l.x, l.y)
       shown.push({ id: l.id, x: l.x, y: l.y, w: ctx.measureText(l.text).width })
     }
@@ -306,7 +312,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       if (state.iteration >= LAYOUT_ITERATIONS && !state.touched) { state.camera = fit(); state.size = { w, h } }
       dirty = true
     }
-    if (dirty) { dirty = false; draw() }
+    if (dirty) { dirty = false; draw(); placePop() }
     requestAnimationFrame(frame)
   }
 
@@ -351,7 +357,15 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     savePins(g); dirty = true
   }
   const endDrag = (): void => { clearTimeout(press); drag = null }
-  const closePop = (): void => { pop.hidden = true }
+  // Wave 42: the person menu keeps its place beside the dot while the canvas zooms or pans (popAnchor = the press point relative to the dot, canvas px).
+  let popAnchor: { node: GraphNode; dx: number; dy: number } | null = null
+  const placePop = (): void => {
+    if (!popAnchor || pop.hidden) return
+    const c = cam(), { node, dx, dy } = popAnchor
+    const at = placeMenu(canvas.offsetLeft + node.x * c.k + c.x + dx, canvas.offsetTop + node.y * c.k + c.y + dy, pop.offsetWidth, pop.offsetHeight, root.clientWidth, root.clientHeight)
+    pop.style.left = at.x + 'px'; pop.style.top = at.y + 'px'
+  }
+  const closePop = (): void => { pop.hidden = true; popAnchor = null }
   const act = (v: GraphNode, a: MenuAction): void => {
     closePop()
     if (a === 'pin') { v.pinned = true; savePins(g); reheat() } else if (a === 'unpin') unpin(v)
@@ -363,8 +377,9 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     const labels: Record<MenuAction, string> = { pin: S.netPin, unpin: S.netUnpin, inspect: S.netInspect, hide: S.netHide }
     pop.replaceChildren(...menuActions(v.pinned).map((a) => el('button', { class: 'btn btn-ghost btn-sm', onclick: () => act(v, a) }, [labels[a]])))
     pop.hidden = false
-    const at = placeMenu(canvas.offsetLeft + p.x, canvas.offsetTop + p.y, pop.offsetWidth, pop.offsetHeight, root.clientWidth, root.clientHeight)
-    pop.style.left = at.x + 'px'; pop.style.top = at.y + 'px'
+    const c = cam()
+    popAnchor = { node: v, dx: p.x - (v.x * c.k + c.x), dy: p.y - (v.y * c.k + c.y) }
+    placePop()
   }
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault()

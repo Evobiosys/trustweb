@@ -65,6 +65,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loadConfig } from './config.mjs'
+import { createBilling, isBillingPath } from './billing.mjs'
 import { createFeedback } from './feedback.mjs'
 import { statusBody } from './status.mjs'
 import { createHosted } from './hosted.mjs'
@@ -141,6 +142,7 @@ export async function startServer(options = {}) {
   const hosted = store === null ? null : createHosted({ cfg, store, withLock, clientOf })
   const transcriber = hosted === null ? null : createTranscriber({ cfg, hosted, store, clientOf, fetchImpl: options.fetchImpl })
   const feedback = createFeedback({ cfg, clientOf, withLock, fetchImpl: options.fetchImpl })
+  const billing = createBilling({ cfg, clientOf, withLock, fetchImpl: options.billingFetchImpl })
   const websearch = createWebsearch({ cfg, clientOf, fetchImpl: options.websearchFetchImpl })
 
   // Like hosting, the short links must never keep /backup from starting: if the store cannot open, links are off (503 not_configured).
@@ -412,7 +414,7 @@ export async function startServer(options = {}) {
     const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe' || isNotesRelayPath(pathname)
     // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
     const isWebsearch = pathname === '/websearch' || pathname === '/websearch/engines'
-    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link' || pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname === '/s' || isOrgPath(pathname)
+    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || isBillingPath(pathname) || pathname === '/link' || pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname === '/s' || isOrgPath(pathname)
     const slowDown = () => {
       const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
       if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
@@ -447,6 +449,7 @@ export async function startServer(options = {}) {
       send(res, 200, 'ok')
       return 200
     }
+    if (isBillingPath(pathname)) return billing.handle(req, res, pathname, (req.url ?? '').split('?')[1] ?? '')
     if (isWebsearch) return websearch.handle(req, res, pathname)
     if (pathname === '/link') return links === null ? jsonError(res, 503, 'not_configured') : links.create(req, res)
     if (pathname.startsWith('/l/')) return links === null ? notFoundPage(res) : links.open(req, res, pathname)
