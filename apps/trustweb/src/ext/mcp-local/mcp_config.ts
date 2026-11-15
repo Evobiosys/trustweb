@@ -19,6 +19,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'community_create', write: true }, { name: 'community_set_kind', write: true }, { name: 'community_add_member', write: true },
   { name: 'community_settings_set', write: true }, { name: 'support_ask', write: true }, { name: 'support_cancel', write: true },
   { name: 'event_create', write: true }, { name: 'event_signup', write: true }, { name: 'event_resource_ask', write: true }, { name: 'event_resource_cover', write: true }, { name: 'event_invitees_set', write: true }, { name: 'event_roles_set', write: true }, { name: 'event_person_identify', write: true },
+  // Wave 43b event-qr-join
+  { name: 'event_link_open', write: false },
   // Wave 43 event-press-share
   { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
   // Wave 43 event-feed

@@ -4,6 +4,7 @@
  * (the MCP tools use it too). A role entry is a person id, or a free name when no person card carries it.
  */
 import type { AppState, Person, Ring, TwEvent } from './model'
+import type { LinkKind } from './event_link'
 
 // Type imports only: the MCP server loads this file under plain node, which resolves no extensionless runtime imports.
 
@@ -112,4 +113,22 @@ export function identifyPerson(s: AppState, eventId: string, typed: string, o: I
   s.people.push({ id: o.id, name: name.slice(0, 40), context: '', ring: o.ring ?? NEW_FROM_EVENT_RING, metAt: o.now, lines: [] })
   tag(s, o.id, eventId)
   return { personId: o.id, created: true }
+}
+
+export const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** The role holders of an event as names: person ids resolve to the card's name, free names stay; the legacy organizer text splits on commas. */
+export function roleNames(ev: TwEvent, people: readonly Pick<Person, 'id' | 'name'>[], keys: readonly RoleKey[]): string[] {
+  const refs = keys.flatMap((k) => (k === 'organizers' ? eventOrganizers(ev) : ev[k] ?? []))
+  return roleLabels({ people: people as Person[] }, refs)
+}
+
+/** Host, organizer or tech support (held as a person id or a free name); an event I made without any host or organizer is mine. */
+export function isEventHost(ev: TwEvent, meName: string, people: readonly Pick<Person, 'id' | 'name'>[] = []): boolean {
+  return roleNames(ev, people, ['hosts', 'organizers', 'techSupport']).some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !eventOrganizers(ev).length)
+}
+
+/** Wave 43b event-qr-join: where an event link opens: the event's edit view for a host, organizer or tech support (or when the link is the host link), else the normal view. */
+export function eventLinkView(ev: TwEvent, kind: LinkKind, meName: string, people: readonly Pick<Person, 'id' | 'name'>[]): 'edit' | 'normal' {
+  return kind === 'host' || isEventHost(ev, meName, people) ? 'edit' : 'normal'
 }
