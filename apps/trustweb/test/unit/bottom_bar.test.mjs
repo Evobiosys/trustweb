@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Bottom bar (wave 31): configurable order, hidden views, one primary; pure. */
-import { DEFAULT_ORDER, STOCK_ORDER, PHONE_MAX, addBar, defaultPair, defaultPrimary, overflowChoices, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
+import { DEFAULT_ORDER, STOCK_ORDER, PHONE_MAX, addBar, defaultPair, defaultPrimary, overflowChoices, moreViews, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
 
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 /** The wave-31 row (Record in the centre) as a saved order: tests of the row rules use it, the unsaved stock row is D2 (bottom_bar_w42). */
@@ -182,13 +182,28 @@ describe('bottom_bar profiles (wave 33)', () => {
     const { customFrom } = await import('../../src/bottom_bar.ts')
     expect(customFrom(undefined, ['web', 'record'], null).primary).toBe('none')
   })
-  it('overflowChoices: views not in the bar, People and Map only when the user took them out', () => {
+  it('overflowChoices: every offered view that is not in the bar, People and Map included (wave 43)', () => {
     const ids = resolveBar(old(), all).ids
-    expect(overflowChoices(ids, [], all)).toEqual(['feed', 'timeline', 'ask', 'network'])
-    expect(overflowChoices(resolveBar(undefined, all).ids, [], all)).toEqual(['timeline', 'record', 'ask', 'network'])
-    expect(overflowChoices(ids, ['map'], all)).toEqual(['feed', 'timeline', 'ask', 'network', 'map'])
-    expect(overflowChoices(ids, [], { ...all, feed: false })).toEqual(['ask', 'network'])
-    expect(overflowChoices(['web', 'chat', 'record', 'events', 'inventory', 'feed', 'timeline', 'ask', 'network'], [], all)).toEqual([])
+    expect(overflowChoices(ids, [], all)).toEqual(['feed', 'timeline', 'ask', 'network', 'people', 'map'])
+    expect(overflowChoices(resolveBar(undefined, all).ids, [], all)).toEqual(['timeline', 'record', 'ask', 'network', 'people', 'map'])
+    expect(overflowChoices(ids, ['map'], all)).toEqual(['feed', 'timeline', 'ask', 'network', 'people', 'map'])
+    expect(overflowChoices(ids, [], { ...all, feed: false, map: false })).toEqual(['ask', 'network', 'people'])
+    expect(overflowChoices(['web', 'chat', 'record', 'events', 'inventory', 'feed', 'timeline', 'ask', 'network', 'people', 'map'], [], all)).toEqual([])
+  })
+  it('moreViews (wave 43): the ⋮ list = every offered view minus the buttons the row shows, whatever the width', () => {
+    const adv = { ...all, advanced: true, mods: ['community'] }
+    const bar = { order: [...STOCK_ORDER, 'view:rings'], hidden: ['record'] }
+    for (const f of [all, adv, { ...all, events: false, people: false }]) {
+      for (const b of [undefined, old(), bar, { ...old(), hidden: ['people', 'map'] }]) {
+        for (const max of [PHONE_MAX, 4, 10]) {
+          const { ids, primary } = resolveBar(b, f)
+          const shown = barLayout(ids, primary, max).shown
+          const want = barChoices(b, f).map((x) => x.id).filter((id) => !shown.includes(id))
+          expect([...moreViews(b, f, max)].sort()).toEqual([...want].sort())
+        }
+      }
+    }
+    expect(moreViews(undefined, all, PHONE_MAX)).toEqual(expect.arrayContaining(['map', 'people', 'ask', 'network', 'record']))
   })
   describe('view: entries (wave 35)', () => {
     const adv = { ...all, advanced: true }

@@ -24,7 +24,7 @@ try {
     check(`${w}: five buttons (Web, Chat, Feed, Events, Resources), only the centre Feed raised (wave 42 D2)`, (await page.locator('.tabs .tab-primary, .tabs .tab-record').count()) === 1 && (await page.locator('.tabs .tab-primary[data-go="feed"]').count()) === 1 && (await page.locator('.tabs > .tab, .tabs > button.tab-record').count()) === 5)
     await tap('[data-bar-more]'); await page.waitForTimeout(300)
     check(`${w}: ⋮ lists Record as a direct button, Community is not in the bar`, (await page.locator('.sheet.on [data-bar-view="record"]').count()) === 1 && (await page.locator('.tabs [data-go="mod:community"]').count()) === 0)
-    check(`${w}: ⋮ does not offer People or Map`, (await page.locator('.sheet.on [data-bar-view="people"], .sheet.on [data-bar-view="map"]').count()) === 0)
+    check(`${w}: ⋮ offers Map without adding and removing it first (wave 43; People only once there are people)`, (await page.locator('.sheet.on [data-bar-view="map"]').count()) === 1 && (await page.locator('.sheet.on [data-bar-view="people"]').count()) === 0)
     await page.screenshot({ path: `${SHOTS}/bar-sheet-2-more-${w}.png` })
     await tap('[data-bar-open-settings]'); await page.waitForTimeout(300)
     check(`${w}: no square checkbox drawn`, (await page.locator('.sheet.on .bar-opt-row input').evaluateAll((ns) => ns.length > 0 && ns.every((n) => getComputedStyle(n).opacity === '0'))))

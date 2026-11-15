@@ -277,8 +277,14 @@ export function activeProfile(bar: UiBar | undefined, f: BarFlags): string {
   return PROFILES.find((p) => p.primary === primary && p.order.join() === core.join())?.id ?? 'custom'
 }
 
-/** Wave 35: the views the ⋮ button lists: offered, not in the bar. People and Map only once the user took them out of it. */
-export function overflowChoices(ids: readonly BarId[], hidden: readonly string[], f: BarFlags): BarId[] {
+/** Wave 35: the views the ⋮ button lists: offered, not in the bar. Wave 43: People and Map too (they were listed only once taken out, so they stayed missing); `_hidden` stays for the callers. */
+export function overflowChoices(ids: readonly BarId[], _hidden: readonly string[], f: BarFlags): BarId[] {
   const mods = (f.mods ?? []).map((m): BarId => `mod:${m}`) // wave 39: a module view taken out of the row
-  return [...CHOICES, ...mods].filter((id) => offered(f).includes(id) && !ids.includes(id) && (id !== 'people' && id !== 'map' || hidden.includes(id)))
+  return [...CHOICES, ...mods].filter((id) => offered(f).includes(id) && !ids.includes(id))
+}
+
+/** Wave 43: everything the ⋮ sheet lists: the buttons the row has no room for, then every other offered view (view: entries too). Nothing offered and not in the row is missing. */
+export function moreViews(bar: UiBar | undefined, f: BarFlags, max: number): BarId[] {
+  const { ids, primary } = resolveBar(bar, f)
+  return [...barLayout(ids, primary, max).overflow, ...offered(f, bar).filter((id) => !ids.includes(id))]
 }

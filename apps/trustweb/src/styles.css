@@ -1192,17 +1192,15 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .cal-err{color:var(--warn,#b45309)}
 .cal-remind{margin:8px 0}
 .cal-drop-over{outline:2px dashed var(--electric); outline-offset:2px}
-.at-event-frame{position:relative; z-index:6; flex:none; height:18%; min-height:96px; box-sizing:border-box; padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 0; background:var(--electric); color:#fff; display:flex; flex-direction:column; justify-content:space-between}
-.at-event-frame .ae-row{display:flex; align-items:center; gap:6px}
+.at-event-frame{position:relative; z-index:6; flex:none; box-sizing:border-box; height:28px; margin:calc(env(safe-area-inset-top,0px) + 6px) 8px 0; background:var(--electric); color:#fff; border-radius:6px; display:flex; align-items:center}
 .at-event-frame .btn-ghost{color:#fff; border-color:rgba(255,255,255,.6)}
-.at-event-frame [aria-pressed="false"]{opacity:.5}
-.ae-name{flex:1; min-width:0; text-align:left; background:none; border:0; color:inherit; font:inherit; cursor:pointer; display:flex; flex-direction:column}
-.ae-name b,.ae-name i{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:normal}
-.ae-name i{font-size:12px; opacity:.85}
+.ae-name{flex:1; min-width:0; height:100%; padding:0 8px; text-align:left; background:none; border:0; color:inherit; font:inherit; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:4px}
+.ae-name b{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600}
+.ae-tag{flex:none; font-size:11px; opacity:.85}
 .ae-latch{align-self:center; width:100%; height:28px; background:none; border:0; cursor:grab; touch-action:none; display:flex; align-items:center; justify-content:center}
 .ae-latch span{width:56px; height:5px; border-radius:999px; background:rgba(255,255,255,.8)}
-.ae-panel{display:none; position:absolute; left:0; right:0; top:100%; max-height:46vh; overflow:auto; padding:8px 12px 12px; background:var(--linen); color:var(--ink); box-shadow:0 8px 16px rgba(0,0,0,.2)}
-.at-event-frame.open .ae-panel{display:block}
+.ae-row{display:flex; align-items:center; gap:6px}
+.ae-panel{margin:8px 0}
 .ae-new{font-style:normal; font-size:11px; background:var(--electric); color:#fff; border-radius:999px; padding:2px 8px}
 .ae-chip{display:inline-flex; align-items:center; gap:6px; margin:0 0 8px}
 .ae-chip-x{border:0; background:none; font:inherit; cursor:pointer; min-width:28px; min-height:28px}
@@ -1905,8 +1903,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .ev-people-head h3{margin:0; min-width:0}
 .ev-web-focus svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
 .filter-badge{display:inline-flex; align-items:center; justify-content:center; flex:none; min-width:24px; height:24px; padding:0 6px; border-radius:12px; border:0; background:var(--teal,#13867E); color:#fff; font:inherit; font-size:13px; font-weight:700; cursor:pointer}
-/* wave 43 event-feed: the social Feed (composer, post actions, event row); .tw-off = P2, an OFF toggle is struck through (greyscale screens), shared name (event-roles adds the same rule) */
-.tw-off{text-decoration:line-through}
+/* wave 43 event-feed: the social Feed (composer, post actions, event row) */
 .feed-compose{display:flex; flex-direction:column; gap:6px; margin:0 0 10px}
 .feed-compose .btn{align-self:flex-end; text-decoration:underline}
 .post-actions{display:flex; gap:6px; margin-top:6px}
@@ -1916,3 +1913,6 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .event-feed-panel{display:flex; flex-direction:column; gap:4px; padding:6px 4px}
 .event-feed-panel[hidden]{display:none}
 .event-feed-panel .btn{align-self:flex-start; text-decoration:underline}
+/* wave 43 shell-fit */
+/* The ⋮ sheet sits above the bottom bar and scrolls inside itself when its list is taller than the screen (P06). */
+.sheet[data-kind=bar-more].on{bottom:100px; max-height:calc(100% - 112px)}
