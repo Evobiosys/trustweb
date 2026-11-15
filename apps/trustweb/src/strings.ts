@@ -3957,6 +3957,8 @@ export const S = {
       event_offers_set: 'Switch support, resources and feed on for an event',
       event_times_set: 'Change when you are at an event',
       me_nickname_set: 'Set your nickname for event links',
+      notifications_list: 'List the bell\'s notifications by section',
+      notifications_mark_read: 'Mark all notifications read',
       feed_list: 'Read the Feed',
       feed_post: 'Post to the Feed or an event\'s Feed',
       feed_edit: 'Change one of your Feed posts',
@@ -4462,4 +4464,19 @@ export const S = {
   pastAsksTitle: (name: string) => `Asks from ${name}`,
   pastAskAnswer: 'Answer now',
   pastAskWhen: (days: number) => (days < 1 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`),
+  /** Wave 43b notify-center: the bell's page. */
+  w43b: {
+    bellAria: (n: number) => (n > 0 ? `Notifications, ${n} unread. Hold to mark all read` : 'Notifications'),
+    centerTitle: 'Notifications',
+    markedRead: 'All notifications marked read',
+    sections: { messages: 'New messages', wants: 'People who want to connect', connected: 'Connected', events: 'Events' } as Record<'messages' | 'wants' | 'connected' | 'events', string>,
+    sectionEmpty: 'Nothing new.',
+    sendMessage: 'Send a message',
+    openChat: 'Open chat',
+    openCard: 'Open',
+    add: 'Add',
+    newlyAdded: 'Newly added',
+    wantsRingAria: 'wants to connect',
+    connectedAgo: (name: string) => `${name} connected`,
+  },
 } as const

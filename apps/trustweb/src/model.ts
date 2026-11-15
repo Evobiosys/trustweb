@@ -1100,6 +1100,8 @@ export interface AppState {
   missedPopupOff?: true
   /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
   notifInbox?: InboxItem[]
+  /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
+  notifReadAt?: number
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
   /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */

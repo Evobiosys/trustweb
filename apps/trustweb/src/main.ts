@@ -352,6 +352,8 @@ import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { createMissedPopup } from './notify_popup_view'
+import { createNotifyCenter, hasBell } from './notify_center_view'
+import { newlyAdded } from './notify_center'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
 import { createToast, fadeHost, type ToastOpts } from './toast'
@@ -1077,6 +1079,12 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 /** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
 const pages = createPages(phone)
+/** Wave 43b notify-center: the bell in the header of Web and Chat and its page. */
+const notifyCenter = createNotifyCenter({
+  state: st, save: () => save(), page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), changed: () => render(),
+  openChat: (personId) => { pages.closeAll(); chatSheet(personId) }, addWant: (peerId, name) => addWantSheet(peerId, name),
+  openCard: (personId) => openCardPage(personId), openEvents: () => openEvents(),
+})
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
 /** Wave 39: the one Import page (contacts, resources file, Tana, earlier imports with Undo); every old entry point opens it. */
 const importHooks = (): ServicesHooks => ({
@@ -1264,7 +1272,7 @@ function renderTabs(): void {
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
   const community = guest ? null : modeShell.tabs() // wave 41: the Community interface has its own row
-  const halo = new Set(guest || community ? [] : haloOf(state?.uiBar, ids))
+  const halo = new Set(guest || community ? [] : haloOf(state?.uiBar, ids, [primary, ...pair].filter((x): x is BarId => x !== null)))
   tabs.replaceChildren(...(community ?? shown.map((id) => barButton(id, id === primary || pair.includes(id), halo.has(id)))), ...(guest || community ? [] : [more]))
   document.body.toggleAttribute('data-community-mode', community !== null)
   tabs.classList.toggle('four', (community ?? shown).length > 3)
@@ -1813,7 +1821,7 @@ function mountHeaderControls(): void {
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
-  right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
+  right.replaceChildren(...(hasBell(screen) ? [notifyCenter.bell()] : []), ...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
@@ -3165,8 +3173,16 @@ function chatListBody(): Node[] {
   const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
   const find = chatFindRows(s.chats, people, chatQuery)
   const community = communityChatRow()
+  const fresh = newlyAdded(people, s.peers, now)
   return [
     ...(community ? [community] : []),
+    ...(fresh.length && !chatQuery.trim() && !s.chatsHidden ? [el('section', { class: 'chat-newly', 'data-chat-newly': '' }, [
+      el('h3', {}, [S.w43b.newlyAdded]),
+      ...fresh.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-newly-row': r.personId, onclick: () => chatSheet(r.personId) }, [
+        avatar(r.name, r.personId),
+        el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [S.w43b.connectedAgo(ageLabel(r.at, now))])]),
+      ])),
+    ])] : []),
     ...(rows.length ? rows.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
       avatar(r.name, r.personId),
       el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),

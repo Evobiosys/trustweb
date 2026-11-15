@@ -6,7 +6,8 @@ import { inExpanse } from './expanse'
 export const WEB_RINGS: readonly Ring[] = [...RINGS, Ring.Unsorted]
 
 /** Where a person is drawn: their ring only when confirmed; a suggested ring, none, unsorted and no ring at all sit on the unsorted ring. */
-export function webSlot(p: Pick<Person, 'ring' | 'fields' | 'ringSuggested'>): Ring {
+export function webSlot(p: Pick<Person, 'ring' | 'fields' | 'ringSuggested'> & Partial<Pick<Person, 'reachedOut'>>): Ring {
+  if (p.reachedOut === 'received' && p.ring === Ring.Intending) return Ring.Unsorted // wave 43b (A3): someone who wants to connect waits on the unsorted ring
   const r = ringSlot(p)
   return WEB_RINGS.includes(r) && !p.ringSuggested ? r : Ring.Unsorted
 }

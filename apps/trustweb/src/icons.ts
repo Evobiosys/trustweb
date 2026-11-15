@@ -5,6 +5,8 @@
 // x, qr, handshake, settings (a cog, never a sun-like icon: owner 2026-10-05),
 // users and info are Lucide icons (lucide.dev, ISC licence).
 export const ICONS: Record<string, string> = {
+  // Wave 43b: the notifications bell (Lucide bell, ISC licence).
+  bell: '<svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
   web: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="10.5" stroke-dasharray="2 3"/></svg>',
   // Wave 36: the Your AI button; wave 39: a clear four-point sparkle with a small one beside it.
   sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3c.7 5.6 3.2 8.3 8.5 9-5.3.7-7.8 3.4-8.5 9-.7-5.6-3.2-8.3-8.5-9C6.8 11.3 9.3 8.6 10 3z"/><path d="M19 2.5c.25 1.9.95 2.6 2.7 2.9-1.75.3-2.45 1-2.7 2.9-.25-1.9-.95-2.6-2.7-2.9 1.75-.3 2.45-1 2.7-2.9z"/></svg>',

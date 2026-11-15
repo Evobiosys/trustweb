@@ -1919,3 +1919,13 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:100px; max-height:calc(100% - 112px)}
 /* wave 43 sync-visibility */
 .sync-advanced{margin-top:12px}
+/* wave43b notify-center */
+:root{--wants-ring:#C2185B}
+.notify-bell{position:relative}
+.notify-count{position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; box-sizing:border-box; background:var(--ink); color:var(--linen,#fff); font-size:10px; font-weight:700; line-height:16px; text-align:center}
+.notify-center{padding:0 12px 12px}
+.notify-section h3{margin:14px 0 4px}
+.notify-row.unread .who b{font-weight:800}
+.chat-newly h3{margin:8px 12px 2px; font-size:13px}
+/* "wants to connect": dashed outline plus colour (greyscale-safe), on the unsorted ring */
+.node.wants .ava{outline:2px dashed var(--wants-ring); outline-offset:2px}
