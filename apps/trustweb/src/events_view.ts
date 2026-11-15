@@ -44,6 +44,8 @@ export interface EventsViewHooks {
   extra?: (ev: TwEvent) => Node[]
   /** Wave 42 community-event: the sections of a community event (about, sign-up, roles, resources), drawn right under the date and place. */
   plan?: (ev: TwEvent) => Node[]
+  /** Wave 43 event-feed: the Feed row of an event that offers a Feed, drawn under the date and place; null when it offers none. */
+  feedRow?: (ev: TwEvent) => HTMLElement | null
   /** Wave 33: opens the edit sheet of an invitation shown among the events. */
   openInvitation?: (i: Invitation) => void
   /** Wave 27: the QR page of an event (qr_modes.ts): the event and my connect code in one code. */
@@ -451,6 +453,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.themes ? editable(el('div', { class: 'chips', 'data-event-themes': '' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))), ev, 'themes') : null,
       ev.conditions ? editable(el('p', { 'data-event-conditions': '' }, [ev.conditions]), ev, 'conditions') : null,
       ...(h.plan?.(ev) ?? []),
+      h.feedRow?.(ev) ?? null,
       offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.() }, [S.w43press.askSupport]) : null,
       el('div', { class: 'chips' }, [attended, notify]),
       notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,

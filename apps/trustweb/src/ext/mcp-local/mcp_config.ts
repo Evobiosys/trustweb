@@ -21,6 +21,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'event_create', write: true }, { name: 'event_signup', write: true }, { name: 'event_resource_ask', write: true }, { name: 'event_resource_cover', write: true }, { name: 'event_invitees_set', write: true }, { name: 'event_roles_set', write: true }, { name: 'event_person_identify', write: true },
   // Wave 43 event-press-share
   { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
+  // Wave 43 event-feed
+  { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
   // Wave 42 settings-llm-first
   { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai

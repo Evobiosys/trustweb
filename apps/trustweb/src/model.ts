@@ -1071,6 +1071,9 @@ export interface AppState {
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
   /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
   groupPosts?: GroupPost[]
+  /** Wave 43 (feed_social.ts): my own Feed posts, kept on this phone; stars are post ids (`social:<id>`, `group:<id>`, ...). */
+  feedPosts?: SocialPost[]
+  feedStars?: string[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
@@ -1464,6 +1467,9 @@ export interface FeedSettings {
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
 export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number; /** feed_nostr.ts: discussion, request, offer or event. Absent: discussion. */ type?: string; /** A channel id of the group (FeedSettings.groupMeta). Absent: the group itself. */ channel?: string; /** 0 members only, 1 friends of members, 2 friends of friends. Absent: 0. */ hops?: number; /** A relay took it. Absent: kept on this phone only. */ sent?: true }
+
+/** Wave 43: a Feed post of mine. `tag` = event_<slug> and `eventId` when made on an event's Feed; `replyTo` = the Feed id of the post it answers. */
+export interface SocialPost { id: string; text: string; by: string; at: number; tag?: string; eventId?: string; replyTo?: string; /** The first 120 characters of the post it answers. */ replyText?: string }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {

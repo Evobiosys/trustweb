@@ -7,11 +7,14 @@
  * switched on, and "Share to..." on an item or post, always the person's tap.
  */
 import { el } from '../../demo/src/ui/dom'
-import { buildFeed, filterFeed, FeedSource, PostKind } from './feed'
+import { contextPress } from './context_press'
+import { eventTagLabel } from './events'
+import { buildFeed, filterFeed, FeedSource, isTimelinePost, PostKind } from './feed'
 import type { Post } from './feed'
 import { followPosts, followText, followUrl, groupPosts, groupsOf, parseFeedText, parseFollow, sourceCounts } from './feed_sources'
 import type { FeedItem } from './feed_sources'
-import { addGroupPosts, buildJoin, canPost, channelTag, ensureNostrKey, GOVERNANCE, hopsOf, parseRelay, POST_TYPES, tagIndex, visibleByHops } from './feed_nostr'
+import { addSocialPost, editSocialPost, eventFeedOn, tagOfEvent, toggleStar } from './feed_social'
+import { addGroupPosts, buildJoin, buildPost, canPost, channelTag, ensureNostrKey, GOVERNANCE, hopsOf, parseRelay, POST_TYPES, tagIndex, visibleByHops } from './feed_nostr'
 import type { Target } from './feed_nostr'
 import type { NostrEvent, PostType } from './feed_nostr'
 import { publish, readGroups } from './feed_relay'
@@ -22,7 +25,7 @@ import type { RemoteStatus } from './fediverse'
 import type { ImageStore } from './image_store'
 import { shrink } from './image_store'
 import { ageLabel, FediverseReach, feedOn } from './model'
-import type { AppState, FediverseLink, FeedSettings, InventoryItem, Person } from './model'
+import type { AppState, FediverseLink, FeedSettings, InventoryItem, Person, TwEvent } from './model'
 import { provenanceChip } from './provenance_view'
 import { askPersist } from './storage_persist'
 import { S } from './strings'
@@ -47,11 +50,16 @@ export interface FeedViewHooks {
   settings: () => void
   /** Wave 27: an item's Share opens the Share page (share_page_view.ts), not the old "Share to..." sheet. */
   openSharePage: (itemId: string) => void
+  /** Wave 43: show the Feed screen (an event's Feed row opens it filtered to the event's tag). */
+  openFeed: () => void
 }
 
 export interface FeedView {
-  /** The Feed screen's body (under the header). */
-  body(): HTMLElement
+  /** The Feed screen's body (under the header); 'timeline' (wave 43) is the record of what happened, 'feed' the posts of people. */
+  body(mode?: 'feed' | 'timeline'): HTMLElement
+  /** Wave 43: an event page's Feed row (null when the event offers none), and opening the Feed filtered to an event. */
+  eventRow(ev: TwEvent): HTMLElement | null
+  showEvent(eventId: string): void
   settingsGroup(): HTMLElement[]
   /** On a person's sheet: their Mastodon or Pixelfed address, and whether the Feed shows their public posts. */
   personRow(p: Person): HTMLElement
@@ -70,7 +78,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   const fetching = new Set<string>()
   let objectUrls: string[] = []
   const followed_ = new Map<string, { at: number; items: FeedItem[] | FetchProblem }>()
-  const chosen: { source?: FeedSource; group?: string; channel?: string } = {}
+  const chosen: { source?: FeedSource; group?: string; channel?: string; tag?: string } = {}
+  const chosenTimeline: { source?: FeedSource; group?: string; channel?: string; tag?: string } = {}
   const inbound = new Map<string, { at: number; posts: Post[] }>()
   const joined = new Set<string>()
 
@@ -239,61 +248,155 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     return img
   }
 
-  function postEl(post: Post): HTMLElement {
+  /** The event a tag (`event_<slug>`) belongs to, on this device. */
+  const eventOfTag = (tag?: string): TwEvent | undefined => (tag ? h.state().events?.find((e) => tagOfEvent(e) === tag) : undefined)
+  const tagText = (tag: string): string => { const ev = eventOfTag(tag); return ev ? eventTagLabel(ev.tagName ?? ev.name) : tag }
+
+  /** Event posts also go to the relay the person set, as a post to the event's group (feed_nostr.ts); with none set nothing leaves the phone. */
+  function shareToRelay(text: string, eventId: string | undefined): void {
+    const s = h.state()
+    const urls = s.feed?.relays ?? []
+    if (!eventId || !urls.length || !s.events?.some((e) => e.id === eventId && e.attended)) return
+    const group = `event:${eventId}`
+    void sendOut([{ id: `social:${eventId}`, group }], [buildPost(ensureNostrKey(s), group, text, 'discussion', Date.now())], urls)
+  }
+
+  /** Writes a post of mine (on an event's Feed when eventId is set) and redraws; false when there was nothing to post. */
+  function writePost(text: string, o: { eventId?: string; replyTo?: string; replyText?: string }): boolean {
+    const post = addSocialPost(h.state(), text, Date.now(), o)
+    if (!post) return false
+    h.save(); h.redrawFeed(); h.toast(S.feedPostedSocial)
+    shareToRelay(post.text, post.eventId)
+    return true
+  }
+
+  function postEl(post: Post, social: boolean): HTMLElement {
     const who = post.who ?? S.feedYou
     const canShare = post.kind === PostKind.Mine || post.kind === PostKind.Remote
-    return el('article', { class: 'post post-' + post.kind, 'data-post': post.id, 'data-post-kind': post.kind }, [
-      el('button', { class: 'post-main', onclick: () => open(post) }, [
-        h.avatar(who, post.personId ?? 'me'),
-        el('div', { class: 'post-body' }, [
-          el('div', { class: 'post-head' }, [el('b', {}, [who]), el('span', { class: 'meta' }, [S.feedKind[post.kind] + ' · ' + ageLabel(post.at, Date.now())])]),
-          el('p', { class: 'post-text' }, [post.text]),
-          post.context ? el('p', { class: 'meta post-ctx' }, [post.kind === PostKind.Answer ? S.feedAsked(post.context) : post.context]) : null,
-          el('div', { class: 'post-tags' }, [
-            post.type ? el('span', { class: 'chip', 'data-post-type': post.type }, [S.feedType[post.type] ?? post.type]) : null,
-            post.unsent ? el('span', { class: 'meta', 'data-post-unsent': '1' }, [(h.state().feed?.relays ?? []).length ? S.feedNotSent : S.feedNotSentNoRelay]) : null,
-            provenanceChip(post.provenance ? { kind: post.provenance } : undefined), post.dummy ? h.dummyChip() : null]),
-        ]),
+    const mineText = post.kind === PostKind.Social
+    const starred = (h.state().feedStars ?? []).includes(post.id)
+    const main = el('button', { class: 'post-main', onclick: () => (mineText ? editSheet(post) : open(post)) }, [
+      h.avatar(who, post.personId ?? 'me'),
+      el('div', { class: 'post-body' }, [
+        el('div', { class: 'post-head' }, [el('b', {}, [who]), el('span', { class: 'meta' }, [S.feedKind[post.kind] + ' · ' + ageLabel(post.at, Date.now())])]),
+        el('p', { class: 'post-text' }, [post.text]),
+        post.context ? el('p', { class: 'meta post-ctx' }, [post.kind === PostKind.Answer ? S.feedAsked(post.context) : post.kind === PostKind.Social ? S.feedReplying(post.context) : post.context]) : null,
+        el('div', { class: 'post-tags' }, [
+          post.tag ? el('span', { class: 'chip', 'data-post-tag': post.tag }, [tagText(post.tag)]) : null,
+          post.type ? el('span', { class: 'chip', 'data-post-type': post.type }, [S.feedType[post.type] ?? post.type]) : null,
+          post.unsent ? el('span', { class: 'meta', 'data-post-unsent': '1' }, [(h.state().feed?.relays ?? []).length ? S.feedNotSent : S.feedNotSentNoRelay]) : null,
+          provenanceChip(post.provenance ? { kind: post.provenance } : undefined), post.dummy ? h.dummyChip() : null]),
       ]),
+    ])
+    if (mineText) contextPress(main, () => editSheet(post))   // wave 43 P1: a long press or right click always edits
+    return el('article', { class: 'post post-' + post.kind, 'data-post': post.id, 'data-post-kind': post.kind }, [
+      main,
       imageEl(post),
+      social ? el('div', { class: 'post-actions' }, [
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-post-reply': post.id, onclick: () => replySheet(post) }, [S.feedReply]),
+        el('button', { class: 'btn btn-ghost btn-sm' + (starred ? ' on' : ' tw-off'), 'aria-pressed': String(starred), 'data-post-star': post.id, onclick: () => { toggleStar(h.state(), post.id); h.save(); h.redrawFeed() } }, [starred ? S.feedStarred : S.feedStar]),
+      ]) : null,
       canShare ? el('button', { class: 'btn btn-ghost btn-sm', 'data-share-post': post.id, onclick: () => shareSheet(post.text, Boolean(post.imageId || post.imageUrl)) }, [S.shareTo]) : null,
     ])
   }
 
-  function body(): HTMLElement {
+  /** One text sheet: a quote of what it answers (optional), the box, one button. */
+  function textSheet(title: string, quote: string | null, ph: string, start: string, button: string, go: (text: string) => boolean, attr: string): void {
+    const text = el('textarea', { class: 'field', rows: '3', placeholder: ph, 'aria-label': ph, [attr]: '1' }) as HTMLTextAreaElement
+    text.value = start
+    h.openSheet([el('h3', {}, [title]), quote ? el('blockquote', { class: 'shared-notes' }, [quote.slice(0, 300)]) : null, text,
+      el('button', { class: 'btn btn-electric', [`${attr}-send`]: '1', onclick: () => { if (go(text.value)) h.closeSheet(); else text.focus() } }, [button])])
+    setTimeout(() => text.focus(), 0)
+  }
+
+  function replySheet(post: Post): void {
+    textSheet(S.feedReplyTitle, post.text, S.feedReplyPh, '', S.feedComposeSend, (text) => writePost(text, { replyTo: post.id, replyText: post.text, eventId: eventOfTag(post.tag)?.id }), 'data-feed-reply-text')
+  }
+
+  function editSheet(post: Post): void {
+    textSheet(S.feedEditTitle, null, S.feedComposePh, post.text, S.feedEditSave, (text) => { if (!editSocialPost(h.state(), post.id.slice('social:'.length), text)) return false; h.save(); h.redrawFeed(); return true }, 'data-feed-edit-text')
+  }
+
+  /** The box at the top of the Feed: a post of mine, on the event's Feed while one is chosen. */
+  function composer(eventId?: string): HTMLElement {
+    const text = el('textarea', { class: 'field', rows: '2', placeholder: S.feedComposePh, 'aria-label': S.feedComposePh, 'data-feed-compose': '1' }) as HTMLTextAreaElement
+    return el('div', { class: 'feed-compose' }, [text, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) text.value = ''; else text.focus() } }, [S.feedComposeSend])])
+  }
+
+  function body(mode: 'feed' | 'timeline' = 'feed'): HTMLElement {
     for (const u of objectUrls) URL.revokeObjectURL(u)
     objectUrls = []
+    const timeline = mode === 'timeline'
+    const sel = timeline ? chosenTimeline : chosen
     const tags = loadColourTags()
     const groups = groupsOf(h.state(), tags)
-    const all = buildFeed(h.state(), [...remoteFor(), ...followedPosts(), ...groupPosts(h.state(), tags), ...relayPosts(groups)])
-    if (chosen.group && !groups.some((g) => g.id === chosen.group)) delete chosen.group
+    const all = buildFeed(h.state(), [...remoteFor(), ...followedPosts(), ...groupPosts(h.state(), tags), ...relayPosts(groups)]).filter((p) => isTimelinePost(p) === timeline)
+    if (sel.group && !groups.some((g) => g.id === sel.group)) delete sel.group
     const metas = h.state().feed?.groupMeta ?? {}
-    if (chosen.channel && !metas[chosen.group ?? '']?.channels?.some((c) => c.id === chosen.channel)) delete chosen.channel
-    const posts = filterFeed(all, chosen).filter((p) => !chosen.channel || p.channel === chosen.channel)
+    if (sel.channel && !metas[sel.group ?? '']?.channels?.some((c) => c.id === sel.channel)) delete sel.channel
+    if (sel.tag && !eventOfTag(sel.tag)) delete sel.tag
+    const posts = filterFeed(all, sel).filter((p) => !sel.channel || p.channel === sel.channel)
     const counts = sourceCounts(all)
-    const pick = (source?: FeedSource, group?: string, channel?: string): void => { chosen.source = source; if (group) chosen.group = group; else delete chosen.group; if (channel) chosen.channel = channel; else delete chosen.channel; h.redrawFeed() }
+    const pick = (source?: FeedSource, group?: string, channel?: string): void => { sel.source = source; if (group) sel.group = group; else delete sel.group; if (channel) sel.channel = channel; else delete sel.channel; h.redrawFeed() }
     const chip = (label: string, on: boolean, attrs: Record<string, string>, go: () => void): HTMLElement => el('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), ...attrs, onclick: go }, [label])
-    return el('div', { class: 'scroll pad feed' }, [
+    const sources = timeline ? [FeedSource.Web, FeedSource.Ask] : [FeedSource.Web, FeedSource.Group, FeedSource.Fediverse, FeedSource.News]
+    const tagEvent = eventOfTag(sel.tag)
+    return el('div', { class: 'scroll pad feed', 'data-feed-mode': mode }, [
+      tagEvent ? el('div', { class: 'feed-chips', 'data-feed-tag': sel.tag ?? '' }, [el('b', {}, [S.feedOnTag(eventTagLabel(tagEvent.tagName ?? tagEvent.name))]), el('button', { class: 'btn btn-ghost btn-sm', 'data-feed-tag-clear': '1', onclick: () => { delete sel.tag; h.redrawFeed() } }, [S.feedTagClear])]) : null,
+      timeline ? null : composer(tagEvent?.id),
       el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedChipsLabel }, [
-        chip(S.feedAll, !chosen.source, { 'data-feed-src': 'all' }, () => pick()),
-        ...Object.values(FeedSource).map((src) => chip(`${S.feedSrc[src]} ${counts[src]}`, chosen.source === src, { 'data-feed-src': src }, () => pick(chosen.source === src ? undefined : src))),
-        el('button', { class: 'btn btn-electric btn-sm', 'data-feed-post': '1', onclick: () => postSheet(groups) }, [S.feedPost]),
+        chip(S.feedAll, !sel.source, { 'data-feed-src': 'all' }, () => pick()),
+        ...sources.map((src) => chip(`${S.feedSrc[src]} ${counts[src]}`, sel.source === src, { 'data-feed-src': src }, () => pick(sel.source === src ? undefined : src))),
+        timeline ? null : el('button', { class: 'btn btn-electric btn-sm', 'data-feed-post': '1', onclick: () => postSheet(groups) }, [S.feedPostGroup]),
       ]),
-      chosen.source === FeedSource.Group && groups.length
+      sel.source === FeedSource.Group && groups.length
         ? el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedGroupsLabel }, groups.flatMap((g) => [
-          chip(g.name, chosen.group === g.id && !chosen.channel, { 'data-feed-group': g.id }, () => pick(FeedSource.Group, chosen.group === g.id && !chosen.channel ? undefined : g.id)),
-          ...(metas[g.id]?.channels ?? []).map((c) => chip(`${g.name} > ${c.name}`, chosen.group === g.id && chosen.channel === c.id, { 'data-feed-channel-chip': `${g.id}|${c.id}` }, () => pick(FeedSource.Group, g.id, c.id))),
+          chip(g.name, sel.group === g.id && !sel.channel, { 'data-feed-group': g.id }, () => pick(FeedSource.Group, sel.group === g.id && !sel.channel ? undefined : g.id)),
+          ...(metas[g.id]?.channels ?? []).map((c) => chip(`${g.name} > ${c.name}`, sel.group === g.id && sel.channel === c.id, { 'data-feed-channel-chip': `${g.id}|${c.id}` }, () => pick(FeedSource.Group, g.id, c.id))),
         ]))
         : null,
-      chosen.source === FeedSource.Group && chosen.group
-        ? el('p', { class: 'meta', 'data-feed-governance': metas[chosen.group]?.governance ?? 'open' }, [S.feedGov[metas[chosen.group]?.governance ?? 'open']])
+      sel.source === FeedSource.Group && sel.group
+        ? el('p', { class: 'meta', 'data-feed-governance': metas[sel.group]?.governance ?? 'open' }, [S.feedGov[metas[sel.group]?.governance ?? 'open']])
         : null,
       ...problems(),
       posts.length
-        ? el('div', { class: 'posts' }, posts.map(postEl))
-        : el('div', { class: 'empty feed-empty', 'data-feed-empty': '1' }, [el('p', {}, [S.feedEmpty]), el('ul', {}, S.feedEmptyList.map((t) => el('li', {}, [t])))]),
-      el('p', { class: 'foot' }, [S.feedFoot]),
+        ? el('div', { class: 'posts' }, posts.map((p) => postEl(p, !timeline)))
+        : timeline
+          ? el('div', { class: 'empty feed-empty', 'data-feed-empty': '1' }, [el('p', {}, [S.feedEmpty]), el('ul', {}, S.feedEmptyList.map((t) => el('li', {}, [t])))])
+          : el('div', { class: 'empty feed-empty', 'data-feed-empty': '1' }, [el('p', {}, [S.feedEmptySocial])]),
+      el('p', { class: 'foot' }, [timeline ? S.feedFoot : S.feedFootSocial]),
     ])
+  }
+
+  /** An event page's Feed row: a V expander (P3) with the latest posts on the event and a way into the Feed; a long press or right click opens the Feed itself (P1). */
+  function eventRow(ev: TwEvent): HTMLElement | null {
+    if (!feedOn(h.state()) || !eventFeedOn(ev)) return null
+    const tag = tagOfEvent(ev)
+    const panel = el('div', { class: 'event-feed-panel', hidden: true })
+    const toggle = el('button', { class: 'btn btn-ghost wide', type: 'button', 'aria-expanded': 'false', 'data-event-feed-toggle': '1' }, [S.feedEventRow + ' ▾'])
+    toggle.addEventListener('click', () => {
+      const openNow = panel.hidden
+      panel.hidden = !openNow
+      toggle.setAttribute('aria-expanded', String(openNow))
+      toggle.textContent = S.feedEventRow + (openNow ? ' ▴' : ' ▾')
+      if (!openNow) return
+      const latest = filterFeed(buildFeed(h.state(), groupPosts(h.state(), [])), { tag }).filter((p) => !isTimelinePost(p)).slice(0, 3)
+      panel.replaceChildren(
+        el('p', { class: 'meta' }, [eventTagLabel(ev.tagName ?? ev.name)]),
+        ...(latest.length ? latest.map((p) => el('p', { class: 'meta', 'data-event-feed-post': p.id }, [`${p.who ?? S.feedYou}: ${p.text}`])) : [el('p', { class: 'meta' }, [S.feedEventRowEmpty])]),
+        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-event-feed-open': '1', onclick: () => showEvent(ev.id) }, [S.feedEventRowOpen]),
+      )
+    })
+    contextPress(toggle, () => showEvent(ev.id))
+    return el('div', { class: 'event-feed-row', 'data-event-feed': ev.id }, [toggle, panel])
+  }
+
+  function showEvent(eventId: string): void {
+    const ev = h.state().events?.find((e) => e.id === eventId)
+    if (!ev) return
+    delete chosen.source; delete chosen.group; delete chosen.channel
+    chosen.tag = tagOfEvent(ev)
+    h.openFeed()
   }
 
   /** "Post to <group>": only groups the person is in are offered. */
@@ -519,5 +622,5 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     return box
   }
 
-  return { body, settingsGroup, personRow, itemExtras, dropImage: (id) => { void h.images.remove(id) } }
+  return { body, eventRow, showEvent, settingsGroup, personRow, itemExtras, dropImage: (id) => { void h.images.remove(id) } }
 }

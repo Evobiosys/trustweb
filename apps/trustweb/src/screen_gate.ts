@@ -18,6 +18,7 @@ const NEEDS: Record<string, (on: ScreenParts) => boolean> = {
   events: (on) => on.events,
   inventory: (on) => on.inventory,
   feed: (on) => on.feed,
+  timeline: (on) => on.feed,
   notes: (on) => on.resources,
 }
 

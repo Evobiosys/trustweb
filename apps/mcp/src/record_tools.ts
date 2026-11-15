@@ -13,6 +13,7 @@ import { barTools } from './bar_tools.ts'
 import { webFilterTools } from './web_filter_tools.ts'
 import { communityTools } from './community_tools.ts'
 import { eventTools } from './event_tools.ts'
+import { feedTools } from './feed_tools.ts'
 import type { Tool } from './protocol.ts'
 import { settingsTools } from './settings_tools.ts'
 
@@ -276,5 +277,6 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
 
   const community = communityTools({ load: () => load(o.file) as never, commit: commit as never, write: o.write, now })
   const events = eventTools({ load: () => load(o.file) as never, commit: commit as never, now })
-  return [...read, ...community.read, ...(o.write ? [...write, ...community.write, ...events.write] : []), ...barTools(o), ...webFilterTools(o), ...settingsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
+  const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now })
+  return [...read, ...community.read, ...feed.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write] : []), ...barTools(o), ...webFilterTools(o), ...settingsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

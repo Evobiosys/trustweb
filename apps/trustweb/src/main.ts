@@ -372,6 +372,8 @@ enum Screen {
   StillTrue = 'still',
   /** What people in your web shared with you, and what you share (wave 1733 round B). */
   Feed = 'feed',
+  /** Wave 43: the record of what happened (answers, meetings, notes, what I share); the Feed is the posts of people. */
+  Timeline = 'timeline',
   /** Events: where and when I met people (E1, wave 7); opened from the Web screen. */
   Events = 'events',
   /** Wave 24: every chat, newest first (bottom row). */
@@ -1190,7 +1192,7 @@ function recordButton(): HTMLElement {
 }
 
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
-const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
+const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', timeline: 'list', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
 const askIconVariant = ((typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) || import.meta.env.DEV) && params.get('askicon') === 'plain' ? 'plain' : 'rings'
@@ -1963,6 +1965,7 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
+      case Screen.Timeline: return [header(S.timelineTitle), feed.body('timeline')]
       case Screen.Events: { const b = cal && eventsView.atList() ? cal.body() : eventsView.body(); return [...b.slice(0, 1), ...reminderRows(), ...b.slice(1)] }
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
@@ -5148,6 +5151,7 @@ const eventsView = createEventsView({
   by: eventsBy,
   showQr: (ev, host) => eventQr(ev, false, host),
   askSupport: () => supportSheet(supportIo),
+  feedRow: (ev) => feed.eventRow(ev),
   plan: (ev) => eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }),
   extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),
@@ -5229,7 +5233,7 @@ bindTw({
 // Wave 40 ai-edit-chat: every step the person can tap, as undoable commands (actions.ts, app_actions.ts). The bar, Variations, Extensions,
 // Theme and the Curate page run through them; the assistant proposes the same commands, so whatever a hand can do, it can do too.
 const appActions = createActions()
-const BAR_PLACES: Partial<Record<AppPlace, BarId>> = { web: 'web', chat: 'chat', people: 'people', resources: 'inventory', events: 'events', feed: 'feed' }
+const BAR_PLACES: Partial<Record<AppPlace, BarId>> = { web: 'web', chat: 'chat', people: 'people', resources: 'inventory', events: 'events', feed: 'feed', timeline: 'timeline' }
 let placeNow: AppPlace | null = null
 function openAppPlace(place: AppPlace, personId?: string): void {
   placeNow = place
@@ -5332,8 +5336,9 @@ const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet: openCardPage, itemSheet,
   openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },
   openMeeting: (id) => { const m = pastMeetings(st()).find((x) => x.id === id); if (m) pastMeetingSheet(m) },
-  redrawFeed: () => { if (screen === Screen.Feed) render() },
-  tabsChanged: () => { renderTabs(); if (screen === Screen.Feed && !feedOn(st())) screen = Screen.Web; render() },
+  redrawFeed: () => { if (screen === Screen.Feed || screen === Screen.Timeline) render() },
+  tabsChanged: () => { renderTabs(); if ((screen === Screen.Feed || screen === Screen.Timeline) && !feedOn(st())) screen = Screen.Web; render() },
+  openFeed: () => go(Screen.Feed),
   settings: settingsSheet,
   openSharePage: (itemId) => pages.open(S.sharePageTitle, [sharePageBody({ state: st, save, toast, page: (title, body, mark) => pages.open(title, body, mark), close: () => history.back() }, itemId)], 'share-page'),
 })
@@ -7194,7 +7199,7 @@ function twChanged(after: () => void = settingsSheet): void {
   document.body.dataset.twProfile = profileOf(state?.twSettings)
   applyVariation()
   const s = st()
-  if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
+  if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || ((screen === Screen.Feed || screen === Screen.Timeline) && !feedOn(s))) screen = Screen.Web
   if (screen === Screen.Ext && !twRegistry.views().some((v) => v.id === extViewId)) screen = Screen.Web
   modeShell.settle() // wave 41: Community switched off underneath = back to Personal
   renderTabs(); render(); after()

@@ -8,6 +8,7 @@
  * membership is never shown beyond it.
  */
 import type { ColourTag } from './colour_tags'
+import { tagOfEvent } from './feed_social'
 import { PostKind, sourceOf } from './feed'
 import type { FeedSource, Post } from './feed'
 import { htmlToText, instanceBase, parseHandle, safeRemoteUrl } from './fediverse'
@@ -40,8 +41,9 @@ export function addGroupPost(s: AppState, group: string, text: string, now: numb
 /** Group posts as Feed posts, for groups the person is in only. */
 export function groupPosts(s: AppState, tags: readonly ColourTag[]): Post[] {
   const names = new Map(groupsOf(s, tags).map((g) => [g.id, g.name]))
+  const tagOf = (group: string): string | undefined => { const ev = group.startsWith('event:') ? s.events?.find((e) => e.id === group.slice(6)) : undefined; return ev ? tagOfEvent(ev) : undefined }
   return (s.groupPosts ?? []).filter((p) => names.has(p.group)).map((p): Post => ({
-    id: `group:${p.id}`, kind: PostKind.Group, who: p.by === s.me.displayName ? null : p.by, at: p.at, text: p.text, context: p.channel ? `${names.get(p.group)} > ${s.feed?.groupMeta?.[p.group]?.channels?.find((c) => c.id === p.channel)?.name ?? p.channel}` : names.get(p.group), group: p.group, channel: p.channel, type: p.type ?? 'discussion', unsent: p.sent !== true, dummy: false, open: { kind: 'none' },
+    id: `group:${p.id}`, kind: PostKind.Group, who: p.by === s.me.displayName ? null : p.by, at: p.at, text: p.text, context: p.channel ? `${names.get(p.group)} > ${s.feed?.groupMeta?.[p.group]?.channels?.find((c) => c.id === p.channel)?.name ?? p.channel}` : names.get(p.group), group: p.group, channel: p.channel, type: p.type ?? 'discussion', tag: tagOf(p.group), unsent: p.sent !== true, dummy: false, open: { kind: 'none' },
   }))
 }
 
