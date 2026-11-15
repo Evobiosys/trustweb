@@ -6,6 +6,9 @@ import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { EventBy, LinkedEvent } from './event_link'
 import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
+import { DEFAULT_INVITE_POLICY, nameRevealOf, stamp, timesError } from './event_press'
+export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, nameRevealOf, offersOf, setEventTimes } from './event_press'
+export type { EventOffers, EventSettingsPatch, InvitePolicy, NameReveal } from './event_press'
 import type { AppState, Person, TwEvent } from './model'
 
 /** What the form hands over; name and from are mandatory, where may be empty. */
@@ -29,17 +32,7 @@ export interface EventFields {
 /** The first field that fails, in form order. */
 export type EventError = 'name' | 'from' | 'to' | 'core'
 
-const DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-function validDate(v: string): boolean {
-  return DATE.test(v) && !Number.isNaN(new Date(v.length === 10 ? `${v}T00:00` : v).getTime())
-}
-
-/** "2026-10-12" starts at 00:00; as an end it lasts until 23:59. */
-function stamp(v: string, end: boolean): string {
-  return v.length === 10 ? `${v}T${end ? '23:59' : '00:00'}` : v
-}
 
 export function splitThemes(text: string): string[] {
   return [...new Set(text.split(',').map((t) => t.trim()).filter(Boolean))]
@@ -52,12 +45,11 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
   const from = f.from.trim()
   const to = f.to?.trim()
   if (!name) return 'name'
-  if (!validDate(from)) return 'from'
-  if (to && (!validDate(to) || stamp(to, true) < stamp(from, false))) return 'to'
   const cf = f.core?.from.trim() ?? ''
   const ct = f.core?.to.trim() ?? ''
   const core = cf || ct ? { from: cf, to: ct } : undefined
-  if (core && !(validDate(cf) && validDate(ct) && cf <= ct && stamp(cf, false) >= stamp(from, false) && (!to || stamp(ct, true) <= stamp(to, true)))) return 'core'
+  const bad = timesError(from, to, core)
+  if (bad) return bad
   const conditions = f.conditions?.trim()
   const organizers = (f.organizers ?? (f.organizer ? [f.organizer] : [])).map((t) => t.trim()).filter(Boolean)
   const organizer = f.organizer?.trim() || organizers.join(', ')
@@ -98,30 +90,26 @@ export function eventMatches(ev: Pick<TwEvent, 'name' | 'tagName' | 'where'>, qu
 }
 
 /** The device-local settings an edit of the form must not drop. */
-export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal'> {
-  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal } = ev
-  return { ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}), ...(nameReveal ? { nameReveal } : {}) }
+export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal' | 'notify' | 'invitePolicy' | 'offers'> {
+  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal, notify, invitePolicy, offers } = ev
+  return {
+    ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}), ...(nameReveal ? { nameReveal } : {}),
+    ...(notify !== undefined ? { notify } : {}), ...(invitePolicy ? { invitePolicy } : {}), ...(offers ? { offers } : {}),
+  }
 }
-
-/** E3: how much of my name an event link of mine tells the other attendees. Set per event on this device; never in a link itself. */
-export type NameReveal = 'full' | 'first' | 'hidden'
-export const NAME_REVEALS: readonly NameReveal[] = ['full', 'first', 'hidden']
-/** Keeps today's behaviour: the display name as typed. */
-export const DEFAULT_NAME_REVEAL: NameReveal = 'full'
-export const nameRevealOf = (ev: Pick<TwEvent, 'nameReveal'>): NameReveal => (NAME_REVEALS.includes(ev.nameReveal as NameReveal) ? ev.nameReveal! : DEFAULT_NAME_REVEAL)
 
 /** The first whitespace-separated word, trimmed. */
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? ''
 }
 
-/** What an event link may say about me: full -> by as is; first -> the first name only (no did: it would name me fully); hidden -> undefined (no name, no did). */
+/** What an event link may say about me: full -> name and did (never the nickname field); first -> the first name only (no did: it would name me fully); nick -> my nickname, else the first name (no did); hidden -> undefined (no name, no did). */
 export function revealedBy(by: EventBy | undefined, ev: Pick<TwEvent, 'nameReveal'>): EventBy | undefined {
   if (!by) return undefined
   const r = nameRevealOf(ev)
   if (r === 'hidden') return undefined
-  if (r === 'first') { const name = firstName(by.name); return name ? { name } : undefined }
-  return by
+  if (r === 'first' || r === 'nick') { const name = (r === 'nick' && by.nick?.trim()) || firstName(by.name); return name ? { name } : undefined }
+  return { name: by.name, ...(by.did ? { did: by.did } : {}) }
 }
 
 export function isPast(ev: TwEvent, now: number): boolean {
@@ -205,6 +193,40 @@ export function restoreEvent(s: AppState, d: DeletedEvent): void {
   s.events = [...(s.events ?? []), d.event]
   d.tagged.forEach((id) => tagPerson(s, id, d.event.id))
 }
+
+/** Wave 43: the line under the name. Today: "since 09:30 today" (no time: "since today"); any other day: the date span. */
+export function sinceLabel(ev: Pick<TwEvent, 'from' | 'to'>, today: string): string {
+  if (ev.from.slice(0, 10) !== today) return whenLabel(ev)
+  return `since ${ev.from.length > 10 ? `${ev.from.slice(11)} ` : ''}today`
+}
+
+/** "until 14 Oct 2026" (with the time when it has one); empty without an end. */
+export function untilLabel(ev: Pick<TwEvent, 'to'>): string {
+  return ev.to ? `until ${dateLabel(ev.to)}` : ''
+}
+
+/** Wave 43: notifications of this event (invitations, feed posts, support asks of the people here); on unless switched off. */
+export const notifyOn = (ev: Pick<TwEvent, 'notify'>): boolean => ev.notify !== false
+
+const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** Host, organizer or tech support (roles by name); an event I made without any host is mine. */
+export function isEventHost(ev: TwEvent, meName: string): boolean {
+  const names = [...(ev.hosts ?? []), ...(ev.organizer ? [ev.organizer] : []), ...(ev.techSupport ?? [])]
+  return names.some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !ev.organizer)
+}
+
+/** One predicate for "show the invite button": hosts always; 'everyone' lets attendees; 'trusted' lets attendees when one of the hosts sits in my Closest or Close ring (family by its closeness). */
+export function mayInvite(ev: TwEvent, s: Pick<AppState, 'me' | 'people'>): boolean {
+  if (isEventHost(ev, s.me.displayName)) return true
+  if (!ev.attended) return false
+  const policy = ev.invitePolicy ?? DEFAULT_INVITE_POLICY
+  if (policy === 'everyone') return true
+  if (policy !== 'trusted') return false
+  const hosts = [...(ev.hosts ?? []), ...(ev.organizer ? [ev.organizer] : [])]
+  return s.people.some((p) => hosts.some((h) => sameName(h, p.name)) && TRUSTED_RINGS.includes(ringSlot(p)))
+}
+const TRUSTED_RINGS: readonly Ring[] = [Ring.Closest, Ring.Close]
 
 /** "12 Oct 2026" for a date, with the time when it has one. */
 export function dateLabel(v: string): string {

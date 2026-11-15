@@ -39,7 +39,7 @@ import type { IntroLink } from './intro_link'
 import { introAskText } from './intro_ask'
 import { cardInvitationsRow, invitationSheet, invitationsSection } from './invitations_view'
 import type { InvitationIo } from './invitations_view'
-import { addSupportIn, supportCards, supportForm, supportInbox, supportLine } from './support_ask_view'
+import { addSupportIn, supportCards, supportForm, supportInbox, supportLine, supportSheet } from './support_ask_view'
 import { applyCancel, categoryAsk } from './support_inbox'
 import { planFlush } from './support_flush'
 import { communityChatLive } from './ext/community_mode/chat_row'
@@ -1699,9 +1699,9 @@ function screenQr(plain = false): void {
   }
 }
 
-function eventQr(ev: TwEvent, plain = false): void {
-  // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy).
-  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)) }), plain)
+function eventQr(ev: TwEvent, plain = false, host = false): void {
+  // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy). Wave 43: the host link when the page's host toggle is on (the QR follows the link).
+  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : revealedBy(eventsBy(), ev)) }), plain)
 }
 
 /** The tag's code carries the tag and the public usernames of the people who carry it (never those who asked to be asked first). */
@@ -5135,7 +5135,7 @@ const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
   curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
-const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
+const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000)
 const eventsView = createEventsView({
@@ -5143,7 +5143,8 @@ const eventsView = createEventsView({
   undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
-  showQr: (ev) => eventQr(ev),
+  showQr: (ev, host) => eventQr(ev, false, host),
+  askSupport: () => supportSheet(supportIo),
   plan: (ev) => eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }),
   extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),

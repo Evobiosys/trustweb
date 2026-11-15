@@ -3,7 +3,7 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { acceptPerson, dragEvent } from '../../drag_payload'
 import { engagementDays } from '../../engagement'
-import { eventLabel, matchPeople, todayIso } from '../../events'
+import { eventLabel, matchPeople, mayInvite, todayIso } from '../../events'
 import { ringColor, type Person, type TwEvent, type TwTask } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
@@ -67,6 +67,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   }
 
   function eventSection(ev: TwEvent): Node[] {
+    if (!mayInvite(ev, h.state())) return here.eventSection(ev)   // wave 43: the host's invite policy
     const box = el('div', { class: 'cal-invitees', 'data-cal-invitees': '' }, [
       el('h3', {}, [S.cal.invitees]),
       S.shareExpiryHint(engagementDays(h.state())) ? el('p', { class: 'meta', 'data-share-expiry': '' }, [S.shareExpiryHint(engagementDays(h.state()))]) : null,

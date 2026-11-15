@@ -13,7 +13,7 @@ export type LinkKind = 'peer' | 'host'
 export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked' | 'nameReveal'> & { kind: LinkKind; by?: EventBy }
 
 /** Who sent the link: their own name and own identity, nothing about third people (I1). */
-export interface EventBy { name: string; did?: string }
+export interface EventBy { name: string; did?: string; /** My nickname (Me.nickname): only the nickname reveal (events.ts revealedBy) may put it in a link as the name. */ nick?: string }
 
 const MAX_BYTES = 4096
 const SRV = /^[0-9a-f]{16}$/

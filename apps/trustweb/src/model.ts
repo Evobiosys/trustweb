@@ -35,7 +35,7 @@ import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
-import type { NameReveal } from './events'
+import type { EventOffers, InvitePolicy, NameReveal } from './events'
 import type { ZoneLink } from './zone_share_link'
 import type { PeerItem } from './peer_items'
 import type { SupportAsk, SupportIn } from './support_ask'
@@ -385,6 +385,12 @@ export interface TwEvent {
   icsUid?: string
   /** E3 (events.ts revealedBy): how much of my name my links for this event tell other attendees. Absent = 'full'. This device only; never in an event link (event_link.ts whitelist). */
   nameReveal?: NameReveal
+  /** Wave 43 event-press-share: notifications of this event; absent = on. Local only. */
+  notify?: boolean
+  /** Wave 43: who may invite others; absent = 'hosts'. Local only. */
+  invitePolicy?: InvitePolicy
+  /** Wave 43: what the host switched on; absent = all off (events.ts EVENT_OFFERS_DEFAULT). */
+  offers?: Partial<EventOffers>
   /** Wave 42 community-event: the community (colour tag id) this event was made in. */
   community?: string
   /** Wave 42: the free-text documents of the event (event_plan.ts). */
@@ -829,6 +835,8 @@ export interface AwayAsk {
 export interface Me {
   id: string
   displayName: string
+  /** Wave 43: what a link says instead of my name when an event's name reveal is "Nickname". Local only. */
+  nickname?: string
   /** Wave 33: the owner's own mail address; local only, never in the connect link. */
   primaryEmail?: { provider: string; address: string }
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */

@@ -1895,3 +1895,8 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .roles-list .role-chips{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0}
 .event-tag-chip{display:inline-block; margin:2px 0 6px; text-decoration:underline}
 .picker-create{font-style:italic; text-decoration:underline}
+/* wave 43 event-press-share */
+.press{cursor:pointer;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left}
+.event-since{display:block;margin:0 0 6px}
+.event-share .btn{flex:1 1 0}
+.event-times .field{margin-bottom:6px}
