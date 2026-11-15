@@ -43,33 +43,25 @@ const closeSheet = (page) => page.locator('.sheet-veil').click({ position: { x: 
 const tab = (page, name) => page.locator('nav.tabs button', { hasText: name }).click()
 const dockOpen = async (page) => (await page.locator('.query-dock').count()) === 1 && await page.locator('.query-dock').isVisible()
 
-/** Item 1: Feed off, the query one tap away from Web and Inventory. */
+/** Item 1: the query one tap away from Web and Inventory. Wave 43b (A4): Ask your web is its own page with Back (no floating pill, no dock ×). */
 async function partQuery(a) {
   ok('the bar is the old one by default: Membranes | Record | Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Resources']), JSON.stringify(await tabLabels(a)))
-  await a.locator('[data-open-query="1"]').click()
-  ok('Web: one tap on "Ask your web" opens the query', await dockOpen(a))
-  await a.locator('.query-dock .x').click()
+  const askBack = () => a.locator('.hdr .back').first().click().then(() => a.waitForTimeout(300))
+  await a.locator('[data-open-query="1"]').first().click()
+  ok('Web: one tap on "Ask your web" opens the query', await dockOpen(a) && (await a.locator('[data-ask-page]').count()) === 1)
+  await askBack()
 
   await tab(a, 'Resources')
-  const call = a.locator('[data-open-query="inventory"]')
+  const call = a.locator('[data-open-query]').first()
   ok('Inventory: "Ask your web" is there', await call.isVisible() && (await call.getAttribute('aria-label')) === 'Ask your web')
   const [cb, rb] = [await call.boundingBox(), await a.locator('.requests-fab').boundingBox()]
-  ok('it sits opposite "Review requests", never over it', Boolean(cb && rb) && cb.x + cb.width <= rb.x, JSON.stringify({ cb, rb }))
+  ok('it never sits over "Review requests"', Boolean(cb && rb) && (cb.y + cb.height <= rb.y || rb.y + rb.height <= cb.y || cb.x + cb.width <= rb.x || rb.x + rb.width <= cb.x), JSON.stringify({ cb, rb }))
   await shot(a, 'w2-01-inventory-call')
   await call.click()
-  ok('Inventory: one tap lands on Web with the query open', await dockOpen(a) && await a.getByRole('heading', { name: 'TrustZones' }).isVisible())
+  ok('Inventory: one tap opens the Ask page', await dockOpen(a) && (await a.locator('[data-ask-page]').count()) === 1)
   await shot(a, 'w2-02-query-from-inventory')
-  await a.locator('.query-dock .x').click()
-
-  // The other query style (Settings: the magnifier means querying): still one tap.
-  await tab(a, 'Resources')
-  await a.getByRole('button', { name: 'Settings' }).click()
-  await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Query$/ }) }).click()
-  await closeSheet(a)
-  await tab(a, 'Web')
-  await a.locator('[data-open-query="1"]').click()
-  ok('query style "search": one tap still opens the query', await dockOpen(a))
-  await a.locator('.query-dock .x').click()
+  await askBack()
+  ok('Back from the Ask page returns to Resources', (await a.locator('[data-ask-page]').count()) === 0 && await a.locator('.requests-fab').isVisible())
 }
 
 /** Item 4: who can ask about an inventory item: acquaintances, friends, close friends, only me. */

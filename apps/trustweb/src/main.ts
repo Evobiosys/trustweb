@@ -3545,9 +3545,11 @@ function openQuery(): void { openAskPage() }
 /** Wave 43b: the plain entry, a header button, where the bottom bar has no Ask item (CSS hides it when it has; the IYG support variation asks for support). */
 function queryFab(): HTMLElement {
   const support = profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')
-  const label = support ? S.supportTitle : S.webQuery
+  const call = !support && queryStyle() === QueryStyle.Call
+  // Review 43b: the call style is "Ask your web" (S.webCall, as the floating pill was), the search style "Query".
+  const label = support ? S.supportTitle : call ? S.webCall : S.webQuery
   const b = iconButton('query', label, () => { if (support) askMode = AskMode.Support; openQuery() }, 'ask-entry')
-  b.innerHTML = !support && queryStyle() === QueryStyle.Call ? askWebIcon(askIconVariant) : icon('query')
+  b.innerHTML = call ? askWebIcon(askIconVariant) : icon('query')
   b.setAttribute('data-open-query', '1')
   if (support) b.setAttribute('data-support-primary', '')
   return b
@@ -8049,6 +8051,8 @@ function queryDock(s: AppState): HTMLElement {
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
       audienceBox,
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
+      // Review 43b: a filter that reaches nobody says so (the ask would leave for no one).
+      s.peers.length > 0 && allowedPeerIds(s, tagsNow)?.length === 0 ? el('p', { class: 'warn', 'data-aud-nobody': '' }, [S.askPage.nobody]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
       run ? null : webHere.el,

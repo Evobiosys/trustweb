@@ -118,6 +118,8 @@ try {
     await page.locator('[data-reach-choice]').nth(1).click(); await page.waitForTimeout(400)
     check(`${w}: I7 Hide from + 2 steps: the hint says a friend may pass it on`, (await page.locator('[data-aud-hide-travels]').count()) === 1)
     await sweep(page, `${w} ask page + filter (Advanced open)`); await shot(page, 'ask')
+    for (const id of ['cy', 'di']) { await page.locator('[data-aud-input="exclude"]').fill('@' + id); await page.waitForTimeout(150); await page.locator(`[data-aud-pick="person:p-${id}"]`).click(); await page.waitForTimeout(250) }
+    check(`${w}: a filter that reaches nobody says so`, (await page.locator('[data-aud-nobody]').count()) === 1)
     check(`${w}: no document scroll on the Ask page`, !phone || await noDocScroll(page))
     await page.close()
 
