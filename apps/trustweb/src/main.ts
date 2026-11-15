@@ -33,6 +33,8 @@ import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
+import { audienceFilterView } from './audience_filter'
+import { allowedPeerIds, askFilterOf, saveAskFilter } from './ask_audience'
 import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
 import type { IntroLink } from './intro_link'
@@ -390,6 +392,8 @@ enum Screen {
   Groups = 'groups',
   /** Wave 39: an extension module's view (ext/tw_registry.ts views()), `extViewId` names which. */
   Ext = 'ext',
+  /** Wave 43b ask-page-filter: Ask your web is its own page (class askpage: .ask is the consent prompt's), Back returns to where it was opened. */
+  Ask = 'askpage',
 }
 /** Wave 39: which extension module view Screen.Ext shows, and the kept element it is mounted in (ext/view_host.ts). */
 let extViewId: string | null = null
@@ -693,6 +697,7 @@ let screen: Screen = state ? Screen.Web : Screen.Start
 let relayStatus: RelayStatus = 'connecting'
 let draft: Draft = freshDraft()
 let review: Review | null = null
+/** Wave 43b: never set any more (Ask your web is a page, Screen.Ask); the Web's dock branches that read it stay until Jakob approves removing them. */
 let queryOpen = false
 // The magnifier on Record and Meeting: past meetings and memos (search.ts).
 let pastSearchOpen = false
@@ -1468,6 +1473,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.People:
     case Screen.Notes:
     case Screen.Groups:
+    case Screen.Ask:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1558,10 +1564,27 @@ function openGroups(): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Groups)
 }
+/** Wave 43b: Ask your web as a page of its own with Back (to the Web, or wherever it was opened from), never over the Web view. */
+function openAskPage(): void {
+  if (webPage) { cardExpanded = false; webPage = null }
+  if (screen === Screen.Ask) { render(); return }
+  peoplePage = true
+  pageBack = screen === Screen.Chat || screen === Screen.Inventory ? screen : Screen.Web
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Ask)
+}
+/** Leaves the Ask page the way Back does. */
+function closeAsk(): void { if (screen === Screen.Ask) history.back() }
+function screenAsk(): Node[] {
+  return [
+    header(S.askPage.title, { back: closeAsk }),
+    el('div', { class: 'scroll pad ask-page', 'data-ask-page': '' }, [queryDock(st())]),
+  ]
+}
 function screenGroups(): Node[] {
   return [
     header(S.groups.heading, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [groupsView({ st, save, askIntro: (target) => { setIntroTarget(target); askMode = AskMode.Intros; queryOpen = true; go(Screen.Web) } })]),
+    el('div', { class: 'scroll pad' }, [groupsView({ st, save, askIntro: (target) => { setIntroTarget(target); askMode = AskMode.Intros; openAskPage() } })]),
   ]
 }
 /** Wave 39: the extension module view `extViewId`; gone (module off) = the Web. */
@@ -1633,7 +1656,7 @@ function shownScreen(target: Screen): Screen {
 
 function go(to: Screen): void {
   const s = shownScreen(to)
-  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Ask
   if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
   if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
@@ -1691,6 +1714,14 @@ function mountSettingsGear(): void {
   const gear = iconButton('settings', S.invSettings, settingsSheet)
   gear.dataset.settingsGear = '1'
   right.insertBefore(gear, right.querySelector('[data-chat-dots]'))
+}
+
+/** Wave 43b: Ask your web as a plain header button on the screens that had the floating pill (Web, Chat, Resources); the bar's own Ask item replaces it. */
+function mountAskButton(): void {
+  if (screen !== Screen.Web && screen !== Screen.Chat && screen !== Screen.Inventory) return
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right || right.querySelector('[data-open-query]')) return
+  right.insertBefore(queryFab(), right.querySelector('[data-chat-dots]'))
 }
 
 /** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
@@ -1983,6 +2014,7 @@ function render(): void {
       case Screen.People: return screenPeople()
       case Screen.Notes: return screenNotes()
       case Screen.Groups: return screenGroups()
+      case Screen.Ask: return screenAsk()
       case Screen.Ext: return screenExt()
     }
   })()
@@ -1992,6 +2024,7 @@ function render(): void {
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
   mountSettingsGear()
+  mountAskButton()
   mountAiButton()
   modeShell.mount(host)
   modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
@@ -2467,7 +2500,8 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   // then open the ask right away (that is what the account is for).
   if (demoLink) {
     if (demoLink.peer) await connectDemoPeer(demoLink.peer, person)
-    queryOpen = true
+    askMode = AskMode.Hints
+    openAskPage()
     toast(S.demoWaitingToast(peer.displayName))
   } else if (picked) {
     addedToast(person, ring)
@@ -3239,7 +3273,6 @@ function screenChat(): Node[] {
       view.simple ? el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]) : null,
       view.simple ? body : null,
     ]),
-    queryFab(),
   ]
 }
 
@@ -3330,7 +3363,6 @@ function screenWeb(): Node[] {
     // Wave 39: the browser-only notice sits under the web, outside the zoomed layer (inside it the zoom scaled the line off the screen).
     ...[browserOnlyNotice()].filter((n): n is HTMLElement => n !== null),
     ...[wantsToConnectSection()].filter((d): d is HTMLElement => d !== null),   // wave 39: below the zoom clip, so it stays put and full size while the Web zooms
-    queryOpen ? queryDock(s) : queryFab(),
   ]
 }
 
@@ -3503,35 +3535,18 @@ function fitRings(): void {
 window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() })
 window.addEventListener(COLOUR_TAGS_EVENT, () => { if (screen === Screen.Web) render() })
 
-/** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
-function openQuery(): void {
-  if (webPage) { cardExpanded = false; webPage = null }   // wave 40: a card page draws no dock, so the ask (sparkle, ⋮ list) opened nothing while one was open
-  queryOpen = true
-  if (screen === Screen.Web) render()
-  else go(Screen.Web)
-}
+/** Opens Ask your web (its own page, wave 43b) from anywhere: querying is the one thing (Jakob, wave 2, P6/P9). */
+function openQuery(): void { openAskPage() }
 
+/** Wave 43b: the plain entry, a header button, where the bottom bar has no Ask item (CSS hides it when it has; the IYG support variation asks for support). */
 function queryFab(): HTMLElement {
-  // Wave 39: in the IYG support variation the Web's primary button asks for support.
-  if (profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')) {
-    const b = el('button', { class: 'query-fab', 'aria-label': S.supportTitle, 'data-open-query': '1', 'data-support-primary': '', onclick: () => { askMode = AskMode.Support; openQuery() } })
-    b.innerHTML = icon('query')
-    b.append(el('span', {}, [S.supportTitle]))
-    return b
-  }
-  const call = queryStyle() === QueryStyle.Call
-  const b = el('button', {
-    class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
-    onclick: openQuery,
-  })
-  b.innerHTML = call ? askWebIcon(askIconVariant) : icon('query')
-  b.append(call
-    ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
-    : el('span', {}, [S.webQuery]))
-  if (!call) return b
-  const wrapped = withHint(b, HintId.CallWeb)
-  if (wrapped !== b) wrapped.classList.add('fab-hint')
-  return wrapped
+  const support = profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')
+  const label = support ? S.supportTitle : S.webQuery
+  const b = iconButton('query', label, () => { if (support) askMode = AskMode.Support; openQuery() }, 'ask-entry')
+  b.innerHTML = !support && queryStyle() === QueryStyle.Call ? askWebIcon(askIconVariant) : icon('query')
+  b.setAttribute('data-open-query', '1')
+  if (support) b.setAttribute('data-support-primary', '')
+  return b
 }
 
 function tagChip(tag: Tag, custom?: string): HTMLElement {
@@ -7771,9 +7786,6 @@ function screenInventory(): Node[] {
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
   // Querying is one tap from Inventory too (wave 2, P9): bottom right as on Web and Chat (wave 27); "Review requests" sits bottom left.
-  const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
-  call.innerHTML = askWebIcon(askIconVariant)
-  call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
   const zin = zoom.inventory
   const list = el('div', { class: 'scroll pad', 'data-zoom-level': zin ? 'in' : 'out' }, zin ? [...outlinerItems(s), ...(cal?.resourcesSection?.() ?? [])] : [
       s.testOf ? foundView(s) : null,
@@ -7818,7 +7830,6 @@ function screenInventory(): Node[] {
   return [
     header(S.invTitle, { glyph: el('span', { class: 'hdr-pair' }, [zoomGlyph('inventory'), info]) }),
     list,
-    call,
     requests,
   ]
 }
@@ -7939,7 +7950,8 @@ async function sendFromDock(text: string): Promise<void> {
 async function runAsk(text: string, reach?: number): Promise<void> {
   const t = text.trim()
   if (!t) return
-  const peers = askPeers(st())
+  const allowed = allowedPeerIds(st(), loadColourTags())   // wave 43b: the audience filter (null = everybody)
+  const peers = askPeers(st()).filter((p) => !allowed || allowed.includes(p.id))
   askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null, reach: reach !== undefined && !askDirectOnly(st()) ? reach : askReachOf(st()) }
   clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
@@ -7947,11 +7959,11 @@ async function runAsk(text: string, reach?: number): Promise<void> {
     if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt, askRun.reach))
   }, 1000)
   render()
-  const results = await net.ask(t, reach)
+  const results = await net.ask(t, reach, allowed)
   clearInterval(countdownTimer)
   if (askRun && askRun.text === t) askRun.results = results
   recordFound(t, results)
-  if (screen === Screen.Web) render()
+  if (screen === Screen.Web || screen === Screen.Ask) render()
 }
 
 function resultsView(results: AskResult[], asked: { text: string; at: number }): HTMLElement[] {
@@ -7994,9 +8006,17 @@ function queryDock(s: AppState): HTMLElement {
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
+  // Wave 43b: the audience filter (zones, Also include / Hide from) with "How far?" under its Advanced; hints and intros share it.
+  const filter = askFilterOf(s)
+  const tagsNow = loadColourTags()
+  const chipName = (c: string): string => (c.startsWith('person:') ? s.people.find((p) => p.id === c.slice(7))?.name ?? '' : tagsNow.find((t) => t.id === c.slice(4))?.label ?? c.slice(4))
   const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r) => {
     if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
     save(); render()
+  }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) })
+  const audienceBox = audienceFilterView({
+    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, advanced: [reach], openSheet, closeSheet,
+    changed: () => { saveAskFilter(s, filter); save(); render() },
   })
   const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {
     class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
@@ -8005,7 +8025,7 @@ function queryDock(s: AppState): HTMLElement {
   const dock = el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
       el('h3', {}, [S.queryTitle]),
-      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; askMode = AskMode.Hints; render() } }, ['×']),
+      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { askMode = AskMode.Hints; closeAsk() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : modeChips,
@@ -8013,7 +8033,7 @@ function queryDock(s: AppState): HTMLElement {
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
-      reach,
+      audienceBox,
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
@@ -8038,11 +8058,11 @@ function queryDock(s: AppState): HTMLElement {
   ])
   // Ask for support swaps the question box for the support form; the chips stay on top.
   if (!run && nextAskMode(askMode) === AskMode.Support) {
-    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Hints; queryOpen = false }))
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Hints; closeAsk() }))
   }
   if (!run && nextAskMode(askMode) === AskMode.Intros) {
     dock.querySelector('.dock-body')?.replaceChildren(modeChips, introForm({
-      st, reach, steps: () => askReachOf(st()),
+      st, reach: audienceBox, allowed: () => allowedPeerIds(st(), loadColourTags()), steps: () => askReachOf(st()),
       ask: (peerId, target) => net.askIntro(peerId, target),
       onResult: (target, r) => recordFound(introAskText(target), [r]),
       link: async (target, why) => encodeIntroLink(linkOrigin(location.origin), { by: st().me.displayName, target, ...(why.trim() ? { why: why.trim() } : {}), connect: await (async () => { await net.start(); return net.connectLink(CONNECT_URL) })() }),

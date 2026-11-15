@@ -14,8 +14,10 @@ export interface IntroIo {
   st: () => AppState
   /** Sends the intro ask to one person (their id in the web); resolves null when they are not a connected peer. */
   ask: (peerId: string, target: string) => Promise<AskResult | null>
-  /** The "How far?" chips, built by the dock. */
+  /** The audience filter view (zones, Also include / Hide from, Advanced with "How far?"), built by the dock (audience_filter.ts). */
   reach: HTMLElement
+  /** Wave 43b: the peer ids the filter allows; null = everybody (the filter is off). */
+  allowed?: () => string[] | null
   /** The reach (steps) the chips hold. */
   steps: () => number
   onResult: (target: string, result: AskResult) => void
@@ -82,7 +84,8 @@ function row(io: IntroIo, c: IntroCandidate<AppState['people'][number]>, redraw:
 export function introForm(io: IntroIo): HTMLElement {
   const list = el('div', { class: 'ppl', 'data-intro-list': '' })
   const redraw = (): void => {
-    const rows = introCandidates(io.st().people, eff(), introMaxHop(effectiveMaxHops(io.steps())))
+    const allowed = io.allowed?.() ?? null
+    const rows = introCandidates(io.st().people, eff(), introMaxHop(effectiveMaxHops(io.steps()))).filter((c) => !allowed || (c.person.peerId !== undefined && allowed.includes(c.person.peerId)))
     list.replaceChildren(...(eff() && !rows.length ? [el('p', { class: 'hint', 'data-intro-none': '' }, [S.introNone])] : rows.map((c) => row(io, c, redraw))))
     // Wave 42: a category (the default) also reaches the people who have that skill.
     const t = parseIntroTarget(target)

@@ -1929,3 +1929,34 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chat-newly h3{margin:8px 12px 2px; font-size:13px}
 /* "wants to connect": dashed outline plus colour (greyscale-safe), on the unsorted ring */
 .node.wants .ava{outline:2px dashed var(--wants-ring); outline-offset:2px}
+/* wave43b ask-page-filter */
+/* iPhone Safari: the bottom bar sits at the real bottom, above the home indicator (100dvh phone, safe-area inset added to the bar and the room it takes). */
+.screen{inset:0 0 calc(86px + env(safe-area-inset-bottom,0px))}
+.tabs{height:calc(86px + env(safe-area-inset-bottom,0px)); padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+/* Ask your web is a page: the dock loses its overlay look and scrolls inside .scroll. */
+.ask-page{margin-bottom:26px}   /* the raised centre button of the bar overhangs the page by ~22px: the scroll area ends above it (P06) */
+.ask-page .query-dock{max-height:none; border-radius:0; box-shadow:none; background:transparent; overflow:visible}
+.ask-page .dock-head{display:none}
+.ask-page .dock-body{overflow:visible; padding:0 0 24px}
+.ask-entry{flex:none}
+/* the filter view */
+.afv-filter{display:flex; flex-direction:column; gap:8px; margin:8px 0}
+.afv-seg{flex-direction:column; border-radius:16px; gap:2px}
+.afv-seg button{padding:9px 10px; border-radius:13px; font-size:13px; line-height:1.25; text-align:left}
+.afv-row .chips-lbl,.afv-zones .chips-lbl{display:block; margin:0 0 4px}
+.afv-row .field{margin-top:4px; width:100%; box-sizing:border-box}
+.afv-row .chips{margin:4px 0}
+.afv-found{display:flex; flex-direction:column; align-items:flex-start; gap:2px}
+.afv-adv[hidden]{display:none}
+.afv-adv summary{cursor:pointer; text-decoration:underline}
+.reach-diagram{margin:6px 0}
+.steps-diagram{width:100%; max-width:320px; height:auto}
+.steps-diagram .node{stroke:var(--ink-soft); stroke-width:1.5; fill:var(--card)}
+.steps-diagram .node.you{fill:var(--mist)}
+.steps-diagram .node.on{fill:var(--electric); stroke:var(--electric)}
+.steps-diagram .node.off{stroke-dasharray:3 3}
+.steps-diagram .arrow{stroke:var(--ink-soft); stroke-width:1.5}
+.steps-diagram .lbl{font-size:10px; fill:var(--ink); font-family:inherit}
+.steps-diagram .node.on + .lbl{fill:#fff}
+.steps-diagram .set text{font-size:11px; fill:var(--ink)}
+.steps-diagram .set.exclude text{text-decoration:line-through}

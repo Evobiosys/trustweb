@@ -35,6 +35,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'connect_code', write: false }, { name: 'connect_redeem', write: false },
   // Wave 42 signup-stripe
   { name: 'billing_plans', write: false }, { name: 'billing_status', write: false }, { name: 'billing_checkout_link', write: true },
+  // Wave 43b ask-page-filter
+  { name: 'ask_audience_get', write: false }, { name: 'ask_audience_set', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

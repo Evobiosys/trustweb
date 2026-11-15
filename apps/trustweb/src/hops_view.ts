@@ -11,6 +11,8 @@ import type { InventoryItem } from './model'
 import { DEGREES_CHOICES, DEGREES_MAX, DegreesChoice, degreesChoice, degreesFor, itemDegrees } from './cascade'
 import { effectiveMaxHops, HOP_CAP, HOPS_UNBOUNDED, REACH_CHOICES, ReachChoice, reachChoice, reachFor, readVia } from './hops'
 import { S } from './strings'
+import { PUBLIC_ASK_ENABLED, degreeLabel, stepsDiagram } from './audience_filter'
+import type { Zone } from './audience_filter'
 
 /** A compact on/off switch (Jakob's #22, less elongated): a button with role="switch". */
 export function onOffSwitch(on: boolean, onToggle: () => void, extra: Record<string, string> = {}): HTMLElement {
@@ -27,20 +29,39 @@ function customBox(value: number, min: number, max: number, aria: string, commit
   return box
 }
 
-/** "How far?" in the ask dock: my contacts (default) / friends of friends / 3 / custom / no limit. */
-export function reachChooser(reach: number, disabled: boolean, onChange: (reach: number) => void): HTMLElement {
+/** Wave 43b: what the chooser knows of the audience: the zone words the degrees (friends of friends ...) and the names the diagram shows around the rings. */
+export interface ReachAudience { zone?: Zone; add: readonly string[]; exclude: readonly string[] }
+
+const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1)
+
+/** "How far?" in the ask dock: the first three choices word the degree from the zone (friends of friends ...), then 3+ steps with its diagram, custom, no limit, and Public (disabled). */
+export function reachChooser(reach: number, disabled: boolean, onChange: (reach: number) => void, aud?: ReachAudience): HTMLElement {
   const current = reachChoice(reach)
   const steps = effectiveMaxHops(reach)
   const custom = current === ReachChoice.Custom ? steps : 4
+  const label = (c: ReachChoice): string => {
+    const n = c === ReachChoice.Contacts ? 1 : c === ReachChoice.FriendsOfFriends ? 2 : c === ReachChoice.Three ? 3 : 0
+    return aud?.zone && n ? cap(degreeLabel(aud.zone, n as 1 | 2 | 3)) : S.reachLabel[c]
+  }
+  const diagram = el('div', { class: 'reach-diagram', 'data-reach-diagram': '' })
+  if (steps > 1 || reach === HOPS_UNBOUNDED) {
+    const shown = reach === HOPS_UNBOUNDED ? HOP_CAP : steps
+    diagram.innerHTML = stepsDiagram(shown, { you: S.askPage.diagramYou, ring: S.askPage.diagramRing, alt: (n) => S.askPage.diagramAlt(n, aud?.add.length ?? 0, aud?.exclude.length ?? 0) }, current === ReachChoice.Custom && aud ? aud : undefined)
+  }
   return el('div', { class: 'reach', 'data-reach': String(reach) }, [
     el('span', { class: 'chips-lbl' }, [S.reachTitle]),
-    el('div', { class: 'chips reach-chips', role: 'radiogroup', 'aria-label': S.reachTitle }, REACH_CHOICES.map((c) => el('button', {
-      class: 'chip' + (c === current ? ' on' : ''), role: 'radio', 'aria-checked': String(c === current), 'data-reach-choice': c, disabled,
-      onclick: () => onChange(reachFor(c, custom)),
-    }, [S.reachLabel[c]]))),
+    el('div', { class: 'chips reach-chips', role: 'radiogroup', 'aria-label': S.reachTitle }, [
+      ...REACH_CHOICES.map((c) => el('button', {
+        class: 'chip' + (c === current ? ' on' : ''), role: 'radio', 'aria-checked': String(c === current), 'data-reach-choice': c, disabled,
+        onclick: () => onChange(reachFor(c, custom)),
+      }, [label(c)])),
+      // Posting publicly (the questhub server) waits for the Mastodon decision.
+      el('button', { class: 'chip', role: 'radio', 'aria-checked': 'false', 'data-reach-public': '', disabled: !PUBLIC_ASK_ENABLED, title: S.askPage.publicSoon }, [`${S.askPage.publicLbl} · ${S.askPage.publicSoon}`]),
+    ]),
     current === ReachChoice.Custom && !disabled
       ? customBox(steps, 1, HOP_CAP, S.reachCustomAria, (n) => onChange(reachFor(ReachChoice.Custom, n)), 'data-reach-custom')
       : null,
+    diagram.childElementCount ? diagram : null,
     el('p', { class: 'hint', 'data-reach-hint': '1' }, [S.reachHint(steps, reach === HOPS_UNBOUNDED)]),
   ])
 }

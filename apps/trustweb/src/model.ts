@@ -1309,6 +1309,8 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /** Wave 43b (audience_filter.ts): the ask audience the filter view keeps: zone (closest, close, friend; absent = every connected person) and the added / hidden `person:<id>` / `tag:<id>` chips. The degree is `askReach`. An older build ignores it. */
+  askAudience?: { zone?: 'closest' | 'close' | 'friend'; add: string[]; exclude: string[] }
   /** Wave 25: "Your city" (Settings > Profile); the ask sheet's example names it. Absent: Vienna. An older build ignores it. */
   city?: string
   /**

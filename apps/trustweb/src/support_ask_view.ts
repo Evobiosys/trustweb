@@ -5,17 +5,18 @@ import { el } from '../../demo/src/ui/dom'
 import { Ring } from './model'
 import type { AppState, Peer, Person } from './model'
 import { askPeers } from './non_responsive'
-import { loadColourTags, memberIds, type ColourTag } from './colour_tags'
-import { tagPill } from './components/tag_pill'
-import { foldText } from './settings_search'
+import { loadColourTags } from './colour_tags'
+import { DEFAULT_FILTER, audienceFilterView, peopleFor, ringOfZone, zoneOfRing } from './audience_filter'
+import type { AudienceFilter, FilterExtras } from './audience_filter'
+import { tagTester } from './ask_audience'
 import { S } from './strings'
 import { deliveryPanel } from './support_delivery_view'
 import type { DeliveryIo } from './support_delivery_view'
 import { planDelivery, sentVia } from './support_delivery'
 import {
-  BUNDLES, SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, audience, buildSupport, bundlePeople, closeText, emergencyNumber, hereText, isOpen, openAsks, supportText,
+  SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, buildSupport, closeText, emergencyNumber, hereText, isOpen, openAsks, supportText,
 } from './support_ask'
-import type { AudienceChoice, Bundle, SupportIn } from './support_ask'
+import type { SupportIn } from './support_ask'
 import { cancelAsk, inboxRows } from './support_inbox'
 import { agentAsks, approveAgentAsk, discardAgentAsk } from './support_flush'
 
@@ -33,113 +34,51 @@ export interface SupportIo {
   env: DeliveryIo['env']
 }
 
-/** The zones the dropdown offers, narrowest first (the ask is never wider than Friends); tags follow. */
-const ZONES: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Friend]
-
-/** The people the ask would reach: connected, in the chosen zone or tag, Closest few always (unless left out), filtered in and out; not blocked or silent. */
-function recipients(io: SupportIo, a: AudienceChoice): { peer: Peer; name: string; person: Person }[] {
+/** The people the ask would reach: connected, open to asks, in the filter's zone (Closest few always) plus what it adds, minus what it hides. */
+function recipients(io: SupportIo, f: AudienceFilter & FilterExtras): { peer: Peer; name: string; person: Person }[] {
   const s = io.st()
   const open = new Set(askPeers(s).map((p) => p.id))
-  // Wave 40: a tag means its resolved members (a group holds its children's people).
-  const tags = loadColourTags()
-  const members = new Map<string, Set<string>>()
-  const hasTag = (p: { id: string }, id: string): boolean => {
-    if (!members.has(id)) members.set(id, new Set(memberIds(s.people, tags, id)))
-    return members.get(id)?.has(p.id) === true
-  }
-  return audience(s.people.filter((p) => p.peerId && open.has(p.peerId)), a, hasTag)
+  return peopleFor(f, s.people.filter((p) => p.peerId && open.has(p.peerId)), tagTester(s.people, loadColourTags()))
     .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name, person: p }))
-}
-
-/** Review wave 40: how many members of a tag an ask to it really reaches (connected, open to asks, Friends and closer), for its dropdown line. */
-function tagReach(io: SupportIo, tags: readonly ColourTag[], id: string): number {
-  const members = new Set(memberIds(io.st().people, tags, id))
-  return recipients(io, { zone: `tag:${id}` }).filter((r) => members.has(r.person.id)).length
 }
 
 /** Wave 42: the community an ask is made in: its tag is the default audience; `remembered` = the last audiences used (keys, newest first); `used` stores one. */
 export interface AskScope { tag: string; remembered: readonly string[]; used: (key: string) => void }
 
-/** An audience as one remembered key: the zone, then the bundles pressed ("tag:iyg+closest-allies"). */
-const audienceKey = (zone: string, bundles: ReadonlySet<Bundle>): string => [zone, ...BUNDLES.filter((b) => bundles.has(b))].join('+')
+/** An audience as one remembered key: "ring:<ring>" or, for a community scope, "tag:<id>" (older keys may carry bundle suffixes after a "+": ignored). */
+const audienceKey = (f: AudienceFilter & FilterExtras): string => (f.only ? `tag:${f.only}` : `ring:${ringOfZone(f.zone ?? 'closest')}`)
 
 /** The send form: the sheet and the Ask dock both show it; `sent` runs after a send. */
 export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): HTMLElement {
-  const pick: AudienceChoice = { zone: scope ? `tag:${scope.tag}` : `ring:${Ring.Closest}` }
-  const bundles = new Set<Bundle>()
-  const bundleLabel = (b: Bundle): string => (b === 'closest-few' ? S.w42.bundleFew : S.w42.bundleAllies)
-  const include = new Set<string>()
-  const exclude = new Set<string>()
+  // The zone is always one of the three (Closest few by default); a community scope starts as its tag inside the Friends zone.
+  const f: AudienceFilter & FilterExtras = { ...DEFAULT_FILTER, zone: scope ? 'friend' : 'closest', add: [], exclude: [], ...(scope ? { only: scope.tag } : {}) }
   const chosen = new Set<string>()
   let window: SupportWindow = SupportWindow.Today
   const note = el('textarea', { class: 'field', rows: '2', maxlength: '200', placeholder: S.supportNotePh, 'aria-label': S.supportNotePh, 'data-support-note': '' }) as HTMLTextAreaElement
   const body = el('div', { class: 'support-sheet' })
-  const found = el('div', { class: 'support-found', 'data-support-found': '' })
-  const find = el('input', {
-    class: 'field', type: 'search', placeholder: S.supportFind, 'aria-label': S.supportFind, autocomplete: 'off', 'data-support-find': '',
-    oninput: () => drawFound(),
-  }) as HTMLInputElement
-  const nameOf = (id: string): string => io.st().people.find((p) => p.id === id)?.name ?? ''
-  const mark = (id: string, into: Set<string>, from: Set<string>): void => { from.delete(id); into.add(id); find.value = ''; draw() }
-  /** Matches of the find field, each to include or leave out. */
-  const drawFound = (): void => {
-    const q = foldText(find.value)
-    const hits = q ? io.st().people.filter((p) => p.peerId && !include.has(p.id) && !exclude.has(p.id) && foldText(p.name).includes(q)).slice(0, 5) : []
-    found.replaceChildren(...hits.flatMap((p) => [
-      el('span', {}, [p.name]),
-      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-support-include': p.id, onclick: () => mark(p.id, include, exclude) }, [S.supportInclude]),
-      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-support-exclude': p.id, onclick: () => mark(p.id, exclude, include) }, [S.supportLeaveOut]),
-    ]))
-  }
-  const chips = (label: string, ids: Set<string>, attr: string): HTMLElement | null => ids.size === 0 ? null : el('div', { class: 'chips', [attr]: '' }, [
-    el('span', { class: 'chips-lbl' }, [label]),
-    ...[...ids].map((id) => el('button', { class: 'chip on', type: 'button', 'aria-label': S.supportRemove(nameOf(id)), onclick: () => { ids.delete(id); draw() } }, [nameOf(id) + ' ×'])),
-  ])
   const zoneName = (zone: string): string => (zone.startsWith('tag:') ? loadColourTags().find((t) => t.id === zone.slice(4))?.label ?? zone.slice(4) : S.ringLabel[zone.slice(5) as Ring] ?? zone)
-  const keyLabel = (key: string): string => key.split('+').map((k, i) => (i === 0 ? zoneName(k) : bundleLabel(k as Bundle))).join(' + ')
   const applyKey = (key: string): void => {
-    const [zone, ...rest] = key.split('+')
-    pick.zone = zone
-    bundles.clear()
-    for (const b of rest) if ((BUNDLES as readonly string[]).includes(b)) bundles.add(b as Bundle)
+    const [zone] = key.split('+')
+    if (zone.startsWith('tag:')) { f.zone = 'friend'; f.only = zone.slice(4) } else { f.zone = zoneOfRing(zone.slice(5)) ?? 'closest'; delete f.only }
     draw()
   }
   const draw = (): void => {
-    pick.include = [...new Set([...include, ...[...bundles].flatMap((b) => bundlePeople(io.st().people, b).map((p) => p.id))])]
-    pick.exclude = [...exclude]
-    const to = recipients(io, pick)
-    const tags = loadColourTags()
-    const chosenTag = pick.zone.startsWith('tag:') ? tags.find((t) => t.id === pick.zone.slice(4)) : undefined
+    const to = recipients(io, f)
     const num = emergencyNumber(navigator.language)
     body.replaceChildren(...[
-      el('p', { class: 'chips-lbl' }, [S.supportWho]),
-      // One audience control: a zone or a tag; Closest few are always in unless the advanced switch says otherwise.
-      el('select', { class: 'field', 'aria-label': S.supportZoneAria, 'data-support-zone': '', onchange: (e) => { pick.zone = (e.target as HTMLSelectElement).value; draw() } }, [
-        ...ZONES.map((r) => el('option', { value: `ring:${r}`, ...(pick.zone === `ring:${r}` ? { selected: '' } : {}) }, [S.ringLabel[r]])),
-        ...tags.map((t) => el('option', { value: `tag:${t.id}`, ...(pick.zone === `tag:${t.id}` ? { selected: '' } : {}) }, [t.kind && t.kind !== 'personal' ? S.supportGroupTag(t.label ?? t.id, tagReach(io, tags, t.id)) : S.supportTag(t.label ?? t.id)])),
-      ]),
-      chosenTag ? el('div', { class: 'chips', 'data-support-zone-pill': '' }, [tagPill(chosenTag)]) : null,
-      // Wave 42: the trust-zone bundles are always there; they add their people on top of any audience.
-      el('div', { class: 'chips', 'data-support-bundles': '', role: 'group', 'aria-label': S.w42.bundles }, BUNDLES.map((b) => el('button', {
-        class: 'chip' + (bundles.has(b) ? ' on' : ''), type: 'button', 'data-support-bundle': b, 'aria-pressed': String(bundles.has(b)),
-        onclick: () => { if (bundles.has(b)) bundles.delete(b); else bundles.add(b); draw() },
-      }, [bundleLabel(b)]))),
+      // One filter view for every "who may see it": the zones, Also include / Hide from, Advanced (the Closest-few switch).
+      audienceFilterView({
+        filter: f, people: () => io.st().people.filter((p) => p.peerId), zoneRequired: true, openSheet: io.openSheet, closeSheet: io.closeSheet,
+        changed: () => { io.save(); draw() },
+        advanced: [el('label', { class: 'support-not-closest' }, [
+          el('input', { type: 'checkbox', 'data-support-not-closest': '', ...(f.notClosest ? { checked: '' } : {}), onchange: (e) => { f.notClosest = (e.target as HTMLInputElement).checked; draw() } }),
+          el('span', {}, [S.supportNotClosest]),
+        ])],
+      }),
       scope?.remembered.length ? el('div', { class: 'chips', 'data-support-remembered': '' }, [
         el('span', { class: 'chips-lbl' }, [S.w42.recent]),
-        ...scope.remembered.map((k) => el('button', { class: 'chip', type: 'button', 'data-support-remembered-key': k, onclick: () => applyKey(k) }, [keyLabel(k)])),
+        ...scope.remembered.map((k) => el('button', { class: 'chip', type: 'button', 'data-support-remembered-key': k, onclick: () => applyKey(k) }, [zoneName(k.split('+')[0])])),
       ]) : null,
-      pick.notClosest ? null : el('div', { class: 'chips' }, [el('span', { class: 'chip on support-closest', 'data-support-closest-always': '' }, [S.supportClosestAlways])]),
-      find,
-      found,
-      chips(S.supportAlso, include, 'data-support-included'),
-      chips(S.supportLeaveOut, exclude, 'data-support-excluded'),
-      el('details', { class: 'support-adv', 'data-support-advanced': '', ...(pick.notClosest ? { open: '' } : {}) }, [
-        el('summary', {}, [S.supportAdvanced]),
-        el('label', { class: 'support-not-closest' }, [
-          el('input', { type: 'checkbox', 'data-support-not-closest': '', ...(pick.notClosest ? { checked: '' } : {}), onchange: (e) => { pick.notClosest = (e.target as HTMLInputElement).checked; draw() } }),
-          el('span', {}, [S.supportNotClosest]),
-        ]),
-      ]),
       el('p', { class: 'hint', 'data-support-count': String(to.length) }, [to.length ? S.supportOnly(to.length) : S.supportNobody]),
       el('p', { class: 'chips-lbl' }, [S.supportWhat]),
       el('div', { class: 'chips' }, SUPPORT_CHIPS.map((c) => el('button', {
@@ -163,7 +102,7 @@ export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): 
     io.save()
     const text = supportText(io.appUrl, ask)
     for (const t of to) void io.send(t.peer, text).catch(() => { /* the card shows who answered; nobody else is told */ })
-    scope?.used(audienceKey(pick.zone, bundles))
+    scope?.used(audienceKey(f))
     sent()
     io.toast(S.supportSent(to.length))
     io.render()

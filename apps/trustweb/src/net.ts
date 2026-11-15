@@ -1028,9 +1028,10 @@ export class Net {
    * Ask every connected peer; resolves once every answer is in or has timed
    * out. With "Ask only my direct contacts" on, each ask says so (`direct`);
    * otherwise it carries the reach chosen under "How far?" (none for one step).
+   * Wave 43b: `only` (audience_filter.ts) limits the ask to those peer ids; null or absent = every connected peer.
    * Wave 6h: every ask carries this phone's window, and is remembered per connection so a later yes can still land (late_answers.ts).
    */
-  async ask(text: string, reachOverride?: number): Promise<AskResult[]> {
+  async ask(text: string, reachOverride?: number, only?: readonly string[] | null): Promise<AskResult[]> {
     await this.start()
     const s = this.hooks.state()
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
@@ -1042,7 +1043,7 @@ export class Net {
     }
     const timeoutMs = askTimeoutMs(reach, this.windowMs)
     const now = Date.now()
-    const outgoing = askPeers(s).map((peer) => ({ peer, qid: randomId(12) }))
+    const outgoing = askPeers(s).filter((peer) => !only || only.includes(peer.id)).map((peer) => ({ peer, qid: randomId(12) }))
     s.sentAsks = addSentAsk(s.sentAsks, { id: root, text: freeText, at: now, to: outgoing.map(({ peer, qid }) => ({ peerId: peer.id, qid })) }, now)
     this.hooks.save()
     const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({
