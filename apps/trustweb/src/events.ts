@@ -17,7 +17,9 @@ export interface EventFields {
   conditions?: string
   themes?: string[]
   organizer?: string
+  organizers?: string[]
   hosts?: string[]
+  techSupport?: string[]
   /** The days everyone is there; both ends or none (empty ends = none). */
   core?: { from: string; to: string }
   /** Default true: I add or join it. */
@@ -57,8 +59,10 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
   const core = cf || ct ? { from: cf, to: ct } : undefined
   if (core && !(validDate(cf) && validDate(ct) && cf <= ct && stamp(cf, false) >= stamp(from, false) && (!to || stamp(ct, true) <= stamp(to, true)))) return 'core'
   const conditions = f.conditions?.trim()
-  const organizer = f.organizer?.trim()
+  const organizers = (f.organizers ?? (f.organizer ? [f.organizer] : [])).map((t) => t.trim()).filter(Boolean)
+  const organizer = f.organizer?.trim() || organizers.join(', ')
   const hosts = f.hosts?.map((t) => t.trim()).filter(Boolean)
+  const techSupport = f.techSupport?.map((t) => t.trim()).filter(Boolean)
   const themes = f.themes?.map((t) => t.trim()).filter(Boolean)
   return {
     id, name, from, where, createdAt: now, attended: f.attended ?? true,
@@ -66,10 +70,20 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
     ...(core ? { core } : {}),
     ...(conditions ? { conditions } : {}),
     ...(themes?.length ? { themes } : {}),
+    ...(organizers.length ? { organizers } : {}),
     ...(organizer ? { organizer } : {}),
     ...(hosts?.length ? { hosts } : {}),
+    ...(techSupport?.length ? { techSupport } : {}),
   }
 }
+
+/** P4 (wave 43): every event is a tag. In code, URLs, QR payloads and ids: `event_<slug>` (lowercase, spaces to underscore, other punctuation stripped). */
+export function eventTagSlug(name: string): string {
+  return `event_${name.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_]+/gu, '').replace(/[\s_]+/g, '_').replace(/^_+|_+$/g, '')}`
+}
+
+/** P4: how the tag shows in the app: `#event:<name>`. */
+export const eventTagLabel = (name: string): string => `#event:${name.trim()}`
 
 /** What the tag is called on my device. */
 export function tagLabel(ev: Pick<TwEvent, 'name' | 'tagName'>): string {

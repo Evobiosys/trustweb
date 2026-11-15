@@ -6,9 +6,10 @@
  * person is always "me".
  */
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
+import { identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { SupportAsk } from '../../trustweb/src/support_ask.ts'
-import type { TwEvent } from '../../trustweb/src/model.ts'
+import type { AppState, TwEvent } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
@@ -108,6 +109,35 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
           const dids = list(a.people).map((w) => { const p = personOf(r, w); if (!p.did) throw new Error(`${p.name} has no identity yet: connect first`); return p.did })
           setInvitees(ev, dids)
           out = { event: ev.id, invitees: ev.invitees?.length ?? 0 }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_roles_set', description: 'Set who organizes, hosts and gives technical support for an event (id or exact name). Each list takes people by id or exact name (a name nobody carries stays a free name); a list left out stays as it is, an empty list clears it. Technical support = whoever sets this app up for the organizers; it never goes into an event link.',
+      inputSchema: schema({ event: S('event id or exact name'), organizers: { type: 'array', items: { type: 'string' } }, hosts: { type: 'array', items: { type: 'string' } }, techSupport: { type: 'array', items: { type: 'string' } } }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const refs = (v: unknown): string[] => list(v).map((w) => r.people.find((p) => p.deleted_at === undefined && (p.id === w || p.name.trim().toLowerCase() === w.trim().toLowerCase()))?.id ?? w)
+          setRoles(r as unknown as AppState, ev, Object.fromEntries(ROLE_KEYS.filter((k) => Array.isArray(a[k])).map((k) => [k, refs(a[k])])))
+          out = { id: ev.id, organizers: ev.organizers ?? [], hosts: ev.hosts ?? [], techSupport: ev.techSupport ?? [] }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_person_identify', description: 'Identify a person for an event by name: the person already called that (exact name, any case) is returned; otherwise a new person is made (ring Not yet sorted) and tagged with the event. Returns {personId, created}.',
+      inputSchema: schema({ event: S('event id or exact name'), name: S('the person\'s name') }, ['event', 'name']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const now = e.now()
+          const done = identifyPerson(r as unknown as AppState, ev.id, str(a.name), { id: `p${newId(now)}`, now: now.getTime() })
+          if (!done) throw new Error('a name is needed')
+          out = done
         })
         return out
       },

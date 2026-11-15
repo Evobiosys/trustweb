@@ -140,7 +140,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
 
   // ---- Events --------------------------------------------------------------
   function events(): Kids {
-    const cards = buildEvents(st().events, Date.now())
+    const cards = buildEvents(st().events, Date.now(), st().people)
     const tag = communityTagOf(data(), st(), loadColourTags())
     const create = btn(ctx.strings.w42ev.newEvent, () => ctx.bus.emit('new-event', { tag }), { 'data-community-new-event': '' }, 'btn')
     if (!cards.length) return [create, el('p', { class: 'empty' }, [t.eventsEmpty])]

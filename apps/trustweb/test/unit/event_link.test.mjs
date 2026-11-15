@@ -11,7 +11,7 @@ describe('event link', () => {
     const link = encodeEventLink(ev, ORIGIN, 'peer')
     expect(link.startsWith(`${ORIGIN}/#ev=`)).toBe(true)
     expect(decodeEventLink(link.slice(ORIGIN.length + 1))).toEqual({
-      kind: 'peer', id: 'e1', name: 'Forum Südtirol', from: '2026-10-12', to: '2026-10-14', where: 'Innsbruck', conditions: 'Bring a dish', themes: ['trust', 'commons'], organizer: 'Anna Gruber',
+      kind: 'peer', id: 'e1', name: 'Forum Südtirol', from: '2026-10-12', to: '2026-10-14', where: 'Innsbruck', conditions: 'Bring a dish', themes: ['trust', 'commons'], organizer: 'Anna Gruber', organizers: ['Anna Gruber'],
     })
   })
 
