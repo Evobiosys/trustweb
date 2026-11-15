@@ -9,6 +9,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'search', write: false }, { name: 'notifications_inbox_list', write: false }, { name: 'add_note', write: true }, { name: 'add_tag', write: true },
   { name: 'notifications_inbox_mark_seen', write: true }, { name: 'notifications_popup_set', write: true },
   { name: 'bar_list', write: false }, { name: 'bar_set', write: true }, { name: 'bar_hide', write: true }, { name: 'bar_show', write: true },
+  { name: 'web_filter_get', write: false }, { name: 'web_filter_set', write: true },
   { name: 'remove_person', write: true }, { name: 'restore_person', write: true },
   { name: 'assistant_providers', write: false }, { name: 'assistant_ask', write: false }, { name: 'assistant_set_model', write: true },
   // Wave 42 mcp-parity: every registry action reachable

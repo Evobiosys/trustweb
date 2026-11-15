@@ -285,6 +285,7 @@ import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
+import { createWebFocus } from './web_focus'
 import { createModeShell } from './ext/community_mode/shell'
 import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
@@ -5138,7 +5139,9 @@ const web = createWebView({
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000)
+const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
 const eventsView = createEventsView({
+  focusWeb: webFocus,
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),

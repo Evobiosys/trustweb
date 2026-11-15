@@ -16,6 +16,7 @@ import { PERSON_GREEN } from './colour_tags'
 import { ringColor } from './model'
 import type { AppState, Invitation, Person, TwEvent } from './model'
 import { invitationEventRows } from './invitations'
+import { ICONS } from './icons'
 import { S } from './strings'
 
 export interface EventsViewHooks {
@@ -49,6 +50,8 @@ export interface EventsViewHooks {
   showQr?: (ev: TwEvent, host?: boolean) => void
   /** Wave 43: opens the ask-for-support sheet (an event that offers support shows its button). */
   askSupport?: () => void
+  /** Wave 43 web-focus-filter: show the Web with only this event's people. */
+  focusWeb?: (ev: TwEvent) => void
 }
 
 export interface EventsView {
@@ -225,6 +228,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     ])
     contextPress(row, () => h.curatorPerson(p.id))
     return row
+  }
+
+  /** Wave 43: the Web glyph in the people header: the Web view with this event as its only filter. */
+  function webFocusButton(ev: TwEvent): HTMLElement | null {
+    if (!h.focusWeb) return null
+    const b = el('button', { type: 'button', class: 'hdr-btn icon-only ev-web-focus', 'data-event-web-focus': '', 'aria-label': S.eventsWebFocus, title: S.eventsWebFocus, onclick: () => h.focusWeb?.(ev) })
+    b.innerHTML = ICONS.web
+    return b
   }
 
   /** "Identify a person": the shared picker (event_person_picker.ts); a pick tags the person with this event. */
@@ -448,7 +459,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       linkPreview(),
       el('p', { class: 'meta' }, [S.eventLinkHint]),
       nameReveal(ev),
-      el('h3', {}, [S.eventsAssociated(tagLabel(ev))]),
+      el('div', { class: 'ev-people-head' }, [el('h3', {}, [S.eventsAssociated(tagLabel(ev))]), webFocusButton(ev)]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),

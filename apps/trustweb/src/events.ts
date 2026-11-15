@@ -69,13 +69,7 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
   }
 }
 
-/** P4 (wave 43): every event is a tag. In code, URLs, QR payloads and ids: `event_<slug>` (lowercase, spaces to underscore, other punctuation stripped). */
-export function eventTagSlug(name: string): string {
-  return `event_${name.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_]+/gu, '').replace(/[\s_]+/g, '_').replace(/^_+|_+$/g, '')}`
-}
-
-/** P4: how the tag shows in the app: `#event:<name>`. */
-export const eventTagLabel = (name: string): string => `#event:${name.trim()}`
+export { eventTagLabel, eventTagSlug } from './event_tag'
 
 /** What the tag is called on my device. */
 export function tagLabel(ev: Pick<TwEvent, 'name' | 'tagName'>): string {

@@ -3901,6 +3901,8 @@ export const S = {
       bar_set: 'Set the order of the bottom bar',
       bar_hide: 'Take a view out of the bottom bar',
       bar_show: 'Put a view back in the bottom bar',
+      web_filter_get: 'Read the Web\'s filter (which tags show only)',
+      web_filter_set: 'Set the Web\'s filter to these tags (an event is event_<slug>)',
       set_ring: 'Move a person to a trust ring',
       remove_tag: 'Take a tag off a person',
       set_field: 'Set a field of a person (name, where we met, ...)',
@@ -4401,4 +4403,7 @@ export const S = {
     offerFeed: 'Feed',
     askSupport: 'Ask the people here for support',
   },
+  // Wave 43 web-focus-filter: an event as a Web filter, and the filter badge.
+  eventsWebFocus: 'Show these people in the Web',
+  filterBadgeAria: (n: number) => `${n} ${n === 1 ? 'filter is' : 'filters are'} on: press to see them, hold to clear all`,
 } as const
