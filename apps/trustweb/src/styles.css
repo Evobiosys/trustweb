@@ -1916,3 +1916,5 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* wave 43 shell-fit */
 /* The ⋮ sheet sits above the bottom bar and scrolls inside itself when its list is taller than the screen (P06). */
 .sheet[data-kind=bar-more].on{bottom:100px; max-height:calc(100% - 112px)}
+/* wave 43 sync-visibility */
+.sync-advanced{margin-top:12px}

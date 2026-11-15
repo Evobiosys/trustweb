@@ -24,7 +24,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   // Wave 43 event-feed
   { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
   // Wave 42 settings-llm-first
-  { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_set', write: true },
+  { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_sync_capabilities', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai
   { name: 'import_sources', write: false }, { name: 'import_suggestions_list', write: false }, { name: 'import_run', write: true }, { name: 'import_suggestions_accept', write: true },
   // Wave 42 in-person-e2e

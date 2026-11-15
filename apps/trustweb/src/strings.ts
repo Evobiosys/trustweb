@@ -3934,6 +3934,7 @@ export const S = {
       settings_list: 'List every setting with its value',
       settings_get: 'Read one setting',
       settings_search: 'Search the settings',
+      settings_sync_capabilities: 'Show which sync entries (vault, Tana) this device offers',
       settings_set: 'Change one setting',
       community_list: 'List your communities',
       community_settings_get: 'Read a community\'s settings',
@@ -4433,4 +4434,6 @@ export const S = {
   // Wave 43 web-focus-filter: an event as a Web filter, and the filter badge.
   eventsWebFocus: 'Show these people in the Web',
   filterBadgeAria: (n: number) => `${n} ${n === 1 ? 'filter is' : 'filters are'} on: press to see them, hold to clear all`,
+  /** Wave 43 sync-visibility: on a phone the vault and Tana entries sit under Advanced. */
+  syncPhoneHint: 'Vault sync runs on a computer; your phone receives the result.',
 } as const
