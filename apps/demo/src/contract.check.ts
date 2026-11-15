@@ -19,7 +19,7 @@ import type {
   MatchResult,
   QueryEnvelope,
   AnswerEnvelope,
-  ChatEnvelope, PingEnvelope, ConnectEnvelope, ConnectAckEnvelope, AskAgainEnvelope,
+  ChatEnvelope, PingEnvelope, ConnectEnvelope, ConnectAckEnvelope, AskAgainEnvelope, DevicesEnvelope,
   DecodedAnswer,
   LocalOutcome,
 } from './types'
@@ -74,11 +74,11 @@ const _randomId: RandomIdFn = randomId
 type EncodeFn = (env: ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope) => string
 const _encode: EncodeFn = encodeForQr
 
-// Widened for the chat, ping and connect-ack envelopes (types.ts), and for TrustWeb wave 6i's ask-again. Kept as an
+// Widened for the chat, ping and connect-ack envelopes (types.ts), for TrustWeb wave 6i's ask-again and wave 43c's devices. Kept as an
 // explicit union rather than importing wire.ts's `Envelope` alias, so that
 // adding a new envelope type still has to be acknowledged HERE, which is the
 // whole point of this file.
-type DecodeFn = (s: string) => ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | null
+type DecodeFn = (s: string) => ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope | null
 const _decode: DecodeFn = decodeFromQr
 
 /** Referenced so `noUnusedLocals` does not hide a drift by complaining first. */
