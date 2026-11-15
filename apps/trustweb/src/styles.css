@@ -1960,3 +1960,19 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .steps-diagram .node.on + .lbl{fill:#fff}
 .steps-diagram .set text{font-size:11px; fill:var(--ink)}
 .steps-diagram .set.exclude text{text-decoration:line-through}
+/* wave43b resources-views */
+.rv-bar{display:flex; flex-direction:column; gap:6px; margin:0 0 10px}
+.rv-switch,.rv-chips{display:flex; flex-wrap:wrap; gap:4px}
+.rv-bar .btn,.rv-item .btn,.rv-protected .btn{text-decoration:underline}
+.rv-bar .btn.tw-off{text-decoration:underline line-through}
+.rv-section h3{margin:12px 0 6px}
+.rv-indent{margin-left:12px}
+.rv-indent h4{margin:8px 0 4px; font-size:13px; color:var(--ink-soft)}
+.rv-meta{display:flex; justify-content:flex-end; margin:-4px 0 6px}
+.rv-kind-set{font:inherit; font-size:12px; max-width:50%}
+.rv-suggest{display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin:0 0 8px}
+.rv-protected{user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; cursor:default}
+.rv-protected .rv-actions{display:flex; gap:6px; margin-top:6px}
+.rv-link{margin-top:6px; word-break:break-all; user-select:none; -webkit-user-select:none; font-size:13px}
+.rv-head{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px}
+.rv-bar .btn{padding-inline:8px}

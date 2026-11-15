@@ -675,7 +675,23 @@ export interface InventoryItem {
   tagAudience?: string[]
   /** Wave 24 (calendar at_event.ts): recorded while I was at this event (TwEvent.id). Absent = not tied to an event. Tags only; sends nothing. */
   eventId?: string
+  /** Wave 43b resources-views: what kind of resource this is. Absent = 'other' (old items migrate by staying as they are). */
+  kind?: ResourceKind
+  /** Who recommended it: a person id or a free name. */
+  recommendedBy?: string
+  /** The person who shared it with me (it then sits under "Suggested by others"). */
+  sharedBy?: string
+  /** The community (colour tag id) it came from. */
+  communityId?: string
+  /** Came from a protected community: no share-on, not selectable, link shown one at a time on press. */
+  protected?: boolean
+  /** Its web address, when it has one (a protected one shows only on press). */
+  link?: string
+  /** The "Recommended by X?" suggestion was dismissed. */
+  recommenderDismissed?: boolean
 }
+
+export type ResourceKind = 'book' | 'publication' | 'reference' | 'recording' | 'link' | 'other'
 
 /** One note added as context to an inventory item. */
 export interface InventoryContext {

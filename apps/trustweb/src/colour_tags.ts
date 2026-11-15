@@ -7,7 +7,7 @@ export const COLOUR_TAGS_KEY = 'trustweb.v1.colourtags'
 export const COLOUR_TAGS_EVENT = 'tw-colour-tags'
 export const PERSON_GREEN = 'var(--person-default)'   // warm amber by default, not green (Jakob 2026-10-15 16:10), now the token; the name stays for the callers
 
-export interface ColourTag { id: string; colour: string; label?: string; /** Wave 39: a system tag (`import:<date>-<source>`, import_tags.ts): hidden everywhere unless Tools > "show system tags" is on. */ system?: boolean; /** Wave 28 (trustzones.ts communityTags): this tag is a #community node; the friends and community zone can add its holders. */ community?: boolean
+export interface ColourTag { id: string; colour: string; label?: string; /** Wave 39: a system tag (`import:<date>-<source>`, import_tags.ts): hidden everywhere unless Tools > "show system tags" is on. */ system?: boolean; /** Wave 28 (trustzones.ts communityTags): this tag is a #community node; the friends and community zone can add its holders. */ community?: boolean; /** Wave 43b resources-views: a protected community: its resources cannot be shared on, selected or copied; the link shows one at a time. */ protected?: boolean
   /** Wave 40 (tags_model.ts): nesting. A group's members are its children's, minus `excludes`; a managed tag has stewards; `forkedFrom` names the tag this was copied from. */
   kind?: TagKind; parents?: string[]; excludes?: string[]; stewardIds?: string[]; forkedFrom?: string }
 
