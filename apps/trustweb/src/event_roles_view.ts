@@ -46,7 +46,7 @@ function roleRow(h: RolesHooks, ev: TwEvent, key: RoleKey, label: string): HTMLE
     ])
   })
   const picker = eventPersonPicker(h, ev.id, {
-    exclude: refs, ariaLabel: label, placeholder: S.eventsTagSearch, inputAttr: 'data-role-search', personAttr: 'data-role-pick',
+    exclude: refs, ariaLabel: label, placeholder: S.eventsTagSearch, inputAttr: 'data-role-search', personAttr: 'data-role-pick', quietWhenEmpty: true,
     onPick: (id) => change([...refs, id]),
   })
   return el('div', { class: 'role-row', 'data-role': key }, [

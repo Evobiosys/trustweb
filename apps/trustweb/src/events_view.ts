@@ -439,11 +439,23 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
     }, [S.eventsAttended])
-    const notify = toggle(notifyOn(ev), S.w43press.notify, 'data-event-notify', () => { applyEventSettings(ev, { notify: !notifyOn(ev) }); h.save(); h.redraw() })
+    // review-fixes-43: one switch for this event's notifications; it also covers the "I'm here now" bell (a muted bell of older records shows as off, switching on clears it).
+    const st = h.state()
+    const notifyNow = notifyOn(ev) && !(st.atEvent?.eventId === ev.id && st.atEvent.bell === false)
+    const notify = toggle(notifyNow, S.w43press.notify, 'data-event-notify', () => {
+      applyEventSettings(ev, { notify: !notifyNow })
+      if (!notifyNow && st.atEvent?.eventId === ev.id) delete st.atEvent.bell
+      h.save(); h.redraw()
+    })
     contextPress(notify, () => { notifyHint = !notifyHint; h.redraw() })
     const title = h.header(ev.name, view.kind === 'page' && view.noBack ? {} : { back: () => show({ kind: 'list' }) })   // wave 40: from the calendar it is a regular event card, no Back button
     dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
-    const tagChip = el('button', { class: 'chip event-tag-chip', type: 'button', 'data-event-tag-chip': ev.name, 'aria-label': S.eventsTagChipAria(eventTagLabel(ev.name)), onclick: () => h.copyLink(eventTagSlug(ev.name), S.eventsTagCopied) }, [eventTagLabel(ev.name)])
+    // review-fixes-43: the event name in the header is a line of the page too (P1): nothing to expand, so a press edits; a long press / right click edits with the name focused.
+    const nameLine = title.querySelector('h2')
+    if (nameLine) { nameLine.setAttribute('data-event-name-line', ''); nameLine.setAttribute('role', 'button'); nameLine.tabIndex = 0; editable(nameLine, ev, 'name') }
+    // P4: the tag as this device calls it (tagLabel: the tag name, else the event name), the same text the Web filter and the Feed show.
+    const tag = tagLabel(ev)
+    const tagChip = el('button', { class: 'chip event-tag-chip', type: 'button', 'data-event-tag-chip': tag, 'aria-label': S.eventsTagChipAria(eventTagLabel(tag)), onclick: () => h.copyLink(eventTagSlug(tag), S.eventsTagCopied) }, [eventTagLabel(tag)])
     contextPress(tagChip, () => show({ kind: 'form', id: ev.id }))
     return [title, el('div', { class: 'scroll events-page' }, [
       tagChip,

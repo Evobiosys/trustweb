@@ -81,3 +81,13 @@ describe('open decisions: one constant each, read here', () => {
     expect(revealedBy({ name: 'Ada Probe' }, { nameReveal: 'nick' })).toEqual(NICK_FALLBACK === 'first' ? { name: 'Ada' } : undefined)
   })
 })
+
+describe('one notifications switch per event', () => {
+  it('the "I\'m here now" announcements stay quiet when the event\'s Notifications are off or the old bell is muted', async () => {
+    const { hereMuted } = await import('../../src/ext/calendar/at_event.ts')
+    const e = { id: 'e1', name: 'x', from: '2026-11-15', where: '', createdAt: 0, attended: true }
+    expect(hereMuted({ atEvent: { eventId: 'e1', since: 0 } }, e)).toBe(false)
+    expect(hereMuted({ atEvent: { eventId: 'e1', since: 0 } }, { ...e, notify: false })).toBe(true)
+    expect(hereMuted({ atEvent: { eventId: 'e1', since: 0, bell: false } }, e)).toBe(true)
+  })
+})

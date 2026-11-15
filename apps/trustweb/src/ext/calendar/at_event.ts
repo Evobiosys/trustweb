@@ -34,6 +34,11 @@ export function setBell(s: AppState, on: boolean): void {
   if (on) delete s.atEvent.bell; else s.atEvent.bell = false
 }
 
+/** Review-fixes-43: the announcements of tick() stay quiet when this event's Notifications are off (ev.notify, the event page's one switch) or an older record muted the bell. */
+export function hereMuted(s: Pick<AppState, 'atEvent'>, ev: Pick<TwEvent, 'notify'>): boolean {
+  return s.atEvent?.bell === false || ev.notify === false
+}
+
 /** null: not at an event, the event is gone, or it ended more than 6 h ago (the frame then offers Leave only). */
 export function hereNow(s: AppState, now: number): Here | null {
   const ev = s.atEvent && s.events?.find((e) => e.id === s.atEvent?.eventId)

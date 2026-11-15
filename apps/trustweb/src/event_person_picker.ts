@@ -48,6 +48,8 @@ export interface PickerOptions {
   tag?: boolean
   /** Open hook: ask which ring a new person gets. Unused by default (NEW_FROM_EVENT_RING). */
   pickRing?: () => Promise<Ring>
+  /** No rows until something is typed (the three role rows; P3: a simple surface). */
+  quietWhenEmpty?: boolean
   placeholder?: string
   ariaLabel?: string
   /** Data attribute names, so each caller keeps its own selectors. */
@@ -67,7 +69,7 @@ export function eventPersonPicker(h: PickerHooks, eventId: string, o: PickerOpti
     o.onPick(done.personId, done.created)
   }
   const draw = (): void => {
-    rows.replaceChildren(...identifyRows(h.state().people, input.value, o.exclude).map((r) => {
+    rows.replaceChildren(...(o.quietWhenEmpty && !input.value.trim() ? [] : identifyRows(h.state().people, input.value, o.exclude)).map((r) => {
       if ('create' in r) {
         return el('button', { class: 'chip picker-create', 'data-person-create': r.create, onclick: () => { void make(r.create) } }, [S.eventsAddNew(r.create)])
       }

@@ -1896,7 +1896,8 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* wave 43 event-press-share */
 .press{cursor:pointer;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left}
 .event-since{display:block;margin:0 0 6px}
-.event-share .btn{flex:1 1 0}
+.event-share{justify-content:flex-start; gap:16px}
+.event-share .btn{flex:0 0 auto}   /* review-fixes-43: Link and QR icons side by side, not spread across the row */
 .event-times .field{margin-bottom:6px}
 /* wave 43 web-focus-filter */
 .ev-people-head{display:flex; align-items:center; justify-content:space-between; gap:8px}
