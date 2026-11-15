@@ -44,6 +44,9 @@ export const NAME_REVEALS: readonly NameReveal[] = ['full', 'first', 'hidden', '
 export const DEFAULT_NAME_REVEAL: NameReveal = 'full'
 export const nameRevealOf = (ev: Pick<TwEvent, 'nameReveal'>): NameReveal => (NAME_REVEALS.includes(ev.nameReveal as NameReveal) ? ev.nameReveal! : DEFAULT_NAME_REVEAL)
 
+/** Open decision (wave 43 questions, nickname source): the nickname is Me.nickname (mine, set on the event page); without one, a Nickname reveal shows 'first' (my first name) or 'hidden' (nothing). One-line switch, read by events.ts revealedBy. */
+export const NICK_FALLBACK: 'first' | 'hidden' = 'first'
+
 /** Who may invite others to an event. */
 export type InvitePolicy = 'hosts' | 'trusted' | 'everyone'
 export const INVITE_POLICIES: readonly InvitePolicy[] = ['hosts', 'trusted', 'everyone']

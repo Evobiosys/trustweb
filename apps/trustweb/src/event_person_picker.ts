@@ -22,6 +22,13 @@ export function identifyRows(people: readonly Person[], query: string, exclude: 
   return [...hits, { create: q }]
 }
 
+/** What Enter does: the first row (the best match, else the add-new row), so a partial name never makes a second card. Undefined: nothing typed. */
+export function pickOnEnter(people: readonly Person[], query: string, exclude: readonly string[] = []): { id: string } | { create: string } | undefined {
+  const first = query.trim() ? identifyRows(people, query, exclude)[0] : undefined
+  if (!first) return undefined
+  return 'create' in first ? { create: first.create } : { id: first.id }
+}
+
 export interface PickerHooks {
   state: () => AppState
   save: () => void
@@ -70,7 +77,13 @@ export function eventPersonPicker(h: PickerHooks, eventId: string, o: PickerOpti
     }))
   }
   input.addEventListener('input', draw)
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) { e.preventDefault(); void make(input.value) } })
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    const first = pickOnEnter(h.state().people, input.value, o.exclude)
+    if (!first) return
+    e.preventDefault()
+    if ('create' in first) void make(first.create); else o.onPick(first.id, false)
+  })
   draw()
   return el('div', {}, [input, rows])
 }

@@ -9,8 +9,14 @@
  */
 import type { AppState, SocialPost, TwEvent } from './model'
 
-/** event_tag.ts eventTagSlug, repeated: this leaf loads under plain node, where an extension-less value import fails; event_feed.test.mjs proves the two agree. */
-const slugOf = (name: string): string => 'event_' + name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\p{L}\p{N}_]/gu, '')
+/** event_tag.ts EVENT_SLUG_CASE, repeated (flip both; review_fixes_43.test.mjs fails while they differ). */
+export const EVENT_SLUG_CASE: 'lower' | 'keep' = 'lower'
+
+/** event_tag.ts eventTagSlug, repeated character for character: this leaf loads under plain node, where an extension-less value import fails; review_fixes_43.test.mjs proves the two agree. */
+function slugOf(name: string): string {
+  const cased = EVENT_SLUG_CASE === 'lower' ? name.trim().toLowerCase() : name.trim()
+  return `event_${cased.replace(/[^\p{L}\p{N}\s_]+/gu, '').replace(/[\s_]+/g, '_').replace(/^_+|_+$/g, '')}`
+}
 
 /** The tag of an event on this device: its tag name (events.ts tagLabel) as `event_<slug>`. */
 export const tagOfEvent = (ev: Pick<TwEvent, 'name' | 'tagName'>): string => slugOf(ev.tagName ?? ev.name)

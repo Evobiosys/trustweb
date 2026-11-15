@@ -367,7 +367,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...field(S.eventTagName, name),
       el('label', { class: 'meta' }, [hostNames, ' ', S.eventHostNamesTags]),
       ...others(ev),
-      isEventHost(ev, h.state().me.displayName) ? el('div', { 'data-event-invite-policy': policy }, [
+      isEventHost(ev, h.state().me.displayName, h.state().people) ? el('div', { 'data-event-invite-policy': policy }, [
         el('label', { class: 'meta' }, [T.invitePolicy]),
         el('div', { class: 'seg', role: 'group', 'aria-label': T.invitePolicy }, INVITE_POLICIES.map((p) => el('button', {
           type: 'button', class: p === policy ? 'on' : '', 'aria-pressed': String(p === policy), 'data-event-invite-policy-opt': p,

@@ -6,8 +6,9 @@ import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { EventBy, LinkedEvent } from './event_link'
 import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
-import { DEFAULT_INVITE_POLICY, nameRevealOf, stamp, timesError } from './event_press'
-export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, nameRevealOf, offersOf, setEventTimes } from './event_press'
+import { eventOrganizers, roleLabels } from './event_roles'
+import { DEFAULT_INVITE_POLICY, NICK_FALLBACK, nameRevealOf, stamp, timesError } from './event_press'
+export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, NICK_FALLBACK, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, nameRevealOf, offersOf, setEventTimes } from './event_press'
 export type { EventOffers, EventSettingsPatch, InvitePolicy, NameReveal } from './event_press'
 import type { AppState, Person, TwEvent } from './model'
 
@@ -102,7 +103,9 @@ export function revealedBy(by: EventBy | undefined, ev: Pick<TwEvent, 'nameRevea
   if (!by) return undefined
   const r = nameRevealOf(ev)
   if (r === 'hidden') return undefined
-  if (r === 'first' || r === 'nick') { const name = (r === 'nick' && by.nick?.trim()) || firstName(by.name); return name ? { name } : undefined }
+  if (r === 'nick' && by.nick?.trim()) return { name: by.nick.trim() }
+  if (r === 'nick' && NICK_FALLBACK === 'hidden') return undefined
+  if (r === 'first' || r === 'nick') { const name = firstName(by.name); return name ? { name } : undefined }
   return { name: by.name, ...(by.did ? { did: by.did } : {}) }
 }
 
@@ -204,21 +207,27 @@ export const notifyOn = (ev: Pick<TwEvent, 'notify'>): boolean => ev.notify !== 
 
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
 
-/** Host, organizer or tech support (roles by name); an event I made without any host is mine. */
-export function isEventHost(ev: TwEvent, meName: string): boolean {
-  const names = [...(ev.hosts ?? []), ...(ev.organizer ? [ev.organizer] : []), ...(ev.techSupport ?? [])]
-  return names.some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !ev.organizer)
+/** The role holders of an event as names: person ids resolve to the card's name, free names stay; the legacy organizer text splits on commas. */
+function roleNames(ev: TwEvent, people: readonly Pick<Person, 'id' | 'name'>[], keys: readonly ('organizers' | 'hosts' | 'techSupport')[]): string[] {
+  const refs = keys.flatMap((k) => (k === 'organizers' ? eventOrganizers(ev) : ev[k] ?? []))
+  return roleLabels({ people: people as Person[] }, refs)
 }
 
-/** One predicate for "show the invite button": hosts always; 'everyone' lets attendees; 'trusted' lets attendees when one of the hosts sits in my Closest or Close ring (family by its closeness). */
+/** Host, organizer or tech support (held as a person id or a free name); an event I made without any host or organizer is mine. */
+export function isEventHost(ev: TwEvent, meName: string, people: readonly Pick<Person, 'id' | 'name'>[] = []): boolean {
+  return roleNames(ev, people, ['hosts', 'organizers', 'techSupport']).some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !eventOrganizers(ev).length)
+}
+
+/** One predicate for "show the invite button": hosts always; 'everyone' lets attendees; 'trusted' lets attendees when one of the hosts or organizers sits in my Closest or Close ring (family by its closeness). */
 export function mayInvite(ev: TwEvent, s: Pick<AppState, 'me' | 'people'>): boolean {
-  if (isEventHost(ev, s.me.displayName)) return true
+  if (isEventHost(ev, s.me.displayName, s.people)) return true
   if (!ev.attended) return false
   const policy = ev.invitePolicy ?? DEFAULT_INVITE_POLICY
   if (policy === 'everyone') return true
   if (policy !== 'trusted') return false
-  const hosts = [...(ev.hosts ?? []), ...(ev.organizer ? [ev.organizer] : [])]
-  return s.people.some((p) => hosts.some((h) => sameName(h, p.name)) && TRUSTED_RINGS.includes(ringSlot(p)))
+  const refs = new Set([...(ev.hosts ?? []), ...eventOrganizers(ev)])
+  const names = roleNames(ev, s.people, ['hosts', 'organizers'])
+  return s.people.some((p) => (refs.has(p.id) || names.some((h) => sameName(h, p.name))) && TRUSTED_RINGS.includes(ringSlot(p)))
 }
 const TRUSTED_RINGS: readonly Ring[] = [Ring.Closest, Ring.Close]
 

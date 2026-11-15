@@ -31,8 +31,11 @@ export const canSyncLocalVault = (env: SyncEnv): boolean => env.tauri || !env.ph
 /** The Tana API needs a network and a token only, so every device can; a phone just keeps it under Advanced. */
 export const canSyncTana = (_env: SyncEnv): boolean => true
 
+/** Open decision (wave 43 questions, sync device predicate): where a phone without the Tauri shell shows the Obsidian and Tana entries. One-line switch. */
+export const SYNC_PHONE_PLACEMENT: Placement = 'advanced'
+
 export function syncPlacement(env: SyncEnv): SyncPlacement {
-  const where: Placement = env.tauri || !env.phone ? 'main' : 'advanced'
+  const where: Placement = env.tauri || !env.phone ? 'main' : SYNC_PHONE_PLACEMENT
   return { obsidian: where, tana: where }
 }
 
