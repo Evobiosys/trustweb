@@ -23,6 +23,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'event_link_open', write: false },
   // Wave 43 event-press-share
   { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
+  // Wave 43c chat-notices
+  { name: 'notices_list', write: false }, { name: 'web_default_view_get', write: false }, { name: 'web_default_view_set', write: true },
   // Wave 43b notify-center
   { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
   // Wave 43b resources-views

@@ -1788,7 +1788,7 @@ export const S = {
   } as Record<TranscriptionChoice, string>,
   setDefaultRecording: 'The Record tab starts with',
   // Record default by origin (owner 2026-10-06): Settings only decides where the origin does not.
-  setDefaultRecordingNote: 'From Resources or the QR code, Record opens a meeting; from Web, just you. Everywhere else, this choice.',
+  setDefaultRecordingNote: 'From Resources or the QR code, Record opens a meeting; from Contacts, just you. Everywhere else, this choice.',
   setDefaultRecordingLabel: {
     [DefaultRecording.Solo]: 'Just me',
     [DefaultRecording.Meeting]: 'A meeting',
@@ -2867,7 +2867,7 @@ export const S = {
   awayAskMessage: (name: string) => `Message ${name}`,
   awayAskDismiss: 'Dismiss',
   setMembraneLimit: 'People per trust zone',
-  setMembraneLimitHint: (n: number) => `The Web page shows the ${n} you are closest to in each trust zone: pinned first, then the most recent chat, connection or activity (1 to 20).`,
+  setMembraneLimitHint: (n: number) => `The Contacts page shows the ${n} you are closest to in each trust zone: pinned first, then the most recent chat, connection or activity (1 to 20).`,
   setPinnedOrder: 'Pinned order',
   setPinnedOrderChoice: { pinned: 'When pinned', contact: 'Latest contact' },
   setPinnedOrderHint: 'Pinned people come first. "When pinned" puts the newest pin first; "Latest contact" puts whoever you were last in touch with first.',
@@ -3137,10 +3137,10 @@ export const S = {
   barMoreViews: 'More views',
   // Wave 35 (web_default_view.ts): pin a view as the default of Web.
   viewMoreAria: (name: string) => `More for ${name}`,
-  viewPinDefault: 'Pin as the default view of Web',
-  viewPinned: 'Default view of Web ✓',
+  viewPinDefault: 'Pin as the default view of Contacts',
+  viewPinned: 'Default view of Contacts ✓',
   viewInBar: 'Also show in the bottom row',
-  webDefaultLabel: 'Default view',
+  webDefaultLabel: 'Default view of Contacts',
   groups: {
     heading: 'Groups I could join or help',
     none: 'No groups yet. Add the ones you wonder about; the ranking stays on this phone.',
@@ -3251,7 +3251,7 @@ export const S = {
   agentUrl: 'Agent address (this device only)',
   agentCheck: 'Check',
   agentChecking: 'Checking …',
-  agentConnected: (when: string) => `Connected, checked ${when}. The Your AI button shows in the Web header.`,
+  agentConnected: (when: string) => `Connected, checked ${when}. The Your AI button shows in the Contacts header.`,
   agentNotConnected: 'Not connected. The agent must answer at this address on this device.',
   agentHint: 'Optional. Connect your own agent here; a check holds for 10 minutes.',
   // wave 36 ai-subscription
@@ -3948,6 +3948,9 @@ export const S = {
       event_offers_set: 'Switch support, resources and feed on for an event',
       event_times_set: 'Change when you are at an event',
       me_nickname_set: 'Set your nickname for event links',
+      notices_list: 'List the notice layer: how many notices show at once and what waits',
+      web_default_view_get: 'Read the view the Web (Contacts) tab opens',
+      web_default_view_set: 'Pin the view the Web (Contacts) tab opens',
       notifications_list: 'List the bell\'s notifications by section',
       notifications_mark_read: 'Mark all notifications read',
       resources_list: 'List your resources, filtered by kind, who shared them or community, in a list, outliner or by person',

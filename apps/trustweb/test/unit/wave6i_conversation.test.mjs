@@ -267,10 +267,11 @@ describe('card_stack.ts: in the flow above the rings, one tap opens', () => {
       { peerId: 'pC', qid: 'a1', text: 'drill', at: NOW },
     ])
   })
-  it('the stack is drawn into the Web screen\'s flow, never as a floating card (main.ts, styles.css)', () => {
+  it('the stack is a child of the one notice layer (wave 43c), not of the zoomed rings; the cards themselves never float (main.ts, styles.css)', () => {
     const main = readFileSync(path.join(HERE, '../../src/main.ts'), 'utf8')
     const css = readFileSync(path.join(HERE, '../../src/styles.css'), 'utf8')
-    expect(main).toMatch(/queryOpen \? null : cardStackEl,\s*\n\s*s\.people\.length === 0/)
+    expect(main).toContain("noticeLayer.adopt('cards', cardStackEl)")
+    expect(main).not.toMatch(/queryOpen \? null : cardStackEl,/)
     expect(css).toMatch(/\.card-stack\{display:flex/)
     expect(css.match(/\.card-stack\{[^}]*\}/)[0]).not.toMatch(/position:absolute|position:fixed/)
     expect(css.match(/\.stack-card\{[^}]*\}/)[0]).not.toMatch(/position:absolute|position:fixed/)

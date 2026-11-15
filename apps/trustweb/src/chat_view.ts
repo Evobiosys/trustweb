@@ -176,17 +176,19 @@ export const CHAT_CSS = `
 .chat-ext{display:inline-block; align-self:flex-start; color:var(--electric-deep); font-weight:600; text-decoration:underline; padding:6px 0}
 .chat-note{color:var(--ink-soft); font-size:13.5px}
 .chat-thread{display:flex; flex-direction:column; gap:6px; max-height:46vh; overflow-y:auto; padding:2px}
-.chat-msg{max-width:84%; padding:8px 12px; border-radius:16px; background:var(--card); border:1px solid var(--line); white-space:pre-wrap; overflow-wrap:anywhere}
+.chat-msg{max-width:72%; box-sizing:border-box; padding:8px 12px; border-radius:16px; background:var(--card); border:1px solid var(--line); white-space:pre-wrap; overflow-wrap:anywhere}
 .chat-out{align-self:flex-end; background:var(--electric); color:#fff; border-color:transparent}
 .chat-in{align-self:flex-start}
-.chat-meta{display:block; font-size:11.5px; opacity:.75; margin-top:2px}
-.chat-composer{display:flex; flex-direction:column; gap:6px}
+.chat-meta{display:block; font-size:11px; opacity:.75; margin-top:2px}
+.chat-composer{display:flex; flex-direction:column; gap:6px; position:sticky; bottom:0; background:var(--linen); padding:6px 0 calc(6px + env(safe-area-inset-bottom,0px))}
 .chat-composer textarea{width:100%; min-height:64px; resize:vertical; font:inherit; padding:10px 12px; border-radius:14px; border:1px solid var(--line); background:var(--card); color:var(--ink)}
 .chat-row{display:flex; gap:8px; align-items:center; justify-content:space-between}
-.chat-re{display:block; font-size:12px; opacity:.85; border-left:3px solid currentColor; padding:0 0 0 8px; margin:0 0 4px; white-space:normal}
+.chat-re{display:block; font-size:12px; opacity:.9; border-left:3px solid currentColor; background:rgba(128,128,128,.16); border-radius:6px; padding:3px 8px; margin:0 0 6px; white-space:normal; font-style:italic}
 .chat-context{display:flex; gap:8px; align-items:flex-start; justify-content:space-between; font-size:13px; color:var(--ink-soft); border-left:3px solid var(--electric); padding:4px 0 4px 10px}
 .chat-context button{border:0; background:none; font:inherit; color:var(--ink-soft); cursor:pointer; padding:0 4px; line-height:1}
 .chat-fallback{display:flex; flex-wrap:wrap; gap:6px; align-items:center; align-self:flex-end; font-size:12px; color:var(--ink-soft)}
+.chat-note:empty{display:none}
+@media (max-width:480px){ .chat-msg{max-width:86%} }
 .chat-msg.chat-focus{outline:2px solid var(--electric); outline-offset:2px}
 `
 
@@ -266,11 +268,14 @@ function composer(deps: ChatViewDeps, vm: ChatViewModel, redraw: () => void, dra
   const area = h(doc, 'textarea', { placeholder: S.placeholder, 'aria-label': S.placeholder, maxlength: String(CHAT_TEXT_MAX), rows: '2' }) as HTMLTextAreaElement
   area.value = draft.text
   const left = h(doc, 'span', { class: 'chat-note' })
+  // Wave 43c: the Signal hint only when the 500-character cap is near (400 or more typed).
+  const hint = h(doc, 'p', { class: 'chat-note', 'data-chat': 'long-hint' })
   const sendBtn = h(doc, 'button', { class: 'btn btn-electric btn-sm', type: 'button' }, [S.send]) as HTMLButtonElement
   const updateLeft = (): void => {
     draft.text = area.value
     const n = CHAT_TEXT_MAX - area.value.length
     left.textContent = n <= 100 ? S.charsLeft(n) : ''
+    hint.textContent = n <= 100 ? S.longHint : ''
   }
   updateLeft()
   const submit = async (): Promise<void> => {
@@ -295,7 +300,7 @@ function composer(deps: ChatViewDeps, vm: ChatViewModel, redraw: () => void, dra
     contextLine(deps, draft, redraw),
     area,
     h(doc, 'div', { class: 'chat-row' }, [left, again, sendBtn]),
-    h(doc, 'p', { class: 'chat-note', 'data-chat': 'long-hint' }, [S.longHint]),
+    hint,
   ])
 }
 
@@ -323,7 +328,12 @@ export function renderChat(deps: ChatViewDeps): ChatHandle {
       ...[h(doc, 'h3', {}, [S.title(person.name)]), link, statusNote(deps, vm), thread, person.peerId ? composer(deps, vm, draw, draft) : null]
         .filter((n): n is HTMLElement => n !== null),
     )
-    if (thread) scrollThread(thread, focusKey)
+    if (thread) {
+      const key = focusKey
+      scrollThread(thread, key)
+      // Wave 43c: on the first draw the thread is not in the page yet (scrollHeight 0): scroll to the newest again once it is.
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => scrollThread(thread, key))
+    }
     focusKey = undefined
   }
   draw()
