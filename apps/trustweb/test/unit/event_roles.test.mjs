@@ -13,9 +13,9 @@ const state = (extra = {}) => ({ v: 1, me: { id: 'me', displayName: 'Jakob' }, p
 
 describe('event tag helpers (P4)', () => {
   it('slug: lowercase, spaces to underscore, other punctuation stripped, prefixed event_', () => {
-    expect(eventTagSlug('Winter IYG')).toBe('event_winter_iyg')
-    expect(eventTagSlug('  Forum  Alpbach: 2026! ')).toBe('event_forum_alpbach_2026')
-    expect(eventTagSlug('Fête de l’été')).toBe('event_fête_de_lété')
+    expect(eventTagSlug('Winter IYG')).toBe('event_Winter_IYG')
+    expect(eventTagSlug('  Forum  Alpbach: 2026! ')).toBe('event_Forum_Alpbach_2026')
+    expect(eventTagSlug('Fête de l’été')).toBe('event_Fête_de_lété')
   })
   it('label: #event:<name>', () => expect(eventTagLabel('Winter IYG')).toBe('#event:Winter IYG'))
 })

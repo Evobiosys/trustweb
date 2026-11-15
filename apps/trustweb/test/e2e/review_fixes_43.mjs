@@ -124,6 +124,7 @@ try {
     await sweep(page, `${w} focused web + badge`); await shot('web-focus')
     if (phone) check(`${w}: no document scroll on the focused Web`, await noDocScroll(page))
     await page.locator('[data-filter-badge]').click({ button: 'right' }); await page.waitForTimeout(300)
+    await page.locator('[data-notice-close]').click().catch(() => {}); await page.waitForTimeout(200)   // answers-43: clearing offers a 5 s Undo toast; the sweep checks the screen itself
 
     // Feed
     await click('[data-go="feed"]'); await page.waitForTimeout(500)

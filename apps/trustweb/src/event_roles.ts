@@ -76,9 +76,16 @@ export function relatedOthers(s: Pick<AppState, 'people'>, ev: TwEvent): Person[
   return s.people.filter((p) => refs.has(p.id) && p.deleted_at === undefined && !p.events?.includes(ev.id))
 }
 
-function addEventTag(s: Pick<AppState, 'people'>, personId: string, eventId: string): void {
+/** Wave 43 answers (epsilon): a person added to an event that is part of a community joins that community (its colour tag). An isolated event changes nothing. */
+export function joinEventCommunity(s: Pick<AppState, 'people' | 'events'>, personId: string, eventId: string): void {
+  const tag = s.events?.find((e) => e.id === eventId)?.communityId
   const p = s.people.find((x) => x.id === personId)
-  if (p && !p.events?.includes(eventId)) p.events = [...(p.events ?? []), eventId]
+  if (tag && p && String(p.fields?.[tag]) !== 'true') p.fields = { ...p.fields, [tag]: 'true' }
+}
+
+function addEventTag(s: Pick<AppState, 'people' | 'events'>, personId: string, eventId: string): void {
+  const p = s.people.find((x) => x.id === personId)
+  if (p && !p.events?.includes(eventId)) { p.events = [...(p.events ?? []), eventId]; joinEventCommunity(s, personId, eventId) }
 }
 
 export interface IdentifyOptions {

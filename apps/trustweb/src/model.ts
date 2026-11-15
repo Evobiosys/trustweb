@@ -387,12 +387,18 @@ export interface TwEvent {
   nameReveal?: NameReveal
   /** Wave 43 event-press-share: notifications of this event; absent = on. Local only. */
   notify?: boolean
-  /** Wave 43: who may invite others; absent = 'hosts'. Local only. */
+  /** Wave 43: who may invite others; absent = 'everyone' (event_press.ts DEFAULT_INVITE_POLICY). Local only. */
   invitePolicy?: InvitePolicy
   /** Wave 43: what the host switched on; absent = all off (events.ts EVENT_OFFERS_DEFAULT). */
   offers?: Partial<EventOffers>
   /** Wave 42 community-event: the community (colour tag id) this event was made in. */
   community?: string
+  /** Wave 43 answers (epsilon): "Part of a community": the community (colour tag id) whose members this event's people join. Absent = an isolated event. Local only. */
+  communityId?: string
+  /** Wave 43 answers (iota): my own nickname at this event, used by the Nickname reveal. Local only. */
+  myNickname?: string
+  /** Wave 43 answers (zeta): a Mastodon instance (host) whose public hashtag timeline of this event's tag the event Feed merges, read-only. Local only. */
+  mastodonInstance?: string
   /** Wave 42: the free-text documents of the event (event_plan.ts). */
   docs?: { description?: string; followup?: string }
   /** Wave 42: the sign-up sheet: who joined with one tap ('me' or a person id). */
@@ -837,6 +843,8 @@ export interface Me {
   displayName: string
   /** Wave 43: what a link says instead of my name when an event's name reveal is "Nickname". Local only. */
   nickname?: string
+  /** Wave 43 answers (iota): several nicknames, the first is `nickname` (event_press.ts setNicknames). Local only. */
+  nicknames?: string[]
   /** Wave 33: the owner's own mail address; local only, never in the connect link. */
   primaryEmail?: { provider: string; address: string }
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */

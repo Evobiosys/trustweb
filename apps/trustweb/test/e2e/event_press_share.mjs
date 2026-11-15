@@ -17,7 +17,7 @@ const dayNext = iso(new Date(now.getTime() + 86400000))
 const dayLater = `${later.getFullYear()}-${p2(later.getMonth() + 1)}-${p2(later.getDate())}`
 const EV = [
   { id: 'e1', name: 'Winter Forum', from: `${day}T09:30`, to: dayLater, core: { from: dayNext, to: dayLater }, where: 'Innsbruck', conditions: 'Bring a mug', themes: ['soil'], createdAt: 1, attended: true, hosts: ['Jakob'] },
-  { id: 'e2', name: 'Other Gathering', from: day, where: 'Graz', createdAt: 2, attended: true, hosts: ['Somebody Else'], fromLink: true },
+  { id: 'e2', name: 'Other Gathering', from: day, where: 'Graz', createdAt: 2, attended: true, hosts: ['Somebody Else'], fromLink: true, invitePolicy: 'hosts' },
 ]
 const PEOPLE = [{ id: 'p1', name: 'Anna Berger', context: '', ring: 'friend', metAt: 1, lines: [] }]
 const stored = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))
@@ -97,8 +97,8 @@ try {
   check('feed on is stored', (await evOf(page)).offers?.feed === true && (await page.locator('[data-event-advanced]').evaluate((n) => n.open)))
   await page.locator('[data-event-offer-support]').tap(); await page.waitForTimeout(200)
   check('support on shows the ask button on the page', (await page.locator('[data-event-ask-support]').count()) === 1)
-  await page.locator('[data-event-invite-policy-opt="everyone"]').tap(); await page.waitForTimeout(200)
-  check('invite policy everyone stored', (await evOf(page)).invitePolicy === 'everyone')
+  await page.locator('[data-event-invite-policy-opt="hosts"]').tap(); await page.waitForTimeout(200)
+  check('invite policy hosts stored (answers-43: everyone is the default and is not stored)', (await evOf(page)).invitePolicy === 'hosts')
   check('a host still sees the invite box', (await page.locator('[data-cal-invitees]').count()) === 1)
   await page.screenshot({ path: `${SHOTS}/event-press-share-360-advanced.png` })
 
@@ -106,7 +106,7 @@ try {
   await hold(page, '[data-event-where]')
   check('long press on the place opens the edit sheet on that field', (await page.locator('[data-event-save]').count()) === 1 && (await page.evaluate(() => document.activeElement?.value)) === 'Innsbruck')
   await page.locator('[data-event-save]').tap(); await page.waitForTimeout(300)
-  check('saving keeps the local settings', (await evOf(page)).invitePolicy === 'everyone' && (await evOf(page)).notify === false)
+  check('saving keeps the local settings', (await evOf(page)).invitePolicy === 'hosts' && (await evOf(page)).notify === false)
   await page.locator('[data-event-conditions]').click(); await page.waitForTimeout(300)
   check('a single press on a line with nothing to expand edits it', (await page.locator('[data-event-save]').count()) === 1)
   await page.locator('[data-event-save]').tap(); await page.waitForTimeout(300)

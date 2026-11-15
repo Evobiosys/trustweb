@@ -11,10 +11,10 @@ const people = [p('a', ['e1']), p('b'), p('c'), p('d', ['e2']), p('e', ['e2', 'e
 const ids = (r) => r.map((x) => x.id)
 
 describe('event tag helpers (P4)', () => {
-  it('slug: lowercase, spaces to underscore, other punctuation stripped', () => {
-    expect(eventTagSlug('Winter IYG')).toBe('event_winter_iyg')
-    expect(eventTagSlug('  Sommer-Fest, 2026!  ')).toBe('event_sommerfest_2026')
-    expect(eventTagSlug('Über  uns')).toBe('event_über_uns')
+  it('slug: keeps case, spaces to underscore, other punctuation stripped', () => {
+    expect(eventTagSlug('Winter IYG')).toBe('event_Winter_IYG')
+    expect(eventTagSlug('  Sommer-Fest, 2026!  ')).toBe('event_SommerFest_2026')
+    expect(eventTagSlug('Über  uns')).toBe('event_Über_uns')
   })
   it('label: #event:<name>', () => expect(eventTagLabel('Winter IYG')).toBe('#event:Winter IYG'))
 })

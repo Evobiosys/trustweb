@@ -13,7 +13,7 @@ import { buildFeed, filterFeed, FeedSource, isTimelinePost, PostKind } from './f
 import type { Post } from './feed'
 import { followPosts, followText, followUrl, groupPosts, groupsOf, parseFeedText, parseFollow, sourceCounts } from './feed_sources'
 import type { FeedItem } from './feed_sources'
-import { addSocialPost, editSocialPost, eventFeedOn, tagOfEvent, toggleStar } from './feed_social'
+import { addSocialPost, editSocialPost, eventFeedOn, sameEventTag, tagOfEvent, toggleStar } from './feed_social'
 import { addGroupPosts, buildJoin, buildPost, canPost, channelTag, ensureNostrKey, GOVERNANCE, hopsOf, parseRelay, POST_TYPES, tagIndex, visibleByHops } from './feed_nostr'
 import type { Target } from './feed_nostr'
 import type { NostrEvent, PostType } from './feed_nostr'
@@ -22,6 +22,7 @@ import { getPublicKey, hexToBytes } from '../../demo/src/nostr_lib'
 import { loadColourTags } from './colour_tags'
 import { fetchFeedText, FetchProblem, handleText, safeRemoteUrl, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
 import type { RemoteStatus } from './fediverse'
+import { fetchMastodonTag } from './mastodon_tag'
 import type { ImageStore } from './image_store'
 import { shrink } from './image_store'
 import { ageLabel, FediverseReach, feedOn } from './model'
@@ -76,6 +77,8 @@ const allowLocal = import.meta.env.DEV
 export function createFeedView(h: FeedViewHooks): FeedView {
   const remote = new Map<string, { at: number; statuses: RemoteStatus[] | FetchProblem; accountId?: string }>()
   const fetching = new Set<string>()
+  /** Wave 43 answers (zeta): the public hashtag timelines of events that name a Mastodon instance, in memory only. */
+  const mastodon = new Map<string, { at: number; posts: Post[] | FetchProblem }>()
   let objectUrls: string[] = []
   const followed_ = new Map<string, { at: number; items: FeedItem[] | FetchProblem }>()
   const chosen: { source?: FeedSource; group?: string; channel?: string; tag?: string } = {}
@@ -134,6 +137,24 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       if (got && Array.isArray(got.statuses) && p.fediverse) out.push(...remotePosts(p, p.fediverse, got.statuses, imagesOn()))
     }
     return out
+  }
+
+  /** The event's tag on its Mastodon instance (only when the host named one and this event's Feed is open); a failed read keeps its reason for the line above the posts. */
+  function mastodonFor(ev: TwEvent | undefined): Post[] {
+    const host = ev?.mastodonInstance
+    if (!ev || !host) return []
+    const slug = tagOfEvent(ev)
+    const key = `${host}|${slug}`
+    const got = mastodon.get(key)
+    if ((!got || Date.now() - got.at > REMOTE_TTL_MS) && !fetching.has(key)) {
+      fetching.add(key)
+      void fetchMastodonTag(host, slug, fetch, allowLocal).then((posts) => { mastodon.set(key, { at: Date.now(), posts }) }).finally(() => { fetching.delete(key); h.redrawFeed() })
+    }
+    return got && Array.isArray(got.posts) ? got.posts : []
+  }
+  const mastodonProblem = (ev: TwEvent | undefined): HTMLElement[] => {
+    const got = ev?.mastodonInstance ? mastodon.get(`${ev.mastodonInstance}|${tagOfEvent(ev)}`) : undefined
+    return got && !Array.isArray(got.posts) ? [el('p', { class: 'meta', 'data-mastodon-problem': got.posts }, [S.fedProblem(ev!.mastodonInstance!, S.fedProblemText[got.posts])])] : []
   }
 
   /** Followed accounts / hashtags and the news feed: one public RSS or JSON read each, kept in memory for REMOTE_TTL_MS. Nothing is read before the person added the address. */
@@ -249,7 +270,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   }
 
   /** The event a tag (`event_<slug>`) belongs to, on this device. */
-  const eventOfTag = (tag?: string): TwEvent | undefined => (tag ? h.state().events?.find((e) => tagOfEvent(e) === tag) : undefined)
+  const eventOfTag = (tag?: string): TwEvent | undefined => (tag ? h.state().events?.find((e) => sameEventTag(tagOfEvent(e), tag)) : undefined)
   const tagText = (tag: string): string => { const ev = eventOfTag(tag); return ev ? eventTagLabel(ev.tagName ?? ev.name) : tag }
 
   /** Event posts also go to the relay the person set, as a post to the event's group (feed_nostr.ts); with none set nothing leaves the phone. */
@@ -330,7 +351,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     const sel = timeline ? chosenTimeline : chosen
     const tags = loadColourTags()
     const groups = groupsOf(h.state(), tags)
-    const all = buildFeed(h.state(), [...remoteFor(), ...followedPosts(), ...groupPosts(h.state(), tags), ...relayPosts(groups)]).filter((p) => isTimelinePost(p) === timeline)
+    const all = buildFeed(h.state(), [...remoteFor(), ...mastodonFor(eventOfTag(sel.tag)), ...followedPosts(), ...groupPosts(h.state(), tags), ...relayPosts(groups)]).filter((p) => isTimelinePost(p) === timeline)
     if (sel.group && !groups.some((g) => g.id === sel.group)) delete sel.group
     const metas = h.state().feed?.groupMeta ?? {}
     if (sel.channel && !metas[sel.group ?? '']?.channels?.some((c) => c.id === sel.channel)) delete sel.channel
@@ -359,6 +380,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         ? el('p', { class: 'meta', 'data-feed-governance': metas[sel.group]?.governance ?? 'open' }, [S.feedGov[metas[sel.group]?.governance ?? 'open']])
         : null,
       ...problems(),
+      ...mastodonProblem(tagEvent),
       posts.length
         ? el('div', { class: 'posts' }, posts.map((p) => postEl(p, !timeline)))
         : timeline

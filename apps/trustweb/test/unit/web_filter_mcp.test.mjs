@@ -21,11 +21,11 @@ describe('web filter tools', () => {
   it('set takes event_<slug>, tag:<id> and person:<id>; get gives them back the same way', () => {
     reset()
     const t = tools()
-    expect(t.web_filter_set.run({ tags: ['event_winter_iyg', 'tag:family', 'person:a'] })).toEqual({ tags: ['event_winter_iyg', 'tag:family', 'person:a'], hide: [], count: 3 })
+    expect(t.web_filter_set.run({ tags: ['event_Winter_IYG', 'tag:family', 'person:a'] })).toEqual({ tags: ['event_Winter_IYG', 'tag:family', 'person:a'], hide: [], count: 3 })
     expect(saved().uiRings.show).toEqual(['event:e1', 'tag:family', 'person:a'])
-    expect(t.web_filter_get.run({}).tags).toEqual(['event_winter_iyg', 'tag:family', 'person:a'])
+    expect(t.web_filter_get.run({}).tags).toEqual(['event_Winter_IYG', 'tag:family', 'person:a'])
   })
-  it('the slug here is the app slug', () => expect(eventTagSlug('Winter IYG')).toBe('event_winter_iyg'))
+  it('the slug here is the app slug', () => expect(eventTagSlug('Winter IYG')).toBe('event_Winter_IYG'))
   it('an empty list clears the filter; unknown tags fail and change nothing', () => {
     reset({ uiRings: { show: ['event:e1'], hide: ['tag:x'], sidebarOpen: true } })
     const t = tools()

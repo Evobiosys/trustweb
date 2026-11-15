@@ -13,8 +13,8 @@ const base = () => ({
 
 describe('event tag', () => {
   it('code form event_<slug>, app form #event:<name>', () => {
-    expect(eventTagSlug('Winter IYG!')).toBe('event_winter_iyg')
-    expect(eventTagSlug('  Fête  du  Nord ')).toBe('event_fête_du_nord')
+    expect(eventTagSlug('Winter IYG!')).toBe('event_Winter_IYG')
+    expect(eventTagSlug('  Fête  du  Nord ')).toBe('event_Fête_du_Nord')
     expect(eventTagLabel('Winter IYG')).toBe('#event:Winter IYG')
     expect(tagOfEvent({ name: 'Fête  du Nord!' })).toBe(eventTagSlug('Fête  du Nord!'))   // feed_social's plain-node copy agrees with event_tag.ts
   })
@@ -30,7 +30,7 @@ describe('own posts', () => {
   })
   it('an event post carries the event tag; an unknown event is refused', () => {
     const s = base()
-    expect(addSocialPost(s, 'Arrived', NOW, { eventId: 'e1' })).toMatchObject({ tag: 'event_winter_iyg', eventId: 'e1' })
+    expect(addSocialPost(s, 'Arrived', NOW, { eventId: 'e1' })).toMatchObject({ tag: 'event_Winter_IYG', eventId: 'e1' })
     expect(addSocialPost(s, 'x', NOW, { eventId: 'nope' })).toBeNull()
     expect(s.feedPosts).toHaveLength(1)
   })
@@ -89,7 +89,7 @@ describe('per-event feed', () => {
     addSocialPost(s, 'tagged', NOW + 1, { eventId: 'e1' })
     addSocialPost(s, 'untagged', NOW + 2)
     const posts = buildFeed(s, groupPosts(s, []))
-    expect(filterFeed(posts, { tag: 'event_winter_iyg' }).map((p) => p.text).sort()).toEqual(['g e1', 'tagged'])
+    expect(filterFeed(posts, { tag: 'event_Winter_IYG' }).map((p) => p.text).sort()).toEqual(['g e1', 'tagged'])
   })
 })
 

@@ -5,14 +5,16 @@
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
 import type { EventOffers } from './events'
-import { INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, isEventHost, localSettings, nameRevealOf, newEvent, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
+import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, localSettings, mayEdit, nameRevealOf, newEvent, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import { eventOrganizers, eventForLink, refsForNames, relatedOthers, roleLabels, setRoles } from './event_roles'
 import { eventPersonPicker } from './event_person_picker'
 import { rolesSection } from './event_roles_view'
 import type { EventError, EventFields } from './events'
 import { dragEvent, dragPerson } from './drag_payload'
-import { PERSON_GREEN } from './colour_tags'
+import { PERSON_GREEN, loadColourTags } from './colour_tags'
+import { listCommunities, parseCommunity } from './ext/community-mighty/community_data'
+import { nicknamesOf, setNicknames } from './event_press'
 import { ringColor } from './model'
 import type { AppState, Invitation, Person, TwEvent } from './model'
 import { invitationEventRows } from './invitations'
@@ -148,6 +150,19 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return [el('label', { class: 'meta' }, [label]), input]
   }
 
+  /** Wave 43 answers (epsilon): "Part of a community" (a picker over the communities I have) or "Isolated event" (the default). The value is the community's colour tag id, empty = isolated. */
+  function communityPick(current: string | undefined, onChange?: (id: string) => void): HTMLSelectElement {
+    const st = h.state()
+    const rows = listCommunities(parseCommunity(st.extData?.['community-mighty']), loadColourTags(), st.people)
+    const known = current && !rows.some((r) => r.id === current) ? [{ id: current, name: current }] : []
+    const pick = el('select', { class: 'field', 'aria-label': S.w43answers.community, 'data-event-community': '' }, [
+      el('option', { value: '' }, [S.w43answers.communityNone]),
+      ...[...rows, ...known].map((r) => el('option', { value: r.id, ...(r.id === current ? { selected: '' } : {}) }, [r.name])),
+    ]) as HTMLSelectElement
+    if (onChange) pick.addEventListener('change', () => onChange(pick.value))
+    return pick
+  }
+
   function form(existing?: TwEvent, presetFrom?: string): Node[] {
     const text = (v = ''): HTMLInputElement => el('input', { class: 'field', value: v })
     // A date that carries a time (the since editor sets one) keeps it: a date input would blank it.
@@ -174,6 +189,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const addHost = (v = ''): void => { hosts.append(text(v)) }
     ;(existing ? roleLabels(h.state(), existing.hosts ?? []) : [h.state().me.displayName]).forEach(addHost)
     if (!hosts.children.length) addHost()
+    const community = communityPick(existing?.communityId)
     const error = el('p', { class: 'warn', 'data-event-error': '', hidden: true })
     const focus = view.kind === 'form' ? view.focus : undefined   // wave 43: a long press on a line of the page opens the sheet on that field
     if (focus) setTimeout(() => ({ name, where, conditions, themes, organizer })[focus].focus())
@@ -190,6 +206,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         hosts: refsForNames(h.state(), [...hosts.querySelectorAll('input')].map((i) => i.value), existing?.hosts),
         techSupport: existing?.techSupport ?? [],
       })
+      applyEventSettings(ev, { communityId: community.value })
       const tagged = tag.value.trim()
       if (tagged && tagged !== made.name) { ev.tagName = tagged; ev.tagLocked = true } else { delete ev.tagName; delete ev.tagLocked }
       const s = h.state()
@@ -202,6 +219,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...field(S.eventsName, name), ...field(S.eventsTagNameField, tag), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsCoreFrom, coreFrom), ...field(S.eventsCoreTo, coreTo), ...field(S.eventsWhere, where),
       ...field(S.eventsConditions, conditions), ...field(S.eventsThemes, themes), ...field(S.eventsOrganizer, organizer),
       ...field(S.eventsHost, hosts), el('button', { class: 'btn btn-ghost btn-sm', 'data-event-cohost': '', onclick: () => addHost() }, [S.eventsCoHost]),
+      ...field(S.w43answers.community, community), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
       error,
       el('button', { class: 'btn btn-electric wide', 'data-event-save': '', onclick: save }, [S.eventsSave]),
       el('button', { class: 'btn btn-ghost wide', onclick: cancel }, [S.eventsCancel]),
@@ -317,17 +335,16 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       onclick: () => choose(r),
     }, [S.eventNameRevealOpt[r]])))
     contextPress(group, () => { revealOpen = true; if (cur === 'nick') h.redraw(); else choose('nick') })
-    const nick = el('input', { class: 'field', value: h.state().me.nickname ?? '', placeholder: S.w43press.nickLabel, 'aria-label': S.w43press.nickLabel, 'data-event-nickname': '' })
+    const nick = el('input', { class: 'field', value: nicknamesOf(h.state().me).join(', '), placeholder: S.w43press.nickLabel, 'aria-label': S.w43press.nickLabel, 'data-event-nickname': '' })
     nick.addEventListener('change', () => {
-      const v = nick.value.trim()
-      if (v) h.state().me.nickname = v; else delete h.state().me.nickname
+      setNicknames(h.state().me, nick.value.split(','))
       h.save()
       if (lastLink) copyShown(ev)
     })
     return el('div', { class: 'event-reveal', 'data-event-reveal': cur }, [
       el('label', { class: 'meta' }, [S.eventNameReveal]),
       group,
-      cur === 'nick' ? el('div', {}, [nick, el('p', { class: 'meta' }, [S.w43press.nickHint])]) : null,
+      cur === 'nick' ? el('div', {}, [nick, el('p', { class: 'meta' }, [S.w43press.nickHint + ' ' + S.w43answers.nicknamesHint])]) : null,
       el('p', { class: 'meta' }, [S.eventNameRevealHint]),
     ])
   }
@@ -342,6 +359,23 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   /** An on/off control for a greyscale screen (P2): off = struck through, never colour alone. */
   function toggle(on: boolean, label: string, attr: string, onclick: () => void): HTMLElement {
     return el('button', { class: 'chip' + (on ? ' on' : ' tw-off'), type: 'button', 'aria-pressed': String(on), [attr]: '', onclick }, [label])
+  }
+
+  /** Wave 43 answers (zeta): the host names a Mastodon instance; the event Feed merges its public posts under the event tag. A change saves when the field loses focus; a bad host shows a line and keeps the old one. */
+  function mastodonInput(ev: TwEvent): HTMLElement {
+    const input = el('input', { class: 'field', value: ev.mastodonInstance ?? '', placeholder: S.w43answers.mastodonPh, 'aria-label': S.w43answers.mastodon, 'data-event-mastodon': '' }) as HTMLInputElement
+    const bad = el('p', { class: 'warn', 'data-event-mastodon-bad': '', hidden: true }, [S.w43answers.mastodonBad])
+    input.addEventListener('change', () => {
+      try { applyEventSettings(ev, { mastodonInstance: input.value }); bad.hidden = true; h.save(); input.value = ev.mastodonInstance ?? '' } catch { bad.hidden = false }
+    })
+    return el('div', {}, [input, bad])
+  }
+
+  /** Wave 43 answers (iota): my nickname at this event; the Nickname reveal of this event uses it, else my first nickname. */
+  function myNicknameInput(ev: TwEvent): HTMLInputElement {
+    const input = el('input', { class: 'field', value: ev.myNickname ?? '', placeholder: nicknamesOf(h.state().me)[0] ?? '', 'aria-label': S.w43answers.myNickname, 'data-event-my-nickname': '' }) as HTMLInputElement
+    input.addEventListener('change', () => { applyEventSettings(ev, { myNickname: input.value }); h.save(); if (lastLink) copyShown(ev) })
+    return input
   }
 
   /** Renaming the tag locks it against the host and copies the link now showing (host or peer) again at once with the new name. */
@@ -359,7 +393,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     hostNames.checked = ev.hostNamesTags !== false
     hostNames.addEventListener('change', () => { ev.hostNamesTags = hostNames.checked; h.save() })
     const T = S.w43press
-    const policy = ev.invitePolicy ?? 'hosts'
+    const policy = ev.invitePolicy ?? DEFAULT_INVITE_POLICY
     const offers = offersOf(ev)
     const offerRows: [keyof EventOffers, string][] = [['support', T.offerSupport], ['resources', T.offerResources], ['feed', T.offerFeed]]
     const box = el('details', { 'data-event-advanced': '' }, [
@@ -367,7 +401,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...field(S.eventTagName, name),
       el('label', { class: 'meta' }, [hostNames, ' ', S.eventHostNamesTags]),
       ...others(ev),
-      isEventHost(ev, h.state().me.displayName, h.state().people) ? el('div', { 'data-event-invite-policy': policy }, [
+      mayEdit(ev, h.state().me.displayName, h.state().people) ? el('div', { 'data-event-invite-policy': policy }, [
         el('label', { class: 'meta' }, [T.invitePolicy]),
         el('div', { class: 'seg', role: 'group', 'aria-label': T.invitePolicy }, INVITE_POLICIES.map((p) => el('button', {
           type: 'button', class: p === policy ? 'on' : '', 'aria-pressed': String(p === policy), 'data-event-invite-policy-opt': p,
@@ -375,6 +409,11 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         }, [T.invitePolicyOpt[p]]))),
         el('p', { class: 'meta' }, [T.invitePolicyHint]),
       ]) : null,
+      ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [
+        ...field(S.w43answers.community, communityPick(ev.communityId, (id) => { applyEventSettings(ev, { communityId: id }); h.save() })), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
+        ...field(S.w43answers.mastodon, mastodonInput(ev)), el('p', { class: 'meta' }, [S.w43answers.mastodonHint]),
+      ] : []),
+      ...field(S.w43answers.myNickname, myNicknameInput(ev)), el('p', { class: 'meta' }, [S.w43answers.myNicknameHint]),
       el('label', { class: 'meta' }, [T.offers]),
       el('div', { class: 'chips', 'data-event-offers': '' }, offerRows.map(([k, label]) => toggle(offers[k], label, `data-event-offer-${k}`, () => { applyEventSettings(ev, { offers: { [k]: !offers[k] } }); h.save(); h.redraw() }))),
     ])
