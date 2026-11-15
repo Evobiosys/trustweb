@@ -31,7 +31,21 @@ export const selectableResources = <T extends Pick<InventoryItem, 'protected' | 
 export const copyAllText = (items: readonly InventoryItem[], tags: readonly { id: string; protected?: boolean }[]): string => selectableResources(items, tags).map((i) => i.text).join('\n')
 
 /** Which protected link shows after a press on `id`: that one, or none when it was the open one. */
-export const revealNext = (current: string | null, id: string): string | null => (current === id ? null : id)
+export const revealNext = (current: string | null, id: string): string | null => revealLinks(current ? [current] : [], id, true)[0] ?? null
+
+/** The protected links shown after a press on `id` (review 43b: the switch decides): it toggles; with PROTECTED_LINK_ONE_AT_A_TIME the others close. */
+export function revealLinks(shown: readonly string[], id: string, oneAtATime: boolean = PROTECTED_LINK_ONE_AT_A_TIME): string[] {
+  if (shown.includes(id)) return shown.filter((x) => x !== id)
+  return oneAtATime ? [id] : [...shown, id]
+}
+
+/** B20: "start the recording immediately": Play opens a protected resource's own link (http or https only) without showing it. */
+export function playUrl(i: Pick<InventoryItem, 'link'>): string | null {
+  try {
+    const u = new URL(i.link ?? '')
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null
+  } catch { return null }
+}
 
 export function filterResources<T extends InventoryItem>(items: readonly T[], f: ResourceFilter): T[] {
   return items.filter((i) => (!f.kind || kindOf(i) === f.kind) && (!f.sharedBy || i.sharedBy === f.sharedBy) && (!f.communityId || i.communityId === f.communityId))

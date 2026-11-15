@@ -14,9 +14,11 @@ export const EVENT_DOCS = ['description', 'followup'] as const
 export type EventDoc = (typeof EVENT_DOCS)[number]
 
 /** The assistant's first message for "New event": one change card per document, approved one by one. */
-export function templatePrompt(community: string): string {
+export function templatePrompt(community: string, hosted?: boolean): string {
   return [
     `Help me assemble a new event in the community "${community}". Ask me for the name, the date and the place first.`,
+    // Wave 43b (B33): the menu's "Add event" says whether it is hosted (I host it) or an informal gathering (no host).
+    ...(hosted === undefined ? [] : [hosted ? 'It is a hosted event: I am its host.' : 'It is an informal gathering: nobody hosts it.']),
     'Then propose ONE change card per document, in this order, each as its own action:',
     '1. event-create (name, from, where) - the date and place;',
     '2. event-doc description - what the event is, in two or three sentences;',

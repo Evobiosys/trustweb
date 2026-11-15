@@ -28,6 +28,12 @@ export const zoneOfRing = (r: unknown): Zone | null => ZONES.find((z) => RING_OF
 
 export const zonesWithin = (cut: Zone): Zone[] => ZONES.slice(0, ZONES.indexOf(cut) + 1)
 
+/** P2 (greyscale screens): the picked zone is 'on', the narrower ones it includes 'in', wider ones 'off' (struck through). No zone = everybody: all 'in'. */
+export const zoneState = (z: Zone, cut: Zone | undefined): 'on' | 'in' | 'off' => (!cut ? 'in' : z === cut ? 'on' : zonesWithin(cut).includes(z) ? 'in' : 'off')
+
+/** I7: someone is hidden and the ask travels beyond my direct contacts (any reach but 1): a friend may still pass it on to the hidden person. */
+export const hideLeaks = (f: { exclude: readonly string[]; degree: number }): boolean => f.exclude.length > 0 && f.degree !== 1
+
 type Who = Pick<Person, 'id' | 'ring' | 'fields' | 'peerId'>
 
 /** The connected people the filter reaches: the zone cut (Closest few always in), plus the added people and tags, minus the hidden ones. */
@@ -91,6 +97,8 @@ export interface FilterView {
   /** Overlay for "Create tag": hands over the rows to show; main.ts supplies the sheet. */
   openSheet: (children: (Node | null)[]) => void
   closeSheet: () => void
+  /** How far the ask travels (askReachOf); absent = direct contacts only (the support ask). */
+  steps?: number
 }
 
 const tagName = (id: string, tags: readonly ColourTag[]): string => tags.find((t) => t.id === id)?.label ?? id
@@ -100,7 +108,7 @@ function zoneBar(v: FilterView): HTMLElement {
   return el('div', { class: 'afv-zones', 'data-aud-zones': '' }, [
     el('p', { class: 'chips-lbl' }, [S.askPage.zonesLbl]),
     el('div', { class: 'seg afv-seg', role: 'group', 'aria-label': S.askPage.zoneAria }, ZONES.map((z) => el('button', {
-      class: z === f.zone ? 'on' : '', type: 'button', 'data-aud-zone': z, 'aria-pressed': String(z === f.zone),
+      class: { on: 'on', in: 'in', off: 'tw-off' }[zoneState(z, f.zone)], type: 'button', 'data-aud-zone': z, 'data-aud-zone-state': zoneState(z, f.zone), 'aria-pressed': String(z === f.zone),
       onclick: () => { f.zone = z === f.zone && !v.zoneRequired ? undefined : z; v.changed() },
     }, [S.ringLabel[RING_OF[z]]]))),
     el('p', { class: 'hint', 'data-aud-zone-hint': '' }, [S.askPage.zoneHint]),
@@ -187,6 +195,7 @@ export function audienceFilterView(v: FilterView): HTMLElement {
     }, [S.askPage.onlyTag(tagName(f.only, tags)) + ' ×'])]) : null,
     chipRow(v, 'add'),
     chipRow(v, 'exclude'),
+    hideLeaks({ exclude: f.exclude, degree: v.steps ?? 1 }) ? el('p', { class: 'hint', 'data-aud-hide-travels': '' }, [S.askPage.hideTravels]) : null,
     advancedBox(v),
   ].filter((n): n is HTMLElement => n !== null))
 }

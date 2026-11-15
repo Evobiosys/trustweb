@@ -161,6 +161,7 @@ import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import { resourceViews } from './resource_views_view'
+import { canShareOn } from './resource_views'
 import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -3594,7 +3595,8 @@ function itemSheet(itemId: string): void {
     itemContextView(item),
     ...provenanceStateView(item),
     feed.itemExtras(item),
-    el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]),
+    // Review 43b (B17): a protected resource offers no way to pass it on (canShareOn).
+    canShareOn(item, loadColourTags()) ? el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]) : null,
     ...(cal?.itemSection?.(item) ?? []),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
@@ -5254,12 +5256,15 @@ twBus.on('support-ask', (d) => {   // wave 42: the Community view's "Ask for sup
 twBus.on('add-member', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) addPersonSheet(Ring.Friend, false, tag) })   // wave 42: the add-person flow, scoped to a community
 /** Wave 42 community-event: "New event" in a community opens the assistant with the event template; its cards are approved one by one. */
 let eventCommunity: string | undefined
+/** Wave 43b (B33): the menu's Add event: Hosted (true), Informal (false); absent from the older "New event" button. */
+let eventHosted: boolean | undefined
 twBus.on('new-event', (d) => {
-  const tag = (d as { tag?: string } | undefined)?.tag
+  const { tag, hosted } = (d ?? {}) as { tag?: string; hosted?: boolean }
   if (!tag) return
   eventCommunity = tag
+  eventHosted = typeof hosted === 'boolean' ? hosted : undefined
   if (!isEnabled('assistant') || !chainOf(st().advanced).length) { toast(S.w42ev.assistantNeeded); sparkleFallback(); return }   // review wave 42: the same test as the sparkle (any provider of the chain)
-  const send = (): void => twBus.emit('assistant-prefill', templatePrompt(loadColourTags().find((x) => x.id === tag)?.label ?? tag))
+  const send = (): void => twBus.emit('assistant-prefill', templatePrompt(loadColourTags().find((x) => x.id === tag)?.label ?? tag, eventHosted))
   if (twRegistry.isActive('assistant')) { send(); return }
   void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) send(); else sparkleFallback() })
 })
@@ -5360,7 +5365,7 @@ defineAppActions(appActions, {
   newId: () => randomId(8),
   now: () => Date.now(),
 })
-defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity })
+defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName })
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
   fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,
@@ -7820,6 +7825,7 @@ function screenInventory(): Node[] {
       // Wave 43b resources-views: the view switcher, filters and the two sections; protected rows come from resource_views_view.ts.
       ...resourceViews({
         items: shown, people: s.people, tags: loadColourTags(), row: invRow, open: itemSheet, save, render,
+        play: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
         record: (item) => { if (draftInProgress()) { toast(S.resViews.recordBusy); return }; newDraft(); draft.mode = RecordMode.Solo; draft.about = AboutKind.What; draft.name = item.text; draft.itemId = item.id; go(recordScreen()); void startSolo() },
       }),
       ...invitationsSection(invitationIo()),
@@ -8023,7 +8029,7 @@ function queryDock(s: AppState): HTMLElement {
     save(); render()
   }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) })
   const audienceBox = audienceFilterView({
-    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, advanced: [reach], openSheet, closeSheet,
+    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, advanced: [reach], openSheet, closeSheet, steps: askReachOf(s),
     changed: () => { saveAskFilter(s, filter); save(); render() },
   })
   const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {

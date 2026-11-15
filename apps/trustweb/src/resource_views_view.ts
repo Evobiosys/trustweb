@@ -4,7 +4,7 @@ import { el } from '../../demo/src/ui/dom'
 import type { ColourTag } from './colour_tags'
 import type { InventoryItem, ResourceKind } from './model'
 import {
-  RESOURCE_KINDS, RESOURCE_VIEWS, filterResources, groupByPerson, groupOutliner, isProtected, kindOf, revealNext, setKind, acceptRecommender, dismissRecommender, splitSections, suggestionFor,
+  RESOURCE_KINDS, RESOURCE_VIEWS, filterResources, groupByPerson, groupOutliner, isProtected, kindOf, playUrl, revealLinks, setKind, acceptRecommender, dismissRecommender, splitSections, suggestionFor,
 } from './resource_views'
 import type { ResourceFilter, ResourceView } from './resource_views'
 import { S } from './strings'
@@ -17,13 +17,15 @@ export interface ResourceViewsCtx {
   row: (i: InventoryItem) => Node
   open: (id: string) => void
   record: (i: InventoryItem) => void
+  /** B20: starts a protected recording (opens its link) without showing the link. */
+  play: (url: string) => void
   save: () => void
   render: () => void
 }
 
 let view: ResourceView = 'list'
 let filter: ResourceFilter = {}
-let revealed: string | null = null
+let revealed: string[] = []
 let filtersOpen = false
 
 const noSelect = (n: HTMLElement): HTMLElement => { n.addEventListener('selectstart', (e) => e.preventDefault()); n.addEventListener('copy', (e) => e.preventDefault()); return n }
@@ -31,12 +33,12 @@ const noSelect = (n: HTMLElement): HTMLElement => { n.addEventListener('selectst
 export function resourceViews(c: ResourceViewsCtx): Node[] {
   const name = (id: string): string => c.people.find((p) => p.id === id)?.name ?? id
   const label = (id: string): string => c.tags.find((t) => t.id === id)?.label ?? id
-  const set = (f: ResourceFilter): void => { filter = f; revealed = null; c.render() }
+  const set = (f: ResourceFilter): void => { filter = f; revealed = []; c.render() }
   const pressed = (on: boolean, attrs: Record<string, string>, text: string, click: () => void): HTMLElement =>
     el('button', { class: 'btn btn-ghost btn-sm' + (on ? '' : ' tw-off'), 'aria-pressed': String(on), ...attrs, onclick: click }, [text])
 
   const switcher = el('div', { class: 'rv-switch', role: 'group', 'aria-label': S.resViews.viewsAria }, RESOURCE_VIEWS.map((v) =>
-    pressed(view === v, { 'data-rv-view': v }, S.resViews.view[v], () => { view = v; revealed = null; c.render() })))
+    pressed(view === v, { 'data-rv-view': v }, S.resViews.view[v], () => { view = v; revealed = []; c.render() })))
   const sharers = [...new Set(c.items.map((i) => i.sharedBy).filter((x): x is string => Boolean(x)))]
   const communities = [...new Set(c.items.map((i) => i.communityId).filter((x): x is string => Boolean(x)))]
   const kindChips = el('div', { class: 'rv-chips' }, [
@@ -57,15 +59,21 @@ export function resourceViews(c: ResourceViewsCtx): Node[] {
   ])
   const compact = (i: InventoryItem): HTMLElement => el('button', { class: 'prow zoom-row', 'data-item': i.id, onclick: () => c.open(i.id) }, [el('b', {}, [i.text]), chipsOf(i)])
 
-  const protectedRow = (i: InventoryItem): HTMLElement => noSelect(el('div', { class: 'prow zoom-row rv-protected', 'data-rv-protected': i.id }, [
-    el('b', {}, [i.text]),
-    el('div', { class: 'cal-chips' }, [el('span', { class: 'cal-chip' }, [S.resViews.protectedChip]), el('span', { class: 'cal-chip' }, [S.resViews.kind[kindOf(i)]])]),
-    el('div', { class: 'rv-actions' }, [
-      i.link ? el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-link-toggle': i.id, 'aria-expanded': String(revealed === i.id), onclick: () => { revealed = revealNext(revealed, i.id); c.render() } }, [revealed === i.id ? S.resViews.hideLink : S.resViews.showLink]) : null,
-      el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-record': i.id, 'aria-label': S.resViews.record, onclick: () => c.record(i) }, [S.resViews.record]),
-    ]),
-    i.link && revealed === i.id ? el('div', { class: 'rv-link', 'data-rv-link': i.id }, [i.link]) : null,
-  ]))
+  const protectedRow = (i: InventoryItem): HTMLElement => {
+    const open = revealed.includes(i.id)
+    const url = playUrl(i)
+    return noSelect(el('div', { class: 'prow zoom-row rv-protected', 'data-rv-protected': i.id, oncontextmenu: (e: Event) => e.preventDefault() }, [
+      el('b', {}, [i.text]),
+      el('div', { class: 'cal-chips' }, [el('span', { class: 'cal-chip' }, [S.resViews.protectedChip]), el('span', { class: 'cal-chip' }, [S.resViews.kind[kindOf(i)]])]),
+      el('div', { class: 'rv-actions' }, [
+        // B20 review 43b: "start the recording immediately" = play it, link unseen; Record (a memo about it) stays as built, see D-line.
+        url ? el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-play': i.id, onclick: () => c.play(url) }, [S.resViews.play]) : null,
+        i.link ? el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-link-toggle': i.id, 'aria-expanded': String(open), onclick: () => { revealed = revealLinks(revealed, i.id); c.render() } }, [open ? S.resViews.hideLink : S.resViews.showLink]) : null,
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-record': i.id, 'aria-label': S.resViews.record, onclick: () => c.record(i) }, [S.resViews.record]),
+      ]),
+      i.link && open ? el('div', { class: 'rv-link', 'data-rv-link': i.id }, [i.link]) : null,
+    ]))
+  }
 
   const suggestion = (i: InventoryItem): HTMLElement | null => {
     const g = suggestionFor(i, c.people.filter((p) => p.deleted_at === undefined))

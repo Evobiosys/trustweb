@@ -68,9 +68,10 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
       },
     },
     {
-      name: 'event_create', description: 'Make an event inside a community from a template: name, from (YYYY-MM-DD), to, where, description, roles (named slots), resources (what it needs), followup (note). The sign-up sheet starts empty.',
+      name: 'event_create', description: 'Make an event inside a community from a template: name, from (YYYY-MM-DD), to, where, description, roles (named slots), resources (what it needs), followup (note). The sign-up sheet starts empty. hosted:true = I host it (the menu\'s Add event > Hosted), false or absent = informal, no host.',
       inputSchema: schema({
         community: S('community id'),
+        hosted: { type: 'boolean', description: 'true: I am the host; false/absent: an informal gathering' },
         template: { type: 'object', description: 'name, from, to?, where?, description?, roles?: [text], resources?: [text], followup?: text' },
       }, ['community', 'template']),
       run: (a) => {
@@ -81,6 +82,7 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
           if (!parseCommunity(r.extData?.['community-mighty']).meta?.[community]) throw new Error(`no community "${community}"`)
           const now = e.now()
           const ev = buildEvent({ name: str(t.name), from: str(t.from), to: str(t.to), where: str(t.where), community }, `ev${newId(now)}`, now.getTime())
+          if (a.hosted === true && r.me?.displayName?.trim()) ev.hosts = [r.me.displayName.trim()]   // wave 43b review: Add event Informal | Hosted
           if (str(t.description).trim()) setDoc(ev, 'description', str(t.description))
           if (str(t.followup).trim()) setDoc(ev, 'followup', str(t.followup))
           list(t.roles).forEach((n) => addRole(ev, n))

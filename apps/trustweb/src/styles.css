@@ -1976,3 +1976,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .rv-link{margin-top:6px; word-break:break-all; user-select:none; -webkit-user-select:none; font-size:13px}
 .rv-head{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px}
 .rv-bar .btn{padding-inline:8px}
+
+/* wave43b review-fixes-b */
+/* P06 (360 px): the audience and degrees pills of a Resources row wrap instead of running under the Shared switch (older than 43b, on a 43b screen). */
+.inv-actions{flex-wrap:wrap}

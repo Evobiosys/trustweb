@@ -13,6 +13,9 @@ export interface EventActionHost {
   newId(): string
   /** The community the assistant was opened for ("New event" inside a community); absent = none. */
   community?(): string | undefined
+  /** Wave 43b (B33): "Add event" picked Hosted (true: I am the host), Informal (false) or nothing (absent); and my name for the hosts list. */
+  hosted?(): boolean | undefined
+  me?(): string
 }
 
 export function defineEventActions(reg: Actions, host: EventActionHost): void {
@@ -35,6 +38,8 @@ export function defineEventActions(reg: Actions, host: EventActionHost): void {
     label: (a) => `New event: ${a.name} (${a.from})`, auto: false,
     apply: (a) => {
       const ev = buildEvent({ ...a, community: host.community?.() }, host.newId(), Date.now())
+      const me = host.me?.().trim()
+      if (host.hosted?.() === true && me) ev.hosts = [me]
       const s = host.state() as { events?: TwEvent[] }
       s.events = [...(s.events ?? []), ev]
       host.save()

@@ -39,17 +39,18 @@ export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
 }
 
-/** Wave 43b: the short form the event QR uses (`#evs=` / `#evs_host=`): [id, name, from, to, core from, core to, hosts] as a JSON array, the same fields as the long form. */
-export const shortFields = (ev: Pick<LinkedEvent, 'id' | 'name' | 'from' | 'to' | 'core' | 'hosts'>): string => {
-  const a: unknown[] = [ev.id, ev.name, ev.from, ev.to ?? '', ev.core?.from ?? '', ev.core?.to ?? '', ev.hosts ?? []]
+/** Wave 43b: the short form the event QR uses (`#evs=` / `#evs_host=`): [id, name, from, to, core from, core to, hosts, mode, tag name] as a JSON array,
+ * the same fields as the long form; `mode` is 'e' for the event-only variant (B5); the tag name as the long form carries it (P4). Empty tail entries are dropped. */
+export const shortFields = (ev: Pick<LinkedEvent, 'id' | 'name' | 'from' | 'to' | 'core' | 'hosts' | 'linkMode' | 'tagName'>): string => {
+  const a: unknown[] = [ev.id, ev.name, ev.from, ev.to ?? '', ev.core?.from ?? '', ev.core?.to ?? '', ev.hosts ?? [], ev.linkMode === 'event' ? 'e' : '', ev.tagName ?? '']
   while (a.length && (a[a.length - 1] === '' || (Array.isArray(a[a.length - 1]) && !(a[a.length - 1] as unknown[]).length))) a.pop()
   return toBase64Url(JSON.stringify(a))
 }
 
 function expandShort(v: unknown, kind: LinkKind): unknown {
   if (!Array.isArray(v)) return null
-  const [id, name, from, to, cf, ct, hosts] = v as unknown[]
-  return { kind, id, name, from, where: '', ...(to ? { to } : {}), ...(cf || ct ? { core: { from: cf, to: ct } } : {}), ...(Array.isArray(hosts) && hosts.length ? { hosts } : {}) }
+  const [id, name, from, to, cf, ct, hosts, m, tagName] = v as unknown[]
+  return { kind, id, name, from, where: '', ...(to ? { to } : {}), ...(cf || ct ? { core: { from: cf, to: ct } } : {}), ...(Array.isArray(hosts) && hosts.length ? { hosts } : {}), ...(m === 'e' ? { mode: 'event' } : {}), ...(typeof tagName === 'string' && tagName ? { tagName } : {}) }
 }
 
 /** The event in a location.hash ("#ev=..." or the host link's "#ev_host=..."), or null for anything missing, mangled, invalid or over 4 KB. */
