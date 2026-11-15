@@ -72,8 +72,9 @@ const action = (id: string, section: SettingsSection, label: string, hint: strin
 
 export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   // ---- simple: the short page (booleans here, screens as actions) ----
+  // Wave 43b B6: Your Profile is the top entry (it replaced Your AI there). A "simple settings" variant (S.w43shell.simpleVariant) would show only the rows from here to Show notices; not built, no variant system.
+  action('ui.profile', 'general', 'Your Profile', 'Your name and how you appear to others.'),
   action('ui.bar', 'general', 'Views in the bottom bar', 'Which views the bar shows, and in what order.'),
-  action('ui.ai', 'general', 'Your AI', 'Switch the AI on or off and pick its provider.'),
   action('ui.appearance', 'general', 'Look, language and theme', 'Default, sleek or dex look; light, dark or system theme.'),
   flag('chats.hidden', 'chat', 'Do not disturb', 'chatsHidden', false, true, 'Hides chats and their notices until you switch it off.'),
   { id: 'notices.on', section: 'general', label: 'Show notices', hint: 'The short notes TrustWeb shows now and then.', type: 'boolean', default: true, simple: true,
@@ -87,6 +88,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     get: (r) => obj(r.feed).on === true, set: (r, v) => { r.feed = { ...obj(r.feed), on: v === true } } },
   flag('birthdays.reminders', 'events', 'Birthday reminders', 'birthdayReminders', true, true, 'A note on the day a person you know has a birthday.'),
   action('ui.import', 'general', 'Import', 'Bring in contacts and notes from other services.'),
+  action('ui.ai', 'general', 'Your AI', 'Switch the AI on or off and pick its provider.'),
   action('ui.help', 'general', 'Help and about', 'Version, the tutorial, and who built this.'),
 
   // ---- advanced: everything else the record stores ----

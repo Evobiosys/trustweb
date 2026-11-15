@@ -413,6 +413,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         ...field(S.w43answers.community, communityPick(ev.communityId, (id) => { applyEventSettings(ev, { communityId: id }); h.save() })), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
         ...field(S.w43answers.mastodon, mastodonInput(ev)), el('p', { class: 'meta' }, [S.w43answers.mastodonHint]),
       ] : []),
+      // Wave 43b (B5): the host chooses what people see when they open this event's link.
+      ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [el('div', { 'data-event-link-mode': ev.linkMode ?? 'full' }, [
+        el('label', { class: 'meta' }, [S.w43shell.linkMode]),
+        el('div', { class: 'seg', role: 'group', 'aria-label': S.w43shell.linkMode }, (['full', 'event'] as const).map((m) => el('button', {
+          type: 'button', class: m === (ev.linkMode ?? 'full') ? 'on' : '', 'aria-pressed': String(m === (ev.linkMode ?? 'full')), 'data-event-link-mode-opt': m,
+          onclick: () => { if (m === 'event') ev.linkMode = 'event'; else delete ev.linkMode; h.save(); h.redraw() },
+        }, [m === 'full' ? S.w43shell.linkModeFull : S.w43shell.linkModeEvent]))),
+      ])] : []),
       ...field(S.w43answers.myNickname, myNicknameInput(ev)), el('p', { class: 'meta' }, [S.w43answers.myNicknameHint]),
       el('label', { class: 'meta' }, [T.offers]),
       el('div', { class: 'chips', 'data-event-offers': '' }, offerRows.map(([k, label]) => toggle(offers[k], label, `data-event-offer-${k}`, () => { applyEventSettings(ev, { offers: { [k]: !offers[k] } }); h.save(); h.redraw() }))),

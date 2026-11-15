@@ -37,6 +37,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'billing_plans', write: false }, { name: 'billing_status', write: false }, { name: 'billing_checkout_link', write: true },
   // Wave 43b ask-page-filter
   { name: 'ask_audience_get', write: false }, { name: 'ask_audience_set', write: true },
+  /* wave43b community-shell */
+  { name: 'community_menu_get', write: false }, { name: 'community_home_tiles_set', write: true }, { name: 'community_chat_scope_set', write: true }, { name: 'event_link_mode_set', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

@@ -34,8 +34,8 @@ export function linkOrigin(pageOrigin: string): string {
 }
 
 export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?: EventBy): string {
-  const { id, name, from, to, core, where, conditions, themes, organizer, hosts, hostNamesTags, tagName } = ev
-  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
+  const { id, name, from, to, core, where, conditions, themes, organizer, hosts, hostNamesTags, tagName, linkMode } = ev
+  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(linkMode === 'event' ? { mode: 'event' as const } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
 }
 
@@ -84,7 +84,7 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     const byDid = text(b?.did)
     const { createdAt: _c, attended: _a, ...rest } = ev
     const srv = params.get('srv')
-    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}) }
+    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(f.mode === 'event' ? { linkMode: 'event' as const } : {}) }
   } catch {
     return null
   }

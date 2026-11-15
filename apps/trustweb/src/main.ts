@@ -140,7 +140,7 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import { communityChatRows } from './chat_communities'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, askFloating, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
@@ -308,6 +308,7 @@ import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel,
 import { afterConnect, eventLinkView } from './event_join'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
+import { eventModeOn, rememberEventMode } from './event_mode'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
@@ -539,6 +540,7 @@ let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingC
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // Wave 43b: an event link that came with a connect opens after the connect flow (the ring choice) is done, never over it.
 let eventWaitsForConnect = pendingEvent !== null && pendingConnect !== null
+rememberEventMode(pendingEvent)   // wave 43b: mode=event keeps this session in the event-only variant
 // An intro link (#intro=..., intro_link.ts): the "Intro request" card opens once the app has a record.
 let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
@@ -1256,7 +1258,7 @@ function barButton(id: BarId, primary: boolean, halo = false): HTMLElement {
 
 function barFlags(): BarFlags {
   // HAS_MAP_VIEW is declared further down (this runs at load), so the Map is simply on.
-  return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state), mods: twRegistry.views().map((v) => v.id) }
+  return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state), mods: twRegistry.views().map((v) => v.id), eventOnly: eventModeOn() }
 }
 
 function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
@@ -1283,7 +1285,7 @@ function renderTabs(): void {
   tabs.classList.toggle('four', (community ?? shown).length > 3)
   tabs.classList.toggle('many', (community ?? shown).length > 5)
   tabs.classList.toggle('pair', !community && pair.length > 0)
-  phone.classList.toggle('ask-in-bar', !community && shown.includes('ask'))
+  phone.classList.toggle('ask-in-bar', !community && !askFloating(shown))
   updateChatBadge()
 }
 renderTabs()
@@ -7654,7 +7656,7 @@ function settingsSheet(): void {
     simpleBlock({
       state: () => st() as unknown as Record<string, unknown>, save, render: () => { renderTabs(); render() }, redraw: settingsSheet,
       actions: {
-        'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
+        'ui.profile': () => editNameSheet(), 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
         'ui.import': () => openServicesImport(importHooks()), 'ui.help': () => openSheet([el('h3', {}, [S.setTitle]), ...aboutGroup()]),
       },
     }),

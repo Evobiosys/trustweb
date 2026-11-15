@@ -58,6 +58,16 @@ function linkOf(url: string): { id: string; kind: 'peer' | 'host' } {
 export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
   const write: Tool[] = [
     {
+      name: 'event_link_mode_set', description: 'What people see when they open this event\'s link: full (the whole app, the default) or event (only Web, Ask your web and Chat). The link carries mode=event.',
+      inputSchema: schema({ event: S('event id or exact name'), mode: S('full | event') }, ['event', 'mode']),
+      run: (a) => {
+        if (a.mode !== 'full' && a.mode !== 'event') throw new Error('mode must be full or event')
+        let id = ''
+        e.commit((r) => { const ev = eventOf(r, a.event); id = ev.id; if (a.mode === 'event') ev.linkMode = 'event'; else delete ev.linkMode })
+        return { id, mode: a.mode }
+      },
+    },
+    {
       name: 'event_create', description: 'Make an event inside a community from a template: name, from (YYYY-MM-DD), to, where, description, roles (named slots), resources (what it needs), followup (note). The sign-up sheet starts empty.',
       inputSchema: schema({
         community: S('community id'),
