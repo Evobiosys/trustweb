@@ -4662,4 +4662,13 @@ export const S = {
     tanaPullCancel: 'Cancel',
     tanaPullSkipped: (n: number) => `${n} could not be read and were left as they are.`,
   },
+  /* wave44 feed-look */
+  feedLook: {
+    boostedBy: (name: string) => `${name} boosted`,
+    boost: 'Boost',
+    boostNo: 'Boost (not possible for this post)',
+    shareNo: 'Share (not possible for this post)',
+    more: 'More',
+    linkCard: (domain: string) => `Link to ${domain}`,
+  },
 } as const
