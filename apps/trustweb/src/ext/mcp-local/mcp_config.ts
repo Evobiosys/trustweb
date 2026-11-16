@@ -67,6 +67,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
 
   /* wave44b profile-page */
   { name: 'profile_get', write: false }, { name: 'profile_set', write: true }, { name: 'profile_link_add', write: true }, { name: 'profile_link_remove', write: true },
+  /* wave44b resources-outliner */
+  { name: 'resource_share', write: false }, { name: 'resource_block_add', write: true }, { name: 'resource_block_edit', write: true }, { name: 'resource_block_move', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

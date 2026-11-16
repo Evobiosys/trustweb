@@ -17,6 +17,7 @@ import { communityTools } from './community_tools.ts'
 import { filterStateTools } from './filter_state_tools.ts'
 import { eventTools } from './event_tools.ts'
 import { resourceTools } from './resource_tools.ts'
+import { resourceBlockTools } from './resource_block_tools.ts'
 import { feedTools } from './feed_tools.ts'
 import { notifyTools } from './notify_tools.ts'
 import { noticeTools } from './notice_tools.ts'
@@ -301,7 +302,8 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
   const community = communityTools({ load: () => load(o.file) as never, commit: commit as never, write: o.write, now })
   const events = eventTools({ load: () => load(o.file) as never, commit: commit as never, now })
   const resources = resourceTools({ load: () => load(o.file) as never, commit: commit as never })
+  const blocks = resourceBlockTools({ load: () => load(o.file) as never, commit: commit as never })
   const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now, embedFetch: o.embedFetch })
   const notify = notifyTools({ load: () => load(o.file) as never, commit: commit as never, now })
-  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write] : []), ...barTools(o), ...webFilterTools(o), ...filterStateTools(o), ...noticeTools(o), ...askAudienceTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
+  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...blocks.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write, ...blocks.write] : []), ...barTools(o), ...webFilterTools(o), ...filterStateTools(o), ...noticeTools(o), ...askAudienceTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

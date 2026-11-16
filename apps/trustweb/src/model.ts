@@ -720,7 +720,12 @@ export interface InventoryItem {
   link?: string
   /** The "Recommended by X?" suggestion was dismissed. */
   recommenderDismissed?: boolean
+  /** Wave 44b resources-outliner (resource_blocks.ts): the outline under this resource, a tree of blocks. Absent = none. */
+  blocks?: ResBlock[]
 }
+
+/** One bullet of a resource's outline; shared as a whole subtree or as its line alone. */
+export interface ResBlock { id: string; text: string; children: ResBlock[]; collapsed?: true }
 
 export type ResourceKind = 'book' | 'publication' | 'reference' | 'recording' | 'link' | 'other'
 

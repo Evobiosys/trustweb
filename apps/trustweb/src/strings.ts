@@ -4905,4 +4905,16 @@ export const S = {
     visHint: 'Only fields marked Directory leave this phone with your discoverable name.',
     zones: 'Who sees which section',
   },
+  /* wave44b resources-outliner */
+  resOutliner: {
+    title: (n: number) => `Outline${n ? ` (${n})` : ''}`,
+    empty: 'No lines yet. Add one, or paste an outline.',
+    add: '+ Line', indent: '→', outdent: '←', up: '↑', down: '↓',
+    lineAria: 'Line', bulletAria: 'Line; hold to share', collapse: 'Show or hide the lines under this one',
+    shareBlock: 'Share this block', shareLine: 'Share only this line', shareGo: 'Share',
+    oneLine: '1 line',
+    blockLines: (blocks: number, lines: number) => `${blocks} block, ${lines} line${lines === 1 ? '' : 's'}`,
+    pasteTitle: 'Paste an outline', pasteAria: 'Outline to paste', pastePh: '- one\n  - under it\n- two', pasteGo: 'Add as lines',
+    requests: (n: number) => `Review requests (${n} waiting)`,
+  },
 } as const
