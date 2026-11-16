@@ -31,7 +31,7 @@ try {
       check(`${w}px ${screen}: settings gear in view`, await inView(page, '.hdr [data-settings-gear]', w))
       if (screen === 'web') {
         check(`${w}px web: search in view`, await inView(page, '.hdr .web-search-btn', w))
-        check(`${w}px web: eye in view`, await inView(page, '.hdr .hdr-right button:nth-child(2)', w))
+        check(`${w}px web: eye in view`, await inView(page, '.hdr .hdr-tools button:nth-child(2)', w))
       }
       check(`${w}px ${screen}: no sideways scroll`, await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth))
     }

@@ -32,7 +32,7 @@ try {
     // (a) + (b) default record: five buttons = one raised, select tool in Tools
     {
       const { ctx, page, errors } = await open({ width: w, height: h })
-      const hdr = await page.locator('.hdr .hdr-right > *').evaluateAll((bs) => bs.map((b) => b.classList.contains('select-tool')))
+      const hdr = await page.locator('.hdr .hdr-right > *, .hdr .hdr-tools > *').evaluateAll((bs) => bs.map((b) => b.classList.contains('select-tool')))
       check(`${w}: select tool not in the header`, !hdr.includes(true))
       if (!(await page.locator('.zone-tools .select-tool').count())) { await page.locator('[data-zone-side-toggle]').first().click(); await page.waitForTimeout(500) }
       check(`${w}: select tool is one of the Tools buttons (beside expand and add)`, (await page.locator('[data-zone-side] .zone-tools .select-tool, .sheet .zone-tools .select-tool').count()) === 1 || (await page.locator('.zone-tools .select-tool').count()) === 1)

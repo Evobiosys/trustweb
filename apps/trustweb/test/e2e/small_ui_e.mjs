@@ -42,7 +42,8 @@ const outerRing = (page) => page.evaluate(() => {
 
 try {
   // 1: zoom-out floor
-  for (const [w, h] of [[1280, 800], [1600, 1000]]) {
+  // wave 44 header-layout: the header is 38 px taller (tools row), so the 1280 case gets 40 px more height to keep the same Web area.
+  for (const [w, h] of [[1280, 840], [1600, 1000]]) {
     const { ctx, page, errors } = await open(w, h)
     const fit = await kOf(page)
     check(`${w}: starts at the fitted zoom (> 1)`, fit > 1.2, String(fit))

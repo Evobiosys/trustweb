@@ -36,7 +36,7 @@ try {
     check(`${w}: unread count is 5 (message, 2 wants, connected, event)`, count === 5, count)
     check(`${w}: a person who wants to connect sits on the unsorted ring, ringed`, (await page.locator('.node.wants[data-pid="d1"]').count()) === 1)
     // P06: the bell overlaps no other header control
-    const boxes = await page.locator('.hdr-right > *').evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } }))
+    const boxes = await page.locator('.hdr-right > *, .hdr-tools > *').evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } }))
     let clash = false
     for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (hit(boxes[i], boxes[j])) clash = true
     check(`${w}: no header control overlaps another`, !clash && boxes.every((b) => b.x >= 0 && b.x + b.width <= w + 1), JSON.stringify(boxes))

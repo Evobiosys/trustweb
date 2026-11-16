@@ -70,7 +70,7 @@ async function main() {
     // Wave 2 (P9): the Feed is optional and off by default, so the bar is the old one; feed_flow switches it on.
     ok('nav is exactly Membranes | Record | Resources', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'Resources']), JSON.stringify(tabs))
     ok('"Ask your web" sits on the Web screen', await page.getByRole('button', { name: 'Ask your web' }).isVisible())
-    const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
+    const hdr = await page.locator('.hdr-right > *, .hdr-tools > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
     ok('header right reads manage (the outliner glyph, wave 6 N3), QR, more', hdr.length === 3 && /Manage and search contacts/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
     ok('no "Online" text in the header', !(await page.locator('.hdr').innerText()).includes('Online'))
 

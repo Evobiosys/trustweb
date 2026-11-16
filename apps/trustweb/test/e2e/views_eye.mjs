@@ -21,7 +21,7 @@ try {
     await page.evaluate((r) => localStorage.setItem('trustweb.v1.me', r), record)
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(500)
     const tap = (sel) => (name === 'phone' ? page.locator(sel).tap() : page.locator(sel).click())
-    check(`${name}: eye replaces the dots`, (await page.locator('.hdr-right .view-menu-btn').count()) === 1 && (await page.locator('.web-view-row [aria-label="Choose a view"]').count()) === 0)
+    check(`${name}: eye replaces the dots`, (await page.locator('.hdr-tools .view-menu-btn').count()) === 1 && (await page.locator('.web-view-row [aria-label="Choose a view"]').count()) === 0)
     await tap('.view-menu-btn'); await page.waitForTimeout(300)
     const order = await page.locator('[data-view-drop] .view-opt').evaluateAll((bs) => bs.map((b) => b.dataset.view))
     check(`${name}: menu order`, JSON.stringify(order) === JSON.stringify(['rings', 'network', 'people', 'dex', 'compact']))

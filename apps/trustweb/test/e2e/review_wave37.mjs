@@ -26,8 +26,8 @@ try {
     const offer = page.locator('.demo-friends button', { hasText: 'No thanks' })
     if (await offer.count()) { await offer.first().click(); await page.waitForTimeout(6500) }
     // header: brand mark left, then search, AI, eye in that order
-    const order = await page.evaluate(() => [...document.querySelectorAll('.hdr .hdr-right > *')].map((n) => (n.matches('.web-search-btn') ? 'search' : n.matches('[data-ai-button]') ? 'ai' : n.matches('.view-menu-btn') || n.querySelector('.view-menu-btn') ? 'eye' : 'x')).filter((k) => k !== 'x'))
-    check(`${name}: header order search, AI, eye`, JSON.stringify(order.slice(0, 3)) === '["search","ai","eye"]')
+    const order = await page.evaluate(() => [...document.querySelectorAll('.hdr .hdr-right > *, .hdr .hdr-tools > *')].map((n) => (n.matches('.web-search-btn') ? 'search' : n.matches('[data-ai-button]') ? 'ai' : n.matches('.view-menu-btn') || n.querySelector('.view-menu-btn') ? 'eye' : 'x')).filter((k) => k !== 'x'))
+    check(`${name}: header order AI (right cluster), search, eye (tools row; wave 44 header-layout)`, JSON.stringify(order.slice(0, 3)) === '["ai","search","eye"]')
     check(`${name}: brand mark top-left`, (await page.locator('.hdr .hdr-left [data-brand-mark]').count()) === 1)
     check(`${name}: no "All people as a table" button`, (await page.locator('.web-view-row button[data-view="complete"]').count()) === 0)
     check(`${name}: birthday banner shows`, (await page.locator('[data-birthday-notice]:not([hidden])').count()) === 1 || (console.log('notice:', await page.locator('.demo-friends').innerText().catch(() => '?')), false))

@@ -27,9 +27,10 @@ try {
     const store = () => page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))
 
     // 1. a plain entry, no floating pill; it opens a page of its own with Back
-    check(`${w}: no floating Ask pill on the Web`, (await page.locator('.query-fab[data-open-query]').count()) === 0)
-    const entry = page.locator('.hdr [data-open-query]:visible').first()
-    check(`${w}: the Ask entry is a header button`, (await entry.count()) === 1)
+    // wave 44 header-layout: the Ask entry is the floating pill again (bottom right), not a header button
+    check(`${w}: the floating Ask pill is back on the Web`, (await page.locator('.query-fab[data-open-query]').count()) === 1)
+    const entry = page.locator('[data-open-query]:visible').first()
+    check(`${w}: the Ask entry is visible`, (await entry.count()) === 1)
     await entry.click(); await page.waitForTimeout(400)
     check(`${w}: Ask your web is its own page (not an overlay on the Web)`, (await page.locator('[data-ask-page]').count()) === 1 && (await page.locator('.screen.askpage').count()) === 1 && (await page.locator('.screen.querying').count()) === 0 && (await page.locator('.rings-wrap').count()) === 0)
     await page.screenshot({ path: `${SHOTS}/ask-page-filter-page-${w}.png` })
@@ -79,7 +80,7 @@ try {
     await page.screenshot({ path: `${SHOTS}/ask-page-filter-support-${w}.png` })
 
     // 7. P06: nothing overlays anything; the bottom bar sits at the bottom
-    const hdr = await page.locator('.hdr .hdr-right > *:visible').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom } }))
+    const hdr = await page.locator('.hdr .hdr-right > *:visible, .hdr .hdr-tools > *:visible').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom } }))
     check(`${w}: header buttons do not overlap`, hdr.every((a, i) => hdr.every((b, j) => i === j || apart(a, b))))
     const tabs = await rect(page, '.tabs'); const scroll = await rect(page, '.ask-page')
     check(`${w}: the bottom bar does not overlay the page`, apart(tabs, scroll), JSON.stringify({ tabs, scroll }))

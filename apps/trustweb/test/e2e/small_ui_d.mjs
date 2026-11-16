@@ -58,6 +58,8 @@ try {
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(500)
     check(`${w}: Settings still has the Variations section`, (await page.locator('[data-settings-group="variations"]').count()) === 1)
     check(`${w}: Theme is hidden under a dropdown`, !(await page.locator('[data-look-choice]').first().isVisible()))
+    // wave 42 llm-first: the Theme row sits under the folded Advanced section
+    await page.locator('[data-settings-advanced-all]').evaluate((d) => { d.open = true }); await page.waitForTimeout(150)
     await page.locator('[data-theme-pill]').scrollIntoViewIfNeeded(); await page.locator('[data-theme-pill]').click(); await page.waitForTimeout(200)
     check(`${w}: the dropdown lists three looks`, (await page.locator('[data-look-choice]').count()) === 3 && (await page.locator('[data-look-choice]').first().isVisible()))
     await shot(page, '3-theme-dropdown', w)
