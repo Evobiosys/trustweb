@@ -5172,4 +5172,20 @@ export const S = {
     tampered: (step: number) => `A device on the way changed your ask's hidden list (hop ${step}). The ask stopped there.`,
     unsupported: (step: number) => `A device on the way could not check your ask's hidden list (hop ${step}) and did not pass it on.`,
   },
+  /* wave44b phone-preview-extension */
+  previewPhone: {
+    pill: 'Preview',
+    title: 'Preview rows',
+    close: 'Close',
+    loaded: 'Loaded in this preview',
+    notLoaded: 'Not loaded',
+    like: '👍 Like',
+    needsWork: 'Needs work',
+    note: 'Note',
+    noteCopied: 'Note copied',
+    where: 'Where',
+    steps: 'Steps',
+    empty: 'No rows in this preview.',
+    failed: (why: string) => `Could not save: ${why}`,
+  },
 } as const

@@ -115,3 +115,19 @@ export async function verifyMeLink(url: string, mine: string, fetcher: Fetcher):
     return false
   } catch { return false }
 }
+
+/** answers-44a (Q7): what a check answers when the app's public address is unknown (MCP without the setting profile.origin). */
+export const ORIGIN_NOT_SET = 'origin not set'
+
+/**
+ * The one rel="me" checker of the app's "Check" button and MCP profile_link_check: checks one of the owner's links against `origin` and sets or
+ * clears its `verified` mark. Empty `origin`: nothing fetched, `reason` says so. A URL that is not one of the links throws.
+ */
+export async function checkProfileLink(me: HasProfile, url: string, origin: string, fetcher: Fetcher): Promise<{ verified: boolean; reason?: typeof ORIGIN_NOT_SET }> {
+  const link = (profileOf(me).links ?? []).find((x) => x.url === url)
+  if (!link) throw new Error('no such link')
+  if (!origin) return { verified: false, reason: ORIGIN_NOT_SET }
+  const verified = await verifyMeLink(url, origin, fetcher)
+  if (verified) link.verified = true; else delete link.verified
+  return { verified }
+}

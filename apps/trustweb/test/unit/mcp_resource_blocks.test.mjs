@@ -41,4 +41,21 @@ describe('resource block tools', () => {
     expect(() => f.by.resource_share.run({ id: '1', blockId: a, scope: 'all' })).toThrow(/scope/)
     expect(() => f.by.resource_share.run({ id: '2', blockId: 'x', scope: 'line' })).toThrow(/protected/)
   })
+  it('review-44 parity: remove an empty leaf, fold a block, paste an outline (the outliner\'s Backspace, bullet and Paste)', () => {
+    const f = fixture()
+    for (const n of ['resource_block_remove', 'resource_block_collapse', 'resource_blocks_import']) { expect(Object.keys(fixture(false).by)).not.toContain(n); expect(Object.keys(f.by)).toContain(n) }
+    const got = f.by.resource_blocks_import.run({ id: '1', markdown: '- a\n  - a1\n- b' })
+    expect(got.added).toBe(3)
+    let blocks = f.rec().inventory[0].blocks
+    expect(blocks.map((x) => x.text)).toEqual(['a', 'b'])
+    const [a, b] = blocks
+    expect(f.by.resource_block_collapse.run({ id: '1', blockId: a.id }).collapsed).toBe(true)
+    expect(f.rec().inventory[0].blocks[0].collapsed).toBe(true)
+    expect(() => f.by.resource_block_remove.run({ id: '1', blockId: a.id })).toThrow(/sub-blocks|text/)
+    expect(() => f.by.resource_block_remove.run({ id: '1', blockId: b.id })).toThrow(/text/)
+    f.by.resource_block_edit.run({ id: '1', blockId: b.id, text: '' })
+    f.by.resource_block_remove.run({ id: '1', blockId: b.id })
+    blocks = f.rec().inventory[0].blocks
+    expect(blocks.map((x) => x.text)).toEqual(['a'])
+  })
 })

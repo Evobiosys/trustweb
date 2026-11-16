@@ -119,7 +119,7 @@ describe('the connect handshake is sealed with the QR key', () => {
     const A = await phone('Shower Three')
     const M = await forger()
     const ack = { v: 1, t: 'connect-ack', from: { id: randomId(12), displayName: 'Mallory' }, did: M.identity.did }
-    const good = await sealConnectAck(ack, M.identity.did, A.did, linkOf(A).qk)
+    const good = await sealConnectAck(ack, M.identity, A.did, linkOf(A).qk)
     const w = JSON.parse(good)
     const c = w.c.slice(0, 5) + (w.c[5] === 'A' ? 'B' : 'A') + w.c.slice(6)
     await M.channel.sendRaw(A.did, JSON.stringify({ ...w, c }))

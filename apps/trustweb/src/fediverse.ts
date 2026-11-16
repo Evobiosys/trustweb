@@ -18,10 +18,12 @@
  */
 import type { FediverseLink, Person } from './model'
 import { PostKind } from './feed'
-import { stripUnsafe } from './safe_text'
+import { fetchCapped, htmlToText, isPublicHost, LOCAL_HOST_RE as LOCAL_RE, REMOTE_BODY_MAX, REMOTE_TEXT_MAX as TEXT_MAX, safeRemoteUrl, stripRemoteUnsafe as stripUnsafe } from './remote_read'
+import type { FetchFn } from './remote_read'
 import type { Post } from './feed'
 
-export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
+export type { FetchFn }
+export { htmlToText, safeRemoteUrl }
 
 export interface Handle {
   user: string
@@ -49,30 +51,9 @@ export interface RemoteStatus {
 }
 
 const USER_RE = /^[A-Za-z0-9_.-]{1,64}$/
-const HOST_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
-/**
- * Names that never lead to a public instance (this network, this machine, or
- * no public DNS at all): a typed address or a remote link pointing there could
- * make the phone probe its own network (review-app-b).
- */
-const RESERVED_SUFFIXES = ['localhost', 'local', 'internal', 'intranet', 'lan', 'home', 'corp', 'private', 'arpa', 'test', 'invalid', 'example', 'onion']
-/** Local test instances (127.0.0.1:<port>), allowed only where the caller says so (the dev build). */
-const LOCAL_RE = /^127\.0\.0\.1:\d{2,5}$/
-const FETCH_TIMEOUT_MS = 8_000
 const STATUSES_LIMIT = 10
-const TEXT_MAX = 500
-/** An answer bigger than this is not read (a lookup is a few KB, ten statuses some tens of KB). */
-export const BODY_MAX_BYTES = 1_000_000
-/** Remote HTML longer than this is cut before it is parsed (the text keeps TEXT_MAX characters anyway). */
-const HTML_MAX = 20_000
-
-/** A public DNS name (not an address literal, not a reserved name). */
-function isPublicHost(host: string): boolean {
-  if (!HOST_RE.test(host)) return false
-  const labels = host.split('.')
-  return !RESERVED_SUFFIXES.includes(labels[labels.length - 1]) && !host.endsWith('.home.arpa')
-}
-
+/** An answer bigger than this is not read (remote_read.ts REMOTE_BODY_MAX). */
+export const BODY_MAX_BYTES = REMOTE_BODY_MAX
 
 /**
  * "@user@host", "user@host" or a profile link "https://host/@user" -> a handle;
@@ -105,70 +86,8 @@ export function profileUrl(h: Handle): string {
   return `${instanceBase(h.host)}/@${encodeURIComponent(h.user)}`
 }
 
-/** Remote HTML -> plain text: tags dropped, line breaks kept, entities decoded; never inserted as markup. */
-export function htmlToText(html: string): string {
-  const withBreaks = html.slice(0, HTML_MAX).replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
-  let text: string
-  if (typeof DOMParser !== 'undefined') {
-    // Parsed into an inert document (nothing runs, nothing loads); what is not text goes before reading the text.
-    const doc = new DOMParser().parseFromString(withBreaks, 'text/html')
-    doc.querySelectorAll('script, style, template, noscript').forEach((n) => n.remove())
-    text = doc.body.textContent ?? ''
-  } else {
-    const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' }
-    text = withBreaks.replace(/<(script|style|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '').replace(/<[^>]*>/g, '').replace(/&(#?[a-z0-9]+);/gi, (m, e: string) => entities[e.toLowerCase()] ?? (/^#\d+$/.test(e) ? String.fromCodePoint(Number(e.slice(1))) : m))
-  }
-  return stripUnsafe(text).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, TEXT_MAX)
-}
-
-/** The body as text, refused (null) past BODY_MAX_BYTES, read in chunks so a huge answer is never held whole. */
-async function cappedText(res: Response): Promise<string | null> {
-  if (Number(res.headers.get('Content-Length') ?? 0) > BODY_MAX_BYTES) return null
-  const reader = res.body?.getReader()
-  if (!reader) {
-    const all = await res.text()
-    return all.length > BODY_MAX_BYTES ? null : all
-  }
-  const chunks: Uint8Array[] = []
-  let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > BODY_MAX_BYTES) { void reader.cancel().catch(() => {}); return null }
-    chunks.push(value)
-  }
-  const all = new Uint8Array(size)
-  let at = 0
-  for (const c of chunks) { all.set(c, at); at += c.byteLength }
-  return new TextDecoder().decode(all)
-}
-
-async function getText(url: string, f: FetchFn, accept: string): Promise<string | FetchProblem> {
-  let res: Response
-  // A plain controller, not AbortSignal.timeout(): that one is missing on iOS before 16.
-  const ctl = new AbortController()
-  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS)
-  try {
-    // No cookies, no referrer, no redirect to somewhere the person did not type (review-app-b).
-    res = await f(url, { headers: { Accept: accept }, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: ctl.signal })
-  } catch {
-    clearTimeout(timer)
-    return FetchProblem.Unreachable
-  }
-  try {
-    if (res.status === 429) return FetchProblem.RateLimited
-    if (res.status === 404) return FetchProblem.NotFound
-    if (!res.ok) return FetchProblem.Unreachable
-    const text = await cappedText(res)
-    return text === null ? FetchProblem.Malformed : text
-  } catch {
-    return FetchProblem.Malformed
-  } finally {
-    // The deadline covers reading the body too: an instance that trickles bytes is cut off.
-    clearTimeout(timer)
-  }
-}
+/** One GET (remote_read.ts fetchCapped): the body as text, or why not. */
+const getText = (url: string, f: FetchFn, accept: string): Promise<string | FetchProblem> => fetchCapped(url, f, accept) as Promise<string | FetchProblem>
 
 export async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem> {
   const text = await getText(url, f, 'application/json')
@@ -187,20 +106,6 @@ export async function lookupAccount(h: Handle, f: FetchFn): Promise<string | Fet
   if (isProblem(v)) return v
   const id = typeof v === 'object' && v !== null ? (v as Record<string, unknown>).id : undefined
   return typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : FetchProblem.Malformed
-}
-
-/**
- * A link or picture address from a remote post: https to a public name only
- * (http to 127.0.0.1 only for the dev build's test instances), never an SVG.
- */
-export function safeRemoteUrl(u: unknown, allowLocal = false, image = false): string | undefined {
-  if (typeof u !== 'string' || u.length > 2000) return undefined
-  let url: URL
-  try { url = new URL(u) } catch { return undefined }
-  const local = allowLocal && url.protocol === 'http:' && LOCAL_RE.test(url.host)
-  if (!local && !(url.protocol === 'https:' && !url.port && isPublicHost(url.hostname) && !url.username && !url.password)) return undefined
-  if (image && /\.svgz?$/i.test(url.pathname)) return undefined
-  return url.toString()
 }
 
 function statusOf(v: unknown, host: string, allowLocal: boolean): RemoteStatus | null {

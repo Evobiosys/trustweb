@@ -31,6 +31,11 @@ import type { ChatBook } from './chat'
 import type { TwSettings } from './ext/profiles'
 import type { SharedNote } from './notes_outline'
 import type { CoMsg } from './ext/co_notes/co_chat'
+// review-44: top-level type imports (the packages/cli no_network scan reads an inline type import as a value import)
+import type { Profile } from './profile_fields'
+import type { EmbedRecord } from './feed_embed'
+import type { HomeLayout } from './home_layout'
+import type { SavedFilter } from './saved_filters'
 import type { CoDoc } from './ext/co_notes/co_doc'
 import type { CoGuest, CoInvite } from './ext/co_notes/co_invite'
 import type { ConnectRecord } from './connect_code'
@@ -46,8 +51,6 @@ import type { EventOffers, InvitePolicy, NameReveal } from './events'
 import type { ZoneLink } from './zone_share_link'
 import type { PeerItem } from './peer_items'
 import type { SupportAsk, SupportIn } from './support_ask'
-import type { HomeLayout } from './home_layout'
-import type { EmbedRecord } from './feed_embed'
 
 export enum Ring {
   /** The top trust zone (wave 25): the few you would call at 3 am. Family keeps its own closeness; this is a ring of its own. */
@@ -940,7 +943,7 @@ export interface Me {
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
   otherEmails?: string[]
   /** Wave 44b profile-page (profile_fields.ts): phone-book name parts, bio, pronouns, languages, place, up to four links, a visibility per field. Local; only discoverable fields leave in the directory record. */
-  profile?: import('./profile_fields').Profile
+  profile?: Profile
 }
 
 /**
@@ -1279,7 +1282,7 @@ export interface AppState {
   /** Wave 44 home-dashboard (home_layout.ts): the Home tile board's columns. Absent: the default (Web centre, others' requests left, mine right). Syncs with the record. */
   homeLayout?: HomeLayout
   /** Wave 44b filters-communities: saved filter states (in / out chips), some pinned above the filter row (saved_filters.ts; schema 4). */
-  savedFilters?: import('./saved_filters').SavedFilter[]
+  savedFilters?: SavedFilter[]
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */

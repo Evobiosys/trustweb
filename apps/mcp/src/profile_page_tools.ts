@@ -3,7 +3,8 @@
  * Wave 44b profile-page (POLICY P02, MCP parity): the own "Your profile" page as tools: read it (profile_get), change fields, display name and
  * per-field visibility (profile_set), add or remove one of up to four related links. The Discoverable switch stays profile_discoverable_set.
  */
-import { FIELDS, LINK_MAX, VIS, addLink, directoryExtra, profileOf, removeLink, setFields, setVis, visOf, fieldOf, type HasProfile, type VisKey } from '../../trustweb/src/profile_fields.ts'
+import { FIELDS, LINK_MAX, VIS, addLink, checkProfileLink, directoryExtra, profileOf, removeLink, setFields, setVis, visOf, fieldOf, type HasProfile, type VisKey } from '../../trustweb/src/profile_fields.ts'
+import { readSetting } from '../../trustweb/src/settings_registry.ts'
 import { commitTo, load, schema, S, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
 
@@ -65,6 +66,19 @@ export function profilePageTools(o: RecordToolsOptions): Tool[] {
       name: 'profile_link_remove', description: 'Remove one related link from your profile by its URL.',
       inputSchema: schema({ url: S('the link address') }, ['url']),
       run: (a) => { let out: Obj = {}; commitTo(o.file, now, (r) => { removeLink(meOf(r), String(a.url ?? '')); out = shown(r) }); return out },
+    },
+    /* answers-44a (Q7) */
+    {
+      name: 'profile_link_check', description: 'Check one of your profile links for rel="me": one GET of the page (no cookies, no referrer); verified when it links back to this app\'s public address (setting profile.origin; empty answers "origin not set"). Stores the mark.',
+      inputSchema: schema({ url: S('one of your profile links') }, ['url']),
+      run: async (a) => {
+        const url = String(a.url ?? '')
+        const r = load(o.file)
+        const fetcher = (o.embedFetch ?? globalThis.fetch) as unknown as Parameters<typeof checkProfileLink>[3]
+        const got = await checkProfileLink(meOf(r), url, String(readSetting(r, 'profile.origin')), fetcher)
+        if (!got.reason) commitTo(o.file, now, (next) => { const l = (profileOf(meOf(next)).links ?? []).find((x) => x.url === url); if (!l) return; if (got.verified) l.verified = true; else delete l.verified })
+        return { url, ...got }
+      },
     },
   ]
   return [...read, ...write]

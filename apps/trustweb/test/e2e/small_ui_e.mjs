@@ -87,11 +87,13 @@ try {
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(500)
     const where = await page.evaluate(() => {
       const g = document.querySelector('.sheet [data-settings-group="ai"]')
-      return { exists: !!g, topLevel: !!g && g.parentElement === document.querySelector('.sheet'), insideAdvanced: !!document.querySelector('[data-settings-section="advanced"] [data-ai]'), title: g?.querySelector('summary')?.textContent }
+      return { exists: !!g, topLevel: !!g && (g.parentElement === document.querySelector('.sheet') || g.parentElement?.hasAttribute('data-settings-advanced-all')), insideAdvanced: !!document.querySelector('[data-settings-section="advanced"] [data-ai]'), title: g?.querySelector('summary')?.textContent }
     })
+    // review-44: top level = a child of the sheet or a top group inside the one Advanced fold (wave 43c settings-advanced-all)
     check(`${w}: Settings has its own top-level section "AI"`, where.exists && where.topLevel && where.title === 'AI', JSON.stringify(where))
     check(`${w}: AI no longer sits inside Advanced`, !where.insideAdvanced)
     await page.evaluate(() => { for (const d of document.querySelectorAll('.sheet details')) d.open = false })
+    await page.locator('[data-settings-advanced-all]').evaluate((d) => { d.open = true }) // review-44: the AI section sits inside the one Advanced fold (wave 43c)
     await page.locator('[data-settings-section="ai"] > summary').click(); await page.waitForTimeout(300)
     const sectionPlans = await page.locator('.sheet [data-settings-section="ai"] [data-ai-plan]').allInnerTexts()
     check(`${w}: the section shows the same plan cards as the sparkle sheet`, sectionPlans.length === 3 && sectionPlans.join('|') === sheetPlans.join('|'))
@@ -142,6 +144,7 @@ try {
     const rows = ['k1', 'k2'].map((key) => ({ key, name: `Row ${key}`, source: 'vcf', file: 's.vcf', n365: 0, out: 0, in: 0, ids: [], sig: key, labels: [], emails: [`${key}@example.org`] }))
     const { ctx, page } = await open(1280, 800, record({ twSettings: { extensions: { assistant: false } }, serviceImports: [{ id: 'b1', at: Date.now(), counts: { vcf: 2 }, rows, done: {} }] }))
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(400)
+    await page.locator('[data-settings-advanced-all]').evaluate((d) => { d.open = true }) // review-44: Your contacts sits inside the one Advanced fold (wave 43c)
     if (!(await page.locator('[data-people-import]').first().isVisible())) { await page.locator('summary', { hasText: 'Your contacts' }).first().click(); await page.waitForTimeout(300) }
     await page.locator('[data-people-import]').first().click(); await page.waitForTimeout(500)
     await page.locator('[data-svc-curate]').first().click(); await page.waitForTimeout(500)

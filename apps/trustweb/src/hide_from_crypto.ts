@@ -7,21 +7,26 @@
  *              sL = HKDF-SHA256(s(L-1), salt = root, "tw-hide-next-v1"): one-way, so a device further out cannot compute an earlier level.
  *   tags       per level the set { HMAC-SHA256(sL, did)[0..16) } of every DID hidden from, padded with random tags to a bucket of HIDE_BUCKET
  *              and sorted: no DID, no count below the bucket, different tags per level and per ask.
- *   blob       ExclusionBlob {v, r: root, d: asker DID, m: reach, x: expiry, t: tags per level, g: Ed25519 signature of the asker's identity
- *              key over all of it}. Forwarders pass it on unchanged; the reach is signed too, so it cannot be raised.
+ *   blob       ExclusionBlob {v, r: root, d: asker DID, m: reach, x: expiry, t: tags per level, k: a commitment SHA-256(sL) per level
+ *              0..m-1 (review-44: binds each level secret to the signed blob, so a forwarder cannot hand on another key that would make
+ *              hidden DIDs further out test as not hidden), g: Ed25519 signature of the asker's identity key over all of it}. Forwarders pass it on unchanged; the reach is signed too, so it cannot be raised.
  *   level key  each receiver gets the secret of its own level in `hk`, inside the envelope sealed with the pair key (the sealed box): a
  *              forwarder at hop k tests its candidates for level k+1 with s(k+1) and hands s(k+1) on. It learns whether a DID it already
  *              holds is hidden, never the list (residual leak, see the report).
  *   check      verifyAskExclusion before an ask is honoured: a changed blob fails and the device answers like no match, passes nothing on,
- *              and sends a TamperReport back the way the ask came (signed by the reporter, MAC'd with its level secret, so only a device
- *              that received this ask can make one; the asker rejects forged, replayed and "tampered" claims about the genuine blob).
+ *              and seals a TamperReport straight to the asker's DID (answers-44a, Q3: not back through the device that changed the list).
+ *              The report names nobody: no reporter DID, no signature; the MAC with its level secret proves that a device which received
+ *              this ask at that hop made it; the asker rejects forged, replayed and "tampered" claims about the genuine blob.
+ *   seal       sealHideReport: X25519 from a fresh ephemeral key to the asker's key-agreement key (handshake_crypto.ts key derivation,
+ *              without the static-static part, so the sender stays anonymous to the asker), AES-GCM, padded to 256 bytes.
  * WebCrypto (HMAC, SHA-256) + apps/demo did.ts (@noble Ed25519, HKDF): runs in the browser and under node, never under plain-node MCP
  * (hide_reports.ts is the record side for that).
  */
-import { hkdfSha256, signBytes, verifyDidSignature } from '../../demo/src/did'
+import { hkdfSha256, resolveDidPeer, signBytes, verifyDidSignature, x25519Ephemeral, x25519Shared } from '../../demo/src/did'
 import type { Identity } from '../../demo/src/did'
 import { fromB64u, randomBytes, toB64u } from '../../demo/src/crypto'
-import { HIDE_BLOB_MAX_JSON, HOP_CAP } from '../../demo/src/types'
+import { HIDE_BLOB_MAX_JSON, HIDE_REPORT_MAX_JSON, HOP_CAP } from '../../demo/src/types'
+import { deriveHandshakeKey, openHandshake, padWire, sealHandshake } from './handshake_crypto'
 import type { HideReason } from './hide_reports'
 
 export { HIDE_BLOB_MAX_JSON }
@@ -43,9 +48,12 @@ const TAG_RE = /^[A-Za-z0-9_-]{22}$/
 const NONCE_RE = /^[A-Za-z0-9_-]{22}$/
 const te = new TextEncoder()
 
-export interface ExclusionBlob { v: number; r: string; d: string; m: number; x: number; t: string[][]; g: string }
+export interface ExclusionBlob { v: number; r: string; d: string; m: number; x: number; t: string[][]; k: string[]; g: string }
 export type ExclusionCheck = 'ok' | 'tampered' | 'unsupported'
-export interface TamperReport { v: 1; r: string; hop: number; h: string; why: HideReason; d: string; n: string; at: number; mac: string; g: string }
+export interface TamperReport { v: 1; r: string; hop: number; h: string; why: HideReason; n: string; at: number; mac: string }
+/** answers-44a: the report sealed to the asker's DID, sent on the relay's raw path. */
+export const HIDE_REPORT_WIRE = 'hide-report2'
+export interface HideReportWire { v: 1; t: typeof HIDE_REPORT_WIRE; e: string; n: string; c: string }
 export type ReportCheck =
   | { ok: true; seen: string[]; report: { hop: number; why: HideReason; at: number } }
   | { ok: false; reason: 'malformed' | 'forged' | 'replay' | 'not-tampered' }
@@ -77,13 +85,30 @@ export async function tagSet(sk: Uint8Array, dids: readonly string[]): Promise<s
   return tags.sort()
 }
 
-const signedBytes = (b: Omit<ExclusionBlob, 'g'>): Uint8Array => te.encode('tw-hide-v1|' + JSON.stringify([b.v, b.r, b.d, b.m, b.x, b.t]))
+const signedBytes = (b: Omit<ExclusionBlob, 'g'>): Uint8Array => te.encode('tw-hide-v1|' + JSON.stringify([b.v, b.r, b.d, b.m, b.x, b.t, b.k]))
+
+/** The commitment to a level secret (16 bytes of SHA-256, base64url): one-way, so it shows nothing of the secret. */
+async function commitOf(sk: Uint8Array): Promise<string> {
+  const msg = new Uint8Array([...te.encode('tw-hide-commit-v1|'), ...sk])
+  return toB64u(new Uint8Array(await crypto.subtle.digest('SHA-256', msg as BufferSource)).slice(0, TAG_BYTES))
+}
+
+/** Review-44: is `sk` the level secret the asker committed to for `level` (0 = its direct contacts)? Only for a blob that verified. */
+export async function verifyLevelKey(blob: ExclusionBlob, level: number, sk: Uint8Array): Promise<boolean> {
+  const want = blob.k[level]
+  return typeof want === 'string' && sk.length === 32 && (await commitOf(sk)) === want
+}
 
 /** The asker's signed blob for an ask of reach `maxHops` (effective, 2..HOP_CAP): tag sets for levels 1..maxHops-1. */
 export async function signAskExclusion(identity: Identity, a: { root: string; maxHops: number; issuedAt: number; s0: Uint8Array; dids: readonly string[] }): Promise<ExclusionBlob> {
   const t: string[][] = []
-  for (let level = 1; level < a.maxHops; level++) t.push(await tagSet(deriveHopSecret(a.s0, a.root, level), a.dids))
-  const body = { v: ASK_EXCLUSION_V, r: a.root, d: identity.did, m: a.maxHops, x: a.issuedAt + HIDE_BLOB_TTL_MS, t }
+  const k: string[] = [await commitOf(a.s0)]
+  for (let level = 1; level < a.maxHops; level++) {
+    const sk = deriveHopSecret(a.s0, a.root, level)
+    t.push(await tagSet(sk, a.dids))
+    k.push(await commitOf(sk))
+  }
+  const body = { v: ASK_EXCLUSION_V, r: a.root, d: identity.did, m: a.maxHops, x: a.issuedAt + HIDE_BLOB_TTL_MS, t, k }
   return { ...body, g: signBytes(identity, signedBytes(body)) }
 }
 
@@ -102,10 +127,11 @@ export function verifyAskExclusion(blob: unknown, c: { root: string | null; maxH
   if (!Array.isArray(b.t) || b.t.length !== m - 1 || m < 2 || m > HOP_CAP) return 'tampered'
   const t = b.t as unknown[]
   if (!t.every((l) => Array.isArray(l) && l.length > 0 && l.length % HIDE_BUCKET === 0 && l.every((x) => typeof x === 'string' && TAG_RE.test(x)))) return 'tampered'
+  if (!Array.isArray(b.k) || b.k.length !== m || !b.k.every((x) => typeof x === 'string' && TAG_RE.test(x))) return 'tampered'
   if (b.r !== c.root || m !== c.maxHops) return 'tampered'
   if (c.now > b.x || b.x > c.now + HIDE_BLOB_TTL_MS + CLOCK_SLACK_MS) return 'tampered'
   if (c.hop === 0 ? b.d !== c.senderDid : b.d === c.senderDid) return 'tampered'
-  const body = { v: ASK_EXCLUSION_V, r: b.r, d: b.d, m, x: b.x, t: t as string[][] }
+  const body = { v: ASK_EXCLUSION_V, r: b.r, d: b.d, m, x: b.x, t: t as string[][], k: b.k as string[] }
   return verifyDidSignature(b.d, signedBytes(body), b.g) ? 'ok' : 'tampered'
 }
 
@@ -124,15 +150,60 @@ export async function blobHash(received: unknown): Promise<string> {
   return toB64u(new Uint8Array(await crypto.subtle.digest('SHA-256', te.encode(json))).slice(0, 16))
 }
 
-const reportBytes = (r: Pick<TamperReport, 'r' | 'hop' | 'h' | 'why' | 'd' | 'n' | 'at'>): Uint8Array =>
-  te.encode('tw-hide-report-v1|' + JSON.stringify([1, r.r, r.hop, r.h, r.why, r.d, r.n, r.at]))
+const reportBytes = (r: Pick<TamperReport, 'r' | 'hop' | 'h' | 'why' | 'n' | 'at'>): Uint8Array =>
+  te.encode('tw-hide-report-v2|' + JSON.stringify([1, r.r, r.hop, r.h, r.why, r.n, r.at]))
 
-/** The receiver's signed report: what it got (`received`, hashed), at which hop, why; MAC'd with its level secret `sk`. */
-export async function makeTamperReport(identity: Identity, a: { root: string; hop: number; received: unknown; why: HideReason; sk: Uint8Array; at: number }): Promise<TamperReport> {
-  const base = { r: a.root, hop: a.hop, h: await blobHash(a.received), why: a.why, d: identity.did, n: toB64u(randomBytes(16)), at: a.at }
+/** The receiver's report: what it got (`received`, hashed), at which hop, why; MAC'd with its level secret `sk`. No DID, no signature. */
+export async function makeTamperReport(a: { root: string; hop: number; received: unknown; why: HideReason; sk: Uint8Array; at: number }): Promise<TamperReport> {
+  const base = { r: a.root, hop: a.hop, h: await blobHash(a.received), why: a.why, n: toB64u(randomBytes(16)), at: a.at }
   const mac = toB64u(new Uint8Array(await crypto.subtle.sign('HMAC', await hmacKey(a.sk, ['sign']), reportBytes(base) as BufferSource)))
-  const g = signBytes(identity, te.encode(mac + '|' + JSON.stringify([base.r, base.hop, base.h, base.why, base.d, base.n, base.at])))
-  return { v: 1, ...base, mac, g }
+  return { v: 1, ...base, mac }
+}
+
+const SEAL_LABEL = 'tw-hide-report-seal-v1'
+const sealTranscript = (askerDid: string): Uint8Array => te.encode(SEAL_LABEL + '|' + askerDid)
+
+/** The report sealed to `askerDid` alone (anonymous sender: a fresh ephemeral key, no static one). Returns the wire text. */
+export async function sealHideReport(rep: TamperReport, askerDid: string): Promise<string> {
+  const pub = resolveDidPeer(askerDid).keyAgreementPublicKey
+  const eph = x25519Ephemeral()
+  try {
+    const key = await deriveHandshakeKey(te.encode(SEAL_LABEL), eph.publicKey, pub, x25519Shared(eph.secretKey, pub))
+    const box = await sealHandshake(padWire(JSON.stringify(rep)), key, sealTranscript(askerDid))
+    const wire: HideReportWire = { v: 1, t: HIDE_REPORT_WIRE, e: toB64u(eph.publicKey), n: toB64u(box.n), c: toB64u(box.c) }
+    return JSON.stringify(wire)
+  } finally {
+    eph.secretKey.fill(0)
+  }
+}
+
+const B64U = /^[A-Za-z0-9_-]+$/
+const isB64 = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max && B64U.test(v)
+/** Sealed ciphertext of a report at most HIDE_REPORT_MAX_JSON (padded) plus the GCM tag, as base64url. */
+const WIRE_C_MAX = Math.ceil((HIDE_REPORT_MAX_JSON + 256 + 16) / 3) * 4
+
+/** A sealed report wire, or null for anything else. */
+export function parseHideReportWire(payload: string): HideReportWire | null {
+  let o: unknown
+  try { o = JSON.parse(payload) } catch { return null }
+  if (typeof o !== 'object' || o === null) return null
+  const w = o as Record<string, unknown>
+  if (w.v !== 1 || w.t !== HIDE_REPORT_WIRE || !isB64(w.e, 64) || !isB64(w.n, 32) || !isB64(w.c, WIRE_C_MAX)) return null
+  return { v: 1, t: HIDE_REPORT_WIRE, e: w.e, n: w.n, c: w.c }
+}
+
+/** The asker opens a report sealed to `me`; null when it does not open (another recipient, a changed byte) or is too large. */
+export async function openHideReport(wire: HideReportWire, me: Identity): Promise<unknown> {
+  try {
+    const e = fromB64u(wire.e)
+    if (e.length !== 32) return null
+    const key = await deriveHandshakeKey(te.encode(SEAL_LABEL), e, me.keyAgreement.publicKey, x25519Shared(me.keyAgreement.secretKey, e))
+    const plain = new TextDecoder().decode(await openHandshake({ n: fromB64u(wire.n), c: fromB64u(wire.c) }, key, sealTranscript(me.did), []))
+    const json = plain.trimEnd()
+    return json.length > HIDE_REPORT_MAX_JSON ? null : JSON.parse(json) as unknown
+  } catch {
+    return null
+  }
 }
 
 /** The asker's check of a report about its ask `root` (secret `s0`, the hash of the blob it sent, its nonce ledger `seen`). */
@@ -141,14 +212,13 @@ export async function verifyTamperReport(rep: unknown, c: { root: string; s0: Ui
   const r = rep as Record<string, unknown>
   const hop = r.hop as number
   if (r.v !== 1 || !isStr(r.r) || !Number.isInteger(hop) || hop < 0 || hop >= HOP_CAP || !isStr(r.h) || (r.why !== 'tampered' && r.why !== 'unsupported')
-    || !isStr(r.d) || typeof r.n !== 'string' || !NONCE_RE.test(r.n) || typeof r.at !== 'number' || !isStr(r.mac) || !isStr(r.g)) return { ok: false, reason: 'malformed' }
+    || typeof r.n !== 'string' || !NONCE_RE.test(r.n) || typeof r.at !== 'number' || !isStr(r.mac)) return { ok: false, reason: 'malformed' }
   if (r.r !== c.root || r.at > c.now + CLOCK_SLACK_MS || r.at < c.now - HIDE_BLOB_TTL_MS) return { ok: false, reason: 'forged' }
-  const base = { r: r.r, hop, h: r.h, why: r.why as HideReason, d: r.d, n: r.n, at: r.at }
+  const base = { r: r.r, hop, h: r.h, why: r.why as HideReason, n: r.n, at: r.at }
   let mac: Uint8Array
   try { mac = fromB64u(r.mac) } catch { return { ok: false, reason: 'malformed' } }
   const key = await hmacKey(deriveHopSecret(c.s0, c.root, hop), ['verify'])
   if (!(await crypto.subtle.verify('HMAC', key, mac as BufferSource, reportBytes(base) as BufferSource))) return { ok: false, reason: 'forged' }
-  if (!verifyDidSignature(r.d, te.encode(r.mac + '|' + JSON.stringify([base.r, base.hop, base.h, base.why, base.d, base.n, base.at])), r.g)) return { ok: false, reason: 'forged' }
   if (c.seen.includes(r.n)) return { ok: false, reason: 'replay' }
   if (base.why === 'tampered' && base.h === c.sentHash) return { ok: false, reason: 'not-tampered' }
   return { ok: true, seen: [...c.seen, r.n].slice(-HIDE_REPORT_LEDGER_MAX), report: { hop, why: base.why, at: base.at } }
