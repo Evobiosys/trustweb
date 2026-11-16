@@ -115,6 +115,19 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   sparse('mcp.applyDirectly', 'general', 'MCP applies directly', 'mcpApplyDirectly', false, true, 'Personal preview: what an agent changes through MCP is taken at once, without a card to approve.'),
   /* wave43c sync-devices: this device's switch (never synced); Settings > My devices shows it struck through when off */
   sparse('general.syncAuto', 'general', 'Auto sync between my devices', 'syncAutoOff', true, true, 'Off: changes go to your other devices only with Sync now.'),
+  // Wave 43c social-hosting: the global profile, hosting for friends, trusted-only mode and the directory servers (UI: social_hosting_view.ts; MCP: apps/mcp/src/social_tools.ts).
+  sparse('profile.discoverable', 'general', 'Discoverable by name', 'discoverable', false, true, 'Publish your first and last name and public key so people can find you by name. Off by default.'),
+  sparse('profile.openToConnect', 'general', 'Open to connect', 'discoverOpen', true, false, 'Your published profile says you are open to people who want to connect.'),
+  choice('hosting.friends', 'general', "Host my friends' names", 'hostFriends', ['off', 'closest', 'close'], 'closest', 'Whose name records this device holds while it is online: nobody, Closest, or Closest and Close.'),
+  sparse('trust.only', 'general', 'Only through people I trust (no servers)', 'trustedOnly', false, true, 'No directory, no server fallback: only people in Closest and Close (or marked trusted) host and find names.'),
+  { id: 'directory.servers', section: 'general', label: 'Directory servers', hint: 'Comma list of https servers; empty = the Swiss default (questhub).', type: 'text', default: '', simple: false,
+    get: (r) => list(r.directoryServers).join(', '),
+    set: (r, v) => {
+      const urls = [...new Set(String(v).split(/[\s,]+/).filter(Boolean).map((u) => u.replace(/\/+$/, '')))]
+      const bad = urls.find((u) => !/^https:\/\/[^/\s]+$/.test(u) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(u))
+      if (bad) throw new Error(`a directory server must be an https address, not "${bad}"`)
+      if (urls.length) r.directoryServers = urls; else delete r.directoryServers
+    } },
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),
   pin('qr-only', 'Pin the QR only button to the toolbar', 'A button beneath Settings.'),

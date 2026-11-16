@@ -11,13 +11,13 @@
  * fields).
  */
 
-import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
-import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, FREE_TEXT_MAX_LEN, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
+import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
+import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
 
-export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope
+export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope | HostEnvelope | EventEnvelope
 
 /** JSON-serialise an envelope for a QR code. */
 export function encodeForQr(env: Envelope): string {
@@ -144,6 +144,17 @@ function parseAskAgain(): AskAgainEnvelope {
 }
 // ----- END TrustWeb wave 6i -----
 
+// ----- BEGIN TrustWeb wave 43c (connect-extras): the event envelope (types.ts EventEnvelope) -----
+/** Exactly one of `want` (an event id) or `link` (bounded text); anything else is null. Nothing else a sender put in is read. */
+function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
+  const hasWant = 'want' in o
+  const hasLink = 'link' in o
+  if (hasWant === hasLink) return null
+  if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
+  return isNonEmptyString(o.link) && o.link.length <= EVENT_LINK_MAX ? { v: WIRE_VERSION, t: 'event', link: o.link } : null
+}
+// ----- END TrustWeb wave 43c -----
+
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----
 type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door' | 'answerWindowMs'>
 
@@ -245,6 +256,16 @@ function parseConnectAck(o: Record<string, unknown>): ConnectAckEnvelope | null 
   return { v: WIRE_VERSION, t: 'connect-ack', from: o.from, did: o.did, ...(o.reachOut === true ? { reachOut: true as const } : {}) }
 }
 
+// ----- BEGIN TrustWeb wave 43c (social-hosting): types.ts HostEnvelope -----
+function parseHost(o: Record<string, unknown>): HostEnvelope | null {
+  const m = o.m
+  if (typeof m !== 'object' || m === null || Array.isArray(m)) return null
+  const k = (m as Record<string, unknown>).k
+  if (!HOST_KINDS.includes(k as (typeof HOST_KINDS)[number]) || JSON.stringify(m).length > HOST_MAX_JSON) return null
+  return { v: WIRE_VERSION, t: 'host', m: m as HostEnvelope['m'] }
+}
+// ----- END TrustWeb wave 43c -----
+
 /**
  * Parse a QR payload back into an envelope. Returns `null` on anything
  * malformed -- truncated JSON, wrong version, wrong/missing `t`, wrong field
@@ -280,6 +301,10 @@ export function decodeFromQr(s: string): Envelope | null {
       return parseAskAgain()
     case 'devices':
       return parseDevices(o)
+    case 'host':
+      return parseHost(o)
+    case 'event':
+      return parseEvent(o)
     default:
       return null
   }

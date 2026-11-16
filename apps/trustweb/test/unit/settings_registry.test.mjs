@@ -3,7 +3,7 @@
 import { SETTINGS_REGISTRY, settingById, valued, readSetting, writeSetting, searchSettings, describeSetting } from '../../src/settings_registry.ts'
 import { upgradeSwitches, simpleRows } from '../../src/settings_page.ts'
 
-const sample = (d) => (d.type === 'boolean' ? !d.default : d.type === 'choice' ? d.choices.find((c) => c !== d.default) : d.type === 'number' ? 45 : 'x')
+const sample = (d) => (d.type === 'boolean' ? !d.default : d.type === 'choice' ? d.choices.find((c) => c !== d.default) : d.type === 'number' ? 45 : 'https://x.test')
 
 describe('settings registry', () => {
   it('ids are unique and every entry has a label, a section and a type', () => {

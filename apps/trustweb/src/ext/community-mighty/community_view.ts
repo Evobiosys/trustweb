@@ -21,9 +21,10 @@ import {
 } from './community_model'
 import { legacyLinksPatch, TILES, type TileId } from './community_data'
 import {
-  DASHBOARD_SOCIAL_DEFAULTS, WHATSAPP_BRIDGE_ENABLED, chatCommunities, chatOnlyCommunity, communityChatRows, connectEvents, homeTiles, isManager, menuItems, recordTileUse,
+  WHATSAPP_BRIDGE_ENABLED, dashboardSocial, followTiles, setShareLayout, shareLayoutOn, tilePercents, tileSetOf, type TileAggregate, chatCommunities, chatOnlyCommunity, communityChatRows, connectEvents, homeTiles, isManager, menuItems, recordTileUse,
   renameCommunity, setChatOnly, setConnectEvents, setManagedTiles, setOwnTiles, startLayout, toggleTile,
 } from './community_data'
+import { fetchAggregate, sendTileSet } from './community_server'
 import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
 import { chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
@@ -135,6 +136,39 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const pick = (label: string, attrs: Record<string, string>, on: boolean, onchange: (v: boolean) => void, off = false): HTMLElement =>
     el('label', { class: 'pick' + (on ? '' : ' tw-off') }, [el('input', { type: 'checkbox', ...SWITCH(on), ...attrs, ...(on ? { checked: '' } : {}), ...(off ? { disabled: '' } : {}), onchange: (e: Event) => onchange((e.target as HTMLInputElement).checked) }), el('span', {}, [label])])
 
+  // Wave 43c connect-extras (theta): the opt-in layout share. `sent` = the tile set the server last took, `agg` = its answer (null: none shown), `no` = "No thanks" this session.
+  const social = { sent: {} as Record<string, string>, agg: {} as Record<string, TileAggregate | null>, no: new Set<string>() }
+  const newSlot = (): string => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('')
+  /** Only with the switch on: sends my tile set when it changed, then reads the aggregate once. Never before the opt-in. */
+  function syncAggregate(tag: string): void {
+    const d = data()
+    const slot = d.meta?.[tag]?.slot
+    if (!shareLayoutOn(d, tag) || !slot) return
+    const tiles = tileSetOf(d, tag)
+    const key = tiles.join(',')
+    if (social.sent[tag] === key) return
+    social.sent[tag] = key
+    void sendTileSet(fetch, tag, slot, tiles).then(() => fetchAggregate(fetch, tag)).then((a) => { social.agg[tag] = a; draw() })
+  }
+  function socialCard(tag: string): HTMLElement | null {
+    const d = data()
+    const w = ctx.strings.w43connect
+    const on = shareLayoutOn(d, tag)
+    const agg = social.agg[tag]
+    const toggle = pick(w.shareLayout, { 'data-community-share-layout': '' }, on, (v) => { if (!v) delete social.sent[tag]; save(setShareLayout(data(), tag, v, newSlot)) })
+    if (!dashboardSocial(d, tag) || !agg || social.no.has(tag)) return el('div', { class: 'card', 'data-community-social': on ? 'on' : 'off' }, [toggle, el('p', { class: 'meta' }, [on ? w.shareLayoutHint : w.shareLayoutOff])])
+    const parts = tilePercents(agg).map((r) => `${w43.tileNames[r.tile]} ${r.pct} %`)
+    const follow = followTiles(agg)
+    return el('div', { class: 'card', 'data-community-social': 'on' }, [
+      toggle,
+      el('p', { class: 'meta', 'data-community-social-others': '' }, [`${w.others(parts)}. ${w.follow}`]),
+      el('div', { class: 'row wrap' }, [
+        btn(w.followYes, () => save(setOwnTiles(data(), tag, follow)), { 'data-community-social-follow': '' }),
+        btn(w.followNo, () => { social.no.add(tag); draw() }, { 'data-community-social-no': '' }),
+      ]),
+    ])
+  }
+
   function home(): Kids {
     const tag = tagNow()
     const d = data()
@@ -151,8 +185,8 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     ]) : null
     return [
       from && fromId ? el('div', { class: 'card', 'data-community-start-layout': '' }, [el('p', { class: 'meta' }, [w43.startFrom(fromName)]), btn(w43.startUse, () => save(setOwnTiles(data(), tag!, from)), { 'data-community-start-use': '' }, 'lnk strong')]) : null,
-      // Wave 43b (B36): "other users set up their dashboard this way, follow them?" needs usage shared between people: built, switched off.
-      DASHBOARD_SOCIAL_DEFAULTS ? el('div', { class: 'card', 'data-community-social': '' }, [el('p', { class: 'meta' }, [w43.socialPrompt]), el('div', { class: 'row wrap' }, [el('button', { class: 'lnk', type: 'button', disabled: '' }, [w43.socialYes]), el('button', { class: 'lnk', type: 'button', disabled: '' }, [w43.socialNo])])]) : null,
+      // Wave 43c (theta): the opt-in switch, and what other members show once enough of them shared (nothing is sent or read while it is off).
+      tag ? (syncAggregate(tag), socialCard(tag)) : null,
       managed.length ? el('section', { class: 'tiles-managed', 'data-community-tiles-managed': '' }, [el('h4', { class: 'eyebrow' }, [w43.homeManaged]), el('div', { class: 'grid' }, managed.map((x) => tileCard(x, tag, true)))]) : null,
       own.length ? el('div', { class: 'grid', 'data-community-tiles': '' }, own.map((x) => tileCard(x, tag, false))) : el('p', { class: 'empty' }, [w43.homeNoTiles]),
       choose,

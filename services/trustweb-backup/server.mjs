@@ -28,6 +28,10 @@
 //   drops orgs untouched for ORG_DAYS. close() is async now: it awaits the store's final write.
 // Added 2026-11-05 (wave 32): POST|GET|DELETE /notes/relay, an encrypted-blob mailbox for shared notes above ~100 items (notes_relay.mjs; NOTES_RELAY_* settings,
 //   store <BACKUP_DIR>/notes_relay). Never logged either.
+// Added 2026-11-16 (wave 43c): PUT|GET|DELETE /directory, POST /directory/intent|intents, the signed name directory of friends-first social hosting (directory.mjs;
+//   DIRECTORY_* settings, store <BACKUP_DIR>/directory.json). Never logged either.
+// Added 2026-11-16 (wave 43c): POST /community/agg, GET /community/agg/<id>, the anonymous community dashboard aggregate (dashboard_agg.mjs; DASH_AGG_* settings, in memory
+//   only, never logged).
 // The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
 // The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
 // (15 min) because a 20 MB upload from a phone takes minutes.
@@ -83,6 +87,8 @@ import { createLinks, notFoundPage } from './links.mjs'
 import { etagMatches, jsonError, sendJson, sha256Hex, tooManyRequests } from './http_util.mjs'
 import { createTranscriber } from './transcribe.mjs'
 import { isNotesRelayPath, openNotesRelay } from './notes_relay.mjs'
+import { isDirectoryPath, openDirectory } from './directory.mjs'
+import { createDashboardAgg, isAggPath } from './dashboard_agg.mjs'
 import { createWebsearch, loadWebsearchConfig } from './websearch.mjs'
 
 const ID_RE = /^[0-9a-f]{64}$/
@@ -216,6 +222,15 @@ export async function startServer(options = {}) {
   } catch {
     cfg.log('notes relay unavailable: notes relay off')
   }
+  // Name directory (wave 43c): same rule, a store that cannot open turns the feature off (503 not_configured).
+  let directory = null
+  try {
+    directory = await openDirectory({ cfg, clientOf, now: cfg.now })
+  } catch {
+    cfg.log('directory unavailable: directory off')
+  }
+  // Community dashboard aggregate (wave 43c): in memory, nothing to open, so it cannot fail to start.
+  const dashAgg = createDashboardAgg({ cfg, clientOf, now: cfg.now })
   const admin = createAdmin({ cfg, store: connectStore, orgStore, clientOf, now: cfg.now })
   let boundPort = cfg.port // replaced by the port actually bound once the server listens (tests listen on 0)
 
@@ -414,7 +429,7 @@ export async function startServer(options = {}) {
     const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe' || isNotesRelayPath(pathname)
     // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
     const isWebsearch = pathname === '/websearch' || pathname === '/websearch/engines'
-    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || isBillingPath(pathname) || pathname === '/link' || pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname === '/s' || isOrgPath(pathname)
+    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || isBillingPath(pathname) || pathname === '/link' || pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname === '/s' || isOrgPath(pathname) || isDirectoryPath(pathname) || isAggPath(pathname)
     const slowDown = () => {
       const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
       if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
@@ -461,6 +476,8 @@ export async function startServer(options = {}) {
     if (pathname.startsWith('/s/')) return shortAliases === null ? notFoundPage(res) : shortAliases.open(req, res, pathname)
     if (pathname.startsWith('/who/')) return connect === null ? notFoundPage(res) : connect.who(req, res, pathname)
     if (isNotesRelayPath(pathname)) return notesRelay === null ? jsonError(res, 503, 'not_configured') : notesRelay.handle(req, res)
+    if (isDirectoryPath(pathname)) return directory === null ? jsonError(res, 503, 'not_configured') : directory.handle(req, res)
+    if (isAggPath(pathname)) return dashAgg.handle(req, res)
     if (isOrgPath(pathname)) return organizer === null ? jsonError(res, 503, 'not_configured') : organizer.handle(req, res, pathname)
     if (pathname === '/feedback') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, OPTIONS' })
     if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
@@ -495,7 +512,7 @@ export async function startServer(options = {}) {
       })
       return
     }
-    const quiet = isLinkPath((req.url ?? '').split('?')[0]) || isConnectPath((req.url ?? '').split('?')[0]) || isOrgPath((req.url ?? '').split('?')[0]) || isNotesRelayPath((req.url ?? '').split('?')[0])
+    const quiet = isLinkPath((req.url ?? '').split('?')[0]) || isConnectPath((req.url ?? '').split('?')[0]) || isOrgPath((req.url ?? '').split('?')[0]) || isNotesRelayPath((req.url ?? '').split('?')[0]) || isDirectoryPath((req.url ?? '').split('?')[0]) || isAggPath((req.url ?? '').split('?')[0])
     route(req, res)
       .then((status) => {
         if (!quiet) cfg.log(`${req.method} ${status}`)

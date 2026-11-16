@@ -308,6 +308,7 @@ import { chatView } from './messenger_combined_view'
 import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
+import { createEventEnvelopes } from './event_envelope'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import { eventModeOn, rememberEventMode } from './event_mode'
@@ -359,6 +360,8 @@ import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { createMissedPopup } from './notify_popup_view'
 import { createNotifyCenter, hasBell } from './notify_center_view'
+import { createSocial } from './social_hosting_view'
+import { linkGlobal } from './social_hosting'
 import { newlyAdded } from './notify_center'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
@@ -772,6 +775,8 @@ const net = new Net({
   save,
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
+  onHeard: (did) => social.onHeard(did),
+  onHost: (did, m) => social.onHost(did, m),
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
     queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken,
@@ -803,8 +808,10 @@ const net = new Net({
       s.people.push(person)
     }
     if (person.doorPeerId !== peer.id) person.peerId = peer.id
+    linkGlobal(person, peer)   // wave 43c: a person found by name becomes an ordinary card
     save()
     sendHelloTo(peer)
+    void eventEnv.connected(peer)   // wave 43c: the event whose QR was just shown goes to the person who scanned it
     void autoShareProfile(peer, 'public')
     applyHeldContact(peer, person)
     closeSheet()
@@ -852,6 +859,7 @@ const net = new Net({
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
+  onEvent: (peer, env) => { void eventEnv.onEnvelope(peer, env) },
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -1095,6 +1103,12 @@ const notifyCenter = createNotifyCenter({
   state: st, save: () => save(), page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), changed: () => render(),
   openChat: (personId) => { pages.closeAll(); chatSheet(personId) }, addWant: (peerId, name) => addWantSheet(peerId, name),
   openCard: (personId) => openCardPage(personId), openEvents: () => openEvents(),
+})
+/** Wave 43c social-hosting: global profile, friends-first hosting, trusted-only mode (social_hosting_view.ts). */
+const social = createSocial({
+  state: st, save: () => save(), identity: () => net.ownIdentity(), sendHost: (peer, m) => net.sendHost(peer, m),
+  connect: (did, name) => net.completeConnect({ did, from: { id: randomId(8), displayName: name } }, Ring.Acquaintance),
+  origin: SERVER_ORIGIN, fetch: (url, init) => fetch(url, init), now: () => Date.now(), toast: (msg) => toast(msg), render: () => render(), newId: () => randomId(8),
 })
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
 /** Wave 39: the one Import page (contacts, resources file, Tana, earlier imports with Undo); every old entry point opens it. */
@@ -1759,6 +1773,7 @@ function screenQr(plain = false): void {
 }
 
 function eventQr(ev: TwEvent, plain = false, host = false): void {
+  eventEnv.shown(ev.id)
   // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy). Wave 43: the host link when the page's host toggle is on (the QR follows the link).
   void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : revealedBy(eventsBy(), ev)) }), plain)
 }
@@ -2477,6 +2492,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
   const peer = await net.completeConnect(link, ring, reachOut)
+  void eventEnv.afterConnect(peer)   // wave 43c: the scanned event's place, conditions and themes come from the shower's device
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
   if (!person) {
@@ -2921,7 +2937,7 @@ function webPageScreen(page: WebPage): Node[] {
       onAdd: (title, category) => { addPeerItem(st(), p.id, title, category, 'self', Date.now()); save() },
     },
     onTag: (id) => { tagFilter = id; if (cardExpanded) { cardExpanded = false; history.go(-2) } else back() },
-  })])]
+  }), social.trustRow(p, render), social.connectButton(p, render)])]
 }
 
 /** Wave 31: what we know of a person's resources, in the same list as My Resources (whose = theirs). */
@@ -3354,7 +3370,7 @@ function screenWeb(): Node[] {
     passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
-      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save }, extra: social.findBlock })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
     supportLine(supportIo),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -5201,6 +5217,11 @@ const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
   curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
+/** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
+const eventEnv = createEventEnvelopes<Peer>({
+  state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
+  link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+})
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
@@ -5379,7 +5400,10 @@ defineAppActions(appActions, {
   newId: () => randomId(8),
   now: () => Date.now(),
 })
-defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName })
+defineEventActions(appActions, {
+  state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName,
+  sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
+})
 defineSyncActions(appActions, devices) // wave43c sync-devices
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
@@ -7149,6 +7173,7 @@ function editNameSheet(fromWeb = false): void {
     el('p', { class: 'meta' }, [S.meNameHint]),
     el('button', { class: 'btn btn-electric', onclick: saveName }, [S.meNameSave]),
     ...ownEmailLines(s.me.primaryEmail),
+    social.profileBlock(() => editNameSheet(fromWeb)),   // wave 43c: Discoverable by name
     // Tapped in the Web view: a line, then the section for the web itself.
     ...(fromWeb ? [
       el('hr', { class: 'sheet-line' }),
@@ -7688,6 +7713,7 @@ function settingsSheet(): void {
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
+    social.settingsGroup(settingsSheet),   // wave 43c: People and servers
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
     // Wave 41: AI is a section of its own (it sat inside Advanced); same block as the AI sparkle's sheet.
@@ -8323,6 +8349,7 @@ if (state && !state.testOf?.handedOverAt) {
   appOpened()
   // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable (in the tab that drains, review 6h).
   void net.start().then(announceLink).then(() => net.restoreHeldAsks())
+  social.start()   // wave 43c: publish, pull intents; needs no open relay
   void completePendingConnect().catch(connectFailed)
   maybeOpenPendingShare()
   maybeOpenPendingEvent()

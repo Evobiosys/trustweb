@@ -45,6 +45,10 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'community_menu_get', write: false }, { name: 'community_home_tiles_set', write: true }, { name: 'community_chat_scope_set', write: true }, { name: 'event_link_mode_set', write: true },
   /* wave43c sync-devices */
   { name: 'sync_status', write: false }, { name: 'sync_now', write: true },
+  /* wave43c social-hosting */
+  { name: 'directory_search', write: false }, { name: 'profile_discoverable_set', write: true }, { name: 'hosting_set', write: true }, { name: 'trusted_only_set', write: true }, { name: 'trust_override_set', write: true },
+  /* wave43c connect-extras */
+  { name: 'feed_sources_get', write: false }, { name: 'feed_sources_set', write: true }, { name: 'community_dashboard_share_set', write: true }, { name: 'event_envelope_send', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
