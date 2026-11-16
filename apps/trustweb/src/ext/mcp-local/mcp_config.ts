@@ -31,6 +31,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_set_suggester', write: true },
   // Wave 43 event-feed
   { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
+  // Wave 44 feed-embed
+  { name: 'feed_embed_link', write: true },
   // Wave 42 settings-llm-first
   { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_sync_capabilities', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai

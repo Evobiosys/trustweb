@@ -3959,6 +3959,7 @@ export const S = {
       feed_post: 'Post to the Feed or an event\'s Feed',
       feed_edit: 'Change one of your Feed posts',
       feed_star: 'Star a Feed post',
+      feed_embed_link: 'Embed a post in the Feed from its link',
       import_sources: 'List the import sources (Obsidian vault...)',
       import_suggestions_list: 'List the people your AI suggested from notes',
       import_run: 'Look for more people in your notes',
@@ -4671,5 +4672,14 @@ export const S = {
     shareNo: 'Share (not possible for this post)',
     more: 'More',
     linkCard: (domain: string) => `Link to ${domain}`,
+  },
+  /* wave44 feed-embed */
+  feedEmbed: {
+    button: 'Embed this post',
+    busy: 'Reading the post ...',
+    done: 'Post embedded.',
+    card: 'Link added. This one could not be read, so only the link shows.',
+    already: 'That post is already in your Feed.',
+    from: (host: string) => `from ${host}`,
   },
 } as const

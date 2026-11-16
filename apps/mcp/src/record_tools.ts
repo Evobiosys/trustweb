@@ -36,6 +36,8 @@ export interface RecordToolsOptions {
   now?: () => Date
   /** Wave 43c: the fetch directory_search uses (tests inject one). */
   fetch?: (url: string) => Promise<{ status: number; json: () => Promise<unknown> }>
+  /** Wave 44 feed-embed: the fetch feed_embed_link uses (tests inject one; default: global fetch). */
+  embedFetch?: (input: string, init?: RequestInit) => Promise<Response>
 }
 
 const MAX_NOTE = 5000
@@ -285,7 +287,7 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
   const community = communityTools({ load: () => load(o.file) as never, commit: commit as never, write: o.write, now })
   const events = eventTools({ load: () => load(o.file) as never, commit: commit as never, now })
   const resources = resourceTools({ load: () => load(o.file) as never, commit: commit as never })
-  const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now })
+  const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now, embedFetch: o.embedFetch })
   const notify = notifyTools({ load: () => load(o.file) as never, commit: commit as never, now })
   return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write] : []), ...barTools(o), ...webFilterTools(o), ...noticeTools(o), ...askAudienceTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

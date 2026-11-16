@@ -91,6 +91,8 @@ export interface Post {
   handle?: string
   /** Wave 44: who boosted it, when the post is a reblog. */
   boostedBy?: string
+  /** Wave 44 feed-embed: the domain of the link an embedded post came from. */
+  linkHost?: string
 }
 
 /** At most this many posts. */

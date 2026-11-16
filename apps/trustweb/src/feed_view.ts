@@ -11,6 +11,7 @@ import { contextPress } from './context_press'
 import { eventTagLabel } from './events'
 import { buildFeed, filterFeed, FeedSource, isTimelinePost, PostKind } from './feed'
 import type { Post } from './feed'
+import { addEmbed, embedPosts, fetchEmbed, parsePostLink } from './feed_embed'
 import { followPosts, followText, followUrl, groupPosts, groupsOf, parseFeedText, parseFollow, sourceCounts } from './feed_sources'
 import type { FeedItem } from './feed_sources'
 import { addSocialPost, editSocialPost, eventFeedOn, sameEventTag, tagOfEvent, toggleStar } from './feed_social'
@@ -365,7 +366,22 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   /** The box at the top of the Feed: a post of mine, on the event's Feed while one is chosen. */
   function composer(eventId?: string): HTMLElement {
     const text = el('textarea', { class: 'field', rows: '2', placeholder: S.feedComposePh, 'aria-label': S.feedComposePh, 'data-feed-compose': '1' }) as HTMLTextAreaElement
-    return el('div', { class: 'feed-compose' }, [text, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) text.value = ''; else text.focus() } }, [S.feedComposeSend])])
+    const embed = el('button', { class: 'btn btn-ghost btn-sm', hidden: true, 'data-feed-embed': '1', onclick: () => { void embedLink(text, embed) } }, [S.feedEmbed.button]) as HTMLButtonElement
+    text.addEventListener('input', () => { embed.hidden = !parsePostLink(text.value) })   // a lone link: offer to embed it (wave 44)
+    return el('div', { class: 'feed-compose' }, [text, embed, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) text.value = ''; else text.focus() } }, [S.feedComposeSend])])
+  }
+
+  /** Wave 44 feed-embed: the pasted link of one post becomes a post in the Feed; the one GET happens only on this press. */
+  async function embedLink(text: HTMLTextAreaElement, button: HTMLButtonElement): Promise<void> {
+    const link = parsePostLink(text.value)
+    if (!link || button.disabled) return
+    button.disabled = true
+    h.toast(S.feedEmbed.busy)
+    const embed = await fetchEmbed(link, fetch)
+    button.disabled = false
+    if (!addEmbed(h.state(), embed)) { h.toast(S.feedEmbed.already); return }
+    text.value = ''; button.hidden = true
+    h.save(); h.redrawFeed(); h.toast(embed.card ? S.feedEmbed.card : S.feedEmbed.done)
   }
 
   function body(mode: 'feed' | 'timeline' = 'feed'): HTMLElement {
@@ -375,7 +391,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     const sel = timeline ? chosenTimeline : chosen
     const tags = loadColourTags()
     const groups = groupsOf(h.state(), tags)
-    const all = buildFeed(h.state(), [...remoteFor(), ...mastodonFor(eventOfTag(sel.tag)), ...followedPosts(), ...groupPosts(h.state(), tags), ...relayPosts(groups)]).filter((p) => isTimelinePost(p) === timeline)
+    const all = buildFeed(h.state(), [...remoteFor(), ...mastodonFor(eventOfTag(sel.tag)), ...followedPosts(), ...groupPosts(h.state(), tags), ...relayPosts(groups), ...embedPosts(h.state().feedEmbeds, imagesOn())]).filter((p) => isTimelinePost(p) === timeline)
     if (sel.group && !groups.some((g) => g.id === sel.group)) delete sel.group
     const metas = h.state().feed?.groupMeta ?? {}
     if (sel.channel && !metas[sel.group ?? '']?.channels?.some((c) => c.id === sel.channel)) delete sel.channel
