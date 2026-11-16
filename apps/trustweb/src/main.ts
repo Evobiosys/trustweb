@@ -113,6 +113,7 @@ import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
 import { HANDSHAKE_NOTICE_MS } from './handshake_crypto'
+import { createInvites } from './invite_view'   // wave44 steer-invite-link
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
@@ -539,6 +540,11 @@ const ctxParam = params.get('ctx')
 const ctx: DemoContext = isDemoContext(ctxParam) ? ctxParam : DemoContext.Generic
 const storeCtx = solo ? ctx : undefined
 let pendingConnect: StampedLink | null = connectLinkOf(location.search)
+// wave44 steer-invite-link: the community invite (invite_view.ts); its token rides in the fragment, read before the URL is cleaned.
+const invites = createInvites({
+  state: st, save, render, identity: () => net.ownIdentity(), connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
+  openSheet, closeSheet, renderQr, copy: copyLink, notice: (t, b) => showNotice(t, b, [], HANDSHAKE_NOTICE_MS), toast, tags: loadColourTags, saveTags: saveColourTags,
+}, location.hash)
 /** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
 let reachOutPending = false
 let heldToasted = false
@@ -804,6 +810,7 @@ const net = new Net({
   onPush: (outcome) => { pushState = outcome },
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
+  inviteVerdict: (inv, did) => invites.verdict(inv, did), onInviteAccepted: (peer, inv) => invites.accepted(peer, inv),   // wave44 steer-invite-link
   onHandshakeRefused: (r) => showNotice(S.handshake.noticeTitle, r === 'unsupported' ? S.handshake.unsupportedBody : S.handshake.noticeBody, [], HANDSHAKE_NOTICE_MS), // wave44 handshake-crypto
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
@@ -2610,10 +2617,12 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     afterConnectOpen(held.id)
     return
   }
-  const reachOut = reachOutPending && !solo && !demoLink
+  const inv = await invites.gate(link)   // wave44 steer-invite-link: the confirmation; false = refused or declined, nothing is sent
+  if (inv === false) { afterConnectOpen(); return }
+  const reachOut = !inv && reachOutPending && !solo && !demoLink
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo || link.introduced ? Ring.Friend : Ring.Acquaintance) // wave 44: an introduced code lands in Friends & acquainted community members
-  const peer = await net.completeConnect(link, ring, reachOut)
+  const peer = await net.completeConnect(link, ring, reachOut, inv ?? undefined)
   void eventEnv.afterConnect(peer)   // wave 43c: the scanned event's place, conditions and themes come from the shower's device
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
@@ -2625,12 +2634,13 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     person.ring = ring
   } else if (link.introduced && [Ring.Acquaintance, Ring.Intending, Ring.Unsorted].includes(person.ring)) person.ring = ring // the other side's click made them first
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
+  if (inv) invites.join(inv, link, person)
   if (treeLink?.family) applyFamily(person)
   if (personShare?.contact) mergeContact(person, personShare.contact, Date.now())
   if (noteShare) addReceivedNote(person, noteShare)
   // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
   autoShareToPerson(person)
-  if (admitted.legacy) person.connectedVia = 'legacy-code'
+  if (admitted.legacy && !inv) person.connectedVia = 'legacy-code'   // wave44: an invite's signed token stands for the stamp
   if (sharedNotes) {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
@@ -5446,6 +5456,7 @@ twBus.on('support-ask', (d) => {   // wave 42: the Community view's "Ask for sup
   const used = (key: string): void => { st().extData = { ...st().extData, 'community-mighty': rememberAudience(parseCommunity(st().extData?.['community-mighty']), tag, key) }; save() }
   openSheet([el('h3', {}, [S.supportTitle]), supportForm(supportIo, closeSheet, { tag, remembered: meta.audiences ?? [], used })])
 })
+twBus.on('community-invite', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) invites.openSheet(tag) })   // wave44 steer-invite-link
 twBus.on('add-member', (d) => {   // wave 44 steer-people-picker: "+" opens the people I know first, "Add a new person" below; no AI gate (wave 42 went straight to the add view)
   const tag = (d as { tag?: string } | undefined)?.tag
   if (!tag) return

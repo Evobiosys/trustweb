@@ -149,7 +149,8 @@ const innerAck = (o: unknown): ConnectAckEnvelope | null => {
   const f = a.from as Record<string, unknown> | null
   if (a.v !== 1 || a.t !== 'connect-ack' || typeof a.did !== 'string' || !f || typeof f !== 'object' || typeof f.id !== 'string' || !f.id || typeof f.displayName !== 'string') return null
   if (a.reachOut !== undefined && a.reachOut !== true) return null
-  return { v: 1, t: 'connect-ack', from: { id: f.id, displayName: f.displayName }, did: a.did, ...(a.reachOut === true ? { reachOut: true as const } : {}) }
+  if (a.inv !== undefined && (typeof a.inv !== 'string' || !a.inv || a.inv.length > 1200)) return null
+  return { v: 1, t: 'connect-ack', from: { id: f.id, displayName: f.displayName }, did: a.did, ...(a.reachOut === true ? { reachOut: true as const } : {}), ...(typeof a.inv === 'string' ? { inv: a.inv } : {}) }
 }
 
 /** The shower's side: opens a sealed connect-ack sent by `fromDid` to `me`. Returns the ack, the mode and the ledger with this nonce. */

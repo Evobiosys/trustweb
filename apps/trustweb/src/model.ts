@@ -20,6 +20,7 @@ import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { HandshakeLogEntry, HandshakeMode } from './handshake_status'
+import type { InviteEntry, InviteSettings } from './invite_policy'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
@@ -665,6 +666,8 @@ export interface Peer {
   handshake?: HandshakeMode
   /** Wave 44: the QR secret of their link, kept so a re-sent connect-ack is sealed with it again. This device only. */
   qk?: string
+  /** Wave 44 steer-invite-link (invite_policy.ts): the invite token this phone accepted from their link; every (re-sent) connect-ack carries it. This device only. */
+  inv?: string
 }
 
 export interface Offer { id: string; title: string }
@@ -1310,6 +1313,12 @@ export interface AppState {
   seenHandshakeNonces?: string[]
   /** Wave 44: refused connect handshakes (tampered, replayed, an app before v2), newest first, bounded. This device only. */
   handshakeLog?: HandshakeLogEntry[]
+  /** Wave 44 steer-invite-link (invite_policy.ts): the counter of this device's community invite links (uses, tries, revoked). This device only: acks reach its DID. */
+  invites?: InviteEntry[]
+  /** Wave 44 steer-invite-link: Advanced, the open link's max uses and days (defaults OPEN_INVITE_MAX_USES / INVITE_DAYS). */
+  inviteSettings?: InviteSettings
+  /** Wave 44 steer-invite-link: ids of invite links this phone accepted (a second accept here is refused). This device only. */
+  invitesTaken?: string[]
   /**
    * Wave 15 (sync_code.ts): further connect codes of this account that linked devices brought (a different code from another device whose names did
    * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.

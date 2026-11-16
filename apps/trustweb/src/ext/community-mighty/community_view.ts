@@ -257,6 +257,8 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const name = tags.find((x) => x.id === tag)?.label ?? tag
     return [
       el('p', { class: 'meta' }, [t.membersOf(name, list.length)]),
+      // wave44 steer-invite-link: the invite links (personal / open), placed like the event's share row; the app opens the sheet.
+      el('div', { class: 'row invite-row' }, [btn(`${ctx.strings.w43press.iconLink} ${ctx.strings.invite.button}`, () => ctx.bus.emit('community-invite', { tag }), { 'data-community-invite': '' }, 'lnk strong')]),
       list.length ? null : el('p', { class: 'empty' }, [t.membersEmpty]),
       // Wave 42: the add tile has the size of a member tile, only a centred "+", last in the grid; it opens the add-person flow for this community.
       el('div', { class: 'grid members' }, [
