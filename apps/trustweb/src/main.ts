@@ -35,7 +35,7 @@ import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
 import { audienceFilterView } from './audience_filter'
-import { allowedPeerIds, askFilterOf, saveAskFilter } from './ask_audience'
+import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter } from './ask_audience'
 import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
 import type { IntroLink } from './intro_link'
@@ -113,6 +113,7 @@ import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
 import { HANDSHAKE_NOTICE_MS } from './handshake_crypto'
+import { announceHideReport } from './hide_from_view'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
@@ -788,6 +789,7 @@ const net = new Net({
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
   onHandshakeRefused: (r) => showNotice(S.handshake.noticeTitle, r === 'unsupported' ? S.handshake.unsupportedBody : S.handshake.noticeBody, [], HANDSHAKE_NOTICE_MS), // wave44 handshake-crypto
+  onHideReport: (e) => announceHideReport(e, (t, b) => showNotice(t, b, [], HANDSHAKE_NOTICE_MS)), // wave44b hide-from-crypto
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
     queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken,
@@ -8115,7 +8117,7 @@ async function runAsk(text: string, reach?: number): Promise<void> {
     if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt, askRun.reach))
   }, 1000)
   render()
-  const results = await net.ask(t, reach, allowed)
+  const results = await net.ask(t, reach, allowed, hiddenDids(st(), loadColourTags())) // wave44b hide-from-crypto: the sealed "Hide from" list
   clearInterval(countdownTimer)
   if (askRun && askRun.text === t) askRun.results = results
   recordFound(t, results)

@@ -62,6 +62,9 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
 
   /* wave44 feed-sources */
   { name: 'feed_source_toggle', write: true }, { name: 'feed_algorithm_set', write: true }, { name: 'feed_no_public_read_set', write: true }, { name: 'feed_publish_target_set', write: true },
+
+  /* wave44b hide-from-crypto */
+  { name: 'ask_tamper_reports_list', write: false },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
