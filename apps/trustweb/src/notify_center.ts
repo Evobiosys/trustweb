@@ -15,7 +15,7 @@ export const SECTIONS = ['messages', 'wants', 'connected', 'events'] as const
 export type Section = (typeof SECTIONS)[number]
 export type CenterAction = 'open-chat' | 'add' | 'open-card' | 'message' | 'open-event'
 export interface CenterItem { id: string; section: Section; title: string; body: string; at: number; read: boolean; action: CenterAction; personId?: string; peerId?: string }
-type Src = Pick<AppState, 'people'> & Partial<Pick<AppState, 'peers' | 'chats' | 'wantsToConnect' | 'notifInbox' | 'notifReadAt' | 'events'>>
+type Src = Pick<AppState, 'people'> & Partial<Pick<AppState, 'peers' | 'chats' | 'wantsToConnect' | 'notifInbox' | 'notifReadAt' | 'notifDismissed' | 'events'>>
 
 /** Someone who reached out to me and is not sorted yet: drawn on the unsorted ring in the "wants to connect" colour (rings_layout.ts webSlot). */
 export const wantsConnect = (p: Pick<Person, 'ring' | 'reachedOut'>): boolean => p.reachedOut === 'received' && p.ring === 'intending'
@@ -49,7 +49,8 @@ export function centerItems(s: Src, now: number): CenterItem[] {
   for (const p of people) if (wantsConnect(p)) out.push(item({ id: `wantp:${p.id}`, section: 'wants', title: p.name, body: '', at: p.metAt, action: 'open-card', personId: p.id }))
   for (const r of newlyAdded(people, s.peers ?? [], now)) out.push(item({ id: `conn:${r.personId}`, section: 'connected', title: r.name, body: '', at: r.at, action: 'message', personId: r.personId }))
   for (const i of s.notifInbox ?? []) if (i.kind === 'event' && !quietEvent(s, i)) out.push(item({ id: `inbox:${i.id}`, section: 'events', title: i.title, body: i.body, at: i.at, action: 'open-event' }, i.seenAt !== null))
-  return out.sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || b.at - a.at)
+  const gone = s.notifDismissed ?? {}
+  return out.filter((i) => !(i.id in gone && gone[i.id] >= i.at)).sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || b.at - a.at)
 }
 
 /** The items of one section (all when none is named). */
@@ -61,4 +62,14 @@ export const unreadCount = (s: Src, now: number): number => centerItems(s, now).
 export function markAllRead(s: Pick<AppState, 'notifReadAt' | 'notifInbox'>, now: number): void {
   s.notifReadAt = now
   if (s.notifInbox) s.notifInbox = s.notifInbox.map((i) => (i.seenAt === null ? { ...i, seenAt: now } : i))
+}
+
+/** Wave 44: acting on a row dismisses it like a normal notification. Stored as id -> the row's time, so a newer arrival under the same id shows again. False: no such row. */
+export function dismissNotification(s: Src & Pick<AppState, 'notifDismissed'>, id: string, now: number): boolean {
+  const row = centerItems(s, now).find((i) => i.id === id)
+  if (!row) return false
+  s.notifDismissed = { ...s.notifDismissed, [id]: row.at }
+  const inbox = id.startsWith('inbox:') ? s.notifInbox?.find((i) => `inbox:${i.id}` === id) : undefined
+  if (inbox && inbox.seenAt === null) inbox.seenAt = now
+  return true
 }

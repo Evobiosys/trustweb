@@ -27,6 +27,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'notices_list', write: false }, { name: 'web_default_view_get', write: false }, { name: 'web_default_view_set', write: true },
   // Wave 43b notify-center
   { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
+  /* wave44 steer-notify-dismiss */ { name: 'notification_dismiss', write: true },
   // Wave 43b resources-views
   { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_set_suggester', write: true },
   // Wave 43 event-feed

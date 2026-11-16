@@ -1134,6 +1134,8 @@ export interface AppState {
   notifInbox?: InboxItem[]
   /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
   notifReadAt?: number
+  /** Wave 44 (notify_center.ts): rows dismissed by acting on them, id -> the row's time (a newer arrival shows again). This phone only. */
+  notifDismissed?: Record<string, number>
   /** Wave 43c social-hosting: "Discoverable by name" is on (my signed name record is published to my friends and the directory). Absent: off. */
   discoverable?: true
   /** Wave 43c: the "open to connect" flag of that record. Absent: true. Only false is stored. */

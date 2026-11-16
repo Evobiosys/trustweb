@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 43b notify-center (POLICY P02, MCP parity): the bell's notifications page as tools over the record file: list by section, mark all read. */
-import { SECTIONS, listNotifications, markAllRead, unreadCount, type Section } from '../../trustweb/src/notify_center.ts'
+import { SECTIONS, dismissNotification, listNotifications, markAllRead, unreadCount, type Section } from '../../trustweb/src/notify_center.ts'
 import type { AppState } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
 
@@ -29,6 +29,18 @@ export function notifyTools(e: NotifyToolsEnv): { read: Tool[]; write: Tool[] } 
       run: () => {
         const at = e.now().getTime()
         e.commit((r) => markAllRead(r as unknown as AppState, at))
+        return { unread: unreadCount(e.load() as unknown as AppState, at) }
+      },
+    },
+    /* wave44 steer-notify-dismiss */
+    {
+      name: 'notification_dismiss', description: 'Dismiss one notification of the bell by its id (what tapping its action button does). Returns the unread count.',
+      inputSchema: schema({ id: { type: 'string', description: 'item id from notifications_list' } }, ['id']),
+      run: (a) => {
+        const at = e.now().getTime()
+        let ok = false
+        e.commit((r) => { ok = dismissNotification(r as unknown as AppState, String(a.id), at) })
+        if (!ok) throw new Error(`id: no notification ${String(a.id)}`)
         return { unread: unreadCount(e.load() as unknown as AppState, at) }
       },
     },

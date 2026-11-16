@@ -9,7 +9,7 @@ import { contextPress } from './context_press'
 import { ICONS } from './icons'
 import type { AppState } from './model'
 import { ageLabel } from './model'
-import { SECTIONS, centerItems, markAllRead, unreadCount, type CenterItem } from './notify_center'
+import { SECTIONS, centerItems, dismissNotification, markAllRead, unreadCount, type CenterItem } from './notify_center'
 import { S } from './strings'
 
 export interface CenterHooks {
@@ -34,19 +34,28 @@ export function createNotifyCenter(h: CenterHooks): { bell: () => HTMLElement; o
   const now = (): number => Date.now()
 
   function rowOf(i: CenterItem): HTMLElement {
-    const run: Record<CenterItem['action'], () => void> = {
+    const go: Record<CenterItem['action'], () => void> = {
       'open-chat': () => i.personId && h.openChat(i.personId),
       add: () => i.peerId && h.addWant(i.peerId, i.title),
       'open-card': () => i.personId && h.openCard(i.personId),
       message: () => i.personId && h.openChat(i.personId),
       'open-event': h.openEvents,
     }
+    /** Wave 44: acting on the row dismisses it (stored, bell redrawn) and opens what it points at. */
+    const run = (): void => {
+      dismissNotification(h.state(), i.id, now()); h.save()
+      const sec = row.closest('[data-notify-section]')
+      row.remove()
+      if (sec && !sec.querySelector('[data-notify-item]')) sec.append(el('p', { class: 'meta' }, [S.w43b.sectionEmpty]))
+      h.changed(); go[i.action]()
+    }
     const label = i.action === 'message' ? S.w43b.sendMessage : i.action === 'add' ? S.w43b.add : i.action === 'open-chat' ? S.w43b.openChat : S.w43b.openCard
-    return el('div', { class: 'prow notify-row' + (i.read ? '' : ' unread'), 'data-notify-item': i.id }, [
+    const row = el('div', { class: 'prow notify-row' + (i.read ? '' : ' unread'), 'data-notify-item': i.id }, [
       el('div', { class: 'who' }, [el('b', {}, [i.title]), i.body ? el('i', {}, [i.body]) : null]),
       el('span', { class: 'when' }, [ageLabel(i.at, now())]),
-      el('button', { class: 'btn btn-ghost btn-sm', 'data-notify-action': i.action, onclick: run[i.action] }, [label]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-notify-action': i.action, onclick: run }, [label]),
     ])
+    return row
   }
 
   function open(): void {
