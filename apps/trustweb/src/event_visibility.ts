@@ -17,8 +17,8 @@ export type { EventVisibility } from './event_press'
 /** The mode a person announced for this event; absent = listed. */
 const modeOf = (p: Pick<Person, 'eventShow'>, eventId: string): EventVisibility => (isVisibility(p.eventShow?.[eventId]) ? p.eventShow![eventId] : 'open')
 
-/** Who the attendee list shows: everyone except those who announced discoverable or off. */
-export const listedAttendees = <P extends Pick<Person, 'eventShow'>>(people: readonly P[], eventId: string): P[] => people.filter((p) => modeOf(p, eventId) === 'open')
+/** Who the attendee list shows: everyone except those who announced discoverable or off. Wave 44 steer-open-space: with the host flag "Everyone can see everyone" the discoverable ones are listed too; off stays hidden. */
+export const listedAttendees = <P extends Pick<Person, 'eventShow'>>(people: readonly P[], eventId: string, showAll = false): P[] => people.filter((p) => (showAll ? modeOf(p, eventId) !== 'off' : modeOf(p, eventId) === 'open'))
 
 /** Who a search may still find: the listed ones and the discoverable ones; never those who are off. */
 export const searchableAttendees = <P extends Pick<Person, 'eventShow'>>(people: readonly P[], eventId: string): P[] => people.filter((p) => modeOf(p, eventId) !== 'off')

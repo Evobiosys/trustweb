@@ -12,6 +12,7 @@ import type { EventEnvelope } from '../../demo/src/types'
 import { decodeEventLink } from './event_link'
 import type { LinkedEvent } from './event_link'
 import { isEventHost } from './event_roles'
+import { mergeActivities } from './open_space'
 import { addItem } from './notify_inbox'
 import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
 import { S } from './strings'
@@ -25,8 +26,8 @@ export const EVENT_WANT_RETRY_MS: readonly number[] = [5_000, 30_000, 120_000]
 /** The short QR leaves the place out; an event without one is still waiting for the rest. */
 export const isIncomplete = (ev: { where: string }): boolean => ev.where === ''
 
-type Fillable = Partial<Pick<TwEvent, 'where' | 'conditions' | 'themes' | 'organizer' | 'hosts' | 'to' | 'core'>>
-const FILL: readonly (keyof Fillable)[] = ['where', 'conditions', 'themes', 'organizer', 'hosts', 'to', 'core']
+type Fillable = Partial<Pick<TwEvent, 'where' | 'conditions' | 'themes' | 'organizer' | 'hosts' | 'to' | 'core' | 'showAll'>>
+const FILL: readonly (keyof Fillable)[] = ['where', 'conditions', 'themes', 'organizer', 'hosts', 'to', 'core', 'showAll']
 const empty = (v: unknown): boolean => v === undefined || v === '' || (Array.isArray(v) && v.length === 0)
 
 /** Copies into `target` what it lacks from `src`; true when anything changed. */
@@ -63,6 +64,8 @@ export interface EnvelopeHost<P extends { id: string }> {
   state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox'>>
   /** Wave 44: the connected peers of the people who carry this community tag (the ones an announce goes to). */
   members?(tag: string): P[]
+  /** Wave 44 steer-open-space: the connected people at this event (tagged or invited): the schedule of an open space goes to them. */
+  recipients?(ev: TwEvent): P[]
   save(): void
   now(): number
   /** The event as an event link, the way the event QR page makes it (names hidden as the event's reveal setting says). */
@@ -87,12 +90,42 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const ev = held(id)
     if (!ev || !mayAnswer(host.state(), id, shown, host.now())) return false
     await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev) })
+    if (ev.openSpace) await host.send(peer, osEnvelope(ev)).catch(() => undefined)
+    return true
+  }
+
+  /** The schedule as an envelope; a host also says the event is an open space (receivers accept that only from a host). */
+  const osEnvelope = (ev: TwEvent): EventEnvelope => {
+    const st = host.state()
+    return { v: 1, t: 'event', os: { id: ev.id, ...(isEventHost(ev, st.me.displayName, st.people) ? { open: true as const } : {}), acts: ev.openSpace?.acts ?? [] } }
+  }
+  const pushOs = async (ev: TwEvent, except?: string): Promise<void> => {
+    if (!ev.openSpace) return
+    const env = osEnvelope(ev)
+    for (const peer of host.recipients?.(ev) ?? []) if (peer.id !== except) await host.send(peer, env).catch(() => undefined)
+  }
+
+  /** A schedule from a connected person: a host may turn a held event into an open space; anyone adds to a held open space. A change goes on to the other people, never back. */
+  async function onOpenSpace(peer: P, os: NonNullable<EventEnvelope['os']>): Promise<boolean> {
+    const ev = held(os.id)
+    if (!ev) return false
+    const st = host.state()
+    const who = st.people.find((p) => p.peerId === peer.id)
+    let changed = false
+    if (!ev.openSpace && os.open && who && isEventHost(ev, who.name, st.people)) { ev.openSpace = { acts: [] }; changed = true }
+    if (mergeActivities(ev, os.acts)) changed = true
+    if (!changed) return false
+    host.save()
+    host.changed()
+    await pushOs(ev, peer.id)
     return true
   }
 
   return {
     /** The event QR of this event is on screen now. */
     shown(id: string, at: number = host.now()): void { shown = { id, at } },
+    /** Wave 44 steer-open-space: my change to the schedule (a proposal, a join) goes to the people at this event. */
+    pushOpenSpace: (ev: TwEvent): Promise<void> => pushOs(ev),
     /** Debug (MCP event_envelope_send, approved on a card): the event to one person now, whatever the QR window says. */
     async sendNow(peer: P, id: string): Promise<void> {
       const ev = held(id)
@@ -105,7 +138,9 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       for (const ev of due) {
         ev.announcedAt = host.now()
         const link = host.link(ev)
-        for (const peer of host.members?.(communityOfEvent(ev) ?? '') ?? []) void host.send(peer, { v: 1, t: 'event', link, show: visibilityOf(ev), announce: true }).catch(() => undefined)
+        for (const peer of host.members?.(communityOfEvent(ev) ?? '') ?? []) {
+          void host.send(peer, { v: 1, t: 'event', link, show: visibilityOf(ev), announce: true }).then(() => (ev.openSpace ? host.send(peer, osEnvelope(ev)) : undefined)).catch(() => undefined)
+        }
       }
       return due.length > 0
     },
@@ -123,6 +158,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     },
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
+      if (env.os) return (await onOpenSpace(peer, env.os)) ? 'filled' : 'ignored'
       if (env.want !== undefined) return (await giveTo(peer, env.want).catch(() => false)) ? 'answered' : 'ignored'
       const linked = env.link === undefined ? null : decodeEventLink(env.link.slice(Math.max(0, env.link.indexOf('#'))))
       if (!linked) return 'ignored'

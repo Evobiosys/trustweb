@@ -347,6 +347,10 @@ export interface TwTask {
  * An event I was at or will be at (E1, wave 7). Local only: never sent in a share, pack, answer or cascade
  * (cascade.ts askSources strips it). from/to are "YYYY-MM-DD", optionally with "THH:MM".
  */
+/** Wave 44 steer-open-space: one proposed activity; joins = token of a person (open_space.ts tokenOf) -> time of the last change, positive joined, negative left. */
+export interface OsActivity { id: string; title: string; slot: string; by: string; description?: string; joins: Record<string, number> }
+export interface OpenSpace { acts: OsActivity[] }
+
 export interface TwEvent {
   id: string
   name: string
@@ -399,6 +403,10 @@ export interface TwEvent {
   shareCommunity?: true
   /** Wave 44: when the community was told about it (once). Local only. */
   announcedAt?: number
+  /** Wave 44 steer-open-space: host flag "Everyone can see everyone" (small, intimate events): my default turns to show, discoverable people are listed. Travels in the event link. */
+  showAll?: true
+  /** Wave 44 steer-open-space: an online open space; the day and window are from..to. Local; the schedule travels sealed between attendees (event_envelope.ts). */
+  openSpace?: OpenSpace
   /** Wave 42 community-event: the community (colour tag id) this event was made in. */
   community?: string
   /** Wave 43 answers (epsilon): "Part of a community": the community (colour tag id) whose members this event's people join. Absent = an isolated event. Local only. */

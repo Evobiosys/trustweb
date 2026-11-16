@@ -445,6 +445,8 @@ export interface EventEnvelope {
   /** Wave 44 steer-event-visibility: how the sender shows at this event, and "the host shares this with the whole community" (a link envelope only). */
   show?: 'open' | 'discoverable' | 'off'
   announce?: true
+  /** Wave 44 steer-open-space: the schedule of an online open space (instead of `want` / `link`): `open` = the sender, a host, says the event is an open space; `acts` are checked by the receiver (open_space.ts). */
+  os?: { id: string; open?: true; acts: unknown[] }
 }
 // ----- END TrustWeb wave 43c -----
 

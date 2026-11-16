@@ -149,13 +149,25 @@ function parseAskAgain(): AskAgainEnvelope {
 function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   const hasWant = 'want' in o
   const hasLink = 'link' in o
+  if ('os' in o) return hasWant || hasLink ? null : parseOpenSpace(o.os)
   if (hasWant === hasLink) return null
   if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
   if (!isNonEmptyString(o.link) || o.link.length > EVENT_LINK_MAX) return null
   const show = o.show === 'open' || o.show === 'discoverable' || o.show === 'off' ? o.show : undefined   // wave 44: a value outside the three is dropped
   return { v: WIRE_VERSION, t: 'event', link: o.link, ...(show ? { show } : {}), ...(o.announce === true ? { announce: true as const } : {}) }
 }
-// ----- END TrustWeb wave 43c -----
+
+// ----- BEGIN TrustWeb wave 44 (steer-open-space): the open-space schedule (types.ts EventEnvelope.os) -----
+const OS_ACTS_MAX = 60
+const OS_BYTES_MAX = 24_000
+/** An event id and at most 60 activities in at most 24 KB; each activity is checked by the receiver (open_space.ts), not here. */
+function parseOpenSpace(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const os = v as Record<string, unknown>
+  if (typeof os.id !== 'string' || !QID_RE.test(os.id) || !Array.isArray(os.acts) || os.acts.length > OS_ACTS_MAX || JSON.stringify(os.acts).length > OS_BYTES_MAX) return null
+  return { v: WIRE_VERSION, t: 'event', os: { id: os.id, ...(os.open === true ? { open: true as const } : {}), acts: os.acts } }
+}
+// ----- END TrustWeb wave 44 -----
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----
 type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door' | 'answerWindowMs'>

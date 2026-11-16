@@ -2048,3 +2048,10 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 html.tw-strike .tw-off{text-decoration:line-through}
 html.tw-strike .post-actions .btn.tw-off,html.tw-strike .rv-bar .btn.tw-off{text-decoration:underline line-through}
 .post-actions .btn.tw-off,.rv-bar .btn.tw-off{text-decoration:underline}
+
+/* wave44 steer-open-space */
+.os-act{padding:.5rem 0;border-top:1px solid var(--line,rgba(127,127,127,.25))}
+.os-head{display:flex;align-items:center;gap:.5rem}
+.os-slot{flex:0 0 auto;font-variant-numeric:tabular-nums}
+.os-title{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.os-form{display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem}

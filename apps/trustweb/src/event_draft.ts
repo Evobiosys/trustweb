@@ -45,6 +45,10 @@ export interface EditorFields {
   techSupport: string[]
   communityId: string
   techTakeover: boolean
+  /** Wave 44 steer-open-space: the event is an online open space (day + window = from..to); drafts saved before this have neither field. */
+  openSpace?: boolean
+  /** Wave 44 steer-open-space: host flag "Everyone can see everyone". */
+  showAll?: boolean
 }
 
 export interface EventDraft { id: string; savedAt: number; /** The event this draft edits; absent = a new event. */ eventId?: string; fields: EditorFields }
@@ -100,7 +104,7 @@ export function emptyFields(today: string, meName: string): EditorFields {
   return {
     name: '', from: today, to: '', repeat: 'none', guests: [], cohosts: meName.trim() ? [meName.trim()] : [], meRole: 'cohost',
     where: '', conference: [], description: '', attachment: '', calendar: DEFAULT_CALENDAR,
-    tagName: '', coreFrom: '', coreTo: '', conditions: '', themes: '', organizers: [], techSupport: [], communityId: '', techTakeover: false,
+    tagName: '', coreFrom: '', coreTo: '', conditions: '', themes: '', organizers: [], techSupport: [], communityId: '', techTakeover: false, openSpace: false, showAll: false,
   }
 }
 

@@ -72,7 +72,8 @@ export const EVENT_VISIBILITIES: readonly EventVisibility[] = ['open', 'discover
 /** Jakob (steering 3): the default is discoverable. One constant. */
 export const DEFAULT_EVENT_VISIBILITY: EventVisibility = 'discoverable'
 export const isVisibility = (v: unknown): v is EventVisibility => EVENT_VISIBILITIES.includes(v as EventVisibility)
-export const visibilityOf = (ev: Pick<TwEvent, 'showMe'>): EventVisibility => (isVisibility(ev.showMe) ? ev.showMe : DEFAULT_EVENT_VISIBILITY)
+/** Wave 44 steer-open-space: the host flag "Everyone can see everyone" turns my default to show; an explicit choice stays. */
+export const visibilityOf = (ev: Pick<TwEvent, 'showMe' | 'showAll'>): EventVisibility => (isVisibility(ev.showMe) ? ev.showMe : ev.showAll ? 'open' : DEFAULT_EVENT_VISIBILITY)
 
 /** Sets my mode; the default is not stored. Throws on a value outside the choices. */
 export function setShowMe(ev: TwEvent, v: string): void {
@@ -81,7 +82,7 @@ export function setShowMe(ev: TwEvent, v: string): void {
 }
 
 /** What the app and MCP change on an event on this device; a default value is not stored. Throws on a value outside the choices. */
-export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string; /** Wave 44 (43-D7): the host lets technical support take over. */ techTakeover?: boolean; /** Wave 44 steer-event-visibility: how I show at this event (open | discoverable | off). */ showMe?: string; /** Wave 44: the host shares the event with the whole community. */ shareCommunity?: boolean }
+export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string; /** Wave 44 (43-D7): the host lets technical support take over. */ techTakeover?: boolean; /** Wave 44 steer-event-visibility: how I show at this event (open | discoverable | off). */ showMe?: string; /** Wave 44: the host shares the event with the whole community. */ shareCommunity?: boolean; /** Wave 44 steer-open-space: host flag "Everyone can see everyone". */ showAll?: boolean; /** Wave 44 steer-open-space: the event is an online open space (cannot go off while it holds activities). */ openSpace?: boolean }
 
 export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
   if (p.invitePolicy !== undefined) {
@@ -105,6 +106,12 @@ export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
   if (p.notify !== undefined) { if (p.notify) delete ev.notify; else ev.notify = false }
   if (p.showMe !== undefined) setShowMe(ev, p.showMe)
   if (p.shareCommunity !== undefined) { if (p.shareCommunity) ev.shareCommunity = true; else delete ev.shareCommunity }
+  if (p.showAll !== undefined) { if (p.showAll) ev.showAll = true; else delete ev.showAll }
+  if (p.openSpace !== undefined) {
+    if (p.openSpace) ev.openSpace ??= { acts: [] }
+    else if (ev.openSpace?.acts.length) throw new Error('an open space with activities cannot go back to a plain event')
+    else delete ev.openSpace
+  }
   if (p.techTakeover !== undefined) { if (p.techTakeover) ev.techTakeover = true; else delete ev.techTakeover }
   if (p.offers) {
     const next = { ...offersOf(ev), ...Object.fromEntries(Object.entries(p.offers).filter(([k, v]) => k in EVENT_OFFERS_DEFAULT && typeof v === 'boolean')) }

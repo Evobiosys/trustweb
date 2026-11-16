@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Extension modules (wave 24): everything beyond contacts and what we share. Deleting a module's folder and its line here removes it. */
 import type { Identity } from '../../../demo/src/did'
-import type { AppState, InventoryItem, TwEvent } from '../model'
+import type { AppState, InventoryItem, OsActivity, TwEvent } from '../model'
 import type { BarId } from '../bottom_bar'
 import type { RelayDeps } from '../notes_relay'
 import { calendarModule } from './calendar'
@@ -122,6 +122,8 @@ export interface ExtModule {
   screen: (h: ExtHooks) => {
     body: () => Node[]
     eventSection?: (ev: TwEvent) => Node[]
+    /** Wave 44 steer-open-space: opens the shared notes of one open-space activity; null while the module is off. */
+    activityNote?: (ev: TwEvent, act: OsActivity) => (() => void) | null
     /** Extra rows on a Resources item's sheet; removing the module removes them. */
     itemSection?: (item: InventoryItem) => Node[]
     /** Events and tasks as outliner rows, folded, below the Resources list; removing the module removes them. */
