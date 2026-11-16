@@ -213,7 +213,9 @@ import { TranscriberEngine, TranscriberStatus, createTranscriber, detectEngine }
 import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
-import { createBackupView } from './backup_view'
+import { createBackupView, infoKey as backupInfoKey } from './backup_view'
+import { loadInfo as loadBackupInfoOf } from './auto_backup'
+import { guardLeaving, lastKept, markCopy, markOffered, wasOffered } from './keep_copy'
 import type { BackupView } from './backup_view'
 import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
@@ -325,7 +327,7 @@ import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
-import { PersistState, persistState } from './storage_persist'
+import { PersistState, askPersist, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
@@ -7437,13 +7439,44 @@ function tabRowSettings(): (Node | null)[] {
   return [el('button', { class: 'btn btn-ghost', 'data-settings-bar': '', onclick: barSheet }, [S.barOpenSettings])]
 }
 
-/** Wave 44 steer-settings-sync: the last section of Settings; on a phone the Obsidian and Tana entries sit in its own Advanced. */
+/** Wave 44 steer-settings-sync: when the newest copy of the record was made (file copy or server backup), ms; 0 = none. */
+function copyKeptAt(): number { return lastKept(localStorage, loadBackupInfoOf(localStorage, backupInfoKey(persona, storeCtx))?.lastAt ?? 0) }
+
+/** Writes the encrypted snapshot file (the existing snapshot code) and notes the time. */
+async function keepCopy(): Promise<void> {
+  await snapshots.take(S.snReasonManual, true)
+  markCopy(localStorage, Date.now())
+  toast(S.keepCopy.done)
+  void askPersist()
+}
+
+/** The sheet that offers a copy once, on the first run after this change, when there is data to lose. */
+function offerKeepCopy(): void {
+  if (solo || isDemoPersona(persona) || wasOffered(localStorage)) return
+  markOffered(localStorage, Date.now())
+  if (!state?.people.length) return
+  openSheet([el('h3', {}, [S.keepCopy.offerTitle]), el('p', { class: 'meta' }, [S.keepCopy.hint]),
+    el('button', { class: 'btn btn-electric', 'data-keep-copy-offer': '', onclick: () => { closeSheet(); void keepCopy() } }, [S.keepCopy.title]),
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.keepCopy.notNow])])
+}
+
+/** "How syncing works": the same lines as DEVLOG/wave44/SYNC-GUIDE.txt. */
+function syncGuideSheet(): void {
+  openSheet([el('h3', {}, [S.keepCopy.guide]), el('ol', { 'data-sync-guide': '' }, S.syncGuide.map((l) => el('li', {}, [l]))), el('button', { class: 'btn btn-ghost', onclick: settingsSheet }, [S.setTitle])])
+}
+
+/** Wave 44 steer-settings-sync: the Sync section at the bottom of Settings (outside Advanced); on a phone the Obsidian and Tana entries sit in its own Advanced. */
 function syncSettings(): Node | null {
   const entry = (id: string, label: string): HTMLElement => el('button', { class: 'radio', [`data-settings-sync-${id}`]: '', onclick: () => openServicesImport(importHooks()) }, [el('b', {}, [label])])
   const parts = syncSectionParts<Node>({ eligible: connectEligible(), devices: () => devices.settingsGroup(), entries: () => [entry('obsidian', S.obsidian.title), entry('tana', S.imp39.tanaTitle)] })
+  const at = copyKeptAt()
+  const persisted = el('small', { 'data-keep-copy-persist': '' }, [])
+  void persistState().then((p) => { if (p !== PersistState.Unsupported) persisted.textContent = p === PersistState.Granted ? S.persistGranted : S.persistNotGranted })
   return settingsSection('sync', S.setSecSync, [
+    el('button', { class: 'radio', 'data-keep-copy': '', onclick: () => { void keepCopy().then(settingsSheet) } }, [el('b', {}, [S.keepCopy.title]), el('small', {}, [S.keepCopy.hint]), el('small', { 'data-keep-copy-last': '' }, [at ? S.keepCopy.last(whenLabel(at)) : S.keepCopy.never]), persisted]),
     ...parts.main,
     parts.advanced.length ? el('details', { class: 'settings-adv', 'data-settings-sync-advanced': '' }, [el('summary', { class: 'adv-toggle' }, [S.setAdvanced]), el('p', { class: 'meta' }, [S.syncPhoneHint]), ...parts.advanced]) : null,
+    el('button', { class: 'btn btn-ghost', 'data-sync-guide-open': '', onclick: syncGuideSheet }, [S.keepCopy.guide]),
   ], true)
 }
 
@@ -7725,7 +7758,6 @@ function settingsSheet(): void {
       onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
     }, [S.setHintsAll]),
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
-    installable && !installedHere() ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
     ...apkUpdatesRow(s),
     ...aboutGroup(),
     updateRow(),
@@ -7742,6 +7774,9 @@ function settingsSheet(): void {
   }
   openSheet([
     el('h3', {}, [S.setTitle]),
+    // Wave 44 steer-settings-sync: Install stays pinned at the top until the app is installed.
+    installable && !installedHere() ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', 'data-settings-group': 'install', onclick: openInstallSheet }, [S.setInstall]) : null,
+    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-settings-group': 'install-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     el('input', {
       class: 'field', type: 'search', 'data-settings-search': '', placeholder: S.setSearchPh, 'aria-label': S.setSearchAria, autocomplete: 'off', value: settingsQuery,
       oninput: (e) => { settingsQuery = (e.target as HTMLInputElement).value; filterSettings(sheet, settingsQuery) },
@@ -7757,7 +7792,6 @@ function settingsSheet(): void {
     advancedBlock([
     viewRow(),
     themeRow(),
-    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
@@ -7767,11 +7801,10 @@ function settingsSheet(): void {
     // Wave 41: AI is a section of its own (it sat inside Advanced); same block as the AI sparkle's sheet.
     el('div', { 'data-settings-group': 'ai' }, [settingsSection('ai', S.setSecAi, aiBlock(() => { sheet.dataset.kind = 'settings'; settingsSheet() }))]),
     ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
-    // Wave 40: Import also stands on its own at the very bottom of Settings.
-    solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),
-    // Wave 44 steer-settings-sync: Sync is the last section (device sync, then the Obsidian and Tana entries).
-    syncSettings(),
     ]),
+    // Wave 44 steer-settings-sync: Import and Sync sit below Advanced, visible without opening it.
+    solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-group': 'import', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),
+    el('div', { 'data-settings-group': 'sync' }, [syncSettings()]),
   ])
   sheet.dataset.kind = 'settings'
   upgradeSwitches(sheet)
@@ -8407,6 +8440,8 @@ if (state && !state.testOf?.handedOverAt) {
   if (state.connectCode) void ensureConnectCode()
   offerApkHint(offerDemoContent)
   offerNotifications()
+  offerKeepCopy()
+  guardLeaving(localStorage, { hasData: () => !!state?.people.length, backupAt: copyKeptAt })
   cal?.start?.()
   coNotes?.start?.()
   checkEngagement()
