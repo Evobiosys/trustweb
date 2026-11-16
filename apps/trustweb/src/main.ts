@@ -589,6 +589,7 @@ history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&
 if (!solo) seedDevRecord(persona)
 // Dev only: the define is the literal null in a build, so this branch and the whole panel chunk are dropped from it.
 if (!solo && typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) void import('./dev_preview').then((m) => { m.initDevPreview() })
+if (!solo && typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) void import('./ext/preview-phone/preview_phone').then((m) => { m.initPreviewPhone() }) // wave44b phone-preview-extension: dev only
 if (!solo) initDevFeature()
 let state: AppState | null = loadState(persona, storeCtx)
 // A record that is there but unreadable was kept aside untouched (store.ts);

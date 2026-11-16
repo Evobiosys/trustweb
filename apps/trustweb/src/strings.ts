@@ -4861,4 +4861,20 @@ export const S = {
     publishHint: 'Posting there comes with the account link. Until then your post stays on this phone.',
     publishOffRamp: 'Discouraged: your people also read the fediverse. Move off: Mastodon; export your data (GDPR Art. 20).',
   },
+  /* wave44b phone-preview-extension */
+  previewPhone: {
+    pill: 'Preview',
+    title: 'Preview rows',
+    close: 'Close',
+    loaded: 'Loaded in this preview',
+    notLoaded: 'Not loaded',
+    like: '👍 Like',
+    needsWork: 'Needs work',
+    note: 'Note',
+    noteCopied: 'Note copied',
+    where: 'Where',
+    steps: 'Steps',
+    empty: 'No rows in this preview.',
+    failed: (why: string) => `Could not save: ${why}`,
+  },
 } as const
