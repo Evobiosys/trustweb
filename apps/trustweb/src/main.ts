@@ -147,6 +147,10 @@ import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { groupsView } from './groups_view'
+import { createHomeBoard } from './home_view' // wave44 home-dashboard
+import { createDashboard, dashboardOpened } from './dashboard_view'
+import { defineHomeActions } from './home_actions'
+import { resetLayout } from './home_layout'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, headerRight, headerTools, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
@@ -403,6 +407,9 @@ enum Screen {
   Ext = 'ext',
   /** Wave 43b ask-page-filter: Ask your web is its own page (class askpage: .ask is the consent prompt's), Back returns to where it was opened. */
   Ask = 'askpage',
+  /** Wave 44 home-dashboard: the Home tile board and the Dashboard of an affiliation, both pages with Back like People. */
+  Home = 'home',
+  Dashboard = 'dashboard',
 }
 /** Wave 39: which extension module view Screen.Ext shows, and the kept element it is mounted in (ext/view_host.ts). */
 let extViewId: string | null = null
@@ -1354,7 +1361,9 @@ function barMoreTap(): void {
   const rest = moreViews(s.uiBar, f, barMax())
   const halo = new Set(haloOf(s.uiBar, resolveBar(s.uiBar, f).ids))
   openSheet([
-    rest.length ? el('h3', {}, [S.barMoreViews]) : null,
+    el('h3', {}, [S.barMoreViews]),
+    el('button', { class: 'btn btn-ghost bar-more-view', 'data-bar-home': '', onclick: () => { closeSheet(); openHome() } }, [S.home.title]),
+    el('button', { class: 'btn btn-ghost bar-more-view', 'data-bar-dashboard': '', onclick: () => openDashboard() }, [S.dashboard.title]),
     ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view' + (halo.has(id) ? ' tab-halo' : ''), 'data-bar-view': id, onclick: () => bringIntoRow(id) }, [barName(id)])),
     el('h4', { class: 'eyebrow' }, alphaHeading(S.var.title)),
     variationChips(barMoreTap),
@@ -1518,6 +1527,8 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.Notes:
     case Screen.Groups:
     case Screen.Ask:
+    case Screen.Home:
+    case Screen.Dashboard:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1607,6 +1618,38 @@ function openGroups(): void {
   pageBack = Screen.Web
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Groups)
+}
+/** Wave 44 home-dashboard: Home = the tile board (the Web tab opens it when "Open Home first" is on); the Dashboard sits one tap from it and in the ⋮ list. */
+let dashboardId: string | undefined
+let dashboardFromHome = false
+function openHome(): void {
+  if (screen === Screen.Home) { render(); return }
+  peoplePage = true
+  pageBack = Screen.Web
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Home)
+}
+function openDashboard(affiliation?: string): void {
+  if (affiliation) dashboardId = affiliation
+  closeSheet()
+  if (screen === Screen.Dashboard) { render(); return }
+  dashboardOpened()
+  // From Home it shares Home's history entry (a second one would make Back return to the same screen); its own Back arrow returns to Home.
+  dashboardFromHome = screen === Screen.Home
+  if (!dashboardFromHome) { peoplePage = true; pageBack = Screen.Web; history.pushState({ twPage: 'people' }, '') }
+  go(Screen.Dashboard)
+}
+function screenHome(): Node[] {
+  return [
+    header(S.home.title, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [createHomeBoard({ st, save, redraw: render, openWeb: () => { webViewNow = 'rings'; chooseView('rings') }, openDashboard: () => openDashboard() })]),
+  ]
+}
+function screenDashboard(): Node[] {
+  return [
+    header(S.dashboard.title, { back: () => { if (dashboardFromHome) go(Screen.Home); else history.back() } }),
+    el('div', { class: 'scroll pad' }, [createDashboard({ st, save, redraw: render, feedOn: () => feedOn(st()), openFeed: () => go(Screen.Feed), current: () => dashboardId, choose: (id) => { dashboardId = id } })]),
+  ]
 }
 /** Wave 43b: Ask your web as a page of its own with Back (to the Web, or wherever it was opened from), never over the Web view. */
 function openAskPage(): void {
@@ -1700,7 +1743,7 @@ function shownScreen(target: Screen): Screen {
 
 function go(to: Screen): void {
   const s = shownScreen(to)
-  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Ask
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Ask || x === Screen.Home || x === Screen.Dashboard
   if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
   if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
@@ -2043,7 +2086,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups || screen === Screen.Home || screen === Screen.Dashboard))
       || (target === Screen.Inventory && screen === Screen.Notes)
       || (screen === Screen.Ext && target === `mod:${extViewId}`)
     b.classList.toggle('on', on)
@@ -2081,6 +2124,8 @@ function render(): void {
       case Screen.Notes: return screenNotes()
       case Screen.Groups: return screenGroups()
       case Screen.Ask: return screenAsk()
+      case Screen.Home: return screenHome()
+      case Screen.Dashboard: return screenDashboard()
       case Screen.Ext: return screenExt()
     }
   })()
@@ -3217,6 +3262,7 @@ function chooseView(view: ViewKey): void {
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   if (view === 'groups') { if (screen === Screen.Groups) render(); else openGroups(); return }
+  if ((view as string) === 'home') { openHome(); return }   // wave 44: webDefault 'home'
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -5449,6 +5495,7 @@ defineEventActions(appActions, {
   sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
 })
 defineSyncActions(appActions, devices) // wave43c sync-devices
+defineHomeActions(appActions, { openDashboard }) // wave44 home-dashboard
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
   fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,
@@ -7451,6 +7498,17 @@ function settingsSheet(): void {
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
   const groups: Record<SettingsSection, (Node | null)[]> = {
     web: [
+    settingsSection('home', S.home.settingsTitle, [
+      el('label', { class: 'pick' + (webDefaultOf(s) === 'home' ? '' : ' tw-off') }, [
+        el('input', { type: 'checkbox', 'data-home-start': '', role: 'switch', 'aria-checked': String(webDefaultOf(s) === 'home'), ...(webDefaultOf(s) === 'home' ? { checked: '' } : {}), onchange: (e: Event) => {
+          const v = setWebDefault(s.uiViews, (e.target as HTMLInputElement).checked ? 'home' : 'rings'); if (v) s.uiViews = v; else delete s.uiViews
+          save(); render(); settingsSheet()
+        } }),
+        el('span', {}, [S.home.start]),
+      ]),
+      el('p', { class: 'meta' }, [S.home.startHint]),
+      el('button', { class: 'btn btn-ghost', 'data-home-reset': '', onclick: () => { resetLayout(s); save(); render(); toast(S.home.resetDone) } }, [S.home.resetLayout]),
+    ]),
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),

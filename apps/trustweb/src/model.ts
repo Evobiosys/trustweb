@@ -40,6 +40,7 @@ import type { EventOffers, InvitePolicy, NameReveal } from './events'
 import type { ZoneLink } from './zone_share_link'
 import type { PeerItem } from './peer_items'
 import type { SupportAsk, SupportIn } from './support_ask'
+import type { HomeLayout } from './home_layout'
 
 export enum Ring {
   /** The top trust zone (wave 25): the few you would call at 3 am. Family keeps its own closeness; this is a ring of its own. */
@@ -1204,6 +1205,8 @@ export interface AppState {
   extData?: Record<string, unknown>
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
+  /** Wave 44 home-dashboard (home_layout.ts): the Home tile board's columns. Absent: the default (Web centre, others' requests left, mine right). Syncs with the record. */
+  homeLayout?: HomeLayout
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */

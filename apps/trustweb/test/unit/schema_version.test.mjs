@@ -120,7 +120,7 @@ describe('bottom bar order reset (wave 33)', () => {
       expect(s.uiBar.order).toEqual(order)
     }
   })
-  it('wave 44: the schema version is 3 (colourMode); a build reading 2 refuses a 3 record', () => {
+  it('wave 44: the schema version is 3 (colourMode + homeLayout); older builds refuse a newer record', () => {
     expect(SCHEMA_VERSION).toBe(3)
   })
 })

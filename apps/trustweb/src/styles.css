@@ -2042,3 +2042,29 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 @media (prefers-reduced-motion:reduce){.tap-event-hint{animation:none}}
 .rings-wrap.card-open .tap-event-hint{display:none}
 .person-menu input{font:inherit; padding:6px 8px; border:1px solid var(--line-strong); border-radius:8px; background:var(--card); color:var(--ink); min-width:150px}
+/* wave44 home-dashboard */
+.home-board{display:flex; flex-direction:column; gap:12px; padding-bottom:16px}
+.home-top{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.home-cols{display:flex; flex-direction:column; gap:12px}
+.home-col{display:flex; flex-direction:column; gap:10px; min-height:48px}
+.home-col[data-home-col=center]{order:0}
+.home-col[data-home-col=left]{order:1}
+.home-col[data-home-col=right]{order:2}
+.home-tile{background:var(--raised); border:1px solid var(--line); border-radius:var(--r-card); padding:12px; display:flex; flex-direction:column; gap:6px; min-width:0; cursor:grab; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none}
+.home-tile.lifted{position:relative; z-index:5; cursor:grabbing; box-shadow:var(--shadow-float); opacity:.92; touch-action:none; pointer-events:auto}
+.home-tile:focus-visible{outline:2px solid var(--electric); outline-offset:2px}
+.home-web{min-height:150px; justify-content:center; align-items:center; text-align:center}
+.home-tile-head{display:flex; justify-content:space-between; gap:8px; align-items:baseline}
+.home-rows{list-style:none; padding:0; display:flex; flex-direction:column; gap:4px; font-size:13px; overflow-wrap:anywhere}
+@media (min-width:700px){
+  .home-cols{display:grid; grid-template-columns:1fr 1.6fr 1fr; align-items:start; gap:14px}
+  .home-col[data-home-col=left],.home-col[data-home-col=center],.home-col[data-home-col=right]{order:0}
+  .home-web{min-height:240px}
+}
+.dash{display:flex; flex-direction:column; gap:12px}
+.dash-chooser{max-width:100%}
+.dash-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px}
+.dash .tile{display:flex; flex-direction:column; gap:4px; text-align:left; font:inherit; color:inherit}
+.dash-dot{display:inline-block; width:9px; height:9px; margin-right:6px; border-radius:50%; background:var(--trust,#2e7d32)}
+.dash-dot.flash{animation:dash-flash 1.2s ease-out 1}
+@keyframes dash-flash{0%{box-shadow:0 0 0 0 var(--trust,#2e7d32)} 100%{box-shadow:0 0 0 12px transparent}}

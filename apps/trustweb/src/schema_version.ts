@@ -5,6 +5,7 @@ import { resetBarOrder } from './bottom_bar'
 import { repairAgreements } from './agreements'
 import { migrateEventRoles } from './event_roles'
 import { migrateNicknames } from './event_press'
+import { repairHomeLayout } from './home_layout'
 import { migrateChats } from './chat'
 import { repairConnectRecord } from './connect_code'
 import { repairGeneralNotes } from './general_notes'
@@ -43,7 +44,7 @@ export function migrate(s: AppState): boolean {
   const ran = [
     migrateSources(s), normaliseNoteFields(s), migrateChats(s),
     repairConnectRecord(s), repairOtherCodes(s), repairShareFields(s), repairGeneralNotes(s), repairProfile(s), repairAgreements(s), repairPinned(s),
-    resetBarOrder(s), migrateEventRoles(s), migrateNicknames(s), repairColourMode(s),
+    resetBarOrder(s), migrateEventRoles(s), migrateNicknames(s), repairColourMode(s), repairHomeLayout(s),
   ]
   const stamped = s.schemaVersion !== SCHEMA_VERSION
   s.schemaVersion = SCHEMA_VERSION
