@@ -298,3 +298,12 @@ describe('a global person meets the connection that follows (both sides)', () =>
     expect(s.people).toHaveLength(1)
   })
 })
+
+describe('what stays on this device (device sync)', () => {
+  it('the listing is of THIS device\'s key, and the hosted records, cache and waiting intents are this phone\'s: none of them travels', async () => {
+    const { SYNC_EXCLUDED, settingsOf } = await import('../../src/sync_core.ts')
+    for (const k of ['discoverable', 'discoverOpen', 'hosted', 'nameCache', 'intentsIn']) expect(SYNC_EXCLUDED.has(k), k).toBe(true)
+    const s = settingsOf({ v: 1, people: [], discoverable: true, discoverOpen: false, hosted: {}, nameCache: {}, intentsIn: [], hostFriends: 'close', trustedOnly: true, directoryServers: ['https://a.test'] })
+    expect(Object.keys(s).sort()).toEqual(['directoryServers', 'hostFriends', 'trustedOnly'])
+  })
+})

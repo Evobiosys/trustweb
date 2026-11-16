@@ -78,6 +78,8 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'coInvites', 'coGuest', 'coChats', 'coDevice',
   // wave 43c sync-devices: the Auto sync switch and the status line are this device's; wantsToConnect travels now (peer ids match on both devices)
   'syncAutoOff', 'syncStatus',
+  // wave 43c social-hosting: the name listing is of THIS device's key; hosted records, the lookup cache and waiting intents are this phone's
+  'discoverable', 'discoverOpen', 'hosted', 'nameCache', 'intentsIn',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */
