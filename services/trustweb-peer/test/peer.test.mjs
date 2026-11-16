@@ -80,7 +80,7 @@ async function phone(relayOrigin, name, decide) {
     did: identity.did,
     asks,
     /** The scanning side of the one-scan ceremony: tell the peer who we are. */
-    connectTo: async (did) => channel.sendRaw(did, await sealConnectAck(buildConnectAck(me, identity), identity.did, did)), // wave 44: sealed
+    connectTo: async (did) => channel.sendRaw(did, await sealConnectAck(buildConnectAck(me, identity), identity, did)), // wave 44: sealed
     /** Ask one peer; resolves with the decoded answer or null on timeout. */
     ask: async (did, text, timeoutMs = 4000, extra = {}) => {
       const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: text, ...extra }

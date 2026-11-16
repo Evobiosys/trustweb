@@ -92,7 +92,7 @@ describe('sealed connect-ack (connect-ack2)', () => {
   const plain = ack('scan0001', 'Scanner Person', scanner.did)
 
   it('opens on the shower with its own QR secret; the wire holds no name, no id', async () => {
-    const wire = await sealConnectAck(plain, scanner.did, shower.did, qrSecretOf(shower))
+    const wire = await sealConnectAck(plain, scanner, shower.did, qrSecretOf(shower))
     expect(wire).not.toContain('Scanner')
     expect(wire).not.toContain('scan0001')
     const w = parseHandshakeWire(wire)
@@ -102,31 +102,40 @@ describe('sealed connect-ack (connect-ack2)', () => {
     expect(got.mode).toBe('qr')
   })
   it('pads: a long and a short name give the same wire length', async () => {
-    const a = await sealConnectAck(ack('scan0001', 'A', scanner.did), scanner.did, shower.did, qrSecretOf(shower))
-    const b = await sealConnectAck(ack('scan0001', 'A much longer display name here', scanner.did), scanner.did, shower.did, qrSecretOf(shower))
+    const a = await sealConnectAck(ack('scan0001', 'A', scanner.did), scanner, shower.did, qrSecretOf(shower))
+    const b = await sealConnectAck(ack('scan0001', 'A much longer display name here', scanner.did), scanner, shower.did, qrSecretOf(shower))
     expect(a.length).toBe(b.length)
   })
   it('did mode (no QR) opens too', async () => {
-    const got = await openConnectAck(parseHandshakeWire(await sealConnectAck(plain, scanner.did, shower.did)), shower, scanner.did, [])
+    const got = await openConnectAck(parseHandshakeWire(await sealConnectAck(plain, scanner, shower.did)), shower, scanner.did, [])
     expect(got.mode).toBe('did')
   })
   it('a wrong QR secret, another receiver, another claimed sender, or a flipped byte fail closed', async () => {
     const other = createIdentity('http://127.0.0.1/relay')
-    const wrongQr = parseHandshakeWire(await sealConnectAck(plain, scanner.did, shower.did, qrSecretOf(other)))
+    const wrongQr = parseHandshakeWire(await sealConnectAck(plain, scanner, shower.did, qrSecretOf(other)))
     expect(await reason(openConnectAck(wrongQr, shower, scanner.did, []))).toBe('tampered')
-    const good = parseHandshakeWire(await sealConnectAck(plain, scanner.did, shower.did, qrSecretOf(shower)))
+    const good = parseHandshakeWire(await sealConnectAck(plain, scanner, shower.did, qrSecretOf(shower)))
     expect(await reason(openConnectAck(good, other, scanner.did, []))).toBe('tampered')
     expect(await reason(openConnectAck(good, shower, other.did, []))).toBe('tampered')
     const c = good.c.slice(0, 10) + (good.c[10] === 'A' ? 'B' : 'A') + good.c.slice(11)
     expect(await reason(openConnectAck({ ...good, c }, shower, scanner.did, []))).toBe('tampered')
   })
+  it('review-44: the sender is authenticated: a relay or QR holder sealing in another DID\'s name fails (static-static DH in the key)', async () => {
+    const mallory = createIdentity('http://127.0.0.1/relay')
+    // Mallory knows the QR secret (it sits on every shared link) and claims to be the scanner, but holds only her own keys.
+    const posing = { ...mallory, did: scanner.did }
+    for (const qk of [qrSecretOf(shower), undefined]) {
+      const w = parseHandshakeWire(await sealConnectAck(plain, posing, shower.did, qk))
+      expect(await reason(openConnectAck(w, shower, scanner.did, []))).toBe('tampered')
+    }
+  })
   it('an inner ack naming another DID than the sender is a mismatch', async () => {
     const other = createIdentity('http://127.0.0.1/relay')
-    const w = parseHandshakeWire(await sealConnectAck(ack('x', 'X', other.did), scanner.did, shower.did, qrSecretOf(shower)))
+    const w = parseHandshakeWire(await sealConnectAck(ack('x', 'X', other.did), scanner, shower.did, qrSecretOf(shower)))
     expect(await reason(openConnectAck(w, shower, scanner.did, []))).toBe('mismatch')
   })
   it('a replayed wire fails', async () => {
-    const w = parseHandshakeWire(await sealConnectAck(plain, scanner.did, shower.did, qrSecretOf(shower)))
+    const w = parseHandshakeWire(await sealConnectAck(plain, scanner, shower.did, qrSecretOf(shower)))
     const first = await openConnectAck(w, shower, scanner.did, [])
     expect(await reason(openConnectAck(w, shower, scanner.did, first.seen))).toBe('replay')
   })

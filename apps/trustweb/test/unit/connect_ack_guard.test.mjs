@@ -86,7 +86,7 @@ describe('a forged connect-ack cannot take a held connection over', () => {
 
   it('an ack naming Ben\'s id under another DID adds a separate connection with an id of its own; Ben keeps his DID', async () => {
     const ben = A.state.peers.find((x) => x.did === B.did)
-    await M.channel.sendRaw(A.did, await ack({ id: ben.id, displayName: 'Mallory' }, M.identity.did, M.identity.did, A.did))
+    await M.channel.sendRaw(A.did, await ack({ id: ben.id, displayName: 'Mallory' }, M.identity.did, M.identity, A.did))
     await until(() => A.state.peers.some((x) => x.did === M.identity.did))
     const mallory = A.state.peers.find((x) => x.did === M.identity.did)
     expect(mallory.id).not.toBe(ben.id)
@@ -96,7 +96,7 @@ describe('a forged connect-ack cannot take a held connection over', () => {
 
   it('an ack claiming Ben\'s DID with another name and id leaves Ben\'s record as it is', async () => {
     const before = { ...A.state.peers.find((x) => x.did === B.did) }
-    await M.channel.sendRaw(A.did, await ack({ id: 'zzz', displayName: 'Mallory' }, B.did, M.identity.did, A.did))
+    await M.channel.sendRaw(A.did, await ack({ id: 'zzz', displayName: 'Mallory' }, B.did, M.identity, A.did))
     // the wire goes through the unsealed path: give the drain a moment, then look
     await sleep(300)
     const ben = A.state.peers.find((x) => x.did === B.did)
@@ -107,7 +107,7 @@ describe('a forged connect-ack cannot take a held connection over', () => {
 
   it('an ack whose did disagrees with the outer from is ignored', async () => {
     const count = A.state.peers.length
-    await M.channel.sendRaw(A.did, await ack({ id: randomId(12), displayName: 'Nobody' }, 'did:peer:2.' + randomId(40), M.identity.did, A.did))
+    await M.channel.sendRaw(A.did, await ack({ id: randomId(12), displayName: 'Nobody' }, 'did:peer:2.' + randomId(40), M.identity, A.did))
     await sleep(300)
     expect(A.state.peers.length).toBe(count)
   })

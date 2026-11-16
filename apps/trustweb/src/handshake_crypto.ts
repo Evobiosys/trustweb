@@ -6,14 +6,16 @@
  *   QR (v2)    the shower's connect link carries `k=` = qrSecretOf(identity): HKDF of its X25519 secret key, 16 bytes, stable, no storage.
  *              The link's DID already carries the shower's X25519 public key (ephB below; the shower is not online during a scan, so its
  *              key-agreement key stands in for its ephemeral one).
- *   scanner    fresh ephemeral X25519 pair (ephA); dh = X25519(ephA.secret, ephB); key = HKDF-SHA256(ikm = dh || qrSecret,
+ *   scanner    fresh ephemeral X25519 pair (ephA); dh = X25519(ephA.secret, ephB); ss = X25519(scanner static secret, ephB) (review-44:
+ *              authenticates the claimed sender DID, so neither the relay nor a holder of the QR secret can seal in another DID's name);
+ *              key = HKDF-SHA256(ikm = dh || ss || qrSecret,
  *              salt = ephA || ephB, info "tw-handshake-v2"); AES-256-GCM, random 12-byte nonce, additional data = the transcript
  *              (version, mode, sender DID, receiver DID). The plaintext is padded to 256-byte steps so the name length does not show.
  *   shower     recomputes dh with its own secret key and qrSecret from its own identity; a wrong QR secret, another receiver, another
  *              claimed sender, a flipped byte or a nonce seen before fail closed (HandshakeError) and nothing is added.
  *
  * Mode 'did': a connect without a QR (a DID add, the directory, the owner admitting a held reach-out) seals the same way with an
- * empty QR secret; the relay still cannot read it (it needs a private key), but the sender proved no QR possession.
+ * empty QR secret; the relay still cannot read or forge it (it needs a private key), but the sender proved no QR possession.
  * A link WITHOUT k= is a QR of an app before v2: linkHandshake says 'unsupported' and the app asks to update both phones
  * (HANDSHAKE_PLAINTEXT_FALLBACK = false: never silently plaintext). Key material (ephemeral secret, dh, ikm) is zeroed after use;
  * the AES key is a non-extractable CryptoKey.
@@ -58,9 +60,12 @@ export function qrSecretOf(identity: Identity): string {
   return toB64u(hkdfSha256(identity.keyAgreement.secretKey, new Uint8Array(0), 'tw-qr-secret-v2', QR_SECRET_BYTES))
 }
 
-/** The session key: HKDF over the shared secret and the QR secret, salted with both public keys. `dh` is zeroed. */
-export async function deriveHandshakeKey(qrSecret: Uint8Array, ephA: Uint8Array, ephB: Uint8Array, dh: Uint8Array): Promise<CryptoKey> {
-  const ikm = cat(dh, qrSecret)
+/**
+ * The session key: HKDF over the ephemeral shared secret, the static-static one (`ss`, empty only in the primitive tests) and the QR secret,
+ * salted with both public keys. `dh` and `ss` are zeroed.
+ */
+export async function deriveHandshakeKey(qrSecret: Uint8Array, ephA: Uint8Array, ephB: Uint8Array, dh: Uint8Array, ss: Uint8Array = new Uint8Array(0)): Promise<CryptoKey> {
+  const ikm = cat(dh, ss, qrSecret)
   try {
     const base = await globalThis.crypto.subtle.importKey('raw', ikm as BufferSource, 'HKDF', false, ['deriveKey'])
     return await globalThis.crypto.subtle.deriveKey(
@@ -70,6 +75,7 @@ export async function deriveHandshakeKey(qrSecret: Uint8Array, ephA: Uint8Array,
   } finally {
     ikm.fill(0)
     dh.fill(0)
+    ss.fill(0)
   }
 }
 
@@ -109,14 +115,15 @@ const pad = (json: string): Uint8Array => {
   return out
 }
 
-/** The scanner's side: its connect-ack sealed to `toDid` (with that link's QR secret when there was one). Returns the wire text. */
-export async function sealConnectAck(ack: ConnectAckEnvelope, fromDid: string, toDid: string, qk?: string): Promise<string> {
+/** The scanner's side: its connect-ack sealed by `from` to `toDid` (with that link's QR secret when there was one). Returns the wire text. */
+export async function sealConnectAck(ack: ConnectAckEnvelope, from: Identity, toDid: string, qk?: string): Promise<string> {
   const mode: HandshakeMode = qk ? 'qr' : 'did'
   const ephB = resolveDidPeer(toDid).keyAgreementPublicKey
   const eph = x25519Ephemeral()
   try {
-    const key = await deriveHandshakeKey(qk ? fromB64u(qk) : new Uint8Array(0), eph.publicKey, ephB, x25519Shared(eph.secretKey, ephB))
-    const box = await sealHandshake(pad(JSON.stringify(ack)), key, transcriptOf(mode, fromDid, toDid))
+    const ss = x25519Shared(from.keyAgreement.secretKey, ephB)
+    const key = await deriveHandshakeKey(qk ? fromB64u(qk) : new Uint8Array(0), eph.publicKey, ephB, x25519Shared(eph.secretKey, ephB), ss)
+    const box = await sealHandshake(pad(JSON.stringify(ack)), key, transcriptOf(mode, from.did, toDid))
     const wire: HandshakeWire = { v: 1, t: HANDSHAKE_WIRE, hv: 2, m: mode, e: toB64u(eph.publicKey), n: toB64u(box.n), c: toB64u(box.c) }
     return JSON.stringify(wire)
   } finally {
@@ -158,9 +165,12 @@ export async function openConnectAck(wire: HandshakeWire, me: Identity, fromDid:
   try { ephA = fromB64u(wire.e); n = fromB64u(wire.n); c = fromB64u(wire.c) } catch { throw new HandshakeError('tampered') }
   if (ephA.length !== 32) throw new HandshakeError('tampered')
   const qs = wire.m === 'qr' ? fromB64u(qrSecretOf(me)) : new Uint8Array(0)
-  let dh: Uint8Array
-  try { dh = x25519Shared(me.keyAgreement.secretKey, ephA) } catch { throw new HandshakeError('tampered') }
-  const key = await deriveHandshakeKey(qs, ephA, me.keyAgreement.publicKey, dh)
+  let dh: Uint8Array, ss: Uint8Array
+  try {
+    dh = x25519Shared(me.keyAgreement.secretKey, ephA)
+    ss = x25519Shared(me.keyAgreement.secretKey, resolveDidPeer(fromDid).keyAgreementPublicKey)
+  } catch { qs.fill(0); throw new HandshakeError('tampered') }
+  const key = await deriveHandshakeKey(qs, ephA, me.keyAgreement.publicKey, dh, ss)
   qs.fill(0)
   const plain = await openHandshake({ n, c }, key, transcriptOf(wire.m, fromDid, me.did), seen)
   let parsed: unknown

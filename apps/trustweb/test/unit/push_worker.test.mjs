@@ -58,7 +58,7 @@ describe('service worker peek', () => {
     const key = await deriveEcdhPairKey(ecdhSharedSecret(max, me.did))
     const chat = await encryptEnvelope({ v: 1, t: 'chat', from: { id: 'max00001', displayName: 'Max' }, text: 'hi', ts: Date.now() }, key)
     const ask = await encryptEnvelope({ v: 1, t: 'query', from: { id: 'max00001', displayName: 'Max' }, templateId: 'free', templateVersion: 1, qid: 'q1234567', issuedAt: Date.now(), freeText: 'spare bike?' }, key)
-    const ack = await sealConnectAck({ v: 1, t: 'connect-ack', from: { id: 'str00001', displayName: 'Nora' }, did: stranger.did }, stranger.did, me.did) // wave 44: sealed; the worker opens it with the identity it holds
+    const ack = await sealConnectAck({ v: 1, t: 'connect-ack', from: { id: 'str00001', displayName: 'Nora' }, did: stranger.did }, stranger, me.did) // wave 44: sealed; the worker opens it with the identity it holds
     expect(relay.submit(buildOuterWire(me.did, max.did, chat)).routed).toBe('accepted')
     expect(relay.submit(buildOuterWire(me.did, max.did, ask)).routed).toBe('accepted')
     expect(relay.submit(buildOuterWire(me.did, stranger.did, ack)).routed).toBe('accepted')

@@ -443,7 +443,7 @@ async function rawAsker(name, target) {
   channel.onRawWire(() => true)
   channel.onEnvelope(async () => key, (env) => { if (env.t === 'answer') answers.push(env) })
   await channel.connect(identity)
-  await channel.sendRaw(target.did, await sealConnectAck(buildConnectAck(me, identity), identity.did, target.did)) // wave 44: the handshake is sealed
+  await channel.sendRaw(target.did, await sealConnectAck(buildConnectAck(me, identity), identity, target.did)) // wave 44: the handshake is sealed
   await until(() => target.state.peers.some((x) => x.did === identity.did))
   return {
     key, answers,

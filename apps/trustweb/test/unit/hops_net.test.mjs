@@ -201,7 +201,7 @@ describe('older builds', () => {
     channel.onRawWire(() => true)
     channel.onEnvelope(async () => key, (env) => { if (env.t === 'answer') answers.push({ env, at: Date.now() }) })
     await channel.connect(identity)
-    await channel.sendRaw(B.did, await sealConnectAck(buildConnectAck(me, identity), identity.did, B.did)) // wave 44: the handshake is sealed
+    await channel.sendRaw(B.did, await sealConnectAck(buildConnectAck(me, identity), identity, B.did)) // wave 44: the handshake is sealed
     await until(() => B.state.peers.some((x) => x.did === identity.did))
     const t0 = Date.now()
     const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: t0, freeText: 'Who has a ladder?' }

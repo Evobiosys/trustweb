@@ -497,7 +497,7 @@ export class Net {
       if (!this.channel) return
       this.ackAttempts.set(peer.did, nextAttempts(this.ackAttempts.get(peer.did), Date.now()))
       const identity = this.ensureIdentity()
-      await this.channel.sendRaw(peer.did, await sealConnectAck(buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true), identity.did, peer.did, peer.qk))
+      await this.channel.sendRaw(peer.did, await sealConnectAck(buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true), identity, peer.did, peer.qk))
       const stored = this.peerByDid(peer.did)
       if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
     } catch {

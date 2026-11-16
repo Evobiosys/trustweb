@@ -78,7 +78,7 @@ async function phone(relayOrigin, name, decide) {
   return {
     did: identity.did,
     asks,
-    connectTo: async (did) => channel.sendRaw(did, await sealConnectAck(buildConnectAck(me, identity), identity.did, did)), // wave 44: sealed
+    connectTo: async (did) => channel.sendRaw(did, await sealConnectAck(buildConnectAck(me, identity), identity, did)), // wave 44: sealed
     ask: async (did, text, timeoutMs = 4000) => {
       const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: text }
       const answered = new Promise((resolve) => {
