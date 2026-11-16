@@ -1783,16 +1783,6 @@ function inboxButton(): HTMLElement {
   return b
 }
 
-/** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
-function mountAiButton(): void {
-  if (!isEnabled('ai-button')) return   // wave 39 review: the Extensions switch "AI button" (and the profiles) decide
-  const right = host.querySelector('.hdr .hdr-right')
-  if (!right || right.querySelector('[data-ai-button]')) return
-  const ai = iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn')
-  ai.setAttribute('data-ai-button', '')
-  right.append(ai)
-}
-
 /** Wave 28: what the QR button shows for what is on screen: an open event, the tag the web is filtered to, else the connect code (Meet). */
 function screenQr(plain = false): void {
   const ev = screen === Screen.Events ? eventsView.current() : undefined
@@ -1913,8 +1903,8 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   const nodes = (ids: readonly string[]): Node[] => ids.flatMap((c) => parts[c] ?? []).filter((n): n is Node => n !== null)
-  // Wave 44: the right cluster is the same everywhere (QR, settings; the AI sparkle follows in mountAiButton); the screen's own tools get their row.
-  right.replaceChildren(...nodes(headerRight(false)))
+  // Wave 44: the right cluster is the same everywhere (QR, settings; no Ask/AI control, steer-ask-placement); the screen's own tools get their row.
+  right.replaceChildren(...nodes(headerRight()))
   const tools = nodes(headerTools(screen))
   if (tools.length) host.querySelector('.hdr')?.append(el('div', { class: 'hdr-tools' }, tools))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
@@ -2091,7 +2081,6 @@ function render(): void {
   mountHeaderControls()
   mountSettingsGear()
   mountAskButton()
-  mountAiButton()
   modeShell.mount(host)
   modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }

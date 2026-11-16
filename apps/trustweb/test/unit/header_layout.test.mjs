@@ -5,14 +5,12 @@ import { HEADER_RIGHT, headerRight, headerTools, headerControls } from '../../sr
 const SCREENS = ['web', 'chat', 'people', 'events', 'inventory', 'feed', 'timeline', 'ask', 'notes', 'groups', 'ext']
 
 describe('header_layout', () => {
-  it('names the fixed right-hand set once: QR, settings, then the AI sparkle', () => {
-    expect([...HEADER_RIGHT]).toEqual(['qr', 'settings', 'ai'])
+  it('names the fixed right-hand set once: QR, settings; no Ask/AI control (steer-ask-placement)', () => {
+    expect([...HEADER_RIGHT]).toEqual(['qr', 'settings'])
+    expect(HEADER_RIGHT.some((c) => /ask|ai|query|sparkle/.test(c))).toBe(false)
   })
   it('renders exactly that set, in that order, on every screen', () => {
-    for (const s of SCREENS) expect(headerRight(true), s).toEqual(['qr', 'settings', 'ai'])
-  })
-  it('drops only the AI sparkle when its extension is off, on every screen alike', () => {
-    expect(headerRight(false)).toEqual(['qr', 'settings'])
+    for (const s of SCREENS) expect(headerRight(), s).toEqual(['qr', 'settings'])
   })
   it('keeps search, views, the chat switch and the pins out of the right set', () => {
     for (const s of SCREENS) for (const c of headerTools(s)) expect(HEADER_RIGHT.includes(c), `${s}:${c}`).toBe(false)
