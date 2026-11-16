@@ -553,7 +553,6 @@ body:has([data-mode-pill]) .demo-friends{top:124px}
 .rings-hint{top:6px; right:6px}
 .fab-hint{position:absolute; right:16px; bottom:16px; z-index:20}
 .fab-hint .query-fab{position:static}
-.requests-fab{padding:10px 20px; left:16px; right:auto}
 /* the two fabs on Inventory never cover the last line or the backup card */
 .screen.inventory .scroll{padding-bottom:84px}
 .hint-again{display:flex; gap:6px; align-items:center; font-size:12.5px; color:var(--ink-soft); white-space:nowrap}
@@ -1192,17 +1191,13 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .cal-err{color:var(--warn,#b45309)}
 .cal-remind{margin:8px 0}
 .cal-drop-over{outline:2px dashed var(--electric); outline-offset:2px}
-.at-event-frame{position:relative; z-index:6; flex:none; height:18%; min-height:96px; box-sizing:border-box; padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 0; background:var(--electric); color:#fff; display:flex; flex-direction:column; justify-content:space-between}
-.at-event-frame .ae-row{display:flex; align-items:center; gap:6px}
+.at-event-frame{position:relative; z-index:6; flex:none; box-sizing:border-box; height:28px; margin:calc(env(safe-area-inset-top,0px) + 6px) 8px 0; background:var(--electric); color:#fff; border-radius:6px; display:flex; align-items:center}
 .at-event-frame .btn-ghost{color:#fff; border-color:rgba(255,255,255,.6)}
-.at-event-frame [aria-pressed="false"]{opacity:.5}
-.ae-name{flex:1; min-width:0; text-align:left; background:none; border:0; color:inherit; font:inherit; cursor:pointer; display:flex; flex-direction:column}
-.ae-name b,.ae-name i{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:normal}
-.ae-name i{font-size:12px; opacity:.85}
-.ae-latch{align-self:center; width:100%; height:28px; background:none; border:0; cursor:grab; touch-action:none; display:flex; align-items:center; justify-content:center}
-.ae-latch span{width:56px; height:5px; border-radius:999px; background:rgba(255,255,255,.8)}
-.ae-panel{display:none; position:absolute; left:0; right:0; top:100%; max-height:46vh; overflow:auto; padding:8px 12px 12px; background:var(--linen); color:var(--ink); box-shadow:0 8px 16px rgba(0,0,0,.2)}
-.at-event-frame.open .ae-panel{display:block}
+.ae-name{flex:1; min-width:0; height:100%; padding:0 8px; text-align:left; background:none; border:0; color:inherit; font:inherit; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:4px}
+.ae-name b{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600}
+.ae-tag{flex:none; font-size:11px; opacity:.85}
+.ae-row{display:flex; align-items:center; gap:6px}
+.ae-panel{margin:8px 0}
 .ae-new{font-style:normal; font-size:11px; background:var(--electric); color:#fff; border-radius:999px; padding:2px 8px}
 .ae-chip{display:inline-flex; align-items:center; gap:6px; margin:0 0 8px}
 .ae-chip-x{border:0; background:none; font:inherit; cursor:pointer; min-width:28px; min-height:28px}
@@ -1883,3 +1878,145 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* wave 42 in-person-e2e: the two bottom-left pills sat on the first tab of the bottom bar (P06); they stand above the bar */
 .demo-toggle{bottom:104px}
 .demo-toggle.desk-toggle{bottom:160px}
+
+/* wave 43 event-roles */
+/* P2: an OFF toggle is struck through, never colour alone (greyscale / e-ink screens) */
+.tw-off{text-decoration:line-through}
+.tw-expander{flex:0 0 44px; min-height:44px; background:none; border:0; font-size:15px; cursor:pointer; color:var(--ink); text-decoration:underline}
+.roles-line{display:flex; align-items:center; gap:6px}
+.roles-line .roles-summary{flex:1 1 auto; min-width:0; text-align:left; background:none; border:0; padding:8px 0; font:inherit; color:var(--ink-soft); cursor:pointer; text-decoration:underline; overflow-wrap:anywhere}
+.roles-line .roles-summary.empty{font-style:italic}
+.roles-list .role-row{margin:8px 0}
+.roles-list .role-chips{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0}
+.event-tag-chip{display:inline-block; margin:2px 0 6px; text-decoration:underline}
+.picker-create{font-style:italic; text-decoration:underline}
+/* wave 43 event-press-share */
+.press{cursor:pointer;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left}
+.event-since{display:block;margin:0 0 6px}
+.event-share{justify-content:flex-start; gap:16px}
+.event-share .btn{flex:0 0 auto}   /* review-fixes-43: Link and QR icons side by side, not spread across the row */
+.event-times .field{margin-bottom:6px}
+/* wave 43 web-focus-filter */
+.ev-people-head{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.ev-people-head h3{margin:0; min-width:0}
+.ev-web-focus svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+.filter-badge{display:inline-flex; align-items:center; justify-content:center; flex:none; min-width:24px; height:24px; padding:0 6px; border-radius:12px; border:0; background:var(--teal,#13867E); color:#fff; font:inherit; font-size:13px; font-weight:700; cursor:pointer}
+/* wave 43 event-feed: the social Feed (composer, post actions, event row) */
+.feed-compose{display:flex; flex-direction:column; gap:6px; margin:0 0 10px}
+.feed-compose .btn{align-self:flex-end; text-decoration:underline}
+.post-actions{display:flex; gap:6px; margin-top:6px}
+.post-actions .btn{text-decoration:underline}
+.post-actions .btn.tw-off{text-decoration:underline line-through}
+.event-feed-row{margin:8px 0}
+.event-feed-panel{display:flex; flex-direction:column; gap:4px; padding:6px 4px}
+.event-feed-panel[hidden]{display:none}
+.event-feed-panel .btn{align-self:flex-start; text-decoration:underline}
+/* wave 43 shell-fit */
+/* The ⋮ sheet sits above the bottom bar and scrolls inside itself when its list is taller than the screen (P06). */
+.sheet[data-kind=bar-more].on{bottom:100px; max-height:calc(100% - 112px)}
+/* wave 43 sync-visibility */
+.sync-advanced{margin-top:12px}
+/* wave43b notify-center */
+:root{--wants-ring:#C2185B}
+.notify-bell{position:relative}
+.notify-count{position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; box-sizing:border-box; background:var(--ink); color:var(--linen,#fff); font-size:10px; font-weight:700; line-height:16px; text-align:center}
+.notify-center{padding:0 12px 12px}
+.notify-section h3{margin:14px 0 4px}
+.notify-row.unread .who b{font-weight:800}
+.chat-newly h3{margin:8px 12px 2px; font-size:13px}
+/* "wants to connect": dashed outline plus colour (greyscale-safe), on the unsorted ring */
+.node.wants .ava{outline:2px dashed var(--wants-ring); outline-offset:2px}
+/* wave43b ask-page-filter */
+/* iPhone Safari: the bottom bar sits at the real bottom, above the home indicator (100dvh phone, safe-area inset added to the bar and the room it takes). */
+.screen{inset:0 0 calc(86px + env(safe-area-inset-bottom,0px))}
+.tabs{height:calc(86px + env(safe-area-inset-bottom,0px)); padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+/* Ask your web is a page: the dock loses its overlay look and scrolls inside .scroll. */
+.ask-page{margin-bottom:26px}   /* the raised centre button of the bar overhangs the page by ~22px: the scroll area ends above it (P06) */
+.ask-page .query-dock{max-height:none; border-radius:0; box-shadow:none; background:transparent; overflow:visible}
+.ask-page .dock-head{display:none}
+.ask-page .dock-body{overflow:visible; padding:0 0 24px}
+.ask-entry{flex:none}
+/* the filter view */
+.afv-filter{display:flex; flex-direction:column; gap:8px; margin:8px 0}
+.afv-seg{flex-direction:column; border-radius:16px; gap:2px}
+.afv-seg button{padding:9px 10px; border-radius:13px; font-size:13px; line-height:1.25; text-align:left}
+.afv-row .chips-lbl,.afv-zones .chips-lbl{display:block; margin:0 0 4px}
+.afv-row .field{margin-top:4px; width:100%; box-sizing:border-box}
+.afv-row .chips{margin:4px 0}
+.afv-found{display:flex; flex-direction:column; align-items:flex-start; gap:2px}
+.afv-adv[hidden]{display:none}
+.afv-adv summary{cursor:pointer; text-decoration:underline}
+.reach-diagram{margin:6px 0}
+.steps-diagram{width:100%; max-width:320px; height:auto}
+.steps-diagram .node{stroke:var(--ink-soft); stroke-width:1.5; fill:var(--card)}
+.steps-diagram .node.you{fill:var(--mist)}
+.steps-diagram .node.on{fill:var(--electric); stroke:var(--electric)}
+.steps-diagram .node.off{stroke-dasharray:3 3}
+.steps-diagram .arrow{stroke:var(--ink-soft); stroke-width:1.5}
+.steps-diagram .lbl{font-size:10px; fill:var(--ink); font-family:inherit}
+.steps-diagram .node.on + .lbl{fill:#fff}
+.steps-diagram .set text{font-size:11px; fill:var(--ink)}
+.steps-diagram .set.exclude text{text-decoration:line-through}
+/* wave43b resources-views */
+.rv-bar{display:flex; flex-direction:column; gap:6px; margin:0 0 10px}
+.rv-switch,.rv-chips{display:flex; flex-wrap:wrap; gap:4px}
+.rv-bar .btn,.rv-item .btn,.rv-protected .btn{text-decoration:underline}
+.rv-bar .btn.tw-off{text-decoration:underline line-through}
+.rv-section h3{margin:12px 0 6px}
+.rv-indent{margin-left:12px}
+.rv-indent h4{margin:8px 0 4px; font-size:13px; color:var(--ink-soft)}
+.rv-meta{display:flex; justify-content:flex-end; margin:-4px 0 6px}
+.rv-kind-set{font:inherit; font-size:12px; max-width:50%}
+.rv-suggest{display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin:0 0 8px}
+.rv-protected{user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; cursor:default}
+.rv-protected .rv-actions{display:flex; gap:6px; margin-top:6px}
+.rv-link{margin-top:6px; word-break:break-all; user-select:none; -webkit-user-select:none; font-size:13px}
+.rv-head{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px}
+.rv-bar .btn{padding-inline:8px}
+
+/* wave43b review-fixes-b */
+/* P06 (360 px): the audience and degrees pills of a Resources row wrap instead of running under the Shared switch (older than 43b, on a 43b screen). */
+.inv-actions{flex-wrap:wrap}
+
+/* wave43 chat-notices: the ONE notice layer (notice_layer.ts). Fixed in the phone frame, never inside the zoomed rings; stacked above the bottom bar (P06); never wider than the frame. */
+#notice-layer{position:absolute; left:0; right:0; bottom:calc(92px + env(safe-area-inset-bottom,0px)); z-index:62; display:flex; flex-direction:column; justify-content:flex-end; gap:8px; padding:0 12px; box-sizing:border-box; max-width:520px; max-height:calc(100% - 150px); margin-inline:auto; overflow-y:auto; overscroll-behavior:contain; pointer-events:none}
+#notice-layer[data-notice-empty]{display:none}
+#notice-layer>*{position:static; left:auto; right:auto; top:auto; bottom:auto; transform:none; margin:0; width:auto; max-width:100%; box-sizing:border-box; z-index:auto; flex:none; overflow-wrap:anywhere}
+#notice-layer>.card-stack,#notice-layer>.wants,#notice-layer>.update-banner{pointer-events:auto}
+#notice-layer>.toast:not(.on),#notice-layer>.msg-notice:not(.on),#notice-layer>[hidden],#notice-layer>[data-notice-cut]{display:none}
+#notice-layer>.wants{background:var(--surface-1,#fff); box-shadow:0 2px 10px rgba(0,0,0,.18)}
+@media (min-width:900px){
+  body:has(.sheet.desk-wide.on[data-kind=curator]) #notice-layer{position:fixed; z-index:100002; left:auto; right:24px; bottom:24px; width:min(420px, calc(100vw - 48px)); padding:0}
+}
+/* wave43c social-hosting */
+.social-row{display:flex; align-items:center; gap:4px}
+.social-row .set-row{flex:1 1 auto; min-width:0}
+.social-more{margin:4px 0 8px 12px; padding-left:10px; border-left:2px solid var(--line)}
+.social-settings{display:flex; flex-direction:column; gap:8px; margin:8px 0}
+.social-host,.social-trust-choice{display:flex; flex-wrap:wrap; gap:6px}
+.social-host .radio,.social-trust-choice .radio{flex:0 1 auto; width:auto; min-height:40px; padding:6px 12px 6px 40px}
+.social-server{display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:40px; overflow-wrap:anywhere}
+.social-server-add{display:flex; gap:6px; flex-wrap:wrap}
+.social-server-add .field{flex:1 1 160px; min-width:0}
+.social-trust{display:flex; flex-direction:column; gap:6px; padding:12px 14px}
+.social-find{display:flex; flex-direction:column; gap:6px; padding:6px 0}
+.social-find-inputs{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+.social-find-inputs .field{flex:1 1 120px; min-width:0}
+.social-hits{display:flex; flex-direction:column; gap:4px}
+.find-hit .who{min-width:0; overflow-wrap:anywhere}
+/* wave43c shell-fix-2 (43-D4): P06 at 360x780 and 1280x900, the older overlaps; the e2e sweeps no longer exclude them. */
+/* The raised centre tab rises 28 px above the bar: the page ends above it, so nothing scrolls under the circle. */
+.phone:has(.tabs .tab-primary) .screen:not(.start){bottom:calc(86px + 28px + env(safe-area-inset-bottom,0px))}
+/* The ⋮ sits inside the bar, after the last tab, not on its top edge. */
+.bar-more{position:static; flex:0 0 26px; align-self:center; margin:0 0 0 2px}
+/* The "i" badge of a header button sits above it, clear of the next button. */
+.hdr .hint-i{top:-23px}
+/* Desktop: the "Show demo content" chip sits inside the bar at its left end; the tabs make room. */
+@media (min-width:961px){
+  .demo-toggle:not(.desk-toggle){bottom:21px; z-index:40}
+  body:has(.demo-toggle:not(.desk-toggle):not([hidden])) .tabs{padding-left:220px}
+}
+/* The ⋮ sheet clears the raised centre tab too (86 px bar + 28 px raise + a gap). */
+.sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
+/* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
+#notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}

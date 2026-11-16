@@ -28,7 +28,8 @@ const shot = async (page, name, wide = false) => {
 }
 
 async function withRecord(page, base, people, extra = {}) {
-  await page.evaluate(([ps, more]) => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); s.people = ps; Object.assign(s, more); localStorage.setItem('trustweb.v1.me', JSON.stringify(s)) }, [people, extra])
+  // Wave 43c: this suite is about taking a device's state; Auto sync (sync_devices.mjs) is off on these devices.
+  await page.evaluate(([ps, more]) => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); s.people = ps; Object.assign(s, { syncAutoOff: true }, more); localStorage.setItem('trustweb.v1.me', JSON.stringify(s)) }, [people, extra])
   await page.goto(base)
   await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 }
@@ -72,6 +73,8 @@ async function main() {
   try {
     const mac = await newPhone(browser, errors, { viewport: { width: 390, height: 844 } })
     const phone = await newPhone(browser, errors, { viewport: { width: 360, height: 800 } })
+    // the dev server's review panel is not part of the app (as in sync_visibility.mjs)
+    for (const p of [mac, phone]) await p.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.textContent = '.twf, .twf-ok, .twp { display: none !important }'; document.head.append(st) }))
     await startPhone(mac, vite.base, 'Jakob')
     await startPhone(phone, vite.base, 'Jakob')
     await mac.evaluate(() => localStorage.setItem('trustweb.v1.me:device-name', 'Mac'))

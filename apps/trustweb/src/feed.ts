@@ -13,6 +13,7 @@
  */
 import { isDemoItem, isDemoPerson, Provenance } from './model'
 import type { AppState } from './model'
+import { sameEventTag } from './feed_social'
 import { showsUnmatched } from './unmatched_asks'
 
 export enum PostKind {
@@ -32,6 +33,8 @@ export enum PostKind {
   Follow = 'follow',
   /** An ask addressed to you. */
   Ask = 'ask',
+  /** Wave 43: a post I wrote in the Feed (feed_social.ts). */
+  Social = 'social',
 }
 
 /** The chips: one stream, grouped by where an item comes from. */
@@ -42,6 +45,9 @@ export enum FeedSource {
   News = 'news',
   Ask = 'ask',
 }
+
+/** Kept apart from the Feed (wave 43): the Timeline of what happened, built from the record rather than written by people. */
+export const isTimelinePost = (p: { kind: PostKind }): boolean => [PostKind.Answer, PostKind.Meeting, PostKind.Note, PostKind.Mine, PostKind.Ask].includes(p.kind)
 
 /** What tapping a post opens. */
 export type PostTarget =
@@ -79,6 +85,8 @@ export interface Post {
   type?: string
   /** Group posts: no relay took it (it stays on this phone). */
   unsent?: boolean
+  /** Wave 43: the event tag (`event_<slug>`) of a post made on, or in the group of, an event. */
+  tag?: string
 }
 
 /** At most this many posts. */
@@ -154,6 +162,14 @@ function mine(s: AppState): Post[] {
     }))
 }
 
+/** My posts as Feed posts. A reply carries the text it answers as its context line. */
+export function socialPosts(s: AppState): Post[] {
+  return (s.feedPosts ?? []).map((p): Post => ({
+    id: `social:${p.id}`, kind: PostKind.Social, who: null, at: p.at, text: p.text, dummy: false, open: { kind: 'none' },
+    ...(p.replyTo ? { context: p.replyText } : {}), ...(p.tag ? { tag: p.tag } : {}),
+  }))
+}
+
 /** Asks addressed to me (held for consent, and the ones that matched nothing here) as cards; this phone only, the answer moment stays in the stack. */
 export function askPosts(s: AppState): Post[] {
   const held = (Array.isArray(s.heldAsks) ? s.heldAsks : []).map((a): Post => ({
@@ -177,12 +193,12 @@ export function sourceOf(p: Post): FeedSource {
 }
 
 /** The chips' filter: a source, and inside Groups one group. */
-export function filterFeed(posts: readonly Post[], f: { source?: FeedSource; group?: string }): Post[] {
-  return posts.filter((p) => (!f.source || sourceOf(p) === f.source) && (!f.group || p.group === f.group))
+export function filterFeed(posts: readonly Post[], f: { source?: FeedSource; group?: string; tag?: string }): Post[] {
+  return posts.filter((p) => (!f.source || sourceOf(p) === f.source) && (!f.group || p.group === f.group) && (!f.tag || sameEventTag(p.tag, f.tag)))
 }
 
 /** Every post this phone can show, newest first. Pure: reads the record, sends nothing. */
 export function buildFeed(s: AppState, remote: readonly Post[] = []): Post[] {
-  const all = [...answers(s), ...meetings(s), ...sharedNotes(s), ...mine(s), ...askPosts(s), ...remote]
+  const all = [...answers(s), ...meetings(s), ...sharedNotes(s), ...mine(s), ...askPosts(s), ...socialPosts(s), ...remote]
   return all.filter((p) => p.text.trim()).sort((a, b) => b.at - a.at).slice(0, FEED_MAX)
 }

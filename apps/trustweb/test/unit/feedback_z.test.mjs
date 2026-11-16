@@ -23,8 +23,9 @@ describe('Z7 ask icon', () => {
     expect(ICONS.ask).toContain('circle')
     expect(ICONS.ask).not.toBe(ICONS.call)
     // wave 25: the fabs draw src/icons/ask_web.ts (two people, "?" badge, arcs)
-    expect(read('main.ts')).toMatch(/call \? askWebIcon\(/)
-    expect(read('main.ts')).toMatch(/innerHTML = askWebIcon\(/)
+    expect(read('main.ts')).toMatch(/outerHTML = askWebIcon\(/)
+    expect(read('main.ts')).toMatch(/const call = !support && queryStyle\(\) === QueryStyle\.Call/)
+    expect(read('main.ts')).toMatch(/innerHTML = call \? askWebIcon\(/)
   })
 })
 

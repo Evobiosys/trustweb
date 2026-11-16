@@ -77,3 +77,18 @@ describe('wave 28 Do Not Disturb keeps the last state', () => {
     expect(rows.map((r) => [r.personId, r.last, r.unread])).toEqual([['a', 'hi', 0]])
   })
 })
+
+describe('wave43c chat-notices: one row per person', () => {
+  it('two cards with the same peerId make one row, newest first, unread counted once', () => {
+    const dup = [...people, { id: 'a2', peerId: 'pa', name: 'Anna' }]
+    const book = { pa: { messages: [msg('hi', 10)], unread: 2 }, pb: { messages: [msg('yo', 5)], unread: 0 } }
+    const rows = chatListRows(book, dup)
+    expect(rows.map((r) => r.personId)).toEqual(['a', 'b'])
+    expect(rows[0].unread).toBe(2)
+  })
+  it('the picker and the find list also show a person once', () => {
+    const dup = [...people, { id: 'a2', peerId: 'pa', name: 'Anna' }]
+    expect(chatPickerRows(dup).filter((r) => r.name === 'Anna')).toHaveLength(1)
+    expect(chatFindRows({}, dup).filter((r) => r.name === 'Anna')).toHaveLength(1)
+  })
+})

@@ -34,7 +34,7 @@ export function openQrPage(d: QrPageDeps, ctx: QrContext, note?: string): void {
     qr.setAttribute('data-payload', m.payload)
     qr.hidden = tooLong
     if (!tooLong) void d.renderQr(qr, m.payload)
-    words.textContent = tooLong ? S.qrTooLong : ownHint(ctx) ?? S.qrConnects + (m.chosen.length ? S.qrAnd + m.chosen.map((id) => S.qrWhat[id](name)).join(', ') : '')
+    words.textContent = tooLong ? (ctx.kind === 'event' ? S.qrEventTooLong : S.qrTooLong) : ctx.kind === 'event' ? `${S.qrEventHint} ${S.qrEventTrimmed}` : ownHint(ctx) ?? S.qrConnects + (m.chosen.length ? S.qrAnd + m.chosen.map((id) => S.qrWhat[id](name)).join(', ') : '')
     toggles.replaceChildren(...m.options.map((o) => el('label', { class: 'check' }, [
       el('input', { type: 'checkbox', checked: o.on, 'data-qr-option': o.id, onchange: (e: Event) => {
         const i = on.indexOf(o.id)

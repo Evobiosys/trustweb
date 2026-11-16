@@ -19,6 +19,7 @@ import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
+import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { TwSettings } from './ext/profiles'
@@ -35,7 +36,7 @@ import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
-import type { NameReveal } from './events'
+import type { EventOffers, InvitePolicy, NameReveal } from './events'
 import type { ZoneLink } from './zone_share_link'
 import type { PeerItem } from './peer_items'
 import type { SupportAsk, SupportIn } from './support_ask'
@@ -356,7 +357,12 @@ export interface TwEvent {
   /** What was shared with participants: arriving, on what conditions. */
   conditions?: string
   themes?: string[]
+  /** Deprecated wave 43: use `organizers` (event_roles.ts eventOrganizers). Kept readable for older callers and links; never deleted. */
   organizer?: string
+  /** Wave 43 (event-roles): who organizes it; person ids or free names. Legacy `organizer` migrates in once (event_roles.ts migrateEventRoles). */
+  organizers?: string[]
+  /** Wave 43: the person who sets this app up for the organizers; person ids or free names. Never in an event link. */
+  techSupport?: string[]
   createdAt: number
   /** My own attendance, set when I add or join it. */
   attended: boolean
@@ -380,8 +386,22 @@ export interface TwEvent {
   icsUid?: string
   /** E3 (events.ts revealedBy): how much of my name my links for this event tell other attendees. Absent = 'full'. This device only; never in an event link (event_link.ts whitelist). */
   nameReveal?: NameReveal
+  /** Wave 43 event-press-share: notifications of this event; absent = on. Local only. */
+  notify?: boolean
+  /** Wave 43: who may invite others; absent = 'everyone' (event_press.ts DEFAULT_INVITE_POLICY). Local only. */
+  invitePolicy?: InvitePolicy
+  /** Wave 43: what the host switched on; absent = all off (events.ts EVENT_OFFERS_DEFAULT). */
+  offers?: Partial<EventOffers>
   /** Wave 42 community-event: the community (colour tag id) this event was made in. */
   community?: string
+  /** Wave 43 answers (epsilon): "Part of a community": the community (colour tag id) whose members this event's people join. Absent = an isolated event. Local only. */
+  communityId?: string
+  /** Wave 43b (B5): what people see when they open this event's link: the full app (default, absent) or only the event variant. Travels in the link as mode=event. */
+  linkMode?: 'event'
+  /** Wave 43 answers (iota): my own nickname at this event, used by the Nickname reveal. Local only. */
+  myNickname?: string
+  /** Wave 43 answers (zeta): a Mastodon instance (host) whose public hashtag timeline of this event's tag the event Feed merges, read-only. Local only. */
+  mastodonInstance?: string
   /** Wave 42: the free-text documents of the event (event_plan.ts). */
   docs?: { description?: string; followup?: string }
   /** Wave 42: the sign-up sheet: who joined with one tap ('me' or a person id). */
@@ -527,7 +547,10 @@ export interface Person {
    */
   pendingInvite?: ConnectLinkParams
   /** Wave 16: only on a person in the Web Curator's Archive: a reach-out I dismissed (wants_to_connect.ts). Restore puts the row back. Absent: none. */
-  wantsToConnect?: WantsToConnect
+  wantsToConnect?: WantsToConnect  /** Wave 43c social-hosting (trust_mode.ts): my own say on whether this person counts as trusted; absent = by ring (Closest and Close). Local only, never sent. */
+  trust?: 'yes' | 'no'
+  /** Wave 43c (social_hosting.ts applyIntent): the did of someone who found me in the name directory and wants to connect, or whom I found and intend to connect with. Local only. */
+  globalKey?: string
 }
 
 /** Wave 16: someone who reached out through my link and waits under the web for Add or Dismiss (wants_to_connect.ts). */
@@ -612,6 +635,12 @@ export interface Peer {
   askAgainSentAt?: number
   /** Wave 8: this connection began as a reach-out through a public link (sent in the connect-ack; kept so a resend carries it). */
   reachOut?: true
+  /** Wave 43c (device_alias.ts): the DIDs of this person's other devices, told by them in a sealed 'devices' envelope; travels with sync. */
+  alsoDids?: string[]
+  /** Wave 43c: this connection arrived by device sync (another of my devices made it). This device never sends it a connect-ack. This device only. */
+  synced?: true
+  /** Wave 43c: the set of my other devices this device last told this connection (device_alias.ts toldKey). This device only. */
+  toldDevices?: string
 }
 
 export interface Offer { id: string; title: string }
@@ -656,7 +685,23 @@ export interface InventoryItem {
   tagAudience?: string[]
   /** Wave 24 (calendar at_event.ts): recorded while I was at this event (TwEvent.id). Absent = not tied to an event. Tags only; sends nothing. */
   eventId?: string
+  /** Wave 43b resources-views: what kind of resource this is. Absent = 'other' (old items migrate by staying as they are). */
+  kind?: ResourceKind
+  /** Who recommended it: a person id or a free name. */
+  recommendedBy?: string
+  /** The person who shared it with me (it then sits under "Suggested by others"). */
+  sharedBy?: string
+  /** The community (colour tag id) it came from. */
+  communityId?: string
+  /** Came from a protected community: no share-on, not selectable, link shown one at a time on press. */
+  protected?: boolean
+  /** Its web address, when it has one (a protected one shows only on press). */
+  link?: string
+  /** The "Recommended by X?" suggestion was dismissed. */
+  recommenderDismissed?: boolean
 }
+
+export type ResourceKind = 'book' | 'publication' | 'reference' | 'recording' | 'link' | 'other'
 
 /** One note added as context to an inventory item. */
 export interface InventoryContext {
@@ -824,6 +869,10 @@ export interface AwayAsk {
 export interface Me {
   id: string
   displayName: string
+  /** Wave 43: what a link says instead of my name when an event's name reveal is "Nickname". Local only. */
+  nickname?: string
+  /** Wave 43 answers (iota): several nicknames, the first is `nickname` (event_press.ts setNicknames). Local only. */
+  nicknames?: string[]
   /** Wave 33: the owner's own mail address; local only, never in the connect link. */
   primaryEmail?: { provider: string; address: string }
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
@@ -1058,6 +1107,9 @@ export interface AppState {
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
   /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
   groupPosts?: GroupPost[]
+  /** Wave 43 (feed_social.ts): my own Feed posts, kept on this phone; stars are post ids (`social:<id>`, `group:<id>`, ...). */
+  feedPosts?: SocialPost[]
+  feedStars?: string[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
@@ -1074,8 +1126,28 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 42 (notify_inbox.ts): "Popup for missed notifications" is on unless this is true. Only "off" is stored. */
   missedPopupOff?: true
+  /** Wave 43c sync-devices: Auto sync with my linked devices is on unless this is true (Settings > My devices). This device only. */
+  syncAutoOff?: true
+  /** Wave 43c: what Settings shows and MCP sync_status reads: linked devices and the last sync with any of them. This device only. */
+  syncStatus?: { devices: number; lastAt: number }
   /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
   notifInbox?: InboxItem[]
+  /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
+  notifReadAt?: number
+  /** Wave 43c social-hosting: "Discoverable by name" is on (my signed name record is published to my friends and the directory). Absent: off. */
+  discoverable?: true
+  /** Wave 43c: the "open to connect" flag of that record. Absent: true. Only false is stored. */
+  discoverOpen?: false
+  /** Wave 43c: whose names I host for friends: 'off' | 'closest' | 'close' (Closest and Close). Absent: 'closest'. */
+  hostFriends?: 'off' | 'close'
+  /** Wave 43c (trust_mode.ts): "Only through people I trust (no servers)". Absent: off. */
+  trustedOnly?: true
+  /** Wave 43c (directory_client.ts serversOf): the directory servers I chose. Absent or empty: the Swiss default (this app's origin, questhub). */
+  directoryServers?: string[]
+  /** Wave 43c (social_hosting.ts): records I hold for friends by owner did; lookup cache by name; verified intents waiting to become people. This phone only, never synced. */
+  hosted?: Record<string, NameRecord>
+  nameCache?: Record<string, { recs: NameRecord[]; at: number }>
+  intentsIn?: Intent[]
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
   /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */
@@ -1283,6 +1355,8 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /** Wave 43b (audience_filter.ts): the ask audience the filter view keeps: zone (closest, close, friend; absent = every connected person) and the added / hidden `person:<id>` / `tag:<id>` chips. The degree is `askReach`. An older build ignores it. */
+  askAudience?: { zone?: 'closest' | 'close' | 'friend'; add: string[]; exclude: string[] }
   /** Wave 25: "Your city" (Settings > Profile); the ask sheet's example names it. Absent: Vienna. An older build ignores it. */
   city?: string
   /**
@@ -1451,6 +1525,9 @@ export interface FeedSettings {
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
 export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number; /** feed_nostr.ts: discussion, request, offer or event. Absent: discussion. */ type?: string; /** A channel id of the group (FeedSettings.groupMeta). Absent: the group itself. */ channel?: string; /** 0 members only, 1 friends of members, 2 friends of friends. Absent: 0. */ hops?: number; /** A relay took it. Absent: kept on this phone only. */ sent?: true }
+
+/** Wave 43: a Feed post of mine. `tag` = event_<slug> and `eventId` when made on an event's Feed; `replyTo` = the Feed id of the post it answers. */
+export interface SocialPost { id: string; text: string; by: string; at: number; tag?: string; eventId?: string; replyTo?: string; /** The first 120 characters of the post it answers. */ replyText?: string }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
@@ -1765,6 +1842,7 @@ export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope, aske
     threads.push(lineThread(s.me.displayName, threadId, matchText, context, at))
   }
   for (const item of s.inventory) {
+    if (item.protected === true) continue   // review 43b (B17/B20): a protected resource is never matched to anyone's ask, so it cannot be shared on
     if (!item.included || !(audienceAdmits(item.audience, ring) || item.tagAudience?.some((t) => askerTags.includes(t)))) continue
     if (scope?.inventory && !scope.inventory.has(item.id)) continue
     push(`inv:${item.id}`, item.text, INVENTORY_CONTEXT, item.createdAt)

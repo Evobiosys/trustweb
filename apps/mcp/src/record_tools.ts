@@ -10,8 +10,15 @@ import path from 'node:path'
 import { diffRecords } from '../../trustweb/src/record_diff.ts'
 import type { AssistantCfg } from '../../trustweb/src/ext/assistant/providers.ts'
 import { barTools } from './bar_tools.ts'
+import { webFilterTools } from './web_filter_tools.ts'
+import { askAudienceTools } from './ask_audience_tools.ts'
+import { socialTools } from './social_tools.ts'
 import { communityTools } from './community_tools.ts'
 import { eventTools } from './event_tools.ts'
+import { resourceTools } from './resource_tools.ts'
+import { feedTools } from './feed_tools.ts'
+import { notifyTools } from './notify_tools.ts'
+import { noticeTools } from './notice_tools.ts'
 import type { Tool } from './protocol.ts'
 import { settingsTools } from './settings_tools.ts'
 
@@ -27,6 +34,8 @@ export interface RecordToolsOptions {
   /** Only these tool names (absent: all that the write switch allows). */
   allow?: readonly string[]
   now?: () => Date
+  /** Wave 43c: the fetch directory_search uses (tests inject one). */
+  fetch?: (url: string) => Promise<{ status: number; json: () => Promise<unknown> }>
 }
 
 const MAX_NOTE = 5000
@@ -275,5 +284,8 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
 
   const community = communityTools({ load: () => load(o.file) as never, commit: commit as never, write: o.write, now })
   const events = eventTools({ load: () => load(o.file) as never, commit: commit as never, now })
-  return [...read, ...community.read, ...(o.write ? [...write, ...community.write, ...events.write] : []), ...barTools(o), ...settingsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
+  const resources = resourceTools({ load: () => load(o.file) as never, commit: commit as never })
+  const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now })
+  const notify = notifyTools({ load: () => load(o.file) as never, commit: commit as never, now })
+  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write] : []), ...barTools(o), ...webFilterTools(o), ...noticeTools(o), ...askAudienceTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

@@ -5,15 +5,17 @@
  * network: a resource ask is written as one queued support ask and the app shows a card and sends it on a tap (support_flush.ts). On this side the
  * person is always "me".
  */
+import { DEFAULT_INVITE_POLICY, applyEventSettings, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
+import { eventLinkView, identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { SupportAsk } from '../../trustweb/src/support_ask.ts'
-import type { TwEvent } from '../../trustweb/src/model.ts'
+import type { AppState, TwEvent } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; did?: string; fields?: Record<string, unknown>; deleted_at?: string }
-interface Rec extends Obj { people: Person[]; events?: TwEvent[]; extData?: Record<string, unknown>; supportAsks?: SupportAsk[] }
+interface Rec extends Obj { me?: { displayName: string; nickname?: string; nicknames?: string[] }; people: Person[]; events?: TwEvent[]; extData?: Record<string, unknown>; supportAsks?: SupportAsk[] }
 
 export interface EventToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean; now: () => Date }
 
@@ -38,12 +40,38 @@ function personOf(r: Rec, who: string): Person {
   return hits[0]
 }
 
-export function eventTools(e: EventToolsEnv): { write: Tool[] } {
+/** The id and kind of an event link (a whole URL or the text after its #): `#ev=` / `#evs=` = peer, `#ev_host=` / `#evs_host=` = host. The app's decoder (event_link.ts) imports modules that plain node cannot load, so only these two fields are read here. */
+function linkOf(url: string): { id: string; kind: 'peer' | 'host' } {
+  const params = new URLSearchParams(url.slice(Math.max(0, url.indexOf('#'))).replace(/^#/, ''))
+  for (const [key, kind] of [['ev', 'peer'], ['ev_host', 'host'], ['evs', 'peer'], ['evs_host', 'host']] as const) {
+    const raw = params.get(key)
+    if (!raw) continue
+    try {
+      const o: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
+      const id = Array.isArray(o) ? o[0] : (o as { id?: unknown } | null)?.id
+      if (typeof id === 'string' && id) return { id, kind }
+    } catch { /* falls through to the error */ }
+  }
+  throw new Error('not an event link')
+}
+
+export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
   const write: Tool[] = [
     {
-      name: 'event_create', description: 'Make an event inside a community from a template: name, from (YYYY-MM-DD), to, where, description, roles (named slots), resources (what it needs), followup (note). The sign-up sheet starts empty.',
+      name: 'event_link_mode_set', description: 'What people see when they open this event\'s link: full (the whole app, the default) or event (only Web, Ask your web and Chat). The link carries mode=event.',
+      inputSchema: schema({ event: S('event id or exact name'), mode: S('full | event') }, ['event', 'mode']),
+      run: (a) => {
+        if (a.mode !== 'full' && a.mode !== 'event') throw new Error('mode must be full or event')
+        let id = ''
+        e.commit((r) => { const ev = eventOf(r, a.event); id = ev.id; if (a.mode === 'event') ev.linkMode = 'event'; else delete ev.linkMode })
+        return { id, mode: a.mode }
+      },
+    },
+    {
+      name: 'event_create', description: 'Make an event inside a community from a template: name, from (YYYY-MM-DD), to, where, description, roles (named slots), resources (what it needs), followup (note). The sign-up sheet starts empty. hosted:true = I host it (the menu\'s Add event > Hosted), false or absent = informal, no host.',
       inputSchema: schema({
         community: S('community id'),
+        hosted: { type: 'boolean', description: 'true: I am the host; false/absent: an informal gathering' },
         template: { type: 'object', description: 'name, from, to?, where?, description?, roles?: [text], resources?: [text], followup?: text' },
       }, ['community', 'template']),
       run: (a) => {
@@ -54,6 +82,7 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
           if (!parseCommunity(r.extData?.['community-mighty']).meta?.[community]) throw new Error(`no community "${community}"`)
           const now = e.now()
           const ev = buildEvent({ name: str(t.name), from: str(t.from), to: str(t.to), where: str(t.where), community }, `ev${newId(now)}`, now.getTime())
+          if (a.hosted === true && r.me?.displayName?.trim()) ev.hosts = [r.me.displayName.trim()]   // wave 43b review: Add event Informal | Hosted
           if (str(t.description).trim()) setDoc(ev, 'description', str(t.description))
           if (str(t.followup).trim()) setDoc(ev, 'followup', str(t.followup))
           list(t.roles).forEach((n) => addRole(ev, n))
@@ -112,6 +141,113 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
         return out
       },
     },
+    {
+      name: 'event_roles_set', description: 'Set who organizes, hosts and gives technical support for an event (id or exact name). Each list takes people by id or exact name (a name nobody carries stays a free name); a list left out stays as it is, an empty list clears it. Technical support = whoever sets this app up for the organizers; it never goes into an event link.',
+      inputSchema: schema({ event: S('event id or exact name'), organizers: { type: 'array', items: { type: 'string' } }, hosts: { type: 'array', items: { type: 'string' } }, techSupport: { type: 'array', items: { type: 'string' } } }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const refs = (v: unknown): string[] => list(v).map((w) => r.people.find((p) => p.deleted_at === undefined && (p.id === w || p.name.trim().toLowerCase() === w.trim().toLowerCase()))?.id ?? w)
+          setRoles(r as unknown as AppState, ev, Object.fromEntries(ROLE_KEYS.filter((k) => Array.isArray(a[k])).map((k) => [k, refs(a[k])])))
+          out = { id: ev.id, organizers: ev.organizers ?? [], hosts: ev.hosts ?? [], techSupport: ev.techSupport ?? [] }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_person_identify', description: 'Identify a person for an event by name: the person already called that (exact name, any case) is returned; otherwise a new person is made (ring Not yet sorted) and tagged with the event. Returns {personId, created}.',
+      inputSchema: schema({ event: S('event id or exact name'), name: S('the person\'s name') }, ['event', 'name']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const now = e.now()
+          const done = identifyPerson(r as unknown as AppState, ev.id, str(a.name), { id: `p${newId(now)}`, now: now.getTime() })
+          if (!done) throw new Error('a name is needed')
+          out = done
+        })
+        return out
+      },
+    },
+    // Wave 43 event-press-share
+    {
+      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite; default everyone), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me), communityId (the community colour tag id this event is part of; empty = an isolated event), mastodonInstance (host whose public hashtag posts the event Feed merges, e.g. mastodon.social; empty = none). Only the fields given change.',
+      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none') }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}) })
+          // review-fixes-43: one switch per event, as on the event page: notifications on also lift a muted "I'm here now" bell of this event.
+          const here = (r as { atEvent?: { eventId?: string; bell?: boolean } }).atEvent
+          if (a.notify === true && here?.eventId === ev.id) delete here.bell
+          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}) }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_offers_set', description: 'Switch what an event offers (all off by default): support (ask for support), resources (ask for resources, borrowing), feed (the event feed). Only the switches given change.',
+      inputSchema: schema({ event: S('event id or exact name'), support: { type: 'boolean' }, resources: { type: 'boolean' }, feed: { type: 'boolean' } }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          applyEventSettings(ev, { offers: Object.fromEntries(['support', 'resources', 'feed'].filter((k) => typeof a[k] === 'boolean').map((k) => [k, a[k]])) })
+          out = { id: ev.id, offers: { support: false, resources: false, feed: false, ...ev.offers } }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_times_set', description: 'Change when I am at an event, e.g. stay longer: from and/or to (YYYY-MM-DD, optionally THH:MM); an empty to removes the end. A core time that no longer fits is dropped.',
+      inputSchema: schema({ event: S('event id or exact name'), from: S('start'), to: S('end, empty = none') }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const bad = setEventTimes(ev, a.from !== undefined ? str(a.from).trim() : ev.from, a.to !== undefined ? str(a.to).trim() : ev.to ?? '')
+          if (bad) throw new Error(`${bad}: not a valid date, or the end is before the start`)
+          out = { id: ev.id, from: ev.from, ...(ev.to ? { to: ev.to } : {}) }
+        })
+        return out
+      },
+    },
+    {
+      name: 'me_nickname_set', description: 'Set my nickname (empty clears it; several separated by commas, the first is used): what event links say instead of my name when an event\'s name reveal is "nick". With eventId (id or exact name) it sets my nickname at that event only.',
+      inputSchema: schema({ nickname: S('nickname, empty = none; several separated by commas'), eventId: S('event id or exact name: the nickname for that event only') }, ['nickname']),
+      run: (a) => {
+        const nickname = str(a.nickname).trim()
+        let out: Obj = {}
+        e.commit((r) => {
+          if (a.eventId !== undefined) { const ev = eventOf(r, a.eventId); applyEventSettings(ev, { myNickname: nickname }); out = { eventId: ev.id, nickname }; return }
+          if (!r.me) throw new Error('no profile in the record')
+          setNicknames(r.me, nickname.split(','))
+          out = { nickname: r.me.nickname ?? '', nicknames: r.me.nicknames ?? [] }
+        })
+        return out
+      },
+    },
   ]
-  return { write }
+  // wave43b event-qr-join (MCP parity P02): where an event link opens; nothing is changed.
+  const read: Tool[] = [
+    {
+      name: 'event_link_open', description: 'Say where an event opens: view "edit" (the event\'s edit view: I am its host, organizer or tech support, or the link is the host link) or "normal". Give eventId (id or exact name) or url (an event link or the text after its #).',
+      inputSchema: schema({ eventId: S('event id or exact name'), url: S('an event link, or its #ev=... fragment') }),
+      run: (a) => {
+        const r = e.load()
+        const me = r.me?.displayName ?? ''
+        if (str(a.url).trim()) {
+          const linked = linkOf(str(a.url))
+          const held = (r.events ?? []).find((x) => x.id === linked.id)
+          return { id: linked.id, view: eventLinkView(held ?? { id: linked.id, name: '', from: '', where: '', createdAt: 0, attended: true, fromLink: true }, linked.kind, me, r.people) }
+        }
+        if (!str(a.eventId).trim()) throw new Error('give eventId or url')
+        const ev = eventOf(r, a.eventId)
+        return { id: ev.id, view: eventLinkView(ev, 'peer', me, r.people) }
+      },
+    },
+  ]
+  return { read, write }
 }

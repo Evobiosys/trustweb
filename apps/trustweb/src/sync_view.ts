@@ -35,6 +35,7 @@ import { S } from './strings'
 import { setDeviceNameSource } from './device_name'
 import { readSyncMode, shouldSend, writeSyncMode } from './sync_mode'
 import { readRelayOn, writeRelayOn } from './notes_relay'
+import { dedupeByPeerId } from './sync_core'
 
 export interface SyncViewHooks {
   persona: string
@@ -68,6 +69,8 @@ export interface SyncViewHooks {
   archive: (reason: string, device: string) => boolean
   /** Wave 40: after a state was taken (the edit stream gets its one line). */
   adopted: (device: string, diff: Differences) => void
+  /** Wave 43c (device_alias.ts): tell my connections the asking DIDs of my other linked devices (net.ts tellDevices); never throws. */
+  tellDevices?: (dids: string[]) => void
 }
 
 export interface SyncView {
@@ -83,7 +86,18 @@ export interface SyncView {
   mergeSheet(aId: string, bId: string): void
   /** Wave 36: the countdown ran out on a dot dropped on another: `dropId` becomes one with `keepId` (b keeps its name), snapshot first. */
   mergeNow(keepId: string, dropId: string): void
+  /** Wave 43c: Sync now with every linked device (the recovery path; MCP sync_now). Resolves with how many were started. */
+  syncAll(): Promise<number>
+  /** Wave 43c: linked devices, the last sync, and whether Auto sync is on (MCP sync_status reads the record's copy). */
+  status(): { devices: number; lastAt: number; auto: boolean }
+  /** review-fixes-43c: a connection was just made here: one round soon (KICK_MS), not at the next tick, so my other devices show it within seconds. */
+  kick(): void
 }
+
+/** Wave 43c: how often the automatic sync runs while the page is visible (also on start and whenever the page comes back). */
+export const AUTO_TICK_MS = 15_000
+/** review-fixes-43c: the round after a new connection waits this long (the card and its connection are saved by then; several in a row make one round). */
+export const KICK_MS = 800
 
 const SHEET_KIND = 'devices'
 const LOG_MAX = 30
@@ -134,7 +148,54 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     settleCodes: async (merge) => { const deps = codeDeps(); if (deps) await settleCodes(deps, merge) },
     onPairRequest: (r) => confirmSheet(r),
     onIncoming: (i) => incomingSheet(i),
+    auto: () => autoOn(),
+    onAutoMerged: () => { h.changed(); noteStatus(); if (showing()) devicesSheet() },
   })
+
+  /** Wave 43c: Auto sync is on unless this device's record says off (syncAutoOff, never synced). No record yet: off. */
+  const autoOn = (): boolean => { const s = h.peek(); return !!s && !s.syncAutoOff }
+  const status = (): { devices: number; lastAt: number; auto: boolean } => (started ? { ...link.status(), auto: autoOn() } : { devices: 0, lastAt: 0, auto: autoOn() })
+  /** Keeps the record's copy of the status current (MCP sync_status reads it); saves only on a change. */
+  function noteStatus(): void {
+    const s = h.peek()
+    if (!s || !started) return
+    const { devices, lastAt } = link.status()
+    if (s.syncStatus?.devices === devices && s.syncStatus.lastAt === lastAt) return
+    s.syncStatus = { devices, lastAt }
+    h.save()
+  }
+  /** One round: send my changes, tell my connections about my other devices, note the status. */
+  function tick(): void {
+    if (!started || !h.peek()) return
+    void link.autoTick().then(noteStatus)
+    const dids = link.pairings().flatMap((p) => (p.askDid ? [p.askDid] : []))
+    if (dids.length) h.tellDevices?.(dids)
+  }
+  function setAuto(on: boolean): void {
+    const s = h.peek()
+    if (!s) return
+    if (on) delete s.syncAutoOff
+    else s.syncAutoOff = true
+    h.save()
+    if (on) tick()
+  }
+  /** "Devices in sync: n, last <time>" and the Auto sync switch (struck through when off, P2), for Settings and My devices. */
+  function syncStatusRow(redraw: () => void): HTMLElement {
+    const st = status()
+    const on = st.auto
+    return el('div', { class: 'sync-status', 'data-sync-status': String(st.devices) }, [
+      el('p', { class: 'meta', 'data-sync-status-line': '1' }, [st.devices ? S.syncDev.inSync(st.devices, st.lastAt ? h.when(st.lastAt) : S.syncDev.neverYet) : S.syncDev.noDevices]),
+      el('button', {
+        class: 'chip' + (on ? ' on' : ' tw-off'), type: 'button', 'aria-pressed': String(on), 'data-sync-auto': on ? 'on' : 'off', title: S.syncDev.autoHint,
+        onclick: () => { setAuto(!on); redraw() },
+      }, [S.syncDev.auto]),
+    ])
+  }
+  async function syncAll(): Promise<number> {
+    const list = link.pairings()
+    await Promise.all(list.map((p) => syncNow(p)))
+    return list.length
+  }
 
   const logList = (): HTMLElement => el('div', { class: 'dv-log', id: 'dv-log', role: 'log' }, log.map((l) => el('div', { class: 'meta' }, [l])))
   const logBox = (): HTMLElement | null => document.getElementById('dv-log')
@@ -167,7 +228,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     const reviewing = s?.syncReview?.length ?? 0
     const rows = link.pairings().map((p: Pairing) => el('div', { class: 'verse', 'data-device': p.name }, [
       el('h3', {}, [p.name]),
-      el('p', { class: 'meta' }, [`${p.fp} · ${p.lastSyncAt ? S.dvLast(h.when(p.lastSyncAt)) : S.dvNever}`]),
+      el('p', { class: 'meta' }, [((at) => `${p.fp} · ${at ? S.dvLast(h.when(at)) : S.dvNever}`)(Math.max(p.lastSyncAt, p.autoSentAt ?? 0))]),
       failed.has(p.did) ? el('p', { class: 'warn', 'data-sync-failed': p.did }, [failed.get(p.did)]) : null,
       el('button', { class: 'btn btn-electric btn-sm', 'data-sync-now': p.did, onclick: () => void syncNow(p) }, [failed.has(p.did) ? S.dvTryAgain : S.dvSyncNow]),
       el('button', { class: 'btn btn-ghost btn-sm', 'data-take-state': p.did, onclick: () => void ask(p, link.takeFrom(p.did), S.adAsked(p.name)) }, [S.adTake]),
@@ -180,6 +241,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       el('h3', {}, [S.dvTitle]),
       el('p', { class: 'meta' }, [S.dvLead]),
       el('p', { class: 'meta', 'data-un-honesty': '1' }, [S.unHonesty]),
+      syncStatusRow(devicesSheet),
       el('label', { class: 'meta' }, [S.dvDeviceName]),
       name,
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { const v = name.value.trim(); if (v) { try { localStorage.setItem(nameKey, v.slice(0, 40)) } catch { /* kept this visit only */ } } devicesSheet() } }, [S.dvDeviceNameSave]),
@@ -583,15 +645,23 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   /** Opens the sheet and reads the names of every code again, so what the server holds is on show (silent when it cannot be reached). */
   function openDevices(): void {
+    // Wave 43c: a record made in this visit (first start) had no boot start yet; opening My devices starts the link (as "Link it" on the welcome screen does).
+    start()
     devicesSheet()
     const deps = codeDeps()
     if (deps && h.peek()?.connectCode) void refreshAll(deps).then(() => { if (showing()) devicesSheet() })
   }
 
+  let kickTimer: ReturnType<typeof setTimeout> | undefined
   function start(): void {
     if (started) return
     started = true
-    void link.start()
+    const s = h.peek()
+    if (s && dedupeByPeerId(s)) { h.save(); h.changed() }
+    void link.start().then(() => setTimeout(tick, 1000))
+    // Wave 43c: the automatic sync: a round every AUTO_TICK_MS while visible, and one when the page comes back.
+    setInterval(() => { if (document.visibilityState !== 'hidden') tick() }, AUTO_TICK_MS)
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick() })
   }
 
   return {
@@ -599,12 +669,21 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       const row = el('button', { class: 'radio', 'data-open-devices': '1', onclick: openDevices }, [el('b', {}, [S.dvOpen]), el('small', {}, [S.dvOpenHint])])
       const code = h.peek()?.connectCode
       const relay = notesRelayRow()
-      return code?.name && !code.stale ? [row, el('p', { class: 'meta', 'data-settings-username': '1' }, [`${S.unTitle}: `, h.editLink ? linkButton(code.name, h.editLink) : `trustweb.one/${code.name}`]), relay] : [row, relay]
+      const holder = el('div', {})
+      const drawStatus = (): void => { holder.replaceChildren(syncStatusRow(drawStatus)) }
+      drawStatus()
+      return code?.name && !code.stale ? [row, holder, el('p', { class: 'meta', 'data-settings-username': '1' }, [`${S.unTitle}: `, h.editLink ? linkButton(code.name, h.editLink) : `trustweb.one/${code.name}`]), relay] : [row, holder, relay]
     },
     start,
     open: openDevices,
     samePersonPicker,
     mergeSheet: (aId, bId) => samePersonSheet(aId, bId, h.closeSheet),
     mergeNow: (keepId, dropId) => { void mergeNow(keepId, dropId) },
+    syncAll,
+    status,
+    kick: () => {
+      if (!started || kickTimer !== undefined) return
+      kickTimer = setTimeout(() => { kickTimer = undefined; tick() }, KICK_MS)
+    },
   }
 }

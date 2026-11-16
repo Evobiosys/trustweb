@@ -19,7 +19,7 @@ try {
     await page.goto(URL); await page.waitForTimeout(1200)
     await page.evaluate(([r, t]) => { localStorage.setItem('trustweb.v1.me', r); localStorage.setItem('trustweb.v1.colourtags', t); localStorage.setItem('trustweb.ui.webView', 'rings') }, [JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers, log: [], inventory: [], people }), JSON.stringify(tags)])
     await page.reload(); await page.addStyleTag({ content: hide }); await page.waitForTimeout(900)
-    // Settings > Your web > Tags
+    // Settings > Your contacts > Tags
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(600)
     await page.locator('[data-settings-section="web"] > summary').click(); await page.waitForTimeout(200)
     const man = page.locator('[data-settings-tags]')

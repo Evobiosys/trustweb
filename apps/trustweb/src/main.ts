@@ -33,13 +33,16 @@ import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
+import { audienceFilterView } from './audience_filter'
+import { allowedPeerIds, askFilterOf, saveAskFilter } from './ask_audience'
 import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
 import type { IntroLink } from './intro_link'
 import { introAskText } from './intro_ask'
 import { cardInvitationsRow, invitationSheet, invitationsSection } from './invitations_view'
 import type { InvitationIo } from './invitations_view'
-import { addSupportIn, supportCards, supportForm, supportInbox, supportLine } from './support_ask_view'
+import { sourceNotifies } from './event_notify'
+import { addSupportIn, supportCards, supportForm, supportInbox, supportLine, supportSheet } from './support_ask_view'
 import { applyCancel, categoryAsk } from './support_inbox'
 import { planFlush } from './support_flush'
 import { communityChatLive } from './ext/community_mode/chat_row'
@@ -138,7 +141,7 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import { communityChatRows } from './chat_communities'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, overflowChoices, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, askFloating, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
@@ -147,7 +150,7 @@ import { groupsView } from './groups_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
-import { isAdvanced, setWebDefault, webDefaultOf, webTabLabel } from './web_default_view'
+import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel, webViewAfterDefault } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
@@ -158,6 +161,8 @@ import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
+import { resourceViews } from './resource_views_view'
+import { canShareOn } from './resource_views'
 import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -285,6 +290,7 @@ import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
+import { createWebFocus } from './web_focus'
 import { createModeShell } from './ext/community_mode/shell'
 import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
@@ -300,13 +306,19 @@ import { obsidianLink } from './ext/obsidian/obsidian_card'
 import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
+import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
+import { afterConnect, eventLinkView } from './event_join'
+import { createEventEnvelopes } from './event_envelope'
+import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
+import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
 import { eventPlanSection } from './event_plan_view'
 import { defineEventActions } from './event_actions'
+import { defineSyncActions } from './sync_actions' // wave43c sync-devices
 import { templatePrompt } from './event_plan'
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
@@ -348,9 +360,14 @@ import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { createMissedPopup } from './notify_popup_view'
+import { createNotifyCenter, hasBell } from './notify_center_view'
+import { createSocial } from './social_hosting_view'
+import { linkGlobal } from './social_hosting'
+import { newlyAdded } from './notify_center'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
 import { createToast, fadeHost, type ToastOpts } from './toast'
+import { createNoticeLayer } from './notice_layer'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 // Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
@@ -370,6 +387,8 @@ enum Screen {
   StillTrue = 'still',
   /** What people in your web shared with you, and what you share (wave 1733 round B). */
   Feed = 'feed',
+  /** Wave 43: the record of what happened (answers, meetings, notes, what I share); the Feed is the posts of people. */
+  Timeline = 'timeline',
   /** Events: where and when I met people (E1, wave 7); opened from the Web screen. */
   Events = 'events',
   /** Wave 24: every chat, newest first (bottom row). */
@@ -382,6 +401,8 @@ enum Screen {
   Groups = 'groups',
   /** Wave 39: an extension module's view (ext/tw_registry.ts views()), `extViewId` names which. */
   Ext = 'ext',
+  /** Wave 43b ask-page-filter: Ask your web is its own page (class askpage: .ask is the consent prompt's), Back returns to where it was opened. */
+  Ask = 'askpage',
 }
 /** Wave 39: which extension module view Screen.Ext shows, and the kept element it is mounted in (ext/view_host.ts). */
 let extViewId: string | null = null
@@ -525,6 +546,9 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
+// Wave 43b: an event link that came with a connect opens after the connect flow (the ring choice) is done, never over it.
+let eventWaitsForConnect = pendingEvent !== null && pendingConnect !== null
+rememberEventMode(pendingEvent)   // wave 43b: mode=event keeps this session in the event-only variant
 // An intro link (#intro=..., intro_link.ts): the "Intro request" card opens once the app has a record.
 let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
@@ -683,6 +707,7 @@ let screen: Screen = state ? Screen.Web : Screen.Start
 let relayStatus: RelayStatus = 'connecting'
 let draft: Draft = freshDraft()
 let review: Review | null = null
+/** Wave 43b: never set any more (Ask your web is a page, Screen.Ask); the Web's dock branches that read it stay until Jakob approves removing them. */
 let queryOpen = false
 // The magnifier on Record and Meeting: past meetings and memos (search.ts).
 let pastSearchOpen = false
@@ -751,6 +776,8 @@ const net = new Net({
   save,
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
+  onHeard: (did) => social.onHeard(did),
+  onHost: (did, m) => social.onHost(did, m),
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
     queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken,
@@ -782,8 +809,10 @@ const net = new Net({
       s.people.push(person)
     }
     if (person.doorPeerId !== peer.id) person.peerId = peer.id
+    linkGlobal(person, peer)   // wave 43c: a person found by name becomes an ordinary card
     save()
     sendHelloTo(peer)
+    void eventEnv.connected(peer)   // wave 43c: the event whose QR was just shown goes to the person who scanned it
     void autoShareProfile(peer, 'public')
     applyHeldContact(peer, person)
     closeSheet()
@@ -831,6 +860,7 @@ const net = new Net({
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
+  onEvent: (peer, env) => { void eventEnv.onEnvelope(peer, env) },
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -1069,6 +1099,18 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 /** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
 const pages = createPages(phone)
+/** Wave 43b notify-center: the bell in the header of Web and Chat and its page. */
+const notifyCenter = createNotifyCenter({
+  state: st, save: () => save(), page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), changed: () => render(),
+  openChat: (personId) => { pages.closeAll(); chatSheet(personId) }, addWant: (peerId, name) => addWantSheet(peerId, name),
+  openCard: (personId) => openCardPage(personId), openEvents: () => openEvents(),
+})
+/** Wave 43c social-hosting: global profile, friends-first hosting, trusted-only mode (social_hosting_view.ts). */
+const social = createSocial({
+  state: st, save: () => save(), identity: () => net.ownIdentity(), sendHost: (peer, m) => net.sendHost(peer, m),
+  connect: (did, name) => net.completeConnect({ did, from: { id: randomId(8), displayName: name } }, Ring.Acquaintance),
+  origin: SERVER_ORIGIN, fetch: (url, init) => fetch(url, init), now: () => Date.now(), toast: (msg) => toast(msg), render: () => render(), newId: () => randomId(8),
+})
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
 /** Wave 39: the one Import page (contacts, resources file, Tana, earlier imports with Undo); every old entry point opens it. */
 const importHooks = (): ServicesHooks => ({
@@ -1126,7 +1168,14 @@ const updateBanner = el('div', { class: 'update-banner', role: 'status', 'aria-l
   el('span', {}, [S.updBanner]),
   el('button', { class: 'btn btn-electric btn-sm', 'data-update-reload': '1', onclick: () => void reloadNow() }, [S.updReload]),
 ])
-phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl, updateBanner)
+// Wave 43c: every toast, notice, Undo and result card lives in ONE layer fixed in the phone frame (notice_layer.ts), never inside the zoomed rings.
+const noticeLayer = createNoticeLayer(document)
+noticeLayer.adopt('cards', cardStackEl)
+noticeLayer.adopt('update', updateBanner)
+noticeLayer.adopt('notice', friendsEl)
+noticeLayer.adopt('message', msgNoticeEl, () => msgNoticeEl.classList.contains('on'))
+noticeLayer.adopt('toast', toastEl, () => toastEl.classList.contains('on'))
+phone.append(host, tabs, veil, sheet, overlay, noticeLayer.el)
 root.replaceChildren(phone)
 // On a wide screen, outside the phone: open the side-by-side demo (not inside
 // the demo's own iframes, and not on a real phone, where the app is full screen).
@@ -1188,7 +1237,7 @@ function recordButton(): HTMLElement {
 }
 
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
-const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
+const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', timeline: 'list', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
 const askIconVariant = ((typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) || import.meta.env.DEV) && params.get('askicon') === 'plain' ? 'plain' : 'rings'
@@ -1222,7 +1271,7 @@ function barOpen(id: BarId): void {
 function barButton(id: BarId, primary: boolean, halo = false): HTMLElement {
   if (id === 'record' && primary) return recordButton()
   const view = viewOfBar(id)
-  const name = id === 'web' && state ? webTabLabel(state, S.viewNames) : barName(id) // wave 35: the Web tab carries the pinned default view's name
+  const name = id === 'web' && state ? webTabLabel(state, S.viewNames, CONTACTS_TAB_LABEL ? S.tabLabel.desk : undefined) : barName(id) // wave 35: the Web tab carries the pinned default view's name
   const mod = modOfBar(id)
   const b = tabButton(id, id === 'web' ? name : view || mod ? barName(id) : S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : view ? viewGlyph[view] ?? 'web' : mod ? twRegistry.views().find((v) => v.id === mod)?.icon ?? 'users' : TAB_ICON[id], () => tapBar(id))
   b.setAttribute('aria-label', name)
@@ -1235,7 +1284,7 @@ function barButton(id: BarId, primary: boolean, halo = false): HTMLElement {
 
 function barFlags(): BarFlags {
   // HAS_MAP_VIEW is declared further down (this runs at load), so the Map is simply on.
-  return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state), mods: twRegistry.views().map((v) => v.id) }
+  return { ...tabFlags(), people: !state || state.people.length > 0, map: true, advanced: !!state && isAdvanced(state), mods: twRegistry.views().map((v) => v.id), eventOnly: eventModeOn() }
 }
 
 function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
@@ -1256,13 +1305,13 @@ function renderTabs(): void {
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
   const community = guest ? null : modeShell.tabs() // wave 41: the Community interface has its own row
-  const halo = new Set(guest || community ? [] : haloOf(state?.uiBar, ids))
+  const halo = new Set(guest || community ? [] : haloOf(state?.uiBar, ids, [primary, ...pair].filter((x): x is BarId => x !== null)))
   tabs.replaceChildren(...(community ?? shown.map((id) => barButton(id, id === primary || pair.includes(id), halo.has(id)))), ...(guest || community ? [] : [more]))
   document.body.toggleAttribute('data-community-mode', community !== null)
   tabs.classList.toggle('four', (community ?? shown).length > 3)
   tabs.classList.toggle('many', (community ?? shown).length > 5)
   tabs.classList.toggle('pair', !community && pair.length > 0)
-  phone.classList.toggle('ask-in-bar', !community && shown.includes('ask'))
+  phone.classList.toggle('ask-in-bar', !community && !askFloating(shown))
   updateChatBadge()
 }
 renderTabs()
@@ -1290,19 +1339,29 @@ function variationChips(after: () => void): HTMLElement {
 }
 
 /** Wave 35: ⋮ lists the views that are not in the bar as direct buttons (wave 40: in row order, a tap moves one into the row; Variations below, compact). */
+/** Wave 43c shell-fix-2 (43b-D8): ends the event-only variant for this session (the ⋮ sheet, or a long press on the app title in it). */
+function openFullApp(): void {
+  leaveEventMode()
+  closeSheet()
+  renderTabs()
+  render()
+  toast(S.shellFix2.openFullAppDone)
+}
+
 function barMoreTap(): void {
   const s = st()
   const f = barFlags()
-  const { ids, primary } = resolveBar(s.uiBar, f)
-  const rest = [...barLayout(ids, primary, barMax()).overflow, ...overflowChoices(ids, s.uiBar?.hidden ?? [], f)]
-  const halo = new Set(haloOf(s.uiBar, ids))
+  const rest = moreViews(s.uiBar, f, barMax())
+  const halo = new Set(haloOf(s.uiBar, resolveBar(s.uiBar, f).ids))
   openSheet([
     rest.length ? el('h3', {}, [S.barMoreViews]) : null,
     ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view' + (halo.has(id) ? ' tab-halo' : ''), 'data-bar-view': id, onclick: () => bringIntoRow(id) }, [barName(id)])),
     el('h4', { class: 'eyebrow' }, alphaHeading(S.var.title)),
     variationChips(barMoreTap),
     el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
+    eventModeOn() ? el('div', { class: 'full-app-row' }, [el('button', { class: 'btn btn-ghost', 'data-open-full-app': '', onclick: openFullApp }, [S.shellFix2.openFullApp]), el('p', { class: 'meta' }, [S.shellFix2.openFullAppHint])]) : null,
   ])
+  sheet.dataset.kind = 'bar-more' // wave 43: styles.css lifts the sheet above the bottom bar
 }
 
 /** Wave 35: "Default view: <name>" under the Web row of the bottom-row sheet; the select changes the view the Web tab opens. */
@@ -1310,7 +1369,13 @@ function webDefaultLine(s: AppState, changed: () => void): HTMLElement {
   const now = webDefaultOf(s)
   const select = el('select', {
     class: 'web-default-select', 'data-web-default': '', 'aria-label': S.webDefaultLabel,
-    onchange: (e: Event) => { const v = setWebDefault(s.uiViews, (e.target as HTMLSelectElement).value); if (v) s.uiViews = v; else delete s.uiViews; changed() },
+    onchange: (e: Event) => {
+      const view = (e.target as HTMLSelectElement).value
+      const v = setWebDefault(s.uiViews, view); if (v) s.uiViews = v; else delete s.uiViews
+      const now = webViewAfterDefault(view)   // review-fixes-43c: the Web screen under the sheet follows at once (Jakob Ω)
+      if (now) try { window.localStorage.setItem(WEB_VIEW_KEY, now) } catch { /* not remembered */ }
+      changed()
+    },
   }, viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: undefined }).map((i) => el('option', { value: i.view, ...(i.view === now ? { selected: '' } : {}) }, [S.viewNames[i.view]])))
   return el('div', { class: 'web-default-line' }, [el('span', { class: 'meta' }, [S.webDefaultLabel + ':']), select])
 }
@@ -1452,6 +1517,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.People:
     case Screen.Notes:
     case Screen.Groups:
+    case Screen.Ask:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1542,10 +1608,27 @@ function openGroups(): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Groups)
 }
+/** Wave 43b: Ask your web as a page of its own with Back (to the Web, or wherever it was opened from), never over the Web view. */
+function openAskPage(): void {
+  if (webPage) { cardExpanded = false; webPage = null }
+  if (screen === Screen.Ask) { render(); return }
+  peoplePage = true
+  pageBack = screen === Screen.Chat || screen === Screen.Inventory ? screen : Screen.Web
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Ask)
+}
+/** Leaves the Ask page the way Back does. */
+function closeAsk(): void { if (screen === Screen.Ask) history.back() }
+function screenAsk(): Node[] {
+  return [
+    header(S.askPage.title, { back: closeAsk }),
+    el('div', { class: 'scroll pad ask-page', 'data-ask-page': '' }, [queryDock(st())]),
+  ]
+}
 function screenGroups(): Node[] {
   return [
     header(S.groups.heading, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [groupsView({ st, save, askIntro: (target) => { setIntroTarget(target); askMode = AskMode.Intros; queryOpen = true; go(Screen.Web) } })]),
+    el('div', { class: 'scroll pad' }, [groupsView({ st, save, askIntro: (target) => { setIntroTarget(target); askMode = AskMode.Intros; openAskPage() } })]),
   ]
 }
 /** Wave 39: the extension module view `extViewId`; gone (module off) = the Web. */
@@ -1617,7 +1700,7 @@ function shownScreen(target: Screen): Screen {
 
 function go(to: Screen): void {
   const s = shownScreen(to)
-  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Ask
   if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
   if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
@@ -1646,6 +1729,13 @@ function brandMark(cls = 'brand-mark'): HTMLElement {
   return m
 }
 
+/** The header's mark; in the event-only variant a long press (or right click) on it opens the full app (P1). */
+function appTitleMark(): HTMLElement {
+  const m = brandMark()
+  if (eventModeOn()) contextPress(m, openFullApp)
+  return m
+}
+
 /**
  * Every header: title left; right, the screen's own button and then the
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
@@ -1659,7 +1749,7 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
-      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : brandMark(),
+      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : appTitleMark(),
       el('h2', {}, [title]),
       opts.glyph ?? null,
     ]),
@@ -1675,6 +1765,24 @@ function mountSettingsGear(): void {
   const gear = iconButton('settings', S.invSettings, settingsSheet)
   gear.dataset.settingsGear = '1'
   right.insertBefore(gear, right.querySelector('[data-chat-dots]'))
+}
+
+/** Wave 43b: Ask your web as a plain header button on the screens that had the floating pill (Web, Chat, Resources); the bar's own Ask item replaces it. */
+function mountAskButton(): void {
+  if (screen !== Screen.Web && screen !== Screen.Chat && screen !== Screen.Inventory) return
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right || right.querySelector('[data-open-query]')) return
+  right.insertBefore(queryFab(), right.querySelector('[data-chat-dots]'))
+}
+
+/** Wave 43c shell-fix-2 (43b-D6): "Review requests" on Resources as a plain header button beside Ask your web (it floated bottom left and covered rows). */
+function mountRequestsButton(): void {
+  if (screen !== Screen.Inventory) return
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right || right.querySelector('[data-open-requests]')) return
+  const b = iconButton('inbox', S.reqAria, requestsSheet, 'requests-btn')
+  b.setAttribute('data-open-requests', '1')
+  right.insertBefore(b, right.querySelector('[data-open-query]'))
 }
 
 /** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
@@ -1698,9 +1806,10 @@ function screenQr(plain = false): void {
   }
 }
 
-function eventQr(ev: TwEvent, plain = false): void {
-  // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy).
-  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)) }), plain)
+function eventQr(ev: TwEvent, plain = false, host = false): void {
+  eventEnv.shown(ev.id)
+  // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy). Wave 43: the host link when the page's host toggle is on (the QR follows the link).
+  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : revealedBy(eventsBy(), ev)) }), plain)
 }
 
 /** The tag's code carries the tag and the public usernames of the people who carry it (never those who asked to be asked first). */
@@ -1805,7 +1914,7 @@ function mountHeaderControls(): void {
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
-  right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
+  right.replaceChildren(...(hasBell(screen) ? [notifyCenter.bell()] : []), ...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
@@ -1924,6 +2033,8 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 
 function render(): void {
   screen = shownScreen(screen)
+  if (screen !== Screen.Web) noticeLayer.slot('wants', null)
+  noticeLayer.setOnWeb(screen === Screen.Web)   // review-fixes-43c: ask-result / message cards stay on the Web screen (P06)
   const showTabs = screen !== Screen.Start
   tabs.style.display = showTabs ? 'flex' : 'none'
   tabs.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => {
@@ -1961,11 +2072,13 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
+      case Screen.Timeline: return [header(S.timelineTitle), feed.body('timeline')]
       case Screen.Events: { const b = cal && eventsView.atList() ? cal.body() : eventsView.body(); return [...b.slice(0, 1), ...reminderRows(), ...b.slice(1)] }
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
       case Screen.Notes: return screenNotes()
       case Screen.Groups: return screenGroups()
+      case Screen.Ask: return screenAsk()
       case Screen.Ext: return screenExt()
     }
   })()
@@ -1975,6 +2088,8 @@ function render(): void {
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
   mountSettingsGear()
+  mountAskButton()
+  mountRequestsButton()
   mountAiButton()
   modeShell.mount(host)
   modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
@@ -2398,6 +2513,9 @@ function admitLink(link: StampedLink): { ok: true; legacy: boolean } | { ok: fal
   return v
 }
 
+/** A connect that threw: the event link waiting behind it still opens. */
+const connectFailed = (e: unknown): void => { console.warn('connect', e); afterConnectOpen() }
+
 /** `picked`: the visitor's add sheet ran it (offerPendingConnect) with the typed name and the ring; then their card opens, no second sheet. */
 async function completePendingConnect(picked?: { name: string; ring: Ring }): Promise<void> {
   const link = pendingConnect
@@ -2405,11 +2523,12 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   pendingConnect = null
   drawCardStack()
   const admitted = admitLink(link)
-  if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); return }
+  if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); afterConnectOpen(); return }
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
   const peer = await net.completeConnect(link, ring, reachOut)
+  void eventEnv.afterConnect(peer)   // wave 43c: the scanned event's place, conditions and themes come from the shower's device
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
   if (!person) {
@@ -2447,7 +2566,8 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   // then open the ask right away (that is what the account is for).
   if (demoLink) {
     if (demoLink.peer) await connectDemoPeer(demoLink.peer, person)
-    queryOpen = true
+    askMode = AskMode.Hints
+    openAskPage()
     toast(S.demoWaitingToast(peer.displayName))
   } else if (picked) {
     addedToast(person, ring)
@@ -2463,10 +2583,10 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (qrBody?.kind === 'person' && qrBody.username) toast(S.qrScanUsername(peer.displayName, qrBody.username))
   else if (qrBody?.kind === 'tag') toast(S.qrScanTag(qrBody.tag))
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
-  if (demoLink || solo) openPendingShare()
+  if (demoLink || solo) afterConnectOpen()
   else if (picked) {
     viaCard.closed(person.id)
-    if (!openPendingShare()) personSheet(person.id)
+    afterConnectOpen(person.id)
   } else openConnectAdd(peer, person, link.from.displayName)
 }
 
@@ -2497,6 +2617,7 @@ function offerPendingConnect(): void {
 /** "Not now" (Jakob 2026-10-19): the inviter goes to the Curator's Archive, not connected, the link kept on the entry. */
 function declineInvite(link: ConnectLinkParams): void {
   pendingConnect = null
+  afterConnectOpen()
   const p = archivedInvite(link, randomId(8), Date.now())
   st().people.push(p)
   save()
@@ -2573,9 +2694,9 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       viaCard.closed(person.id)
       addedToast(person, ring)
       render()
-      if (!openPendingShare()) personSheet(person.id)
+      afterConnectOpen(person.id)
     },
-    onLater: () => { connectAdd = null; closeSheet(); if (!openPendingShare() && viaCard.closed(person.id)) personSheet(person.id) },
+    onLater: () => { connectAdd = null; closeSheet(); if (pendingShare || viaCard.closed(person.id) || pendingEvent) afterConnectOpen(person.id) },
   })
   connectAdd = { peerId: peer.id, handle }
   const nodes: Node[] = [...handle.nodes]
@@ -2631,7 +2752,7 @@ function screenStart(): Node[] {
     setTimeout(() => void offerApkUpdate(), 4000)
     void net.start().then(announceLink).then(() => refreshPush()).then(pollNotesRelay)
     if (invite && !solo && !demo) offerPendingConnect()
-    else void completePendingConnect()
+    else void completePendingConnect().catch(connectFailed)
     coNotes?.start?.()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
@@ -2852,7 +2973,7 @@ function webPageScreen(page: WebPage): Node[] {
       onAdd: (title, category) => { addPeerItem(st(), p.id, title, category, 'self', Date.now()); save() },
     },
     onTag: (id) => { tagFilter = id; if (cardExpanded) { cardExpanded = false; history.go(-2) } else back() },
-  })])]
+  }), social.trustRow(p, render), social.connectButton(p, render)])]
 }
 
 /** Wave 31: what we know of a person's resources, in the same list as My Resources (whose = theirs). */
@@ -2928,8 +3049,8 @@ function curatorSheet(): void {
 }
 
 /** The Events screen: the list, or one event's page (from a chip on a person). */
-function openEvents(eventId?: string): void {
-  eventsView.open(eventId)
+function openEvents(eventId?: string, edit = false): void {
+  eventsView.open(eventId, undefined, edit)
   go(Screen.Events)
 }
 
@@ -3018,7 +3139,8 @@ function viewRowMore(view: ViewKey, row: HTMLElement): HTMLElement {
     el('button', { class: 'linkbtn', role: 'menuitem', 'data-view-pin': view, ...(pinned ? { disabled: '' } : {}), onclick: () => {
       const v = setWebDefault(s.uiViews, view)
       if (v) s.uiViews = v; else delete s.uiViews
-      viewMoreOpen = null; eyeOpen = false; save(); renderTabs(); render()
+      viewMoreOpen = null; eyeOpen = false; save(); renderTabs()
+      if (shownAtOnce(view)) chooseView(view as ViewKey); else render()   // wave 43c: the Web screen follows the pin at once
     } }, [pinned ? S.viewPinned : S.viewPinDefault]),
     isAdvanced(s) && view !== 'rings' ? el('label', { class: 'view-in-bar', 'data-view-in-bar': view }, [
       el('input', { type: 'checkbox', ...(resolveBar(s.uiBar, barFlags()).ids.includes(`view:${view}` as BarId) ? { checked: '' } : {}), onchange: (e: Event) => {
@@ -3152,8 +3274,17 @@ function chatListBody(): Node[] {
   const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
   const find = chatFindRows(s.chats, people, chatQuery)
   const community = communityChatRow()
+  // wave43c sync-devices: a person shows once in the chat list: "Newly added" leaves out who already has a thread row below
+  const fresh = newlyAdded(people, s.peers, now).filter((r) => !rows.some((x) => x.personId === r.personId))
   return [
     ...(community ? [community] : []),
+    ...(fresh.length && !chatQuery.trim() && !s.chatsHidden ? [el('section', { class: 'chat-newly', 'data-chat-newly': '' }, [
+      el('h3', {}, [S.w43b.newlyAdded]),
+      ...fresh.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-newly-row': r.personId, onclick: () => chatSheet(r.personId) }, [
+        avatar(r.name, r.personId),
+        el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [S.w43b.connectedAgo(ageLabel(r.at, now))])]),
+      ])),
+    ])] : []),
     ...(rows.length ? rows.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
       avatar(r.name, r.personId),
       el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),
@@ -3210,7 +3341,6 @@ function screenChat(): Node[] {
       view.simple ? el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]) : null,
       view.simple ? body : null,
     ]),
-    queryFab(),
   ]
 }
 
@@ -3258,7 +3388,7 @@ function browserOnlyNotice(): HTMLElement | null {
 }
 
 function screenWeb(): Node[] {
-  if (webPage) return webPageScreen(webPage)
+  if (webPage) { noticeLayer.slot('wants', null); return webPageScreen(webPage) }
   const full = shown(st(), curatorHiddenIds())
   const s = full
   let stored: string | null = null
@@ -3271,13 +3401,12 @@ function screenWeb(): Node[] {
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
-    queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
     ...supportCards(supportIo),
     passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
-      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save }, extra: social.findBlock })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
     supportLine(supportIo),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -3288,6 +3417,7 @@ function screenWeb(): Node[] {
     ? el('div', { class: 'scroll' }, [createMapView({ people: s.people.filter((p) => ringShown(st(), webSlot(p))), openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
     : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
+  noticeLayer.slot('wants', wantsToConnectSection())   // wave 43c: the notice layer, not the screen flow (it stays put and full size while the Web zooms)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
     header(S.webTitle),
@@ -3300,8 +3430,6 @@ function screenWeb(): Node[] {
       : clip,
     // Wave 39: the browser-only notice sits under the web, outside the zoomed layer (inside it the zoom scaled the line off the screen).
     ...[browserOnlyNotice()].filter((n): n is HTMLElement => n !== null),
-    ...[wantsToConnectSection()].filter((d): d is HTMLElement => d !== null),   // wave 39: below the zoom clip, so it stays put and full size while the Web zooms
-    queryOpen ? queryDock(s) : queryFab(),
   ]
 }
 
@@ -3312,7 +3440,7 @@ function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
   const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
-  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select: selectToolButton(), hiddenCount: expanseList(st()).length, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted(), openPanel: (children) => openSheet(children) })
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add, select: selectToolButton(), hiddenCount: expanseList(st()).length, undo: undoNotice, openHidden: () => web.openExpanse(), spaceOut: () => web.spaceOutWeb(), deletedCount: recentlyDeleted(s.people, Date.now()).length, openDeleted: () => web.openDeleted(), openPanel: (children) => openSheet(children) })
 }
 
 /** The select tool: a button of the Web's Tools row (wave 39 had it in the header; wave 40 moved it back). */
@@ -3474,35 +3602,20 @@ function fitRings(): void {
 window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() })
 window.addEventListener(COLOUR_TAGS_EVENT, () => { if (screen === Screen.Web) render() })
 
-/** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
-function openQuery(): void {
-  if (webPage) { cardExpanded = false; webPage = null }   // wave 40: a card page draws no dock, so the ask (sparkle, ⋮ list) opened nothing while one was open
-  queryOpen = true
-  if (screen === Screen.Web) render()
-  else go(Screen.Web)
-}
+/** Opens Ask your web (its own page, wave 43b) from anywhere: querying is the one thing (Jakob, wave 2, P6/P9). */
+function openQuery(): void { openAskPage() }
 
+/** Wave 43b: the plain entry, a header button, where the bottom bar has no Ask item (CSS hides it when it has; the IYG support variation asks for support). */
 function queryFab(): HTMLElement {
-  // Wave 39: in the IYG support variation the Web's primary button asks for support.
-  if (profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')) {
-    const b = el('button', { class: 'query-fab', 'aria-label': S.supportTitle, 'data-open-query': '1', 'data-support-primary': '', onclick: () => { askMode = AskMode.Support; openQuery() } })
-    b.innerHTML = icon('query')
-    b.append(el('span', {}, [S.supportTitle]))
-    return b
-  }
-  const call = queryStyle() === QueryStyle.Call
-  const b = el('button', {
-    class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
-    onclick: openQuery,
-  })
+  const support = profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')
+  const call = !support && queryStyle() === QueryStyle.Call
+  // Review 43b: the call style is "Ask your web" (S.webCall, as the floating pill was), the search style "Query".
+  const label = support ? S.supportTitle : call ? S.webCall : S.webQuery
+  const b = iconButton('query', label, () => { if (support) askMode = AskMode.Support; openQuery() }, 'ask-entry')
   b.innerHTML = call ? askWebIcon(askIconVariant) : icon('query')
-  b.append(call
-    ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
-    : el('span', {}, [S.webQuery]))
-  if (!call) return b
-  const wrapped = withHint(b, HintId.CallWeb)
-  if (wrapped !== b) wrapped.classList.add('fab-hint')
-  return wrapped
+  b.setAttribute('data-open-query', '1')
+  if (support) b.setAttribute('data-support-primary', '')
+  return b
 }
 
 function tagChip(tag: Tag, custom?: string): HTMLElement {
@@ -3547,7 +3660,8 @@ function itemSheet(itemId: string): void {
     itemContextView(item),
     ...provenanceStateView(item),
     feed.itemExtras(item),
-    el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]),
+    // Review 43b (B17): a protected resource offers no way to pass it on (canShareOn).
+    canShareOn(item, loadColourTags()) ? el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]) : null,
     ...(cal?.itemSection?.(item) ?? []),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
@@ -3638,6 +3752,7 @@ function personSheet(personId: string): void {
     askLinksRow(p),
     passOnRowFor(p),
     askAgainRow(p),
+    pastAsksRow(pastAsksDeps, p),
     leanRow(p),
     eventChipsRow(p),
     knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace),
@@ -3687,7 +3802,7 @@ function cardMore(p: Person): Node[] {
       keepInTouchRow({ state: st, save, redraw: render, toast: (msg, undo) => toast(msg, { onClick: undo }) }, p),
       birthdayRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
       thoughtRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
-      obsidianLink(st(), p.fields?.obsidianNote), seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+      obsidianLink(st(), p.fields?.obsidianNote), seenLine(st(), p.id), personShareRow(p), askAgainRow(p), pastAsksRow(pastAsksDeps, p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
     timeline: () => [timelineSection(p)],
@@ -4407,6 +4522,7 @@ function applyContact(peer: Peer, person: Person, text: string): void {
 
 /** Call right after a card for `peer` exists (onPeerConnected, completePendingConnect). */
 function applyHeldContact(peer: Peer, person: Person): void {
+  devices.kick()   // review-fixes-43c: my other devices get the new connection now, not at the next 15 s tick
   const text = takeContact(heldContacts, peer.id)
   if (text) applyContact(peer, person, text)
 }
@@ -4592,7 +4708,7 @@ function onSupportText(peer: Peer, text: string): void {
     if (!person || ask.until <= Date.now()) return
     s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id }, Date.now())
     save()
-    toast(S.supportGotOne(person.name))
+    if (sourceNotifies(s, { kind: 'support', peerId: peer.id })) toast(S.supportGotOne(person.name))
     if (screen === Screen.Web) render()
     return
   }
@@ -4691,6 +4807,9 @@ function mayAskAgainWith(peer: Peer): boolean {
 }
 
 /** Wave 6i: under Advanced on a connected person's card: "Get <name>'s earlier asks again" (the same envelope as a tightening). */
+// Wave 43b: "Answer now": the prompt on screen is put back in front; one already waiting in the queue comes by itself; else the held ask is presented again.
+const pastAsksDeps = { state: st, answer: (qid: string): void => { closeSheet(); if (askShowing?.qid === qid) renderAsk(); else if (!askQueue.some((a) => a.qid === qid)) void net.presentHeld(qid) } }
+
 function askAgainRow(p: Person): HTMLElement | null {
   const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
   if (!peer || !mayAskAgainWith(peer)) return null
@@ -5047,6 +5166,7 @@ const devices = createSyncView({
   connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
   editLink: () => openLinkChange(linkHooks),
   afterSyncNow: () => void pollNotesRelay(),
+  tellDevices: (dids) => { if (state) void net.tellDevices(dids) }, // wave43c sync-devices
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -5134,22 +5254,31 @@ const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
   curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
-const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
-const undoNotice = (title: string, onUndo: () => void): void =>
-  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000)
+/** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
+const eventEnv = createEventEnvelopes<Peer>({
+  state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
+  link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+})
+const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
+const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
+  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
+const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
 const eventsView = createEventsView({
+  focusWeb: webFocus,
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
-  showQr: (ev) => eventQr(ev),
+  showQr: (ev, host) => eventQr(ev, false, host),
+  askSupport: () => supportSheet(supportIo),
+  feedRow: (ev) => feed.eventRow(ev),
   plan: (ev) => eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }),
   extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),
 })
 const extHooks: ExtHooks = {
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
-  openEvent: (id, fromCalendar) => { eventsView.open(id, fromCalendar); if (screen === Screen.Events) render(); else go(Screen.Events) },
+  openEvent: (id, fromCalendar, edit) => { eventsView.open(id, fromCalendar, edit); if (screen === Screen.Events) render(); else go(Screen.Events) },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),
   avatar,
@@ -5158,7 +5287,7 @@ const extHooks: ExtHooks = {
   atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
   openItem: (id) => { closeSheet(); itemSheet(id) },
   openCalendar: () => { closeSheet(); go(Screen.Events) },
-  eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+  eventLink: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
   sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
   me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
   sendInvite: async (personId, text) => {
@@ -5199,12 +5328,15 @@ twBus.on('support-ask', (d) => {   // wave 42: the Community view's "Ask for sup
 twBus.on('add-member', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) addPersonSheet(Ring.Friend, false, tag) })   // wave 42: the add-person flow, scoped to a community
 /** Wave 42 community-event: "New event" in a community opens the assistant with the event template; its cards are approved one by one. */
 let eventCommunity: string | undefined
+/** Wave 43b (B33): the menu's Add event: Hosted (true), Informal (false); absent from the older "New event" button. */
+let eventHosted: boolean | undefined
 twBus.on('new-event', (d) => {
-  const tag = (d as { tag?: string } | undefined)?.tag
+  const { tag, hosted } = (d ?? {}) as { tag?: string; hosted?: boolean }
   if (!tag) return
   eventCommunity = tag
+  eventHosted = typeof hosted === 'boolean' ? hosted : undefined
   if (!isEnabled('assistant') || !chainOf(st().advanced).length) { toast(S.w42ev.assistantNeeded); sparkleFallback(); return }   // review wave 42: the same test as the sparkle (any provider of the chain)
-  const send = (): void => twBus.emit('assistant-prefill', templatePrompt(loadColourTags().find((x) => x.id === tag)?.label ?? tag))
+  const send = (): void => twBus.emit('assistant-prefill', templatePrompt(loadColourTags().find((x) => x.id === tag)?.label ?? tag, eventHosted))
   if (twRegistry.isActive('assistant')) { send(); return }
   void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) send(); else sparkleFallback() })
 })
@@ -5224,7 +5356,7 @@ bindTw({
 // Wave 40 ai-edit-chat: every step the person can tap, as undoable commands (actions.ts, app_actions.ts). The bar, Variations, Extensions,
 // Theme and the Curate page run through them; the assistant proposes the same commands, so whatever a hand can do, it can do too.
 const appActions = createActions()
-const BAR_PLACES: Partial<Record<AppPlace, BarId>> = { web: 'web', chat: 'chat', people: 'people', resources: 'inventory', events: 'events', feed: 'feed' }
+const BAR_PLACES: Partial<Record<AppPlace, BarId>> = { web: 'web', chat: 'chat', people: 'people', resources: 'inventory', events: 'events', feed: 'feed', timeline: 'timeline' }
 let placeNow: AppPlace | null = null
 function openAppPlace(place: AppPlace, personId?: string): void {
   placeNow = place
@@ -5305,7 +5437,11 @@ defineAppActions(appActions, {
   newId: () => randomId(8),
   now: () => Date.now(),
 })
-defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity })
+defineEventActions(appActions, {
+  state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName,
+  sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
+})
+defineSyncActions(appActions, devices) // wave43c sync-devices
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
   fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,
@@ -5327,8 +5463,9 @@ const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet: openCardPage, itemSheet,
   openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },
   openMeeting: (id) => { const m = pastMeetings(st()).find((x) => x.id === id); if (m) pastMeetingSheet(m) },
-  redrawFeed: () => { if (screen === Screen.Feed) render() },
-  tabsChanged: () => { renderTabs(); if (screen === Screen.Feed && !feedOn(st())) screen = Screen.Web; render() },
+  redrawFeed: () => { if (screen === Screen.Feed || screen === Screen.Timeline) render() },
+  tabsChanged: () => { renderTabs(); if ((screen === Screen.Feed || screen === Screen.Timeline) && !feedOn(st())) screen = Screen.Web; render() },
+  openFeed: () => go(Screen.Feed),
   settings: settingsSheet,
   openSharePage: (itemId) => pages.open(S.sharePageTitle, [sharePageBody({ state: st, save, toast, page: (title, body, mark) => pages.open(title, body, mark), close: () => history.back() }, itemId)], 'share-page'),
 })
@@ -5600,10 +5737,25 @@ function maybeOpenPendingIntro(): void {
   openSheet([introCard(l, { introduce: () => { closeSheet(); introduceHandoff(l) }, notNow: closeSheet, decline: closeSheet })])
 }
 
+/** Wave 43b: an event link opens the event itself: the edit view for a host, organizer or tech support (or a host link), else the normal one. */
+function linkOpensEdit(ev: LinkedEvent): boolean {
+  const held = st().events?.find((e) => e.id === ev.id)
+  return !!held && eventLinkView(held, ev.kind, st().me.displayName, st().people) === 'edit'
+}
+
+/** Wave 43b: the connect flow after a scan is over (its add sheet with the ring choice is done): the event opens next, else the share, else the person's card. */
+function afterConnectOpen(personId?: string): void {
+  eventWaitsForConnect = false
+  const next = afterConnect({ hasShare: pendingShare !== null, hasEvent: pendingEvent !== null })
+  if (next === 'share') openPendingShare()
+  else if (next === 'event') maybeOpenPendingEvent()
+  else if (personId) personSheet(personId)
+}
+
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
 const openedHits = new Set<string>()
 function maybeOpenPendingEvent(): void {
-  if (!pendingEvent || !state) return
+  if (!pendingEvent || !state || eventWaitsForConnect) return
   const ev = pendingEvent
   pendingEvent = null
   if (!featureOn(st(), 'events')) {
@@ -5619,14 +5771,14 @@ function maybeOpenPendingEvent(): void {
     ])
     return
   }
-  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
+  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id, linkOpensEdit(ev)); return }
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement
   const add = (): void => {
     const now = Date.now()
     const id = joinEvent(st(), ev, now)
     if (ev.by && addBox.checked) addInviter(st(), ev.by, id, S.eventInvitedContext(ev.name), randomId(8), now)
-    save(); closeSheet(); openEvents(id)
+    save(); closeSheet(); openEvents(id, linkOpensEdit(ev))
   }
   // The organizer's logo, if the server has one: filled in later, the sheet never waits for it (the title stays the link's own name).
   const logoSlot = ev.srv ? el('div', { 'data-org-logo': '' }) : null
@@ -7058,6 +7210,7 @@ function editNameSheet(fromWeb = false): void {
     el('p', { class: 'meta' }, [S.meNameHint]),
     el('button', { class: 'btn btn-electric', onclick: saveName }, [S.meNameSave]),
     ...ownEmailLines(s.me.primaryEmail),
+    social.profileBlock(() => editNameSheet(fromWeb)),   // wave 43c: Discoverable by name
     // Tapped in the Web view: a line, then the section for the web itself.
     ...(fromWeb ? [
       el('hr', { class: 'sheet-line' }),
@@ -7189,7 +7342,7 @@ function twChanged(after: () => void = settingsSheet): void {
   document.body.dataset.twProfile = profileOf(state?.twSettings)
   applyVariation()
   const s = st()
-  if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || (screen === Screen.Feed && !feedOn(s))) screen = Screen.Web
+  if ((screen === Screen.Inventory && !featureOn(s, 'inventory')) || (screen === Screen.Events && !featureOn(s, 'events')) || ((screen === Screen.Feed || screen === Screen.Timeline) && !feedOn(s))) screen = Screen.Web
   if (screen === Screen.Ext && !twRegistry.views().some((v) => v.id === extViewId)) screen = Screen.Web
   modeShell.settle() // wave 41: Community switched off underneath = back to Personal
   renderTabs(); render(); after()
@@ -7586,7 +7739,7 @@ function settingsSheet(): void {
     simpleBlock({
       state: () => st() as unknown as Record<string, unknown>, save, render: () => { renderTabs(); render() }, redraw: settingsSheet,
       actions: {
-        'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
+        'ui.profile': () => editNameSheet(), 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
         'ui.import': () => openServicesImport(importHooks()), 'ui.help': () => openSheet([el('h3', {}, [S.setTitle]), ...aboutGroup()]),
       },
     }),
@@ -7597,6 +7750,7 @@ function settingsSheet(): void {
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
+    social.settingsGroup(settingsSheet),   // wave 43c: People and servers
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
     // Wave 41: AI is a section of its own (it sat inside Advanced); same block as the AI sparkle's sheet.
@@ -7714,13 +7868,24 @@ function screenInventory(): Node[] {
   const byQuery = invQuery.trim() ? s.inventory.filter((i) => i.text.toLowerCase().includes(invQuery.trim().toLowerCase())) : s.inventory
   const shown = invOnly ? byQuery.filter((i) => invOnly!.ids.has(i.id)) : byQuery
   const onlyChip = invOnly ? tagFilterChip(invOnly.label, () => { invOnly = null; render() }) : null
-  const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
-    el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
+  // Querying is one tap from Inventory too (wave 2, P9); wave 43c shell-fix-2: "Review requests" is a header button next to it (mountRequestsButton), no floating element.
+  const invRow = (item: InventoryItem): HTMLElement => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
+    el('div', { class: 'inv-main' }, [
+      el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
+        item.text, isDemoItem(s, item.id) ? dummyChip() : null,
+        recentChip(item.createdAt, Date.now()),
+        provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
+      ]),
+      el('div', { class: 'inv-actions' }, [
+        audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
+        degreesPill(item, () => itemSheet(item.id)),
+      ]),
+    ]),
+    el('div', { class: 'inv-side' }, [
+      el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']),
+      onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
+    ]),
   ])
-  // Querying is one tap from Inventory too (wave 2, P9): bottom right as on Web and Chat (wave 27); "Review requests" sits bottom left.
-  const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
-  call.innerHTML = askWebIcon(askIconVariant)
-  call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
   const zin = zoom.inventory
   const list = el('div', { class: 'scroll pad', 'data-zoom-level': zin ? 'in' : 'out' }, zin ? [...outlinerItems(s), ...(cal?.resourcesSection?.() ?? [])] : [
       s.testOf ? foundView(s) : null,
@@ -7732,23 +7897,12 @@ function screenInventory(): Node[] {
       invQuery.trim() && s.inventory.length > 0 && shown.length === 0 ? noMatchLine() : null,
       // Jakob's sketch (10-07, #21/#22): the X top right of the item, the on/off switch below it on the right;
       // under the text first who can ask, then how far it may travel.
-      ...shown.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
-        el('div', { class: 'inv-main' }, [
-          el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
-            item.text, isDemoItem(s, item.id) ? dummyChip() : null,
-            recentChip(item.createdAt, Date.now()),
-            provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
-          ]),
-          el('div', { class: 'inv-actions' }, [
-            audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
-            degreesPill(item, () => itemSheet(item.id)),
-          ]),
-        ]),
-        el('div', { class: 'inv-side' }, [
-          el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']),
-          onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
-        ]),
-      ])),
+      // Wave 43b resources-views: the view switcher, filters and the two sections; protected rows come from resource_views_view.ts.
+      ...resourceViews({
+        items: shown, people: s.people, tags: loadColourTags(), row: invRow, open: itemSheet, save, render,
+        play: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
+        record: (item) => { if (draftInProgress()) { toast(S.resViews.recordBusy); return }; newDraft(); draft.mode = RecordMode.Solo; draft.about = AboutKind.What; draft.name = item.text; draft.itemId = item.id; go(recordScreen()); void startSolo() },
+      }),
       ...invitationsSection(invitationIo()),
       ...(cal?.resourcesSection?.() ?? []),
       backup.card(),
@@ -7765,8 +7919,6 @@ function screenInventory(): Node[] {
   return [
     header(S.invTitle, { glyph: el('span', { class: 'hdr-pair' }, [zoomGlyph('inventory'), info]) }),
     list,
-    call,
-    requests,
   ]
 }
 
@@ -7886,7 +8038,8 @@ async function sendFromDock(text: string): Promise<void> {
 async function runAsk(text: string, reach?: number): Promise<void> {
   const t = text.trim()
   if (!t) return
-  const peers = askPeers(st())
+  const allowed = allowedPeerIds(st(), loadColourTags())   // wave 43b: the audience filter (null = everybody)
+  const peers = askPeers(st()).filter((p) => !allowed || allowed.includes(p.id))
   askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null, reach: reach !== undefined && !askDirectOnly(st()) ? reach : askReachOf(st()) }
   clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
@@ -7894,11 +8047,11 @@ async function runAsk(text: string, reach?: number): Promise<void> {
     if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt, askRun.reach))
   }, 1000)
   render()
-  const results = await net.ask(t, reach)
+  const results = await net.ask(t, reach, allowed)
   clearInterval(countdownTimer)
   if (askRun && askRun.text === t) askRun.results = results
   recordFound(t, results)
-  if (screen === Screen.Web) render()
+  if (screen === Screen.Web || screen === Screen.Ask) render()
 }
 
 function resultsView(results: AskResult[], asked: { text: string; at: number }): HTMLElement[] {
@@ -7941,9 +8094,17 @@ function queryDock(s: AppState): HTMLElement {
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
+  // Wave 43b: the audience filter (zones, Also include / Hide from) with "How far?" under its Advanced; hints and intros share it.
+  const filter = askFilterOf(s)
+  const tagsNow = loadColourTags()
+  const chipName = (c: string): string => (c.startsWith('person:') ? s.people.find((p) => p.id === c.slice(7))?.name ?? '' : tagsNow.find((t) => t.id === c.slice(4))?.label ?? c.slice(4))
   const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r) => {
     if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
     save(); render()
+  }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) })
+  const audienceBox = audienceFilterView({
+    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, advanced: [reach], openSheet, closeSheet, steps: askReachOf(s),
+    changed: () => { saveAskFilter(s, filter); save(); render() },
   })
   const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {
     class: 'chip' + (nextAskMode(askMode) === m ? ' on' : ''), type: 'button', 'data-ask-mode': m, 'aria-pressed': String(nextAskMode(askMode) === m),
@@ -7952,7 +8113,7 @@ function queryDock(s: AppState): HTMLElement {
   const dock = el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
       el('h3', {}, [S.queryTitle]),
-      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; askMode = AskMode.Hints; render() } }, ['×']),
+      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { askMode = AskMode.Hints; closeAsk() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : modeChips,
@@ -7960,8 +8121,10 @@ function queryDock(s: AppState): HTMLElement {
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
-      reach,
+      audienceBox,
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
+      // Review 43b: a filter that reaches nobody says so (the ask would leave for no one).
+      s.peers.length > 0 && allowedPeerIds(s, tagsNow)?.length === 0 ? el('p', { class: 'warn', 'data-aud-nobody': '' }, [S.askPage.nobody]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
       run ? null : webHere.el,
@@ -7985,11 +8148,11 @@ function queryDock(s: AppState): HTMLElement {
   ])
   // Ask for support swaps the question box for the support form; the chips stay on top.
   if (!run && nextAskMode(askMode) === AskMode.Support) {
-    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Hints; queryOpen = false }))
+    dock.querySelector('.dock-body')?.replaceChildren(modeChips, supportForm(supportIo, () => { askMode = AskMode.Hints; closeAsk() }))
   }
   if (!run && nextAskMode(askMode) === AskMode.Intros) {
     dock.querySelector('.dock-body')?.replaceChildren(modeChips, introForm({
-      st, reach, steps: () => askReachOf(st()),
+      st, reach: audienceBox, allowed: () => allowedPeerIds(st(), loadColourTags()), steps: () => askReachOf(st()),
       ask: (peerId, target) => net.askIntro(peerId, target),
       onResult: (target, r) => recordFound(introAskText(target), [r]),
       link: async (target, why) => encodeIntroLink(linkOrigin(location.origin), { by: st().me.displayName, target, ...(why.trim() ? { why: why.trim() } : {}), connect: await (async () => { await net.start(); return net.connectLink(CONNECT_URL) })() }),
@@ -8219,7 +8382,8 @@ if (state && !state.testOf?.handedOverAt) {
   appOpened()
   // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable (in the tab that drains, review 6h).
   void net.start().then(announceLink).then(() => net.restoreHeldAsks())
-  void completePendingConnect()
+  social.start()   // wave 43c: publish, pull intents; needs no open relay
+  void completePendingConnect().catch(connectFailed)
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
   maybeOpenPendingIntro()

@@ -11,7 +11,7 @@ export function raisedIndices(n: number): number[] {
   return n % 2 ? [(n - 1) / 2] : [n / 2 - 1, n / 2]
 }
 
-export type BarId = 'ask' | 'inventory' | 'web' | 'feed' | 'record' | 'chat' | 'events' | 'network' | 'people' | 'map' | `view:${string}` | `mod:${string}`
+export type BarId = 'ask' | 'inventory' | 'web' | 'feed' | 'timeline' | 'record' | 'chat' | 'events' | 'network' | 'people' | 'map' | `view:${string}` | `mod:${string}`
 
 export interface UiBar {
   order?: string[]
@@ -37,15 +37,26 @@ export interface BarFlags {
   advanced?: boolean
   /** Wave 39: the view ids of the extension modules that are on (ext/tw_registry.ts views()); each joins the row as `mod:<id>` at the end unless taken out. */
   mods?: readonly string[]
+  /** Wave 43b (B5): the app was opened from an event link with mode=event: only EVENT_ONLY_BAR shows. */
+  eventOnly?: boolean
 }
 
-export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
+/** Wave 43b (B5): what the event-only variant of the app shows in the bar: Web, Ask your web, Chat; no Recorder. */
+export const EVENT_ONLY_BAR: readonly BarId[] = ['web', 'ask', 'chat']
+
+/** Wave 43b (B5): Ask your web floats over Web and Resources only while it is not a button in the bar (either-or). */
+export const askFloating = (ids: readonly string[]): boolean => !ids.includes('ask')
+
+/** Wave 43: the default order with the Feed in; Record stays in it and removable (wave 42). The old row lives on as the Note taker preset. */
+export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory', 'record']
+/** The wave-33 row, Record in the centre: the once-per-record order reset (resetBarOrder) and the Note taker preset. */
+const WAVE33_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
 /** Wave 42 D2: the stock row nobody has changed: Web, Chat, Feed, Events, Resources (the centre Feed raised). Record, Community and the module views wait in the ⋮ list; Community has the heading pill. */
 export const STOCK_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory']
 export const PHONE_MAX = 6
 
 /** The sheet's checklist, in its order. */
-const CHOICES: readonly BarId[] = ['web', 'feed', 'chat', 'record', 'events', 'inventory', 'ask', 'network', 'people', 'map']
+const CHOICES: readonly BarId[] = ['web', 'feed', 'timeline', 'chat', 'record', 'events', 'inventory', 'ask', 'network', 'people', 'map']
 
 /** Wave 35: the view a `view:<id>` bar entry opens (a view_menu ViewKey); null for every other entry. */
 export const viewOfBar = (id: string): string | null => (id.startsWith('view:') && id.length > 5 ? id.slice(5) : null)
@@ -57,7 +68,7 @@ export const modOfBar = (id: string): string | null => (id.startsWith('mod:') &&
 const viewEntries = (bar: UiBar | undefined): BarId[] => [...new Set(Array.isArray(bar?.order) ? bar.order : [])].filter((id): id is BarId => typeof id === 'string' && viewOfBar(id) !== null)
 
 function offered(f: BarFlags, bar?: UiBar): BarId[] {
-  const off: Partial<Record<BarId, boolean>> = { events: !f.events, feed: !f.feed, inventory: !f.inventory, people: !f.people, map: !f.map }
+  const off: Partial<Record<BarId, boolean>> = { events: !f.events, feed: !f.feed, timeline: !f.feed, inventory: !f.inventory, people: !f.people, map: !f.map }
   return [...CHOICES.filter((id) => !off[id]), ...(f.advanced ? viewEntries(bar) : []), ...(f.mods ?? []).map((m): BarId => `mod:${m}`)]
 }
 
@@ -92,7 +103,7 @@ function fullOrder(bar: UiBar | undefined, f: BarFlags): BarId[] {
 export function resolveBar(bar: UiBar | undefined, f: BarFlags, max?: number): { ids: BarId[]; primary: BarId | null; pair: BarId[] } {
   const ok = new Set<string>(offered(f, bar))
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
-  const ids = fullOrder(bar, f).filter((id) => ok.has(id) && !hidden.has(id))
+  const ids = f.eventOnly ? EVENT_ONLY_BAR.filter((id) => ok.has(id)) : fullOrder(bar, f).filter((id) => ok.has(id) && !hidden.has(id))
   // Wave 42 B04: the default raise follows the buttons that show (module buttons count, the phone's ⋮ overflow does not).
   const basis = max === undefined ? ids : ids.slice(0, max)
   const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(basis)
@@ -126,7 +137,7 @@ export function toggleBar(bar: UiBar | undefined, id: string, f: BarFlags): UiBa
   const order = baseOrder(bar)
   const hidden = (bar?.hidden ?? []).filter((h) => h !== id)
   if (!on && !order.includes(id as BarId)) order.push(id as BarId)
-  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden, orderVersion: BAR_ORDER_VERSION, profile: 'custom', ...haloWithout(bar, on ? [id] : []) }
   if (bar?.primary && !(on && bar.primary === id)) next.primary = bar.primary
   return next
 }
@@ -136,7 +147,8 @@ export function showViewInBar(bar: UiBar | undefined, view: string, on: boolean)
   const id = `view:${view}`
   const order = baseOrder(bar).filter((x) => x !== id)
   if (on) order.push(id as BarId)
-  return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+  const { halo: _halo, ...rest } = bar ?? {}
+  return { ...rest, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom', ...haloWithout(bar, on ? [] : [id]) }
 }
 
 /** Wave 42 (MCP): the listed views, known ones once each, are the bar in that order; every other offered view is taken out. Nothing known in the list changes nothing. */
@@ -144,7 +156,8 @@ export function setBarOrder(bar: UiBar | undefined, order: readonly string[], f:
   const ok = offered(f, bar)
   const want = [...new Set(order)].filter((id): id is BarId => ok.includes(id as BarId))
   if (!want.length) return bar
-  return { ...bar, order: want, hidden: ok.filter((id) => !want.includes(id)), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+  const { halo: _halo, ...rest } = bar ?? {}
+  return { ...rest, order: want, hidden: ok.filter((id) => !want.includes(id)), orderVersion: BAR_ORDER_VERSION, profile: 'custom', ...haloWithout(bar, ok.filter((id) => !want.includes(id))) }
 }
 
 /** Shows the view (new, hidden or already shown) left or right of a shown view `ref`; the place is saved in `order`. Bad input changes nothing. */
@@ -203,9 +216,15 @@ export function promoteBar(bar: UiBar | undefined, id: string, f: BarFlags, max:
 
 export const HALO_MAX = 2
 
-/** Wave 40: the views wearing a halo now: stored ones that are still in the row, the newest HALO_MAX. */
-export const haloOf = (bar: UiBar | undefined, ids: readonly BarId[]): BarId[] =>
-  (Array.isArray(bar?.halo) ? bar.halo : []).filter((id): id is BarId => ids.includes(id as BarId)).slice(-HALO_MAX)
+/** Wave 40: the views wearing a halo now: stored ones that are still in the row, the newest HALO_MAX. Wave 43b (B16): a view raised as the centre button (`raised`) wears none. */
+export const haloOf = (bar: UiBar | undefined, ids: readonly BarId[], raised: readonly BarId[] = []): BarId[] =>
+  (Array.isArray(bar?.halo) ? bar.halo : []).filter((id): id is BarId => ids.includes(id as BarId)).slice(-HALO_MAX).filter((id) => !raised.includes(id))
+
+/** Wave 43b (B16): a view that leaves the row takes its halo with it, so it does not come back wearing one that was not pressed again. */
+const haloWithout = (bar: UiBar | undefined, gone: readonly string[]): { halo?: string[] } => {
+  const left = (Array.isArray(bar?.halo) ? bar.halo : []).filter((h) => !gone.includes(h))
+  return left.length ? { halo: left } : {}
+}
 
 /** Wave 40: a press puts the halo on a view in the row (the third drops the oldest) or takes it off. Views not in the row change nothing. */
 export function toggleHalo(bar: UiBar | undefined, id: string, f: BarFlags): UiBar | undefined {
@@ -236,8 +255,8 @@ export function resetBarOrder(s: { uiBar?: UiBar }): boolean {
   s.uiBar.orderVersion = BAR_ORDER_VERSION
   const old = s.uiBar.order
   if (!Array.isArray(old)) return true
-  const extras = [...new Set(old)].filter((id) => typeof id === 'string' && id !== 'ask' && !DEFAULT_ORDER.includes(id as BarId))
-  s.uiBar.order = [...DEFAULT_ORDER, ...extras]
+  const extras = [...new Set(old)].filter((id) => typeof id === 'string' && id !== 'ask' && !WAVE33_ORDER.includes(id as BarId))
+  s.uiBar.order = [...WAVE33_ORDER, ...extras]
   return true
 }
 
@@ -248,7 +267,7 @@ export function resetBarOrder(s: { uiBar?: UiBar }): boolean {
 export const PROFILES: readonly { id: string; order: readonly BarId[]; primary: BarId }[] = [
   { id: 'connector', order: ['web', 'record', 'chat', 'events', 'inventory'], primary: 'chat' },
   { id: 'up_to_date', order: ['web', 'chat', 'feed', 'events', 'inventory'], primary: 'feed' },
-  { id: 'note_taker', order: DEFAULT_ORDER, primary: 'record' },
+  { id: 'note_taker', order: WAVE33_ORDER, primary: 'record' },
   // Retired in wave 34 (archived here; a stored 'communicator' counts as 'custom'):
   // { id: 'communicator', order: ['web', 'feed', 'chat', 'events', 'inventory'], primary: 'chat' },
 ]
@@ -274,8 +293,14 @@ export function activeProfile(bar: UiBar | undefined, f: BarFlags): string {
   return PROFILES.find((p) => p.primary === primary && p.order.join() === core.join())?.id ?? 'custom'
 }
 
-/** Wave 35: the views the ⋮ button lists: offered, not in the bar. People and Map only once the user took them out of it. */
-export function overflowChoices(ids: readonly BarId[], hidden: readonly string[], f: BarFlags): BarId[] {
+/** Wave 35: the views the ⋮ button lists: offered, not in the bar. Wave 43: People and Map too (they were listed only once taken out, so they stayed missing); `_hidden` stays for the callers. */
+export function overflowChoices(ids: readonly BarId[], _hidden: readonly string[], f: BarFlags): BarId[] {
   const mods = (f.mods ?? []).map((m): BarId => `mod:${m}`) // wave 39: a module view taken out of the row
-  return [...CHOICES, ...mods].filter((id) => offered(f).includes(id) && !ids.includes(id) && (id !== 'people' && id !== 'map' || hidden.includes(id)))
+  return [...CHOICES, ...mods].filter((id) => offered(f).includes(id) && !ids.includes(id))
+}
+
+/** Wave 43: everything the ⋮ sheet lists: the buttons the row has no room for, then every other offered view (view: entries too). Nothing offered and not in the row is missing. */
+export function moreViews(bar: UiBar | undefined, f: BarFlags, max: number): BarId[] {
+  const { ids, primary } = resolveBar(bar, f)
+  return [...barLayout(ids, primary, max).overflow, ...offered(f, bar).filter((id) => !ids.includes(id))]
 }

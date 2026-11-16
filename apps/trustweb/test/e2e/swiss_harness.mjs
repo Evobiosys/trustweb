@@ -90,10 +90,14 @@ export async function startSwissServer(port, { providerUrl = '', extraEnv = {} }
   }
 }
 
-export async function startRelay() {
+/** `port`: the Vite port that proxies /relay; the proxy rewrites Host, so the relay is told that origin is its own (sender auth v2 `aud`, wave 43c). */
+/** `tap` (optional array): every wire the relay stores is pushed as {to, wire}: what the relay operator can read (review-fixes-43c). */
+export async function startRelay({ port: vitePort, tap } = {}) {
   const { RelayServer } = await import('../../../../packages/transport/src/relay_server.ts')
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
-  const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
+  const queueStore = new InMemoryRelayQueueStore()
+  if (tap) { const enqueue = queueStore.enqueue.bind(queueStore); queueStore.enqueue = (to, wire) => { tap.push({ to, wire }); return enqueue(to, wire) } }
+  const relay = new RelayServer({ queueStore, ...(vitePort ? { senderAuthAudiences: [`http://127.0.0.1:${vitePort}`] } : {}) })
   const { port } = await relay.listen(0, '127.0.0.1')
   return { port, stop: () => relay.close?.() }
 }

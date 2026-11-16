@@ -4,14 +4,21 @@
  */
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
-import { DEFAULT_NAME_REVEAL, NAME_REVEALS, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, nameRevealOf, newEvent, restoreEvent, revealedBy, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
+import type { EventOffers } from './events'
+import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, localSettings, mayEdit, nameRevealOf, newEvent, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
+import { eventOrganizers, eventForLink, refsForNames, relatedOthers, roleLabels, setRoles } from './event_roles'
+import { eventPersonPicker } from './event_person_picker'
+import { rolesSection } from './event_roles_view'
 import type { EventError, EventFields } from './events'
 import { dragEvent, dragPerson } from './drag_payload'
-import { PERSON_GREEN } from './colour_tags'
+import { PERSON_GREEN, loadColourTags } from './colour_tags'
+import { listCommunities, parseCommunity } from './ext/community-mighty/community_data'
+import { nicknamesOf, setNicknames } from './event_press'
 import { ringColor } from './model'
 import type { AppState, Invitation, Person, TwEvent } from './model'
 import { invitationEventRows } from './invitations'
+import { ICONS } from './icons'
 import { S } from './strings'
 
 export interface EventsViewHooks {
@@ -39,17 +46,23 @@ export interface EventsViewHooks {
   extra?: (ev: TwEvent) => Node[]
   /** Wave 42 community-event: the sections of a community event (about, sign-up, roles, resources), drawn right under the date and place. */
   plan?: (ev: TwEvent) => Node[]
+  /** Wave 43 event-feed: the Feed row of an event that offers a Feed, drawn under the date and place; null when it offers none. */
+  feedRow?: (ev: TwEvent) => HTMLElement | null
   /** Wave 33: opens the edit sheet of an invitation shown among the events. */
   openInvitation?: (i: Invitation) => void
   /** Wave 27: the QR page of an event (qr_modes.ts): the event and my connect code in one code. */
-  showQr?: (ev: TwEvent) => void
+  showQr?: (ev: TwEvent, host?: boolean) => void
+  /** Wave 43: opens the ask-for-support sheet (an event that offers support shows its button). */
+  askSupport?: () => void
+  /** Wave 43 web-focus-filter: show the Web with only this event's people. */
+  focusWeb?: (ev: TwEvent) => void
 }
 
 export interface EventsView {
   /** The screen's children, for render(). */
   body: () => Node[]
   /** Show this event's page, or the list without an id (the next body() draws it). */
-  open: (eventId?: string, noBack?: boolean) => void
+  open: (eventId?: string, noBack?: boolean, edit?: boolean) => void
   /** Whether the plain list would draw now (the calendar stands in for it unless showList() was asked). */
   atList: () => boolean
   /** The add form, From preset to that day. */
@@ -60,7 +73,8 @@ export interface EventsView {
   current: () => TwEvent | undefined
 }
 
-type View = { kind: 'list' } | { kind: 'page'; id: string; noBack?: boolean } | { kind: 'form'; id?: string; from?: string }
+type EventField = 'name' | 'where' | 'conditions' | 'themes' | 'organizer'
+type View = { kind: 'list' } | { kind: 'page'; id: string; noBack?: boolean } | { kind: 'form'; id?: string; from?: string; focus?: EventField }
 
 const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo, core: S.eventsErrCore }
 
@@ -74,7 +88,12 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   let advancedOpen = false
   /** The link copied last on this page, shown under the share button. */
   let lastLink = ''
-  const show = (v: View): void => { view = v; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; h.redraw() }
+  /** Wave 43: the since line shows its until / core days; its time editor is open; the notification sentence shows; the Nickname segment shows. All reset whenever a view opens. */
+  let sinceOpen = false
+  let timesOpen = false
+  let notifyHint = false
+  let revealOpen = false
+  const show = (v: View): void => { view = v; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; sinceOpen = false; timesOpen = false; notifyHint = false; revealOpen = false; h.redraw() }
   const find = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
 
   function row(ev: TwEvent): HTMLElement {
@@ -131,9 +150,23 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return [el('label', { class: 'meta' }, [label]), input]
   }
 
+  /** Wave 43 answers (epsilon): "Part of a community" (a picker over the communities I have) or "Isolated event" (the default). The value is the community's colour tag id, empty = isolated. */
+  function communityPick(current: string | undefined, onChange?: (id: string) => void): HTMLSelectElement {
+    const st = h.state()
+    const rows = listCommunities(parseCommunity(st.extData?.['community-mighty']), loadColourTags(), st.people)
+    const known = current && !rows.some((r) => r.id === current) ? [{ id: current, name: current }] : []
+    const pick = el('select', { class: 'field', 'aria-label': S.w43answers.community, 'data-event-community': '' }, [
+      el('option', { value: '' }, [S.w43answers.communityNone]),
+      ...[...rows, ...known].map((r) => el('option', { value: r.id, ...(r.id === current ? { selected: '' } : {}) }, [r.name])),
+    ]) as HTMLSelectElement
+    if (onChange) pick.addEventListener('change', () => onChange(pick.value))
+    return pick
+  }
+
   function form(existing?: TwEvent, presetFrom?: string): Node[] {
     const text = (v = ''): HTMLInputElement => el('input', { class: 'field', value: v })
-    const date = (v = ''): HTMLInputElement => el('input', { class: 'field', type: 'date', value: v })
+    // A date that carries a time (the since editor sets one) keeps it: a date input would blank it.
+    const date = (v = ''): HTMLInputElement => el('input', { class: 'field', type: v.length > 10 ? 'datetime-local' : 'date', value: v })
     const name = text(existing?.name)
     const tag = text(existing?.tagName)
     const showSame = (): void => { tag.placeholder = name.value.trim() || S.eventsTagNameSame }
@@ -151,21 +184,29 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     where.placeholder = S.eventWherePlaceholder
     const conditions = el('textarea', { class: 'field', rows: 3 }, [existing?.conditions ?? ''])
     const themes = text(existing?.themes?.join(', '))
-    const organizer = text(existing?.organizer)
+    const organizer = text(existing ? roleLabels(h.state(), eventOrganizers(existing)).join(', ') : '')
     const hosts = el('div', {}, [])
     const addHost = (v = ''): void => { hosts.append(text(v)) }
-    ;(existing ? existing.hosts ?? [] : [h.state().me.displayName]).forEach(addHost)
+    ;(existing ? roleLabels(h.state(), existing.hosts ?? []) : [h.state().me.displayName]).forEach(addHost)
     if (!hosts.children.length) addHost()
+    const community = communityPick(existing?.communityId)
     const error = el('p', { class: 'warn', 'data-event-error': '', hidden: true })
+    const focus = view.kind === 'form' ? view.focus : undefined   // wave 43: a long press on a line of the page opens the sheet on that field
+    if (focus) setTimeout(() => ({ name, where, conditions, themes, organizer })[focus].focus())
     const save = (): void => {
       const fields: EventFields = {
         name: name.value, from: from.value, to: to.value, core: { from: coreFrom.value, to: coreTo.value }, where: where.value, conditions: conditions.value,
-        themes: splitThemes(themes.value), organizer: organizer.value, attended: existing?.attended,
-        hosts: [...hosts.querySelectorAll('input')].map((i) => i.value),
+        themes: splitThemes(themes.value), attended: existing?.attended,
       }
       const made = newEvent(fields, existing?.id ?? h.newId(), existing?.createdAt ?? Date.now())
       if (typeof made === 'string') { error.textContent = ERRORS[made]; error.hidden = false; return }
       const ev = { ...made, ...(existing ? localSettings(existing) : {}) }
+      setRoles(h.state(), ev, {
+        organizers: refsForNames(h.state(), organizer.value.split(','), existing ? eventOrganizers(existing) : []),
+        hosts: refsForNames(h.state(), [...hosts.querySelectorAll('input')].map((i) => i.value), existing?.hosts),
+        techSupport: existing?.techSupport ?? [],
+      })
+      applyEventSettings(ev, { communityId: community.value })
       const tagged = tag.value.trim()
       if (tagged && tagged !== made.name) { ev.tagName = tagged; ev.tagLocked = true } else { delete ev.tagName; delete ev.tagLocked }
       const s = h.state()
@@ -178,6 +219,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...field(S.eventsName, name), ...field(S.eventsTagNameField, tag), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsCoreFrom, coreFrom), ...field(S.eventsCoreTo, coreTo), ...field(S.eventsWhere, where),
       ...field(S.eventsConditions, conditions), ...field(S.eventsThemes, themes), ...field(S.eventsOrganizer, organizer),
       ...field(S.eventsHost, hosts), el('button', { class: 'btn btn-ghost btn-sm', 'data-event-cohost': '', onclick: () => addHost() }, [S.eventsCoHost]),
+      ...field(S.w43answers.community, community), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
       error,
       el('button', { class: 'btn btn-electric wide', 'data-event-save': '', onclick: save }, [S.eventsSave]),
       el('button', { class: 'btn btn-ghost wide', onclick: cancel }, [S.eventsCancel]),
@@ -208,24 +250,22 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return row
   }
 
+  /** Wave 43: the Web glyph in the people header: the Web view with this event as its only filter. */
+  function webFocusButton(ev: TwEvent): HTMLElement | null {
+    if (!h.focusWeb) return null
+    const b = el('button', { type: 'button', class: 'hdr-btn icon-only ev-web-focus', 'data-event-web-focus': '', 'aria-label': S.eventsWebFocus, title: S.eventsWebFocus, onclick: () => h.focusWeb?.(ev) })
+    b.innerHTML = ICONS.web
+    return b
+  }
+
+  /** "Identify a person": the shared picker (event_person_picker.ts); a pick tags the person with this event. */
   function picker(ev: TwEvent): HTMLElement {
-    const input = el('input', { class: 'field', placeholder: S.eventsTagSearch, 'aria-label': S.eventsTagPerson, 'data-event-tag-search': '' })
-    const results = el('div', {})
-    const draw = (): void => {
-      const open = h.state().people.filter((p) => !p.events?.includes(ev.id))
-      results.replaceChildren(...matchPeople(open, input.value).map((p) => {
-        const chip = el('button', {
-          class: 'chip', 'data-tag-person': p.id,
-          onclick: () => { tagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
-        }, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])])
-        contextPress(chip, () => h.curatorPerson(p.id))
-        dragPerson(chip, p)
-        return chip
-      }))
-    }
-    input.addEventListener('input', draw)
-    draw()
-    return el('div', {}, [el('h3', {}, [S.eventsTagPerson]), input, el('div', { class: 'chips' }, [results])])
+    return el('div', {}, [el('h3', {}, [S.eventsIdentify]), eventPersonPicker(h, ev.id, {
+      exclude: attendees(h.state(), ev.id).map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
+      renderPerson: (p) => el('span', {}, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])]),
+      decorate: (chip, p) => { contextPress(chip, () => h.curatorPerson(p.id)); dragPerson(chip, p) },
+      onPick: (id) => { tagPerson(h.state(), id, ev.id); h.save(); h.redraw() },
+    })])
   }
 
   function remove(ev: TwEvent): void {
@@ -239,7 +279,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
 
   /** Copies the link the toggle now shows (the host one says so in the toast) and redraws to preview it. E3: the peer link says of me only what the event's name reveal allows. */
   function copyShown(ev: TwEvent): void {
-    lastLink = encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer', hostLink ? undefined : revealedBy(h.by(), ev))
+    lastLink = encodeEventLink(eventForLink(h.state(), ev), h.origin, hostLink ? 'host' : 'peer', hostLink ? undefined : revealedBy(h.by(), ev))
     h.copyLink(lastLink, hostLink ? S.eventHostLinkCopied : undefined)
     h.redraw()
   }
@@ -256,33 +296,86 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return input
   }
 
-  /** Switching copies the matching link at once: host link on, peer link off. */
+  /** Wave 43 (P2): ON = opens as event host; OFF = the same label struck through plus what it means. Switching copies the matching link at once. */
   function hostToggle(ev: TwEvent): HTMLElement {
-    return el('button', {
-      class: 'chip' + (hostLink ? ' on' : ''), role: 'switch', 'aria-checked': String(hostLink), 'data-event-host-toggle': '',
-      onclick: () => {
-        hostLink = !hostLink
-        copyShown(ev)
-      },
-    }, [S.eventHostLinkToggle])
+    return el('div', {}, [
+      el('button', {
+        class: 'chip' + (hostLink ? ' on' : ' tw-off'), 'aria-pressed': String(hostLink), 'data-event-host-toggle': '',
+        onclick: () => {
+          hostLink = !hostLink
+          copyShown(ev)
+        },
+      }, [S.w43press.hostOn]),
+      hostLink ? null : el('small', { class: 'meta', 'data-event-host-off': '' }, [` ${S.w43press.hostOffNote}`]),
+    ])
   }
 
-  /** E3: "Your name to other attendees": Full name | First name | Hidden. A change saves (the default is not stored) and copies the shown link again. */
+  /** Wave 43: the share row, two icons side by side; the QR carries the link the toggle now shows. */
+  function shareRow(ev: TwEvent): HTMLElement {
+    const T = S.w43press
+    const icon = (glyph: string, label: string, attr: string, onclick: () => void): HTMLElement =>
+      el('button', { class: 'btn btn-ghost', type: 'button', 'aria-label': label, title: label, [attr]: '', onclick }, [el('span', { 'aria-hidden': 'true' }, [glyph]), ' ', el('u', {}, [label === S.eventLinkShare ? T.shareLink : T.shareQr])])
+    return el('div', { class: 'chips event-share', 'data-event-share-row': '' }, [
+      icon(T.iconLink, S.eventLinkShare, 'data-event-share', () => copyShown(ev)),
+      h.showQr ? icon(T.iconQr, S.eventQrShare, 'data-event-qr', () => h.showQr?.(ev, hostLink)) : null,
+    ])
+  }
+
+  /** E3: "Your name to other attendees": Full name | First name | Hidden. Wave 43: a long press on the segment reaches Nickname (the fourth, shown while open or chosen). A change saves (the default is not stored) and copies the shown link again. */
   function nameReveal(ev: TwEvent): HTMLElement {
     const cur = nameRevealOf(ev)
+    const choose = (r: typeof cur): void => {
+      if (r === cur) return
+      applyEventSettings(ev, { nameReveal: r })
+      h.save()
+      if (lastLink) copyShown(ev); else h.redraw()
+    }
+    const group = el('div', { class: 'seg', role: 'group', 'aria-label': S.eventNameReveal, 'data-event-reveal-seg': '' }, NAME_REVEALS.filter((r) => r !== 'nick' || revealOpen || cur === 'nick').map((r) => el('button', {
+      type: 'button', class: r === cur ? 'on' : '', 'aria-pressed': String(r === cur), 'data-event-name-reveal': r,
+      onclick: () => choose(r),
+    }, [S.eventNameRevealOpt[r]])))
+    contextPress(group, () => { revealOpen = true; if (cur === 'nick') h.redraw(); else choose('nick') })
+    const nick = el('input', { class: 'field', value: nicknamesOf(h.state().me).join(', '), placeholder: S.w43press.nickLabel, 'aria-label': S.w43press.nickLabel, 'data-event-nickname': '' })
+    nick.addEventListener('change', () => {
+      setNicknames(h.state().me, nick.value.split(','))
+      h.save()
+      if (lastLink) copyShown(ev)
+    })
     return el('div', { class: 'event-reveal', 'data-event-reveal': cur }, [
       el('label', { class: 'meta' }, [S.eventNameReveal]),
-      el('div', { class: 'seg', role: 'group', 'aria-label': S.eventNameReveal }, NAME_REVEALS.map((r) => el('button', {
-        type: 'button', class: r === cur ? 'on' : '', 'aria-pressed': String(r === cur), 'data-event-name-reveal': r,
-        onclick: () => {
-          if (r === cur) return
-          if (r === DEFAULT_NAME_REVEAL) delete ev.nameReveal; else ev.nameReveal = r
-          h.save()
-          if (lastLink) copyShown(ev); else h.redraw()
-        },
-      }, [S.eventNameRevealOpt[r]]))),
+      group,
+      cur === 'nick' ? el('div', {}, [nick, el('p', { class: 'meta' }, [S.w43press.nickHint + ' ' + S.w43answers.nicknamesHint])]) : null,
       el('p', { class: 'meta' }, [S.eventNameRevealHint]),
     ])
+  }
+
+  /** Wave 43: people tied to the event only through roles or invitations; read-only chips, a press opens the person page. */
+  function others(ev: TwEvent): Node[] {
+    const list = relatedOthers(h.state(), ev)
+    if (!list.length) return []
+    return [el('h3', {}, [S.eventsOthersRelated]), el('div', { class: 'chips', 'data-event-others': '' }, list.map((p) => el('button', { class: 'chip', type: 'button', 'data-other-person': p.id, onclick: () => h.curatorPerson(p.id) }, [p.name])))]
+  }
+
+  /** An on/off control for a greyscale screen (P2): off = struck through, never colour alone. */
+  function toggle(on: boolean, label: string, attr: string, onclick: () => void): HTMLElement {
+    return el('button', { class: 'chip' + (on ? ' on' : ' tw-off'), type: 'button', 'aria-pressed': String(on), [attr]: '', onclick }, [label])
+  }
+
+  /** Wave 43 answers (zeta): the host names a Mastodon instance; the event Feed merges its public posts under the event tag. A change saves when the field loses focus; a bad host shows a line and keeps the old one. */
+  function mastodonInput(ev: TwEvent): HTMLElement {
+    const input = el('input', { class: 'field', value: ev.mastodonInstance ?? '', placeholder: S.w43answers.mastodonPh, 'aria-label': S.w43answers.mastodon, 'data-event-mastodon': '' }) as HTMLInputElement
+    const bad = el('p', { class: 'warn', 'data-event-mastodon-bad': '', hidden: true }, [S.w43answers.mastodonBad])
+    input.addEventListener('change', () => {
+      try { applyEventSettings(ev, { mastodonInstance: input.value }); bad.hidden = true; h.save(); input.value = ev.mastodonInstance ?? '' } catch { bad.hidden = false }
+    })
+    return el('div', {}, [input, bad])
+  }
+
+  /** Wave 43 answers (iota): my nickname at this event; the Nickname reveal of this event uses it, else my first nickname. */
+  function myNicknameInput(ev: TwEvent): HTMLInputElement {
+    const input = el('input', { class: 'field', value: ev.myNickname ?? '', placeholder: nicknamesOf(h.state().me)[0] ?? '', 'aria-label': S.w43answers.myNickname, 'data-event-my-nickname': '' }) as HTMLInputElement
+    input.addEventListener('change', () => { applyEventSettings(ev, { myNickname: input.value }); h.save(); if (lastLink) copyShown(ev) })
+    return input
   }
 
   /** Renaming the tag locks it against the host and copies the link now showing (host or peer) again at once with the new name. */
@@ -299,40 +392,138 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const hostNames = el('input', { type: 'checkbox', 'data-event-host-names': '' })
     hostNames.checked = ev.hostNamesTags !== false
     hostNames.addEventListener('change', () => { ev.hostNamesTags = hostNames.checked; h.save() })
+    const T = S.w43press
+    const policy = ev.invitePolicy ?? DEFAULT_INVITE_POLICY
+    const offers = offersOf(ev)
+    const offerRows: [keyof EventOffers, string][] = [['support', T.offerSupport], ['resources', T.offerResources], ['feed', T.offerFeed]]
     const box = el('details', { 'data-event-advanced': '' }, [
       el('summary', {}, [S.eventAdvanced]),
       ...field(S.eventTagName, name),
       el('label', { class: 'meta' }, [hostNames, ' ', S.eventHostNamesTags]),
+      ...others(ev),
+      mayEdit(ev, h.state().me.displayName, h.state().people) ? el('div', { 'data-event-invite-policy': policy }, [
+        el('label', { class: 'meta' }, [T.invitePolicy]),
+        el('div', { class: 'seg', role: 'group', 'aria-label': T.invitePolicy }, INVITE_POLICIES.map((p) => el('button', {
+          type: 'button', class: p === policy ? 'on' : '', 'aria-pressed': String(p === policy), 'data-event-invite-policy-opt': p,
+          onclick: () => { applyEventSettings(ev, { invitePolicy: p }); h.save(); h.redraw() },
+        }, [T.invitePolicyOpt[p]]))),
+        el('p', { class: 'meta' }, [T.invitePolicyHint]),
+        el('p', { class: 'meta', 'data-event-host-only-hint': '' }, [S.shellFix2.hostOnlyHint]),
+      ]) : null,
+      ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [
+        ...field(S.w43answers.community, communityPick(ev.communityId, (id) => { applyEventSettings(ev, { communityId: id }); h.save() })), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
+        ...field(S.w43answers.mastodon, mastodonInput(ev)), el('p', { class: 'meta' }, [S.w43answers.mastodonHint]),
+      ] : []),
+      // Wave 43b (B5): the host chooses what people see when they open this event's link.
+      ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [el('div', { 'data-event-link-mode': ev.linkMode ?? 'full' }, [
+        el('label', { class: 'meta' }, [S.w43shell.linkMode]),
+        el('div', { class: 'seg', role: 'group', 'aria-label': S.w43shell.linkMode }, (['full', 'event'] as const).map((m) => el('button', {
+          type: 'button', class: m === (ev.linkMode ?? 'full') ? 'on' : '', 'aria-pressed': String(m === (ev.linkMode ?? 'full')), 'data-event-link-mode-opt': m,
+          onclick: () => { if (m === 'event') ev.linkMode = 'event'; else delete ev.linkMode; h.save(); h.redraw() },
+        }, [m === 'full' ? S.w43shell.linkModeFull : S.w43shell.linkModeEvent]))),
+      ])] : []),
+      ...field(S.w43answers.myNickname, myNicknameInput(ev)), el('p', { class: 'meta' }, [S.w43answers.myNicknameHint]),
+      el('label', { class: 'meta' }, [T.offers]),
+      el('div', { class: 'chips', 'data-event-offers': '' }, offerRows.map(([k, label]) => toggle(offers[k], label, `data-event-offer-${k}`, () => { applyEventSettings(ev, { offers: { [k]: !offers[k] } }); h.save(); h.redraw() }))),
+      el('p', { class: 'meta', 'data-event-feed-hint': '' }, [S.shellFix2.feedPressHint]),
     ])
     box.open = advancedOpen
     box.addEventListener('toggle', () => { advancedOpen = box.open })
     return box
   }
 
+  /** Wave 43 (P1): single press = more, or the edit sheet when there is nothing more; long press or right click = the edit sheet on that field. */
+  function editable<T extends HTMLElement>(node: T, ev: TwEvent, focus: EventField, more?: () => void): T {
+    const edit = (): void => show({ kind: 'form', id: ev.id, focus })
+    node.classList.add('press')
+    node.addEventListener('click', () => (more ?? edit)())
+    contextPress(node, edit)
+    return node
+  }
+
+  /** Wave 43: "since 09:30 today"; a press shows until and the core days; a long press edits when I am there (inline, saved when a field loses focus). */
+  function sinceLine(ev: TwEvent): HTMLElement {
+    const today = todayIso(new Date())
+    const label = sinceLabel(ev, today)
+    const until = label.startsWith('since') ? untilLabel(ev) : ''
+    const more = !!(until || ev.core)
+    const head = el('button', { class: 'press event-since', type: 'button', 'aria-expanded': String(sinceOpen), 'data-event-since': '' }, [el('b', {}, [label]), more ? el('span', { class: 'chev', 'aria-hidden': 'true' }, [sinceOpen ? ' ⌃' : ' ⌄']) : null])
+    head.title = sinceOpen ? S.w43press.collapse : S.w43press.expand
+    head.addEventListener('click', () => { if (more) sinceOpen = !sinceOpen; else timesOpen = true; h.redraw() })
+    contextPress(head, () => { timesOpen = true; h.redraw() })
+    return el('div', { 'data-event-when': '' }, [
+      head,
+      sinceOpen && until ? el('p', { class: 'meta', 'data-event-until': '' }, [until]) : null,
+      sinceOpen && ev.core ? el('p', { class: 'meta', 'data-event-core': '' }, [coreLabel(ev)]) : null,
+      timesOpen ? timesEditor(ev) : null,
+    ])
+  }
+
+  function timesEditor(ev: TwEvent): HTMLElement {
+    const T = S.w43press
+    const input = (v: string): HTMLInputElement => el('input', { class: 'field', type: 'datetime-local', value: v.length === 10 ? `${v}T00:00` : v })
+    const from = input(ev.from)
+    const to = input(ev.to ?? '')
+    const error = el('p', { class: 'warn', 'data-event-times-error': '', hidden: true }, [T.timesBad])
+    // A date the person never gave a time stays a plain date.
+    const value = (i: HTMLInputElement, was: string): string => (i.value.endsWith('T00:00') && was.length <= 10 ? i.value.slice(0, 10) : i.value)
+    const box = el('div', { class: 'event-times', 'data-event-times': '' }, [
+      el('label', { class: 'meta' }, [T.timesFrom]), from, el('label', { class: 'meta' }, [T.timesTo]), to, error,
+    ])
+    const save = (): void => {
+      const bad = setEventTimes(ev, value(from, ev.from) || ev.from, value(to, ev.to ?? ''))
+      error.hidden = !bad
+      if (!bad) h.save()
+    }
+    from.addEventListener('change', save)
+    to.addEventListener('change', save)
+    box.addEventListener('focusout', (e) => { if (!box.contains((e as FocusEvent).relatedTarget as Node | null) && error.hidden) { timesOpen = false; h.redraw() } })
+    setTimeout(() => to.focus())
+    return box
+  }
+
   function page(ev: TwEvent): Node[] {
     const people = attendees(h.state(), ev.id)
     const attended = el('button', {
-      class: 'chip' + (ev.attended ? ' on' : ''), role: 'switch', 'aria-checked': String(ev.attended), 'data-event-attended': '',
+      class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
     }, [S.eventsAttended])
+    // review-fixes-43: one switch for this event's notifications; it also covers the "I'm here now" bell (a muted bell of older records shows as off, switching on clears it).
+    const st = h.state()
+    const notifyNow = notifyOn(ev) && !(st.atEvent?.eventId === ev.id && st.atEvent.bell === false)
+    const notify = toggle(notifyNow, S.w43press.notify, 'data-event-notify', () => {
+      applyEventSettings(ev, { notify: !notifyNow })
+      if (!notifyNow && st.atEvent?.eventId === ev.id) delete st.atEvent.bell
+      h.save(); h.redraw()
+    })
+    contextPress(notify, () => { notifyHint = !notifyHint; h.redraw() })
     const title = h.header(ev.name, view.kind === 'page' && view.noBack ? {} : { back: () => show({ kind: 'list' }) })   // wave 40: from the calendar it is a regular event card, no Back button
     dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
+    // review-fixes-43: the event name in the header is a line of the page too (P1): nothing to expand, so a press edits; a long press / right click edits with the name focused.
+    const nameLine = title.querySelector('h2')
+    if (nameLine) { nameLine.setAttribute('data-event-name-line', ''); nameLine.setAttribute('role', 'button'); nameLine.tabIndex = 0; editable(nameLine, ev, 'name') }
+    // P4: the tag as this device calls it (tagLabel: the tag name, else the event name), the same text the Web filter and the Feed show.
+    const tag = tagLabel(ev)
+    const tagChip = el('button', { class: 'chip event-tag-chip', type: 'button', 'data-event-tag-chip': tag, 'aria-label': S.eventsTagChipAria(eventTagLabel(tag)), onclick: () => h.copyLink(eventTagSlug(tag), S.eventsTagCopied) }, [eventTagLabel(tag)])
+    contextPress(tagChip, () => show({ kind: 'form', id: ev.id }))
     return [title, el('div', { class: 'scroll events-page' }, [
-      el('p', {}, [el('b', {}, [whenLabel(ev)])]),
-      ev.core ? el('p', { 'data-event-core': '' }, [coreLabel(ev)]) : null,
-      ev.where ? el('p', {}, [ev.where]) : null,
-      ev.organizer ? el('p', { class: 'meta' }, [S.eventsOrganizedBy(ev.organizer)]) : null,
-      ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
-      ev.conditions ? el('p', {}, [ev.conditions]) : null,
+      tagChip,
+      sinceLine(ev),
+      ev.where ? editable(el('p', { 'data-event-where': '' }, [ev.where]), ev, 'where') : null,
+      rolesSection(h, ev),
+      ev.themes ? editable(el('div', { class: 'chips', 'data-event-themes': '' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))), ev, 'themes') : null,
+      ev.conditions ? editable(el('p', { 'data-event-conditions': '' }, [ev.conditions]), ev, 'conditions') : null,
       ...(h.plan?.(ev) ?? []),
-      el('div', { class: 'chips' }, [attended]),
-      el('button', { class: 'btn btn-ghost wide', 'data-event-share': '', onclick: () => copyShown(ev) }, [S.eventLinkShare]),
-      h.showQr ? el('button', { class: 'btn btn-ghost wide', 'data-event-qr': '', onclick: () => h.showQr?.(ev) }, [S.eventQrShare]) : null,
+      h.feedRow?.(ev) ?? null,
+      offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.() }, [S.w43press.askSupport]) : null,
+      el('div', { class: 'chips' }, [attended, notify]),
+      notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,
+      shareRow(ev),
       hostToggle(ev),
       linkPreview(),
       el('p', { class: 'meta' }, [S.eventLinkHint]),
       nameReveal(ev),
-      el('h3', {}, [S.eventsTagged(tagLabel(ev))]),
+      el('div', { class: 'ev-people-head' }, [el('h3', {}, [S.eventsAssociated(tagLabel(ev))]), webFocusButton(ev)]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),
@@ -348,7 +539,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     openForm: (from) => show({ kind: 'form', ...(from ? { from } : {}) }),
     showList: () => { view = { kind: 'list' }; plain = true; h.redraw() },
     current: () => (view.kind === 'page' ? find(view.id) : undefined),
-    open: (id, noBack) => { view = id ? { kind: 'page', id, ...(noBack ? { noBack } : {}) } : { kind: 'list' } },
+    open: (id, noBack, edit) => { view = id ? (edit ? { kind: 'form', id } : { kind: 'page', id, ...(noBack ? { noBack } : {}) }) : { kind: 'list' } },
     body: () => {
       const ev = view.kind === 'list' ? undefined : find(view.id ?? '')
       if (view.kind === 'form') return form(ev, view.from)

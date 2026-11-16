@@ -15,10 +15,12 @@ import { S } from './strings'
 import { FILTER_RINGS, ringShown, setRingShown } from './rings_filter'
 import { communityOf, communityTags, filterOpen, setUi } from './trustzones'
 import { connectionsShown } from './zone_connections'
-import { activeCountLabel, activeFilters } from './filter_active'
+import { activeCountLabel, activeFilters, dropFilters } from './filter_active'
 import { closestLimit, closestMoot, limitOf, parseLimit, setPerRingLimit } from './membranes_five'
 import { webSlot } from './rings_layout'
 import { panelMode } from './filter_panel'
+import { contextPress } from './context_press'
+import { BADGE_PRESS, clearFilters, clearFiltersWithUndo } from './web_focus'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
 export const triangle = (open: boolean): string => (open ? '▾' : '▸')
@@ -43,14 +45,21 @@ function numEdit(value: number, attr: string, onSave: (raw: string) => void): HT
   return btn
 }
 
+/** Wave 43 answers (delta): clears every filter; with the app's undo notice it shows a 5 second Undo. */
+function clearEverything(d: Pick<ZonePanelDeps, 's' | 'onChange' | 'undo'>): void {
+  if (d.undo) { clearFiltersWithUndo(d.s, d.undo, d.onChange); return }
+  clearFilters(d.s); d.onChange()
+}
+
 /** Wave 30 (U9): one row per active chip ("Only #family ✕") plus "Show everyone"; empty when no filter is on. */
-function activeRows(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>): HTMLElement[] {
-  const active = activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s))
-  const off = (keep: (chip: string) => boolean): void => { setUi(d.s, 'show', (d.s.uiRings?.show ?? []).filter(keep)); setUi(d.s, 'hide', (d.s.uiRings?.hide ?? []).filter(keep)); if (!keep('closest150')) setUi(d.s, 'closest150', false); if (!keep('perRing')) { delete d.s.membraneLimit; setUi(d.s, 'rankBy', undefined) }; d.onChange() }
+function activeRows(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange' | 'undo'>): HTMLElement[] {
+  const active = activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s), d.s.events)
+  const off = (keep: (chip: string) => boolean): void => { dropFilters(d.s, keep); d.onChange() }
+  const clearAll = (): void => clearEverything(d)
   const link = (attrs: Record<string, string>, label: string, onclick: () => void): HTMLElement => el('button', { type: 'button', class: 'btn btn-ghost btn-sm filter-off', ...attrs, onclick }, [label])
   return active.length ? [
     ...active.map((a) => el('div', { class: 'filter-active', 'data-filter-active': a.chip }, [el('span', {}, [a.label]), link({ 'data-filter-off': a.chip, 'aria-label': S.filterOff(a.label) }, '✕', () => off((c) => c !== a.chip))])),
-    el('div', { class: 'filter-active' }, [link({ 'data-filter-off-all': '' }, S.tagFilterClear, () => off(() => false))]),
+    el('div', { class: 'filter-active' }, [link({ 'data-filter-off-all': '' }, S.filterClearAll, clearAll)]),
   ] : []
 }
 
@@ -61,6 +70,8 @@ export interface ZonePanelDeps {
   tags: readonly ColourTag[]
   /** A view setting changed (already written to s.uiRings): save and redraw. */
   onChange: () => void
+  /** Wave 43 answers (delta): the app's undo notice (title, action, ms); absent = clearing has no Undo. */
+  undo?: (title: string, onUndo: () => void, ms: number) => void
 }
 
 /** Filter (advanced): one checkbox per trust ring, Community tag. Wave 28b: drawn in the Network view (the TrustZones sidebar has the tag filters instead). */
@@ -76,7 +87,7 @@ export function filterSection(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>)
     ...communityTags(d.tags).map((t) => el('option', { value: t.id, ...(t.id === community ? { selected: '' } : {}) }, [t.label ?? t.id])),
   ])
   return el('section', { class: 'zone-filter', 'data-zone-filter-section': '' }, [
-    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s)).length))])]),
+    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s), d.s.events).length))])]),
     ...(open ? [...activeRows(d), ...FILTER_RINGS.map(check), el('label', { class: 'zone-check' }, [S.zoneCommunity, ' ', pick])] : []),
   ])
 }
@@ -97,7 +108,7 @@ export function trustZonesGroup(d: Pick<ZonePanelDeps, 's' | 'onChange'>): HTMLE
 }
 
 /** Wave 28b: the two chip inputs of the sidebar's Filters (advanced), the share page's chips and typeahead (share_page.ts): "show only" keeps matches, "hide" removes them and wins. Both filter the dots on the web. */
-function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>): HTMLElement {
+function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange' | 'undo'>): HTMLElement {
   const cands = candidates({ people: d.people, tags: d.tags })
   const label = (id: string): string => (id.startsWith('person:') ? '@' : '#') + (cands.find((c) => c.id === id)?.label ?? id)
   const page = (): ReturnType<typeof initial> => ({ ...initial(), include: d.s.uiRings?.show ?? [], exclude: d.s.uiRings?.hide ?? [] })
@@ -176,7 +187,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
 const addingTo: { tag?: string; added: string[] } = { added: [] }
 
 /** Wave 28b: the TrustZones view's only side control (left on desktop, above the rings on the phone, unfolded by default): expand all, add, tag filters. */
-export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'> & { expand: HTMLElement; add: HTMLElement; select: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void; /** Phone: the overlay sheet (main.ts openSheet). */ openPanel: (children: (Node | null)[]) => void }): HTMLElement {
+export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange' | 'undo'> & { expand: HTMLElement; add: HTMLElement; select: HTMLElement; hiddenCount: number; openHidden: () => void; spaceOut: () => void; deletedCount: number; openDeleted: () => void; /** Phone: the overlay sheet (main.ts openSheet). */ openPanel: (children: (Node | null)[]) => void }): HTMLElement {
   // Wave 39: on a phone Tools and Filters open as an overlay sheet that redraws after each change; wider, they fold open inline.
   const sheet = panelMode(window.innerWidth) === 'sheet'
   let showing: 'tools' | 'filters' | null = null
@@ -225,7 +236,7 @@ export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | '
       ' ', S.expandButtonsLabel,
     ]), action('data-hidden-people', '◌', S.hiddenPeopleBtn(d.hiddenCount), d.hiddenCount > 0, d.openHidden), action('data-recently-deleted', '↺', S.recentlyDeleted(d.deletedCount), d.deletedCount > 0, d.openDeleted)]
   }
-  const filterCount = activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length)
+  const nFilters = activeFilters(d.s.uiRings, d.tags, d.s.people, limitOf(d.s), d.s.events).length
   /** The two buttons: inline they fold their section open; on a phone they open the overlay sheet. */
   const present = (kind: 'tools' | 'filters'): void => {
     showing = kind
@@ -234,10 +245,21 @@ export function zoneSidebar(din: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | '
   const button = (kind: 'tools' | 'filters', open: boolean, label: string, attr: string, fold: () => void): HTMLElement =>
     el('button', { type: 'button', class: 'zone-switch-btn', 'aria-expanded': String(!sheet && open), 'aria-haspopup': sheet ? 'dialog' : false, [attr]: '', onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); if (sheet) present(kind); else fold() } },
       [sheet ? '' : triangle(open) + ' ', el('u', {}, [label])])
+  /** Wave 43: how many filters are on (hidden at 0). Press: the filter list (web_focus.ts BADGE_PRESS says otherwise: clear all); long press or right click clears all. */
+  const filterBadge = (): HTMLElement | null => {
+    if (!nFilters) return null
+    const b = el('button', { type: 'button', class: 'filter-badge', 'data-filter-badge': '', 'aria-label': S.filterBadgeAria(nFilters), onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => {
+      e.stopPropagation()
+      if (BADGE_PRESS === 'clear') clearEverything(d); else if (sheet) present('filters'); else if (!filtersOpen) { setUi(d.s, 'showOpen', true); d.onChange() }
+    } }, [String(nFilters)])
+    contextPress(b, () => clearEverything(d))
+    return b
+  }
   return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
     el('div', { class: 'zone-switch' }, [
       button('tools', toolsOpen, S.zoneSidebarTitle, 'data-zone-side-toggle', () => { setUi(d.s, 'sidebarOpen', !toolsOpen); d.onChange() }),
-      button('filters', filtersOpen, S.filtersButton + filterCount, 'data-zone-tags-toggle', () => { setUi(d.s, 'showOpen', !filtersOpen); d.onChange() }),
+      button('filters', filtersOpen, S.filtersButton, 'data-zone-tags-toggle', () => { setUi(d.s, 'showOpen', !filtersOpen); d.onChange() }),
+      filterBadge(),
     ]),
     ...(!sheet && toolsOpen ? toolsRows() : []),
     ...(!sheet && filtersOpen ? [tagFilters(d)] : []),

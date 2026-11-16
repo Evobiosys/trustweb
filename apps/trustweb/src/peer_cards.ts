@@ -29,9 +29,12 @@ export function personOf(people: readonly Person[], peerId: string): Person | un
  * The card a NEW connection lands on: its own, else a card named like the Meet draft that is NOT linked to any connection yet
  * (a meeting noted first, connected after). Undefined: it needs a card of its own.
  */
-export function cardForNewPeer(people: readonly Person[], peer: Pick<Peer, 'id'>, draftName: string): Person | undefined {
+export function cardForNewPeer(people: readonly Person[], peer: Pick<Peer, 'id'> & { did?: string }, draftName: string): Person | undefined {
   const own = personOf(people, peer.id)
   if (own) return own
+  // Wave 43c social-hosting: someone found in the name directory (globalKey = their did) is the card of the connection that follows.
+  const global = peer.did ? people.find((p) => !p.peerId && p.globalKey === peer.did) : undefined
+  if (global) return global
   const name = draftName.trim()
   if (!name) return undefined
   return people.find((p) => !p.peerId && sameName(p.name, name))

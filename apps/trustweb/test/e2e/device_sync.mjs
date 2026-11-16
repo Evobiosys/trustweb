@@ -25,7 +25,8 @@ const until = async (fn, ms = 30_000) => {
 const person = (id, name, device) => ({ id, name, context: '', ring: 'friend', metAt: Date.now(), lines: [{ id: id + 'l', text: name + ' fixes bikes', tag: 'offer', audience: 'close', status: 'current', notedAt: 1, checkedAt: 1, source: { kind: 'typed', device } }] })
 
 async function withPeople(page, base, people, extra = {}) {
-  await page.evaluate(([ps, more]) => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); s.people = ps; Object.assign(s, more); localStorage.setItem('trustweb.v1.me', JSON.stringify(s)) }, [people, extra])
+  // Wave 43c: this suite is about the manual Sync now (with its sheets); Auto sync (sync_devices.mjs) is off on these devices.
+  await page.evaluate(([ps, more]) => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); s.people = ps; Object.assign(s, { syncAutoOff: true }, more); localStorage.setItem('trustweb.v1.me', JSON.stringify(s)) }, [people, extra])
   await page.goto(base)
   await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 }
@@ -33,13 +34,16 @@ async function openDevices(page) {
   await page.locator('nav.tabs button', { hasText: 'Web' }).click()
   await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.devices', '1')) // Settings sections are folded by default
   await page.locator('.hdr [aria-label="Settings"]').click()
+  await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true })) // Settings groups fold (later waves)
   await page.locator('[data-open-devices]').click()
   await page.getByRole('heading', { name: 'My devices' }).waitFor({ timeout: 10_000 })
 }
+/** The dev server's review panel is not part of the app (as in sync_visibility.mjs); at phone width it covers the welcome button. */
+const hidePanel = (page) => page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.textContent = '.twf, .twf-ok, .twp { display: none !important }'; document.head.append(st) }))
 const names = async (page) => (await record(page)).people.map((p) => p.name).sort()
 
 async function main() {
-  const relay = await startRelay()
+  const relay = await startRelay({ port: PORT })
   const vite = await startVite(PORT, { relayPort: relay.port })
   console.log('device-sync against ' + vite.base)
   const browser = await launch()
@@ -49,6 +53,7 @@ async function main() {
     const mac = await newPhone(browser, errors, mobile)
     const phone = await newPhone(browser, errors, mobile)
     for (const p of [mac, phone]) p.on('request', (r) => { if (r.url().includes('/relay/send')) bodies.push(r.postData() ?? '') })
+    for (const p of [mac, phone]) await hidePanel(p)
     await startPhone(mac, vite.base, 'Jakob')
     await startPhone(phone, vite.base, 'Jakob')
     const macExtra = {
@@ -127,6 +132,7 @@ async function main() {
 
     // A new device with no record at all: "Already use TrustWeb on another device? Link it" on the welcome screen, then the first sync.
     const fresh = await newPhone(browser, errors)
+    await hidePanel(fresh)
     await fresh.goto(vite.base)
     await fresh.locator('[data-link-from-start]').click()
     await fresh.locator('[data-enter-code]').click()

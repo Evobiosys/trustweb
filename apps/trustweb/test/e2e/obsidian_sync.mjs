@@ -59,7 +59,7 @@ async function run(label, viewport, touch) {
     await hit(page.locator('[data-settings-gear]')); await wait(500)
     // wave 42 settings-llm-first: the rest of Settings sits under Advanced
     if (!(await page.locator('[data-people-import]').first().isVisible())) { if (!(await page.locator('[data-settings-advanced-all]').evaluate((d) => d.open).catch(() => true))) await page.locator('[data-settings-advanced-all] > summary').click().catch(() => {}); await wait(300) }
-    if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your web' }).first()); await wait(300) }
+    if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your contacts' }).first()); await wait(300) }
     await hit(page.locator('[data-people-import]').first()); await wait(500)
   }
 

@@ -13,7 +13,7 @@ export type LinkKind = 'peer' | 'host'
 export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked' | 'nameReveal'> & { kind: LinkKind; by?: EventBy }
 
 /** Who sent the link: their own name and own identity, nothing about third people (I1). */
-export interface EventBy { name: string; did?: string }
+export interface EventBy { name: string; did?: string; /** My nickname (Me.nickname): only the nickname reveal (events.ts revealedBy) may put it in a link as the name. */ nick?: string }
 
 const MAX_BYTES = 4096
 const SRV = /^[0-9a-f]{16}$/
@@ -34,18 +34,33 @@ export function linkOrigin(pageOrigin: string): string {
 }
 
 export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?: EventBy): string {
-  const { id, name, from, to, core, where, conditions, themes, organizer, hosts, hostNamesTags, tagName } = ev
-  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
+  const { id, name, from, to, core, where, conditions, themes, organizer, hosts, hostNamesTags, tagName, linkMode } = ev
+  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(linkMode === 'event' ? { mode: 'event' as const } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
+}
+
+/** Wave 43b: the short form the event QR uses (`#evs=` / `#evs_host=`): [id, name, from, to, core from, core to, hosts, mode, tag name] as a JSON array,
+ * the same fields as the long form; `mode` is 'e' for the event-only variant (B5); the tag name as the long form carries it (P4). Empty tail entries are dropped. */
+export const shortFields = (ev: Pick<LinkedEvent, 'id' | 'name' | 'from' | 'to' | 'core' | 'hosts' | 'linkMode' | 'tagName'>): string => {
+  const a: unknown[] = [ev.id, ev.name, ev.from, ev.to ?? '', ev.core?.from ?? '', ev.core?.to ?? '', ev.hosts ?? [], ev.linkMode === 'event' ? 'e' : '', ev.tagName ?? '']
+  while (a.length && (a[a.length - 1] === '' || (Array.isArray(a[a.length - 1]) && !(a[a.length - 1] as unknown[]).length))) a.pop()
+  return toBase64Url(JSON.stringify(a))
+}
+
+function expandShort(v: unknown, kind: LinkKind): unknown {
+  if (!Array.isArray(v)) return null
+  const [id, name, from, to, cf, ct, hosts, m, tagName] = v as unknown[]
+  return { kind, id, name, from, where: '', ...(to ? { to } : {}), ...(cf || ct ? { core: { from: cf, to: ct } } : {}), ...(Array.isArray(hosts) && hosts.length ? { hosts } : {}), ...(m === 'e' ? { mode: 'event' } : {}), ...(typeof tagName === 'string' && tagName ? { tagName } : {}) }
 }
 
 /** The event in a location.hash ("#ev=..." or the host link's "#ev_host=..."), or null for anything missing, mangled, invalid or over 4 KB. */
 export function decodeEventLink(hash: string): LinkedEvent | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''))
-  const raw = params.get('ev') ?? params.get('ev_host')
+  const compact = params.get('evs') ?? params.get('evs_host')
+  const raw = compact ?? params.get('ev') ?? params.get('ev_host')
   if (!raw || raw.length > MAX_BYTES) return null
   try {
-    const o: unknown = JSON.parse(fromBase64Url(raw))
+    const o: unknown = compact === null ? JSON.parse(fromBase64Url(raw)) : expandShort(JSON.parse(fromBase64Url(raw)), params.has('evs_host') ? 'host' : 'peer')
     if (typeof o !== 'object' || o === null || Array.isArray(o)) return null
     const f = o as Record<string, unknown>
     const text = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
@@ -70,7 +85,7 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     const byDid = text(b?.did)
     const { createdAt: _c, attended: _a, ...rest } = ev
     const srv = params.get('srv')
-    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}) }
+    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(f.mode === 'event' ? { linkMode: 'event' as const } : {}) }
   } catch {
     return null
   }

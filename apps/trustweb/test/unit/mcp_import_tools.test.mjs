@@ -30,7 +30,7 @@ function fixture(over = {}, write = true) {
 describe('registration', () => {
   it('read-only: sources and suggestions list; writes add run and accept', () => {
     expect(fixture({}, false).tools.map((t) => t.name).sort()).toEqual(['import_sources', 'import_suggestions_list'])
-    expect(fixture().tools.map((t) => t.name).sort()).toEqual(['import_run', 'import_sources', 'import_suggestions_accept', 'import_suggestions_list'])
+    expect(fixture().tools.map((t) => t.name).sort()).toEqual(['import_run', 'import_sources', 'import_suggestions_accept', 'import_suggestions_list', 'import_tana_pull'])
   })
   it('the Settings list of tools knows them, with the right write flag', () => {
     const w = Object.fromEntries(MCP_TOOLS.map((t) => [t.name, t.write]))

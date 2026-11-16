@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Bottom bar (wave 31): configurable order, hidden views, one primary; pure. */
-import { DEFAULT_ORDER, STOCK_ORDER, PHONE_MAX, addBar, defaultPair, defaultPrimary, overflowChoices, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
+import { DEFAULT_ORDER, STOCK_ORDER, PHONE_MAX, addBar, defaultPair, defaultPrimary, overflowChoices, moreViews, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
 
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 /** The wave-31 row (Record in the centre) as a saved order: tests of the row rules use it, the unsaved stock row is D2 (bottom_bar_w42). */
-const old = (extra = {}) => ({ order: [...DEFAULT_ORDER], ...extra })
+const OLD_ROW = ['web', 'chat', 'record', 'events', 'inventory']
+const old = (extra = {}) => ({ order: [...OLD_ROW], ...extra })
 
 describe('bottom_bar', () => {
   it('the unsaved stock row is Web, Chat, Feed, Events, Resources (wave 42 D2); the old row stays as the Note taker preset', () => {
-    expect(DEFAULT_ORDER).toEqual(['web', 'chat', 'record', 'events', 'inventory'])
+    expect(OLD_ROW).toEqual(['web', 'chat', 'record', 'events', 'inventory'])
+    expect(DEFAULT_ORDER).toEqual(['web', 'chat', 'feed', 'events', 'inventory', 'record']) // wave 43: Feed joins the default order, Record stays removable
     expect(STOCK_ORDER).toEqual(['web', 'chat', 'feed', 'events', 'inventory'])
     expect(resolveBar(undefined, all).ids).toEqual(STOCK_ORDER)
     expect(resolveBar(undefined, all).primary).toBe('feed')
@@ -41,7 +43,7 @@ describe('bottom_bar', () => {
   it('toggle hides a shown view and brings it back; a new view joins at the end', () => {
     const hid = toggleBar(old(), 'web', all)
     expect(resolveBar(hid, all).ids).not.toContain('web')
-    expect(resolveBar(toggleBar(hid, 'web', all), all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(toggleBar(hid, 'web', all), all).ids).toEqual(OLD_ROW)
     const withNet = toggleBar(old(), 'network', all)
     expect(resolveBar(withNet, all).ids.at(-1)).toBe('network')
   })
@@ -55,8 +57,8 @@ describe('bottom_bar', () => {
   })
   it('move swaps with the neighbour and stops at the ends', () => {
     expect(resolveBar(moveBar(old(), 'chat', -1, all), all).ids.slice(0, 3)).toEqual(['chat', 'web', 'record'])
-    expect(resolveBar(moveBar(old(), 'web', -1, all), all).ids).toEqual(DEFAULT_ORDER)
-    expect(resolveBar(moveBar(old(), 'inventory', 1, all), all).ids).toEqual(DEFAULT_ORDER)
+    expect(resolveBar(moveBar(old(), 'web', -1, all), all).ids).toEqual(OLD_ROW)
+    expect(resolveBar(moveBar(old(), 'inventory', 1, all), all).ids).toEqual(OLD_ROW)
   })
   it('setPrimary refuses a view that is not shown', () => {
     expect(setPrimary(undefined, 'map', all)).toEqual(undefined)
@@ -75,7 +77,7 @@ describe('bottom_bar', () => {
   })
   it('choices list every available view with its state', () => {
     const c = barChoices(old(), all)
-    expect(c.map((x) => x.id)).toEqual(['web', 'feed', 'chat', 'record', 'events', 'inventory', 'ask', 'network', 'people', 'map'])
+    expect(c.map((x) => x.id)).toEqual(['web', 'feed', 'timeline', 'chat', 'record', 'events', 'inventory', 'ask', 'network', 'people', 'map'])
     expect(c.find((x) => x.id === 'feed').on).toBe(false)
     expect(c.find((x) => x.id === 'web').on).toBe(true)
     expect(c.find((x) => x.id === 'network').on).toBe(false)
@@ -102,7 +104,7 @@ describe('bottom_bar profiles (wave 33)', () => {
     const { PROFILES } = await import('../../src/bottom_bar.ts')
     expect(PROFILES.map((p) => p.id)).toEqual(['connector', 'up_to_date', 'note_taker'])
     for (const p of PROFILES) { expect(p.order).toHaveLength(5); expect(p.order[2]).toBe(p.primary) }
-    expect(PROFILES.find((p) => p.id === 'note_taker').order).toEqual(DEFAULT_ORDER)
+    expect(PROFILES.find((p) => p.id === 'note_taker').order).toEqual(OLD_ROW)
     expect(new Set(PROFILES.map((p) => p.order.join()))).toHaveProperty('size', 3)
   })
   it('applyProfile sets order, primary, marker, profile and clears hidden', async () => {
@@ -142,7 +144,7 @@ describe('bottom_bar profiles (wave 33)', () => {
   })
   it('defaultPrimary: an even number of buttons has no highlight, an odd one the preset or Record', () => {
     expect(defaultPrimary(['web', 'chat', 'record', 'events'])).toBe(null)
-    expect(defaultPrimary(DEFAULT_ORDER)).toBe('record')
+    expect(defaultPrimary(OLD_ROW)).toBe('record')
     expect(defaultPrimary(['web', 'chat', 'feed'], 'feed')).toBe('feed')
     expect(defaultPrimary(['web', 'chat', 'feed'], 'record')).toBe('chat') // Record not in the row: the centre one
   })
@@ -157,7 +159,7 @@ describe('bottom_bar profiles (wave 33)', () => {
     expect(defaultPair(['web', 'chat', 'record', 'events'])).toEqual(['chat', 'record'])
     expect(defaultPair(['web', 'chat', 'record', 'events', 'inventory', 'feed'])).toEqual(['record', 'events'])
     expect(defaultPair(['web', 'chat'])).toEqual(['web', 'chat'])
-    expect(defaultPair(DEFAULT_ORDER)).toEqual([])
+    expect(defaultPair(OLD_ROW)).toEqual([])
     expect(defaultPair(['web'])).toEqual([])
     expect(defaultPair([])).toEqual([])
   })
@@ -180,13 +182,28 @@ describe('bottom_bar profiles (wave 33)', () => {
     const { customFrom } = await import('../../src/bottom_bar.ts')
     expect(customFrom(undefined, ['web', 'record'], null).primary).toBe('none')
   })
-  it('overflowChoices: views not in the bar, People and Map only when the user took them out', () => {
+  it('overflowChoices: every offered view that is not in the bar, People and Map included (wave 43)', () => {
     const ids = resolveBar(old(), all).ids
-    expect(overflowChoices(ids, [], all)).toEqual(['feed', 'ask', 'network'])
-    expect(overflowChoices(resolveBar(undefined, all).ids, [], all)).toEqual(['record', 'ask', 'network'])
-    expect(overflowChoices(ids, ['map'], all)).toEqual(['feed', 'ask', 'network', 'map'])
-    expect(overflowChoices(ids, [], { ...all, feed: false })).toEqual(['ask', 'network'])
-    expect(overflowChoices(['web', 'chat', 'record', 'events', 'inventory', 'feed', 'ask', 'network'], [], all)).toEqual([])
+    expect(overflowChoices(ids, [], all)).toEqual(['feed', 'timeline', 'ask', 'network', 'people', 'map'])
+    expect(overflowChoices(resolveBar(undefined, all).ids, [], all)).toEqual(['timeline', 'record', 'ask', 'network', 'people', 'map'])
+    expect(overflowChoices(ids, ['map'], all)).toEqual(['feed', 'timeline', 'ask', 'network', 'people', 'map'])
+    expect(overflowChoices(ids, [], { ...all, feed: false, map: false })).toEqual(['ask', 'network', 'people'])
+    expect(overflowChoices(['web', 'chat', 'record', 'events', 'inventory', 'feed', 'timeline', 'ask', 'network', 'people', 'map'], [], all)).toEqual([])
+  })
+  it('moreViews (wave 43): the ⋮ list = every offered view minus the buttons the row shows, whatever the width', () => {
+    const adv = { ...all, advanced: true, mods: ['community'] }
+    const bar = { order: [...STOCK_ORDER, 'view:rings'], hidden: ['record'] }
+    for (const f of [all, adv, { ...all, events: false, people: false }]) {
+      for (const b of [undefined, old(), bar, { ...old(), hidden: ['people', 'map'] }]) {
+        for (const max of [PHONE_MAX, 4, 10]) {
+          const { ids, primary } = resolveBar(b, f)
+          const shown = barLayout(ids, primary, max).shown
+          const want = barChoices(b, f).map((x) => x.id).filter((id) => !shown.includes(id))
+          expect([...moreViews(b, f, max)].sort()).toEqual([...want].sort())
+        }
+      }
+    }
+    expect(moreViews(undefined, all, PHONE_MAX)).toEqual(expect.arrayContaining(['map', 'people', 'ask', 'network', 'record']))
   })
   describe('view: entries (wave 35)', () => {
     const adv = { ...all, advanced: true }
@@ -214,5 +231,25 @@ describe('bottom_bar profiles (wave 33)', () => {
       expect(viewOfBar('view:map')).toBe('map')
       expect(viewOfBar('web')).toBeNull()
     })
+  })
+})
+
+describe('bottom_bar wave 43: Feed and Timeline', () => {
+  it('Timeline is offered next to the Feed, off the stock row, so both are reachable (⋮ list) and the row never loses the Feed for it', () => {
+    expect(resolveBar(undefined, all).ids).not.toContain('timeline')
+    expect(barChoices(undefined, all).map((c) => c.id)).toEqual(expect.arrayContaining(['feed', 'timeline']))
+    expect(overflowChoices(resolveBar(undefined, all).ids, [], all)).toContain('timeline')
+  })
+  it('Timeline can be put in the row, and then leaves the ⋮ list; with the Feed switched off neither is offered', () => {
+    const bar = toggleBar(undefined, 'timeline', all)
+    expect(resolveBar(bar, all).ids).toContain('timeline')
+    expect(resolveBar(bar, all).ids).toContain('feed')
+    expect(overflowChoices(resolveBar(bar, all).ids, [], all)).not.toContain('timeline')
+    expect(barChoices(undefined, { ...all, feed: false }).map((c) => c.id)).not.toContain('timeline')
+  })
+  it('never both hidden: the last of Feed and Timeline cannot vanish from the choices, a hidden one is listed in ⋮', () => {
+    const bar = { order: ['web', 'chat', 'events', 'inventory'], hidden: ['feed'] }
+    const ids = resolveBar(bar, all).ids
+    expect(overflowChoices(ids, bar.hidden, all)).toEqual(expect.arrayContaining(['feed', 'timeline']))
   })
 })

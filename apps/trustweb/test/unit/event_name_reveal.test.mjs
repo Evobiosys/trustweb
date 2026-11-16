@@ -11,7 +11,7 @@ const payload = (link) => JSON.parse(Buffer.from(link.split(/#ev(?:_host)?=/)[1]
 
 describe('the choices', () => {
   it('full, first, hidden; full by default (today\'s behaviour)', () => {
-    expect(NAME_REVEALS).toEqual(['full', 'first', 'hidden'])
+    expect(NAME_REVEALS).toEqual(['full', 'first', 'hidden', 'nick'])
     expect(DEFAULT_NAME_REVEAL).toBe('full')
     expect(nameRevealOf(ev())).toBe('full')
     expect(nameRevealOf(ev({ nameReveal: 'first' }))).toBe('first')

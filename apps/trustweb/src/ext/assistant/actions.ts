@@ -14,6 +14,10 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'set-look': 'app_action', 'set-profile': 'app_action', 'set-extension': 'app_action', 'set-setting': 'app_action', 'create-variation': 'app_action',
   // Wave 42 community-event (event_actions.ts): a new event has its own tool; the event's text, roles and resources go through the open preview.
   'event-create': 'event_create', 'event-doc': 'app_action', 'event-role': 'app_action', 'event-resource': 'app_action',
+  /* wave43c sync-devices (sync_actions.ts) */
+  'sync-now': 'sync_now',
+  // Wave 43c connect-extras: the debug send of an event envelope has its own tool
+  'event-envelope-send': 'event_envelope_send',
 }
 
 /** The actions `app_action` accepts (derived, so a new entry above needs no second edit). */

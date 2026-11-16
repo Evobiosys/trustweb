@@ -8,6 +8,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { arcsGradient, loadColourTags, tagColours } from './colour_tags'
+import { clusterAngles, eventColours } from './event_cluster'
 import { isBlocked, isNonResponsive } from './non_responsive'
 import { type Column, YOU_EDGE, DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, avoidSector, beyondRings, columnSector, lapRadius, CONTROL_GAP, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry, Spot } from './rings_layout'
@@ -16,6 +17,7 @@ import { EXPAND_DX, HANDLE, ringPoints } from './ring_handles'
 import { initialColor } from './avatar_initial'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { isConnected } from './card_view'
+import { wantsConnect } from './notify_center'
 import { HintId, isDemoPerson, Ring, RINGS, REACH_OUT_INK, ringColor } from './model'
 import type { AppState, Person } from './model'
 import { S } from './strings'
@@ -191,7 +193,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
     const community = communityOf(s)
     // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
-    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? []))) (everyone[zoneFor(p, community)] ??= []).push(p)
+    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [], s.events))) (everyone[zoneFor(p, community)] ??= []).push(p)
     // Wave 33: "closest 150" keeps the 150 closest across all rings (ring membership unchanged) and draws them all.
     const only150 = !desk && s.uiRings?.closest150 === true
     if (only150) {
@@ -230,7 +232,10 @@ export function createWebView(deps: WebViewDeps): WebView {
     }
     if (shownNow) for (const ps of Object.values(members)) for (const p of ps ?? []) if (fadeOf.get(p.id) !== 'out') shownNow.add(p.id)
     // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
-    const angleOfP = (p: Person): number => angleOf(p)
+    // Wave 43 answers (alpha): people of one event or community sit together inside their ring (event_cluster.ts); a dropped dot keeps its angle.
+    const communityIds = loadColourTags().filter((t) => t.community).map((t) => t.id)
+    const clustered = new Map(Object.values(members).flatMap((ps) => [...clusterAngles(ps ?? [], angleOf, communityIds)]))
+    const angleOfP = (p: Person): number => clustered.get(p.id) ?? angleOf(p)
     const quiet = new Map(desk ? [] : dueMoves(s, Date.now()).map((m) => [m.person.id, m.to] as const))
     for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
     // The layout keeps every person's place; a hidden ring's people are only not drawn (and so not hit-testable).
@@ -318,17 +323,17 @@ export function createWebView(deps: WebViewDeps): WebView {
           svg.appendChild(path)
         }
         const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
-        const arcs = arcsGradient(tagColours(p, colourTags))
+        const arcs = arcsGradient([...tagColours(p, colourTags), ...eventColours(p, s.events ?? [])])
         const face = avatar(p.name, p.id)
-        face.style.background = p.reachedOut && ring === Ring.Intending ? ringColor(p) : toneVar(ring)
-        if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
+        face.style.background = wantsConnect(p) ? ringColor(p) : toneVar(ring)   // wave 43b: the yellow face now sits on the unsorted ring, ringed (.wants)
+        if (wantsConnect(p)) face.style.color = REACH_OUT_INK
         if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
           face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = initialColor('outlined')
         }
         pictured(face, p.theirProfile?.picture)
         const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
         const b = el('button', {
-          class: 'node' + (fadeOf.has(p.id) ? ' fade-' + fadeOf.get(p.id) : '') + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
+          class: 'node' + (fadeOf.has(p.id) ? ' fade-' + fadeOf.get(p.id) : '') + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : '') + (wantsConnect(p) ? ' wants' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
           onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
         }, [
           face,

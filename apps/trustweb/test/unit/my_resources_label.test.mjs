@@ -26,8 +26,10 @@ describe('My Resources wording', () => {
     expect(offenders).toEqual([])
   })
 
-  it('no string says "My Resources" any more', () => {
-    expect(readFileSync(new URL('../../src/strings.ts', import.meta.url), 'utf8')).not.toMatch(/My Resources/)
+  it('no string says "My Resources" any more, except the Resources page\'s top section (wave 43b resources-views, Tana B15: "My Resources" / "Suggested by others")', () => {
+    const src = readFileSync(new URL('../../src/strings.ts', import.meta.url), 'utf8')
+    expect(src.match(/My Resources/g)).toEqual(['My Resources'])
+    expect(src).toMatch(/mine: 'My Resources'/)
   })
 
   it('the text functions do not say "inventory" either', () => {

@@ -9,6 +9,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'search', write: false }, { name: 'notifications_inbox_list', write: false }, { name: 'add_note', write: true }, { name: 'add_tag', write: true },
   { name: 'notifications_inbox_mark_seen', write: true }, { name: 'notifications_popup_set', write: true },
   { name: 'bar_list', write: false }, { name: 'bar_set', write: true }, { name: 'bar_hide', write: true }, { name: 'bar_show', write: true },
+  { name: 'web_filter_get', write: false }, { name: 'web_filter_set', write: true },
   { name: 'remove_person', write: true }, { name: 'restore_person', write: true },
   { name: 'assistant_providers', write: false }, { name: 'assistant_ask', write: false }, { name: 'assistant_set_model', write: true },
   // Wave 42 mcp-parity: every registry action reachable
@@ -17,15 +18,37 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'community_list', write: false }, { name: 'community_settings_get', write: false }, { name: 'support_inbox', write: false },
   { name: 'community_create', write: true }, { name: 'community_set_kind', write: true }, { name: 'community_add_member', write: true },
   { name: 'community_settings_set', write: true }, { name: 'support_ask', write: true }, { name: 'support_cancel', write: true },
-  { name: 'event_create', write: true }, { name: 'event_signup', write: true }, { name: 'event_resource_ask', write: true }, { name: 'event_resource_cover', write: true }, { name: 'event_invitees_set', write: true },
+  { name: 'event_create', write: true }, { name: 'event_signup', write: true }, { name: 'event_resource_ask', write: true }, { name: 'event_resource_cover', write: true }, { name: 'event_invitees_set', write: true }, { name: 'event_roles_set', write: true }, { name: 'event_person_identify', write: true },
+  // Wave 43b event-qr-join
+  { name: 'event_link_open', write: false },
+  // Wave 43 event-press-share
+  { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
+  // Wave 43c chat-notices
+  { name: 'notices_list', write: false }, { name: 'web_default_view_get', write: false }, { name: 'web_default_view_set', write: true },
+  // Wave 43b notify-center
+  { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
+  // Wave 43b resources-views
+  { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_set_suggester', write: true },
+  // Wave 43 event-feed
+  { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
   // Wave 42 settings-llm-first
-  { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_set', write: true },
+  { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_sync_capabilities', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai
-  { name: 'import_sources', write: false }, { name: 'import_suggestions_list', write: false }, { name: 'import_run', write: true }, { name: 'import_suggestions_accept', write: true },
+  { name: 'import_sources', write: false }, { name: 'import_suggestions_list', write: false }, { name: 'import_run', write: true }, { name: 'import_suggestions_accept', write: true }, { name: 'import_tana_pull', write: true },
   // Wave 42 in-person-e2e
   { name: 'connect_code', write: false }, { name: 'connect_redeem', write: false },
   // Wave 42 signup-stripe
   { name: 'billing_plans', write: false }, { name: 'billing_status', write: false }, { name: 'billing_checkout_link', write: true },
+  // Wave 43b ask-page-filter
+  { name: 'ask_audience_get', write: false }, { name: 'ask_audience_set', write: true },
+  /* wave43b community-shell */
+  { name: 'community_menu_get', write: false }, { name: 'community_home_tiles_set', write: true }, { name: 'community_chat_scope_set', write: true }, { name: 'event_link_mode_set', write: true },
+  /* wave43c sync-devices */
+  { name: 'sync_status', write: false }, { name: 'sync_now', write: true },
+  /* wave43c social-hosting */
+  { name: 'directory_search', write: false }, { name: 'profile_discoverable_set', write: true }, { name: 'hosting_set', write: true }, { name: 'trusted_only_set', write: true }, { name: 'trust_override_set', write: true },
+  /* wave43c connect-extras */
+  { name: 'feed_sources_get', write: false }, { name: 'feed_sources_set', write: true }, { name: 'community_dashboard_share_set', write: true }, { name: 'event_envelope_send', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

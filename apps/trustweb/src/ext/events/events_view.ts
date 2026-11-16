@@ -110,7 +110,7 @@ export function mountEvents(hostEl: HTMLElement, ctx: TwCtx): () => void {
 
   let mapKey = ''
   function draw(): void {
-    const cards = buildEventList(st().events, data(), Date.now())
+    const cards = buildEventList(st().events, data(), Date.now(), st().people)
     const past = cards.filter((c) => c.past)
     const rows: Kids = cards.length
       ? [...cards.filter((c) => !c.past).map(eventCard), past.length ? el('h4', { class: 'eyebrow' }, [t.past]) : null, ...past.map(eventCard)]

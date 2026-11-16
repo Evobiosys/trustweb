@@ -71,7 +71,7 @@ export function createMissedPopup(h: MissedHooks): { check: () => Promise<void> 
       if (box) return
       const s = h.state()
       if (!s) return
-      const rows = popupRows(await sync(), s.missedPopupOff === true)
+      const rows = popupRows(await sync(), s.missedPopupOff === true, s.events)
       if (rows.length && !box) show(rows)
     },
   }

@@ -13,6 +13,11 @@ export interface EventActionHost {
   newId(): string
   /** The community the assistant was opened for ("New event" inside a community); absent = none. */
   community?(): string | undefined
+  /** Wave 43b (B33): "Add event" picked Hosted (true: I am the host), Informal (false) or nothing (absent); and my name for the hosts list. */
+  hosted?(): boolean | undefined
+  me?(): string
+  /** Wave 43c connect-extras (debug): send the event to one connected person as the sealed envelope a QR connect sends (event_envelope.ts); throws when that person is not connected. */
+  sendEnvelope?(ev: TwEvent, person: string): void
 }
 
 export function defineEventActions(reg: Actions, host: EventActionHost): void {
@@ -35,6 +40,8 @@ export function defineEventActions(reg: Actions, host: EventActionHost): void {
     label: (a) => `New event: ${a.name} (${a.from})`, auto: false,
     apply: (a) => {
       const ev = buildEvent({ ...a, community: host.community?.() }, host.newId(), Date.now())
+      const me = host.me?.().trim()
+      if (host.hosted?.() === true && me) ev.hosts = [me]
       const s = host.state() as { events?: TwEvent[] }
       s.events = [...(s.events ?? []), ev]
       host.save()
@@ -62,5 +69,12 @@ export function defineEventActions(reg: Actions, host: EventActionHost): void {
     parse: (a) => ({ event: str(a, 'event', 120)!, text: str(a, 'text', 120)! }),
     label: (a) => `Resource: ${a.text}`, auto: false,
     apply: (a) => edit(find(a.event), (ev) => { askResource(ev, a.text, host.newId()) }),
+  })
+  /* wave43c connect-extras */
+  reg.define<{ event: string; person: string }>({
+    type: 'event-envelope-send', doc: 'Debug: sends the full event to one connected person as a sealed envelope, like a connect after an event QR scan. Needs approval; cannot be taken back.', shape: '{"event": id, "person": person id}',
+    parse: (a) => ({ event: str(a, 'event', 120)!, person: str(a, 'person', 120)! }),
+    label: (a) => `Send event ${a.event} to ${a.person}`, auto: false,
+    apply: (a) => { const ev = find(a.event); if (!host.sendEnvelope) throw new Error('not available here'); host.sendEnvelope(ev, a.person); return () => undefined },
   })
 }

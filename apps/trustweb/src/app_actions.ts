@@ -19,11 +19,11 @@ import { createTag, tagPerson, untagPerson } from './tag_create'
 import { deletePersonSoft, putBack } from './deleted_people'
 
 /** Where "open" can bring the person; PLACE_TARGET is what pulses there once it is open. */
-export const PLACES = ['web', 'chat', 'people', 'resources', 'events', 'feed', 'notes', 'settings', 'variations', 'extensions', 'theme', 'your-ai', 'import', 'curate', 'person'] as const
+export const PLACES = ['web', 'chat', 'people', 'resources', 'events', 'feed', 'timeline', 'notes', 'settings', 'variations', 'extensions', 'theme', 'your-ai', 'import', 'curate', 'person'] as const
 export type Place = (typeof PLACES)[number]
 export const PLACE_TARGET: Record<Place, string> = {
   web: '[data-go="web"]', chat: '[data-go="chat"]', people: '[data-go="people"]', resources: '[data-go="inventory"]', events: '[data-go="events"]',
-  feed: '[data-go="feed"]', notes: '[data-go="notes"]',
+  feed: '[data-go="feed"]', timeline: '[data-go="timeline"]', notes: '[data-go="notes"]',
   settings: '[data-settings-gear]', variations: '[data-settings-group="variations"]', extensions: '[data-settings-section="extensions"]', theme: '[data-theme-row]',
   'your-ai': '[data-ai-group="sub"]', import: '[data-import-home]', curate: '[data-svc-list]', person: '.card-name, h1',
 }

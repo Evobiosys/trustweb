@@ -82,14 +82,20 @@ export interface EventCard { id: string; name: string; day: string; month: strin
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+/** The first host, else the organizers; a person id shows as that person's name (wave 43 event-roles). */
+const hostName = (e: TwEvent, people: readonly { id: string; name: string }[]): string | undefined => {
+  const ref = e.hosts?.[0] ?? e.organizers?.[0] ?? e.organizer
+  return ref ? people.find((p) => p.id === ref)?.name ?? ref : undefined
+}
+
 /** Upcoming soonest first, then past newest first. Dates are the record's "YYYY-MM-DD" (a time part is ignored); today is the local day. */
-export function buildEvents(events: readonly TwEvent[] | undefined, now: number): EventCard[] {
+export function buildEvents(events: readonly TwEvent[] | undefined, now: number, people: readonly { id: string; name: string }[] = []): EventCard[] {
   const today = localDay(new Date(now))
   const cards = (events ?? []).filter((e) => /^\d{4}-\d{2}-\d{2}/.test(e.from)).map((e): EventCard => {
     const from = e.from.slice(0, 10)
     return {
       id: e.id, name: e.name, day: String(Number(from.slice(8, 10))), month: MONTHS[Number(from.slice(5, 7)) - 1] ?? '', from, ...(e.to ? { to: e.to.slice(0, 10) } : {}),
-      where: e.where, ...(e.hosts?.[0] ?? e.organizer ? { host: e.hosts?.[0] ?? e.organizer } : {}), going: e.attended, past: (e.to ?? e.from).slice(0, 10) < today,
+      where: e.where, ...(hostName(e, people) ? { host: hostName(e, people) } : {}), going: e.attended, past: (e.to ?? e.from).slice(0, 10) < today,
     }
   })
   return [...cards.filter((c) => !c.past).sort((a, b) => a.from.localeCompare(b.from)), ...cards.filter((c) => c.past).sort((a, b) => b.from.localeCompare(a.from))]

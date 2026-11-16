@@ -3,10 +3,13 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { acceptPerson, dragEvent } from '../../drag_payload'
 import { engagementDays } from '../../engagement'
-import { eventLabel, matchPeople, todayIso } from '../../events'
+import { eventLabel, matchPeople, mayInvite, todayIso } from '../../events'
 import { ringColor, type Person, type TwEvent, type TwTask } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
+import { loadColourTags } from '../../colour_tags'
+import { parseCommunity } from '../community-mighty/community_data'
+import { communityEventColour } from '../community-mighty/community_data'
 import { addMonths, dayCounts, eventsOn, monthGrid } from './calendar'
 import { createAtEvent } from './at_event_view'
 import { createOutliner } from './outliner_view'
@@ -67,6 +70,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   }
 
   function eventSection(ev: TwEvent): Node[] {
+    if (!mayInvite(ev, h.state())) return here.eventSection(ev)   // wave 43: the host's invite policy
     const box = el('div', { class: 'cal-invitees', 'data-cal-invitees': '' }, [
       el('h3', {}, [S.cal.invitees]),
       S.shareExpiryHint(engagementDays(h.state())) ? el('p', { class: 'meta', 'data-share-expiry': '' }, [S.shareExpiryHint(engagementDays(h.state()))]) : null,
@@ -98,7 +102,9 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
     return el('div', { class: 'cal-agenda' }, [
       day.length || dayTasks.length ? null : el('p', { class: 'empty' }, [S.cal.dayEmpty]),
       ...day.map((ev) => {
-        const row = el('button', { class: 'prow', 'data-cal-event': ev.id, onclick: () => h.openEvent(ev.id, true) }, [
+        // Wave 43b (B33): a connected community's event wears the community colour.
+        const colour = communityEventColour(parseCommunity(h.state().extData?.['community-mighty']), loadColourTags(), ev)
+        const row = el('button', { class: 'prow', 'data-cal-event': ev.id, ...(colour ? { style: `border-left:4px solid ${colour}`, 'data-cal-community-colour': colour } : {}), onclick: () => h.openEvent(ev.id, true) }, [
           el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [[timeOf(ev), ev.where].filter(Boolean).join(' · ')])]),
         ])
         acceptPerson(row, (ref) => invite(ev, ref.id))
