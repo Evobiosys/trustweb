@@ -1100,6 +1100,8 @@ export interface AppState {
   missedPopupOff?: true
   /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
   notifInbox?: InboxItem[]
+  /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
+  notifReadAt?: number
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
   /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */
@@ -1307,6 +1309,8 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /** Wave 43b (audience_filter.ts): the ask audience the filter view keeps: zone (closest, close, friend; absent = every connected person) and the added / hidden `person:<id>` / `tag:<id>` chips. The degree is `askReach`. An older build ignores it. */
+  askAudience?: { zone?: 'closest' | 'close' | 'friend'; add: string[]; exclude: string[] }
   /** Wave 25: "Your city" (Settings > Profile); the ask sheet's example names it. Absent: Vienna. An older build ignores it. */
   city?: string
   /**

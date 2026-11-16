@@ -6,8 +6,11 @@ import path from 'node:path'
 const main = readFileSync(path.join(import.meta.dirname, '../../src/main.ts'), 'utf8')
 
 describe('chat ask button', () => {
-  it('screenChat returns queryFab()', () => {
+  it('wave 43b: the Chat header carries the plain Ask entry (queryFab() mounted by mountAskButton), no floating pill', () => {
     const body = main.slice(main.indexOf('function screenChat()'), main.indexOf('function chatNewSheet()'))
-    expect(body).toMatch(/queryFab\(\)/)
+    expect(body).not.toMatch(/queryFab\(\)/)
+    const mount = main.slice(main.indexOf('function mountAskButton()'), main.indexOf('function mountAiButton()'))
+    expect(mount).toMatch(/Screen\.Chat/)
+    expect(mount).toMatch(/queryFab\(\)/)
   })
 })

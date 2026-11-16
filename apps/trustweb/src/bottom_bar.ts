@@ -129,7 +129,7 @@ export function toggleBar(bar: UiBar | undefined, id: string, f: BarFlags): UiBa
   const order = baseOrder(bar)
   const hidden = (bar?.hidden ?? []).filter((h) => h !== id)
   if (!on && !order.includes(id as BarId)) order.push(id as BarId)
-  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden, orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+  const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden, orderVersion: BAR_ORDER_VERSION, profile: 'custom', ...haloWithout(bar, on ? [id] : []) }
   if (bar?.primary && !(on && bar.primary === id)) next.primary = bar.primary
   return next
 }
@@ -139,7 +139,8 @@ export function showViewInBar(bar: UiBar | undefined, view: string, on: boolean)
   const id = `view:${view}`
   const order = baseOrder(bar).filter((x) => x !== id)
   if (on) order.push(id as BarId)
-  return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+  const { halo: _halo, ...rest } = bar ?? {}
+  return { ...rest, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id), orderVersion: BAR_ORDER_VERSION, profile: 'custom', ...haloWithout(bar, on ? [] : [id]) }
 }
 
 /** Wave 42 (MCP): the listed views, known ones once each, are the bar in that order; every other offered view is taken out. Nothing known in the list changes nothing. */
@@ -147,7 +148,8 @@ export function setBarOrder(bar: UiBar | undefined, order: readonly string[], f:
   const ok = offered(f, bar)
   const want = [...new Set(order)].filter((id): id is BarId => ok.includes(id as BarId))
   if (!want.length) return bar
-  return { ...bar, order: want, hidden: ok.filter((id) => !want.includes(id)), orderVersion: BAR_ORDER_VERSION, profile: 'custom' }
+  const { halo: _halo, ...rest } = bar ?? {}
+  return { ...rest, order: want, hidden: ok.filter((id) => !want.includes(id)), orderVersion: BAR_ORDER_VERSION, profile: 'custom', ...haloWithout(bar, ok.filter((id) => !want.includes(id))) }
 }
 
 /** Shows the view (new, hidden or already shown) left or right of a shown view `ref`; the place is saved in `order`. Bad input changes nothing. */
@@ -206,9 +208,15 @@ export function promoteBar(bar: UiBar | undefined, id: string, f: BarFlags, max:
 
 export const HALO_MAX = 2
 
-/** Wave 40: the views wearing a halo now: stored ones that are still in the row, the newest HALO_MAX. */
-export const haloOf = (bar: UiBar | undefined, ids: readonly BarId[]): BarId[] =>
-  (Array.isArray(bar?.halo) ? bar.halo : []).filter((id): id is BarId => ids.includes(id as BarId)).slice(-HALO_MAX)
+/** Wave 40: the views wearing a halo now: stored ones that are still in the row, the newest HALO_MAX. Wave 43b (B16): a view raised as the centre button (`raised`) wears none. */
+export const haloOf = (bar: UiBar | undefined, ids: readonly BarId[], raised: readonly BarId[] = []): BarId[] =>
+  (Array.isArray(bar?.halo) ? bar.halo : []).filter((id): id is BarId => ids.includes(id as BarId)).slice(-HALO_MAX).filter((id) => !raised.includes(id))
+
+/** Wave 43b (B16): a view that leaves the row takes its halo with it, so it does not come back wearing one that was not pressed again. */
+const haloWithout = (bar: UiBar | undefined, gone: readonly string[]): { halo?: string[] } => {
+  const left = (Array.isArray(bar?.halo) ? bar.halo : []).filter((h) => !gone.includes(h))
+  return left.length ? { halo: left } : {}
+}
 
 /** Wave 40: a press puts the halo on a view in the row (the third drops the oldest) or takes it off. Views not in the row change nothing. */
 export function toggleHalo(bar: UiBar | undefined, id: string, f: BarFlags): UiBar | undefined {

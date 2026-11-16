@@ -17,6 +17,7 @@ import { EXPAND_DX, HANDLE, ringPoints } from './ring_handles'
 import { initialColor } from './avatar_initial'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { isConnected } from './card_view'
+import { wantsConnect } from './notify_center'
 import { HintId, isDemoPerson, Ring, RINGS, REACH_OUT_INK, ringColor } from './model'
 import type { AppState, Person } from './model'
 import { S } from './strings'
@@ -324,15 +325,15 @@ export function createWebView(deps: WebViewDeps): WebView {
         const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
         const arcs = arcsGradient([...tagColours(p, colourTags), ...eventColours(p, s.events ?? [])])
         const face = avatar(p.name, p.id)
-        face.style.background = p.reachedOut && ring === Ring.Intending ? ringColor(p) : toneVar(ring)
-        if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
+        face.style.background = wantsConnect(p) ? ringColor(p) : toneVar(ring)   // wave 43b: the yellow face now sits on the unsorted ring, ringed (.wants)
+        if (wantsConnect(p)) face.style.color = REACH_OUT_INK
         if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
           face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = initialColor('outlined')
         }
         pictured(face, p.theirProfile?.picture)
         const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
         const b = el('button', {
-          class: 'node' + (fadeOf.has(p.id) ? ' fade-' + fadeOf.get(p.id) : '') + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
+          class: 'node' + (fadeOf.has(p.id) ? ' fade-' + fadeOf.get(p.id) : '') + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : '') + (wantsConnect(p) ? ' wants' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
           onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
         }, [
           face,

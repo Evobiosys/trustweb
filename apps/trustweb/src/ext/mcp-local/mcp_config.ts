@@ -23,6 +23,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'event_link_open', write: false },
   // Wave 43 event-press-share
   { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
+  // Wave 43b notify-center
+  { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
   // Wave 43 event-feed
   { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
   // Wave 42 settings-llm-first
@@ -33,6 +35,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'connect_code', write: false }, { name: 'connect_redeem', write: false },
   // Wave 42 signup-stripe
   { name: 'billing_plans', write: false }, { name: 'billing_status', write: false }, { name: 'billing_checkout_link', write: true },
+  // Wave 43b ask-page-filter
+  { name: 'ask_audience_get', write: false }, { name: 'ask_audience_set', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
