@@ -4662,4 +4662,10 @@ export const S = {
     tanaPullCancel: 'Cancel',
     tanaPullSkipped: (n: number) => `${n} could not be read and were left as they are.`,
   },
+  /* wave44 steer-panel-fold */
+  w44fold: {
+    fixStarting: 'pi session starting now...',
+    fixToast: 'pi session starting now',
+    fixStatus: (key: string, text: string, at: string) => `pi fix ${key}: ${text}${at ? ` (${at})` : ''}`,
+  },
 } as const

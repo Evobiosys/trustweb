@@ -123,7 +123,9 @@ try {
     await shot('failed')
     const sessionsBefore = existsSync(`${logFile}.session`) ? readFileSync(`${logFile}.session`, 'utf8').trim().split('\n').filter(Boolean).length : 0
     await page.locator('[data-fix-conflict]').click()
-    await page.waitForFunction(() => document.querySelector('.twp-toast')?.textContent.includes('not available') || document.querySelector('[data-fix-conflict]')?.disabled, null, { timeout: 5000 })
+    // Wave 44 ops-fix-in-pi: the press answers at once (toast "pi session starting now"), then names the window.
+    await page.waitForFunction(() => document.querySelector('.twp-toast')?.textContent.includes('pi session starting now'), null, { timeout: 2000 }).then(() => c.ok('wave44: toast "pi session starting now" on press', true), () => c.ok('wave44: toast "pi session starting now" on press', false))
+    await page.waitForFunction(() => document.querySelector('.twp .launched'), null, { timeout: 5000 })
     // Review wave 42: this build has the route, so the STUB launcher (never pi_new_session.sh) must have run once and the panel names the window.
     c.ok('B16: the fix button ran the stub launcher once (no real pi session) and shows the started session', (await page.locator('[data-fix-conflict]').isDisabled()) && (await page.locator('.twp .launched').textContent()).includes('1') && readFileSync(`${logFile}.session`, 'utf8').trim().split('\n').filter(Boolean).length === sessionsBefore + 1 && existsSync(path.join(devlog, 'wave1', 'conflict-review-fixes-41.txt')), `launched=${await page.locator('.twp .launched').textContent().catch(() => '-')} sessions=${existsSync(`${logFile}.session`) ? readFileSync(`${logFile}.session`, 'utf8') : '-'}`)
     // collapsed

@@ -15,6 +15,7 @@ import { walkList } from './dev_drive'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
+import { fixButtonView, fixStatusLine, FIX_TIMEOUT_MS, type FixState } from './dev_fix_button'
 import { approveEach } from './dev_wave_press'
 import { POPOUT_BEAT_MS, POPOUT_CHANNEL, afterKeys, conflictView, rerunOffered, flatRows, popoutHides, popoutIdle, popoutStep, rowState, sessionIdOf, waveReady, type ConflictView, type GateInfo, type PopoutMsg, approveTone, approveBoxVisible, focusAfterApprove, focusAfterPress, panelTitle, APPLY_DELAY_MS, changedSinceApproval, CALL_TIMEOUT_MS, WORKING_AFTER_S, WRITE_TIMEOUT_MS, callError, compatFresh, compatLine, ensureLoaded, focusToggle, holdStore, lastFocusStore, loadingWhy, pendingCount, pressPlan, prStatusView, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel } from './dev_preview_rules'
 
@@ -32,6 +33,8 @@ interface Preview {
   next?: { id: string; port: number }
   tested?: Tested | null
   session?: { id: string; path: string }
+  /** Wave 44: the line the conflict-fix session writes when done (its brief, step 7). */
+  fixStatus?: { key?: string; text?: string; at?: string } | null
 }
 declare const __TW_PREVIEW__: Preview | null | undefined
 declare const __TW_BUILD__: { mode: string } | null | undefined
@@ -80,7 +83,7 @@ const CSS = `
 .twp .hl{flex:1 1 0;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;padding:12px 0;overflow-wrap:anywhere}
 .twp .hbtns{flex:none;display:flex;height:44px;align-items:center}.twp .hbtns button{width:34px;height:44px;padding:0;border-radius:0;display:flex;align-items:center;justify-content:center}
 .twp .btns.hdr{flex-wrap:wrap}.twp .state{flex:none;width:1.4em;text-align:center}.twp .after{color:#b7a8c9}
-.twp .conf{display:grid;gap:5px}.twp .conf details>div{margin-top:3px;font-weight:400}.twp .why{opacity:.8}
+.twp .conf{display:grid;gap:5px}.twp .conf .launched.err{color:#c0392b;font-weight:600}.twp .conf details>div{margin-top:3px;font-weight:400}.twp .why{opacity:.8}
 .twp-popout .twp{left:0!important;top:0!important;width:100vw;max-width:none;max-height:100vh;border-radius:0}.twp-popout .twf-ok,.twp-popout .twf,.twp-popout .twf-dot{display:none!important}
 /* wave 33 panel */
 .twp header{position:sticky;top:0;z-index:2;background:#241b2e}
@@ -433,6 +436,7 @@ export function initDevPreview(): void {
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }
 
+  const fixing = new Map<string, FixState>()   // wave 44: the press shows "starting now" at once, then the window or the error
   const fixStore = (key: string) => ({ get: (): string => { try { return sessionStorage.getItem(`twp-fix-${p!.id}-${key}`) ?? '' } catch { return '' } }, set: (v: string): void => { try { sessionStorage.setItem(`twp-fix-${p!.id}-${key}`, v) } catch { /* not remembered */ } } })
 
   /** Wave 42 B01/B16: a failed assembly or closed gate as one sentence and one tap: "Mark as merged" when the row is already in main, else the first conflict line + details + "Fix it in a pi session". */
@@ -443,24 +447,30 @@ export function initDevPreview(): void {
       b.addEventListener('click', () => { void act(cv.key, () => call('POST', '/mark-merged', { feature: cv.key })) })
       return h('div', { className: 'row warn conf' }, cv.text, b)
     }
-    const launched = cv.fixKey ? fixStore(cv.fixKey).get() : ''
-    const fix = cv.fixKey ? h('button', { textContent: S.panelFixSession, disabled: !!launched }) : null
+    const stored = cv.fixKey ? fixStore(cv.fixKey).get() : ''
+    const v = fixButtonView(cv.fixKey ? fixing.get(cv.fixKey) ?? (stored ? { state: 'launched', id: stored } : undefined) : undefined)
+    const fix = cv.fixKey ? h('button', { textContent: v.label, disabled: v.disabled }) : null
     if (fix && cv.fixKey) {
       fix.dataset.fixConflict = cv.fixKey
       fix.addEventListener('click', () => { void fixConflict(cv.fixKey!) })
     }
-    return h('div', { className: 'row warn conf' }, cv.head, h('details', {}, h('summary', { textContent: S.panelConflictDetails }), h('div', {}, ...conflictNodes(cv.detail))), ...(fix ? [fix] : []), ...(launched ? [h('small', { className: 'launched', textContent: S.panelFixLaunched(launched) })] : []))
+    return h('div', { className: 'row warn conf' }, cv.head, h('details', {}, h('summary', { textContent: S.panelConflictDetails }), h('div', {}, ...conflictNodes(cv.detail))), ...(fix ? [fix] : []), ...(v.line ? [h('small', { className: v.bad ? 'launched err' : 'launched', textContent: v.line })] : []))
   }
 
   /** POST /__tw/preview/fix-conflict (the ops launcher): starts a pi session on the conflict and answers its id; a server without the route says so. */
   async function fixConflict(key: string): Promise<void> {
+    if (fixing.get(key)?.state === 'starting') return
+    fixing.set(key, { state: 'starting' }); toast(S.w44fold.fixToast); render()
+    const fail = (msg: string): void => { fixing.set(key, { state: 'failed', error: msg }); render() }
     try {
-      const r = await fetch('/__tw/preview/fix-conflict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p!.id, key }), signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) })
-      if (r.status === 404 || r.status === 400 || r.status === 405) { toast(S.panelFixUnavailable); return }
+      // The launcher waits up to 120 s for pi_new_session.sh (vite.config.mjs): the panel waits a little longer, never a false timeout.
+      const r = await fetch('/__tw/preview/fix-conflict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p!.id, key }), signal: AbortSignal.timeout(FIX_TIMEOUT_MS) })
+      if (r.status === 404 || r.status === 400 || r.status === 405) { fail(S.panelFixUnavailable); return }
       const j = await r.json().catch(() => ({})) as { error?: string }
-      if (!r.ok) { error = j.error ?? 'HTTP ' + r.status; render(); return }
-      fixStore(key).set(sessionIdOf(j) ?? 'started'); render()
-    } catch (e) { error = callError(e as Error, WRITE_TIMEOUT_MS); render() }
+      if (!r.ok) { fail(j.error ?? 'HTTP ' + r.status); return }
+      const id = sessionIdOf(j) ?? 'started'
+      fixStore(key).set(id); fixing.set(key, { state: 'launched', id }); render()
+    } catch (e) { fail(callError(e as Error, FIX_TIMEOUT_MS)) }
   }
 
   /** F11: the panel in its own window (second screen). The window beats on a BroadcastChannel; this page hides its inline panel meanwhile and shows it again when the window closes or goes silent. */
@@ -705,6 +715,7 @@ export function initDevPreview(): void {
       const tail = [
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(cv ? [conflictRow(cv)] : []),
+        ...(fixStatusLine(q) ? [h('div', { className: 'row fixst' }, h('small', { textContent: fixStatusLine(q) }))] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
       ]
       // Focus mode (wave 37): only the focused row; the compat line and the toggle belong to the full list (the header's expand button leaves). Each row shows once, in the list.

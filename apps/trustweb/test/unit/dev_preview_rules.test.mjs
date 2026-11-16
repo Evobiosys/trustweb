@@ -701,9 +701,9 @@ describe('fix-conflict launcher (B16)', () => {
     const { res, written, launched, merged } = await call()
     expect(res.statusCode).toBe(202)
     expect(res.body).toEqual({ started: true, brief: '/devlog/wave42/conflict-ai-sub.txt', window: '4711' })
-    expect(merged).toEqual([['/wt/preview-x', 'abc1234', 'wave36/ai-subscription']])
+    expect(merged).toEqual([['/wt/preview-x', 'HEAD', 'wave36/ai-subscription']])   // wave 44: the conflict against the preview branch (steer_panel_fold.test.mjs)
     const brief = written['/devlog/wave42/conflict-ai-sub.txt']
-    for (const part of ['wave36/ai-subscription', 'abc1234', 'Merge conflict in a.ts', 'NEVER: push, touch main', 'fallback ladder']) expect(brief).toContain(part)
+    for (const part of ['wave36/ai-subscription', 'abc1234', 'Merge conflict in a.ts', 'push; touch main', 'fallback ladder']) expect(brief).toContain(part)
     expect(launched).toEqual([['/devlog/wave42/conflict-ai-sub.txt', 'fix the conflict of ai-sub']])
   })
   it('only POST from loopback, only for a row of this preview; a launcher failure is a 500 with its reason and nothing is hidden', async () => {

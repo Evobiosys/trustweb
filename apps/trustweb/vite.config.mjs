@@ -404,7 +404,7 @@ function previewApi() {
         loopback, preview: readPreview, readBody: body,
         // Review wave 42: the ops repo's DEVLOG (newest wave), never web-of-trust/DEVLOG (stale at wave20, where the first brief landed).
         devlog: () => { const root = opsDevlogRoot(here, existsSync, process.env.TW_DEVLOG); if (!root) throw new Error('trustweb-ops/DEVLOG not found (set TW_DEVLOG)'); return path.join(root, readdirSync(root).filter((n) => /^wave\d+$/.test(n)).sort((a, b) => Number(a.slice(4)) - Number(b.slice(4))).pop() ?? '') },
-        mergeTree: async (wt, base, branch) => { try { return (await execClosed('git', ['-C', wt, 'merge-tree', '--write-tree', base, branch], { encoding: 'utf8', timeout: 60000 })).stdout } catch (e) { return String(e.stdout || e.message) } },   // exit 1 = conflicts: the output is the point
+        mergeTree: async (wt, ours, branch) => { try { return (await execClosed('git', ['-C', wt, 'merge-tree', '--write-tree', ours, branch], { encoding: 'utf8', timeout: 60000 })).stdout } catch (e) { return String(e.stdout || e.message) } },   // exit 1 = conflicts: the output is the point
         write: (file, text) => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text) },
         launch: async (file, task) => {
           const script = process.env.TW_NEW_SESSION ?? path.join(os.homedir(), '.pi/scripts/pi_new_session.sh')
