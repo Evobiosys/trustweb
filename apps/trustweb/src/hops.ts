@@ -310,9 +310,10 @@ export const REACH_CHOICES: readonly ReachChoice[] = [
   ReachChoice.Contacts, ReachChoice.FriendsOfFriends, ReachChoice.Three, ReachChoice.Custom, ReachChoice.NoLimit,
 ]
 
-/** The chooser position of a stored reach. */
-export function reachChoice(maxHops: number): ReachChoice {
+/** The chooser position of a stored reach; `custom` (wave 44: the person picked Custom) keeps 1 to 3 on Custom instead of the fixed choices. */
+export function reachChoice(maxHops: number, custom = false): ReachChoice {
   if (maxHops === HOPS_UNBOUNDED) return ReachChoice.NoLimit
+  if (custom) return ReachChoice.Custom
   if (maxHops <= 1) return ReachChoice.Contacts
   if (maxHops === 2) return ReachChoice.FriendsOfFriends
   if (maxHops === 3) return ReachChoice.Three

@@ -67,6 +67,7 @@ import { createDrainLock, drainLockName } from './drain_lock'
 import type { DrainLock, LockManagerLike } from './drain_lock'
 import { directFlag, surfacesHere } from './direct_ask'
 import { introAskText, parseIntroTarget } from './intro_ask'
+import { KNOW_CONTEXT, KNOW_NOTE_MAX, KNOW_WHEN, knowItems, shownAskedNames } from './ask_escalation'
 import {
   askerOf, askFields, askReachOf, HOPS_DEFAULT, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
   mayCascade, RootMemory, sanitizeHopItems, seenHash, throughOf,
@@ -123,6 +124,14 @@ interface HopHarvest {
 
 const NO_HARVEST: HopHarvest = { asked: 0, items: [] }
 
+/** Wave 44: what this phone shares with a yes: its matched lines, or for a 'know' ask the tip the person typed. */
+const ownItems = (held: Pick<HeldAsk, 'know' | 'note' | 'matches'>): SharedItem[] => (held.know ? knowItems(held.note, KNOW_CONTEXT, KNOW_WHEN) : sharedItems(held.matches))
+
+/** Wave 44: the 'know' mark and the asked names an incoming ask puts on its held prompt. */
+const knowFields = (q: Pick<QueryEnvelope, 'askedNames'>, know: boolean): Pick<HeldAsk, 'know' | 'askedNames'> => ({
+  ...(know ? { know: true as const } : {}), ...(q.askedNames?.length ? { askedNames: q.askedNames } : {}),
+})
+
 export interface IncomingAsk {
   qid: string
   fromName: string
@@ -141,6 +150,10 @@ export interface IncomingAsk {
   doorName: string | null
   /** Wave 33: an intro ask: who or what the asker wants an introduction to (the card shows it whether or not anything matched). */
   intro?: string
+  /** Wave 44: the second round "Do you know someone who has this?": the card takes a free-text tip instead of showing matches. */
+  know?: true
+  /** Wave 44: who the asker asked (only when the asker placed this phone as Closest few or Close and left it on). */
+  askedNames?: string[]
   /** Wave 6h: the answer moment on this phone's clock. */
   deadline: number
   /** Wave 6h: a yes after the moment reaches the asker as "answered later" (the ask carried its window, ask_window.ts). */
@@ -154,7 +167,8 @@ export interface IncomingAsk {
   askerPeerId: string | null
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring; `at` null: shown without a date. */
   earlier: { at: number | null } | null
-  decide(share: boolean): Promise<void>
+  /** `note`: the tip of a 'know' ask (ignored on any other). */
+  decide(share: boolean, note?: string): Promise<void>
 }
 
 export interface AskResult {
@@ -759,7 +773,9 @@ export class Net {
     const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     // Wave 33: an intro ask always reaches the person (the card names the target), whatever the matcher found: no silent PASS.
     const intro = q.kind === 'intro' && !silent ? parseIntroTarget(q.target) : undefined
-    const surface = classifyIncomingQuery(match, false, Boolean(text)).surface || intro !== undefined
+    // Wave 44: the second round always reaches the person too (the card asks for a tip), so a no looks like every other no (I3).
+    const know = q.kind === 'know' && !silent && Boolean(text)
+    const surface = classifyIncomingQuery(match, false, Boolean(text)).surface || intro !== undefined || know
     const key = await this.pairKey(peer)
     // Passed on the moment it arrives, never waiting for the person here: the next step's answers are
     // in before this phone's own moment, whatever the person does.
@@ -789,7 +805,7 @@ export class Net {
       through: info.door ? [] : throughOf(info, peer.displayName),
       doorName: info.door ? peer.displayName : null,
       relayed: q.relayed === true && (info.door || !info.travels),
-      matches, receivedAt, deadline, lateMode, ...(intro ? { intro } : {}), ...this.earlierFields(earlier, peer, receivedAt),
+      matches: know ? [] : matches, receivedAt, deadline, lateMode, ...(intro ? { intro } : {}), ...knowFields(q, know), ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, reply)
   }
 
@@ -845,14 +861,16 @@ export class Net {
       qid: held.qid, fromName: held.fromName, text: held.text, matches: held.matches, receivedAt: held.receivedAt,
       relayed: held.relayed, through: held.through, doorName: held.doorName,
       deadline: held.deadline, lateMode: held.lateMode, arrivedLate: held.arrivedLate === true, ...(held.intro ? { intro: held.intro } : {}),
+      ...(held.know ? { know: true as const } : {}), ...(held.askedNames ? { askedNames: held.askedNames } : {}),
       askerPeerId: !held.relayed && held.doorName === null && held.through.length === 0 ? held.peerId : null,
       earlier: held.reaskOf !== undefined ? { at: held.earlierAt ?? null } : null,
-      decide: async (share: boolean) => {
+      decide: async (share: boolean, note?: string) => {
         if (decided) return
         decided = true
+        if (held.know && note) held.note = note.trim().slice(0, KNOW_NOTE_MAX)
         const entry = this.log(peer, held.text, share ? LogOutcome.Shared : LogOutcome.Declined)
         if (held.arrivedLate) entry.away = true
-        const own = share ? sharedItems(held.matches) : []
+        const own = share ? ownItems(held) : []
         const late = held.lateMode && (held.arrivedLate === true || atMoment !== null || Date.now() >= held.deadline)
         if (!late) {
           // Review 6h: a yes before the moment stays in the record until it has left (a tab closed right after the yes, a reload, the
@@ -911,7 +929,7 @@ export class Net {
    */
   private async sendLateYes(held: HeldAsk, reply: Replier, momentFirst: boolean): Promise<void> {
     if (momentFirst && !(await reply.atMoment([])).sent) return
-    if (await reply.late(sharedItems(held.matches))) this.unhold(held.qid)
+    if (await reply.late(ownItems(held))) this.unhold(held.qid)
   }
 
   /**
@@ -954,7 +972,7 @@ export class Net {
       const reply = await this.heldReplier(held, peer)
       // Review 6h: a yes given before the moment that had not left yet leaves at the moment; past it, flushLateYes sends it below.
       if (held.yesAt !== undefined) {
-        if (now < held.deadline) void reply.atMoment(sharedItems(held.matches)).then((m) => { if (m.sent) this.unhold(held.qid) })
+        if (now < held.deadline) void reply.atMoment(ownItems(held)).then((m) => { if (m.sent) this.unhold(held.qid) })
         continue
       }
       this.present(held, peer, reply)
@@ -1020,7 +1038,8 @@ export class Net {
     const { threads, refs } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer), this.hooks.askerTags?.(peer))
     const match = matchAsk(text, threads)
     const intro = q.kind === 'intro' ? parseIntroTarget(q.target) : undefined
-    if (!intro && !classifyIncomingQuery(match, false, true).surface) {
+    const know = q.kind === 'know'
+    if (!intro && !know && !classifyIncomingQuery(match, false, true).surface) {
       // Wave 6i: an earlier ask that came again and still matches nothing stays silent (no log row, no card).
       if (earlier) return
       const entry = this.log(peer, text, LogOutcome.NoMatch)
@@ -1029,12 +1048,12 @@ export class Net {
       this.noteUnmatched(q, peer, info, text, receivedAt)
       return
     }
-    const matches = match.hits.map((h) => refs.get(h.threadId)).filter((r): r is LineRef => Boolean(r))
+    const matches = know ? [] : match.hits.map((h) => refs.get(h.threadId)).filter((r): r is LineRef => Boolean(r))
     const key = await this.pairKey(peer)
     const tplId = templateFor(text).id
     this.present({
       qid: q.qid, peerId: peer.id, text, fromName: peer.displayName, through: [], doorName: null, relayed: false,
-      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true, ...(intro ? { intro } : {}), ...this.earlierFields(earlier, peer, receivedAt),
+      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true, ...(intro ? { intro } : {}), ...knowFields(q, know), ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, this.replier(q.qid, tplId, peer, key, receivedAt, receivedAt, Promise.resolve(NO_HARVEST)))
   }
 
@@ -1163,27 +1182,33 @@ export class Net {
    * Wave 43b: `only` (audience_filter.ts) limits the ask to those peer ids; null or absent = every connected peer.
    * Wave 6h: every ask carries this phone's window, and is remembered per connection so a later yes can still land (late_answers.ts).
    */
-  async ask(text: string, reachOverride?: number, only?: readonly string[] | null): Promise<AskResult[]> {
+  async ask(text: string, reachOverride?: number, only?: readonly string[] | null, opts: { know?: boolean } = {}): Promise<AskResult[]> {
     await this.start()
     const s = this.hooks.state()
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
     // Wave 16: a together request carries its own reach for this one ask; "Ask only my direct contacts" still wins and the dock's choice is not touched.
     const reach = reachOverride !== undefined && s.askDirectOnly !== true ? reachOverride : askReachOf(s)
     const root = randomId(12)
-    const extra: Partial<QueryEnvelope> = {
-      ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs),
-    }
-    const timeoutMs = askTimeoutMs(reach, this.windowMs)
+    // Wave 44: the second round "Do you know someone who has this?" stays with the people asked (direct, one step) and carries kind 'know'.
+    const extra: Partial<QueryEnvelope> = opts.know
+      ? { ...directFlag(true), kind: 'know', ...windowFields(this.windowMs) }
+      : { ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs) }
+    const timeoutMs = askTimeoutMs(opts.know ? HOPS_DEFAULT : reach, this.windowMs)
     const now = Date.now()
     const outgoing = askPeers(s).filter((peer) => !only || only.includes(peer.id)).map((peer) => ({ peer, qid: randomId(12) }))
     s.sentAsks = addSentAsk(s.sentAsks, { id: root, text: freeText, at: now, to: outgoing.map(({ peer, qid }) => ({ peerId: peer.id, qid })) }, now)
     this.hooks.save()
-    const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({
-      peerId: peer.id,
-      peerName: peer.displayName,
-      qid,
-      decoded: await this.sendAsk(peer, freeText, extra, timeoutMs, qid),
-    })))
+    // Wave 44: who was asked goes only to a recipient this phone placed as Closest few or Close, and only while "show who was asked" is on.
+    const askedAll = outgoing.map(({ peer }) => peer.displayName)
+    const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => {
+      const names = shownAskedNames(peer.ring, s.askShowAsked !== false, askedAll)
+      return {
+        peerId: peer.id,
+        peerName: peer.displayName,
+        qid,
+        decoded: await this.sendAsk(peer, freeText, names ? { ...extra, askedNames: names } : extra, timeoutMs, qid),
+      }
+    }))
     // Review 6h: who shared at the moment has answered; a second answer of theirs for this ask is not a late one.
     const answered = outgoing.filter((_, i) => results[i].decoded?.outcome === 'shared')
     if (answered.length) {

@@ -22,6 +22,8 @@ const isHeld = (v: unknown): v is HeldAsk =>
   && (v.yesAt === undefined || typeof v.yesAt === 'number')
   && (v.earlierAt === undefined || (typeof v.earlierAt === 'number' && Number.isFinite(v.earlierAt)))
   && (v.reaskOf === undefined || typeof v.reaskOf === 'string') && (v.intro === undefined || typeof v.intro === 'string')
+  && (v.know === undefined || v.know === true) && (v.note === undefined || typeof v.note === 'string')
+  && (v.askedNames === undefined || (Array.isArray(v.askedNames) && v.askedNames.every((n) => typeof n === 'string')))
 
 /** The held prompts, cleaned: well-formed, none older than LATE_KEEP_MS, oldest first (the order they are shown in), bounded. Never throws. */
 export function liveHeldAsks(list: unknown, now: number): HeldAsk[] {

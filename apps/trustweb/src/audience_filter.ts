@@ -92,8 +92,10 @@ export interface FilterView {
   changed: () => void
   /** Hints and intros: the zone can be un-picked (= everybody); support always has one. */
   zoneRequired: boolean
-  /** Inside Advanced: the form's own controls (reach chooser, the "not Closest few" switch). */
+  /** Inside Advanced: the form's own controls (the "not Closest few" switch). */
   advanced: readonly (Node | null)[]
+  /** Wave 44: controls on the main form, under the Hide from row (the "How far?" chooser). */
+  main?: readonly (Node | null)[]
   /** Overlay for "Create tag": hands over the rows to show; main.ts supplies the sheet. */
   openSheet: (children: (Node | null)[]) => void
   closeSheet: () => void
@@ -195,6 +197,7 @@ export function audienceFilterView(v: FilterView): HTMLElement {
     }, [S.askPage.onlyTag(tagName(f.only, tags)) + ' ×'])]) : null,
     chipRow(v, 'add'),
     chipRow(v, 'exclude'),
+    ...(v.main ?? []),
     hideLeaks({ exclude: f.exclude, degree: v.steps ?? 1 }) ? el('p', { class: 'hint', 'data-aud-hide-travels': '' }, [S.askPage.hideTravels]) : null,
     advancedBox(v),
   ].filter((n): n is HTMLElement => n !== null))

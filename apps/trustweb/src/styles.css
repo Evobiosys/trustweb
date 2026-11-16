@@ -2185,3 +2185,11 @@ html.tw-bw :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) o
 .invite-warn{margin:10px 0}
 /* wave44 steer-event-visibility */
 .post-actions .btn.tw-off,.rv-bar .btn.tw-off{text-decoration:underline}
+/* wave44 steer-ask-escalation */
+.esc-box{margin:10px 0; padding:10px; border:1px dashed currentColor; border-radius:10px}
+.esc-box .seg button{min-height:36px}
+.asked-who{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
+.asked-who-list{margin:4px 0 0; padding-left:18px}
+.know-note{width:100%; margin:8px 0}
+.place-wrap{display:flex; gap:6px; align-items:center; margin-top:4px}
+.place-wrap input{flex:1; opacity:.7; font-size:12px; min-height:28px}

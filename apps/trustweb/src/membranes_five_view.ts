@@ -31,6 +31,8 @@ export interface SmallCardDeps {
   onRenameResource?: (id: string, next: string) => void
   /** Wave 30: a title typed in a category's "+ add" line (the caller adds it with that category's audience and redraws). */
   onAddResource?: (category: VisibleCategory, title: string) => void
+  /** Wave 44: marks a resource as something to pick up, with its place (the caller asks "Are you sure?" when the place is empty). */
+  onPhysical?: (id: string, physical: boolean, place: string) => void
   /** "Open in My Resources" under an expanded category. */
   onOpenResources: (category: VisibleCategory) => void
   /** Extended: expands this card in place (aria-expanded), a second press collapses it. */
@@ -100,9 +102,18 @@ function sharesLine(d: SmallCardDeps): HTMLElement {
   const itemRow = (i: VisibleCategory['items'][number]): HTMLElement => {
     const row = el('div', { class: 'meta card-res-row', 'data-card-shares-item': i.id })
     const show = (): void => row.replaceChildren(
-      el('span', {}, [i.text, ' · ', d.kindOf(i)]),
+      el('span', {}, [i.text, ' · ', d.kindOf(i), i.physical && i.place ? ' · ' + S.askPlace.place(i.place) : '']),
+      ...(d.onPhysical ? [el('button', { class: 'card-res-btn', 'data-card-shares-physical': i.id, 'aria-pressed': String(i.physical === true), 'aria-label': S.askPlace.physical, title: S.askPlace.physical, onclick: physical }, ['📦'])] : []),
       ...(d.onRenameResource ? [el('button', { class: 'card-res-btn', 'data-card-shares-edit': i.id, 'aria-label': S.cardResourceEdit, title: S.cardResourceEdit, onclick: edit }, ['✎'])] : []),
     )
+    // Wave 44: a small greyed place box (P7) for a physical thing; saving it with nothing typed asks "Are you sure?" once (main.ts).
+    const physical = (): void => {
+      if (i.physical === true && (i.place ?? '').trim()) { d.onPhysical?.(i.id, false, ''); return }   // a placed thing: the press takes the mark off
+      row.replaceChildren(inlineEdit(S.askPlace.placeAria, i.place ?? '', 'data-card-shares-place-input', (typed) => {
+        if (typed !== null) d.onPhysical?.(i.id, true, typed)
+        else show()
+      }))
+    }
     const edit = (): void => row.replaceChildren(inlineEdit(S.cardResourceEdit, i.text, 'data-card-shares-input', (typed) => {
       if (typed !== null) d.onRenameResource?.(i.id, typed)
       else show()

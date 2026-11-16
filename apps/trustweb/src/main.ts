@@ -35,7 +35,7 @@ import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
 import { audienceFilterView } from './audience_filter'
-import { allowedPeerIds, askFilterOf, saveAskFilter } from './ask_audience'
+import { allowedPeerIds, askFilterOf, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
 import type { IntroLink } from './intro_link'
@@ -371,6 +371,10 @@ import { ownChannels } from './channel_readers'
 import { readersBlock } from './channel_readers_view'
 import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
+import { escalateBlock, knowTips, askedWhoLine, showAskedRow, knowCard } from './ask_escalation_view'
+import { escalationTargets } from './ask_escalation'
+import { setPhysical } from './physical_place'
+import type { Zone as AskZone } from './audience_zones'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { createWebView, RINGS_SIZE } from './web_view'
 import { readCard } from './bubble_card'
@@ -756,6 +760,9 @@ let askRun: {
   reach: number
 } | null = null
 const askQueue: IncomingAsk[] = []
+/** Wave 44 steer-ask-escalation: the second round ("Do you know someone who has this?"): the zone to ask further, and the tips that came back (never stored). */
+let escZone: AskZone = 'friend'
+let escRun: { busy: boolean; tips: AskResult[] | null } | null = null
 /** Asks a fitting together ask already went ahead of (together_match.ts queueAsk). */
 const askOvertaken = new WeakSet<IncomingAsk>()
 let askShowing: IncomingAsk | null = null
@@ -3074,6 +3081,7 @@ function webPageScreen(page: WebPage): Node[] {
     kindOf: (i) => S.cardSharesKind[kindKey(i.source?.kind)],
     onRenameResource: (id, next) => { if (renameResource(st(), id, next)) save(); render() },
     onAddResource: (c, title) => { if (addResourceIn(st(), c, title, randomId(8), Date.now())) save(); render() },
+    onPhysical: (id, physical, place) => setPhysicalThing(id, physical, place),
     onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
     heading: cardNameHeading(p), places: connectedPlaces(p), onChat: () => chatSheet(p.id), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
@@ -8284,6 +8292,33 @@ async function runAsk(text: string, reach?: number): Promise<void> {
   if (screen === Screen.Web || screen === Screen.Ask) render()
 }
 
+/** Wave 44 (physical_place.ts): a physical thing needs a place; with none, ONE dialog asks "Are you sure?" (Continue / Add place). */
+function setPhysicalThing(id: string, physical: boolean, place: string): void {
+  const item = st().inventory.find((i) => i.id === id)
+  if (!item) return
+  if (setPhysical(item, physical, place, false) === 'ok') { save(); render(); return }
+  openSheet([
+    el('h3', {}, [S.askPlace.sureTitle]),
+    el('p', {}, [S.askPlace.sure]),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'btn btn-electric', type: 'button', 'data-place-continue': '', onclick: () => { setPhysical(item, true, place, true); save(); closeSheet(); render() } }, [S.askPlace.continue]),
+      el('button', { class: 'btn btn-ghost', type: 'button', 'data-place-add': '', onclick: closeSheet }, [S.askPlace.addPlace]),
+    ]),
+  ])
+}
+
+/** Wave 44: asks the chosen zone (minus those who already shared) whether they know someone who has it; the tips stay in `escRun`, private to this phone. */
+async function escalate(text: string, zone: AskZone, shared: readonly string[]): Promise<void> {
+  if (escRun?.busy) return
+  const s = st()
+  escRun = { busy: true, tips: null }
+  render()
+  const only = escalationTargets(s.people, zone, shared, askFilterOf(s).exclude, tagTester(s.people, loadColourTags()))
+  const tips = await net.ask(text, undefined, only, { know: true })
+  escRun = { busy: false, tips }
+  render()
+}
+
 function resultsView(results: AskResult[], asked: { text: string; at: number }): HTMLElement[] {
   const shared = results.filter((r) => r.decoded?.outcome === 'shared' && r.decoded.shared)
   if (!shared.length) {
@@ -8320,7 +8355,10 @@ function queryDock(s: AppState): HTMLElement {
         askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
         el('p', { class: 'hint' }, [(run.reach === HOPS_DEFAULT ? S.queryWindow : S.queryWindowFar)(Math.round(askWaitMs(run.reach, net.answerWindowMs) / 1000))]),
         run.results
-          ? el('div', {}, [...resultsView(run.results, { text: run.text, at: run.startedAt }), webSearchRow(run.text, webResults).el])
+          ? el('div', {}, [...resultsView(run.results, { text: run.text, at: run.startedAt }), escalateBlock({
+            zone: escZone, setZone: (z) => { escZone = z; render() }, busy: escRun?.busy === true, tips: escRun?.tips ?? null,
+            send: () => { void escalate(run.text, escZone, run.results?.filter((r) => r.decoded?.outcome === 'shared').map((r) => r.peerId) ?? []) },
+          }), webSearchRow(run.text, webResults).el])
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
@@ -8328,12 +8366,13 @@ function queryDock(s: AppState): HTMLElement {
   const filter = askFilterOf(s)
   const tagsNow = loadColourTags()
   const chipName = (c: string): string => (c.startsWith('person:') ? s.people.find((p) => p.id === c.slice(7))?.name ?? '' : tagsNow.find((t) => t.id === c.slice(4))?.label ?? c.slice(4))
-  const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r) => {
+  const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r, custom) => {
     if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
+    if (custom) s.askReachCustom = true; else delete s.askReachCustom
     save(); render()
-  }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) })
+  }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) }, s.askReachCustom === true)
   const audienceBox = audienceFilterView({
-    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, advanced: [reach], openSheet, closeSheet, steps: askReachOf(s),
+    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, main: [reach], advanced: [showAskedRow(s.askShowAsked !== false, () => { if (s.askShowAsked === false) delete s.askShowAsked; else s.askShowAsked = false; save(); render() })], openSheet, closeSheet, steps: askReachOf(s),
     changed: () => { saveAskFilter(s, filter); save(); render() },
   })
   const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {
@@ -8347,6 +8386,13 @@ function queryDock(s: AppState): HTMLElement {
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : modeChips,
+      // Wave 44: a second round an assistant queued (MCP ask_escalation_set) waits here for Send or Discard.
+      !run && s.askEscalate ? el('div', { class: 'esc-box', 'data-escalate-queued': '' }, [
+        el('p', {}, [S.askKnow.queued(s.askEscalate.text)]),
+        el('button', { class: 'btn btn-electric', type: 'button', 'data-escalate-queued-send': '', disabled: escRun?.busy === true, onclick: () => { const q = s.askEscalate; delete s.askEscalate; save(); if (q) void escalate(q.text, q.zone, []) } }, [S.askKnow.send]),
+        el('button', { class: 'btn btn-ghost', type: 'button', 'data-escalate-queued-discard': '', onclick: () => { delete s.askEscalate; save(); render() } }, [S.askKnow.discard]),
+      ]) : null,
+      !run && escRun?.tips ? knowTips(escRun.tips) : null,
       run ? null : askHow(),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
@@ -8427,7 +8473,9 @@ function renderAsk(): void {
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       fitLine(a),
-      a.intro && decided === null
+      a.know && decided === null
+        ? el('div', {}, [...knowCard((note) => decide(true, note), () => decide(false)), a.askedNames ? askedWhoLine(a.askedNames) : null])
+        : a.intro && decided === null
         ? introCard({ by: a.fromName, target: a.intro }, {
             introduce: () => { decide(true); showNextAsk(); introduceHandoff({ by: a.fromName, target: a.intro! }) },
             notNow: showNextAsk,
@@ -8440,6 +8488,7 @@ function renderAsk(): void {
             el('button', { class: 'btn btn-mint', onclick: () => decide(true) }, [S.askShare]),
             el('button', { class: 'btn btn-ghost', onclick: () => decide(false) }, [S.askDecline]),
             el('p', { class: 'ask-foot' }, [yesIsLate(a) ? S.askLateFoot(a.fromName) : S.askFoot(a.fromName)]),
+            a.askedNames ? askedWhoLine(a.askedNames) : null,
           ])
         : el('div', {}, [
             el('p', { class: 'ask-done' }, [decided ? S.askSent : S.askNotSent]),
@@ -8483,13 +8532,13 @@ function yesIsLate(a: IncomingAsk): boolean {
   return a.lateMode && (a.arrivedLate || Date.now() >= a.deadline)
 }
 
-function decide(share: boolean): void {
+function decide(share: boolean, note?: string): void {
   const a = askShowing
   if (!a || askDecision !== null) return
   askDecidedLate = yesIsLate(a)
   askDecision = share
   renderAsk()
-  void a.decide(share)
+  void a.decide(share, note)
 }
 
 // ---------------------------------------------------------------------------
