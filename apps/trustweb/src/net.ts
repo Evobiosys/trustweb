@@ -819,8 +819,7 @@ export class Net {
       const peer = this.hooks.state().peers.find((p) => p.id === held.peerId)
       if (!peer) { this.unhold(held.qid); continue }
       this.seenQids.add(held.qid)
-      const key = await this.pairKey(peer)
-      const reply = this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST))
+      const reply = await this.heldReplier(held, peer)
       // Review 6h: a yes given before the moment that had not left yet leaves at the moment; past it, flushLateYes sends it below.
       if (held.yesAt !== undefined) {
         if (now < held.deadline) void reply.atMoment(sharedItems(held.matches)).then((m) => { if (m.sent) this.unhold(held.qid) })
@@ -829,6 +828,18 @@ export class Net {
       this.present(held, peer, reply)
     }
     await this.flushLateYes()
+  }
+
+  private async heldReplier(held: HeldAsk, peer: Peer): Promise<Replier> {
+    const key = await this.pairKey(peer)
+    return this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST))
+  }
+
+  /** Wave 43b (A2): the prompt of one open held ask shown again on request (the person page's "Answer now"); nothing when it is gone or its connection is. */
+  async presentHeld(qid: string): Promise<void> {
+    const held = liveHeldAsks(this.hooks.state().heldAsks, Date.now()).find((h) => h.qid === qid && h.yesAt === undefined)
+    const peer = held ? this.hooks.state().peers.find((p) => p.id === held.peerId) : undefined
+    if (held && peer) this.present(held, peer, await this.heldReplier(held, peer))
   }
 
   private hold(held: HeldAsk): void {

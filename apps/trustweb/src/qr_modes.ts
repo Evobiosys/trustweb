@@ -9,6 +9,7 @@
  * The body is inline. A relay token for bodies too long for a QR is a later step.
  */
 import { fromBase64Url, toBase64Url } from './event_link'
+import { shortEventLink } from './event_join'
 
 /** What an introducer may pass on about a person: their public username only (default), the profile one ring closer, or nothing before asking. */
 export type IntroducePermission = 'public' | 'one-ring-closer' | 'ask-first'
@@ -69,7 +70,7 @@ export function mode(ctx: QrContext, on: readonly QrOption['id'][] = [], profile
       return { ...m, payload: withMode(ctx.link, 'person', { ...(m.chosen.includes('username') ? { u: ctx.username } : {}), ...(m.chosen.includes('profile') ? { p: ctx.profile } : {}) }) }
     }
     case 'community': return done(withMode(ctx.link, 'tag', { t: ctx.tag, i: ctx.people, a: ctx.permission ?? 'request' }))
-    case 'event': return done(withMode(ctx.link.split('#')[0], 'event') + (ctx.eventLink.includes('#') ? ctx.eventLink.slice(ctx.eventLink.indexOf('#')) : ''))
+    case 'event': { const short = shortEventLink(ctx.eventLink); return done(withMode(ctx.link.split('#')[0], 'event') + (short.includes('#') ? short.slice(short.indexOf('#')) : '')) } // wave 43b: the short code, the rest follows the connect
     default: return done(withMode(ctx.link, ctx.kind, { l: ctx.shareLink }))
   }
 }

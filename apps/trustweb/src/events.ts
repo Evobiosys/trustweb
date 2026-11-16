@@ -6,7 +6,7 @@ import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { EventBy, LinkedEvent } from './event_link'
 import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
-import { eventOrganizers, joinEventCommunity, roleLabels } from './event_roles'
+import { eventOrganizers, isEventHost, joinEventCommunity, roleNames, sameName } from './event_roles'
 import { DEFAULT_INVITE_POLICY, NICK_FALLBACK, nameRevealOf, stamp, timesError } from './event_press'
 export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, NICK_FALLBACK, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, migrateNicknames, nameRevealOf, nickFor, nicknamesOf, offersOf, setEventTimes, setNicknames } from './event_press'
 export type { EventOffers, EventSettingsPatch, InvitePolicy, NameReveal } from './event_press'
@@ -208,18 +208,7 @@ export function untilLabel(ev: Pick<TwEvent, 'to'>): string {
 /** Wave 43: notifications of this event (invitations, feed posts, support asks of the people here); on unless switched off. */
 export const notifyOn = (ev: Pick<TwEvent, 'notify'>): boolean => ev.notify !== false
 
-const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
-
-/** The role holders of an event as names: person ids resolve to the card's name, free names stay; the legacy organizer text splits on commas. */
-function roleNames(ev: TwEvent, people: readonly Pick<Person, 'id' | 'name'>[], keys: readonly ('organizers' | 'hosts' | 'techSupport')[]): string[] {
-  const refs = keys.flatMap((k) => (k === 'organizers' ? eventOrganizers(ev) : ev[k] ?? []))
-  return roleLabels({ people: people as Person[] }, refs)
-}
-
-/** Host, organizer or tech support (held as a person id or a free name); an event I made without any host or organizer is mine. */
-export function isEventHost(ev: TwEvent, meName: string, people: readonly Pick<Person, 'id' | 'name'>[] = []): boolean {
-  return roleNames(ev, people, ['hosts', 'organizers', 'techSupport']).some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !eventOrganizers(ev).length)
-}
+export { isEventHost }
 
 /** Jakob's answer (2026-11-15, beta): hosts, organizers and technical support may edit the event (one predicate; isEventHost already resolves all three roles). */
 export const mayEdit = isEventHost

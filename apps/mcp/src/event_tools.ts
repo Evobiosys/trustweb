@@ -7,7 +7,7 @@
  */
 import { DEFAULT_INVITE_POLICY, applyEventSettings, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
-import { identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
+import { eventLinkView, identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { SupportAsk } from '../../trustweb/src/support_ask.ts'
 import type { AppState, TwEvent } from '../../trustweb/src/model.ts'
@@ -40,7 +40,22 @@ function personOf(r: Rec, who: string): Person {
   return hits[0]
 }
 
-export function eventTools(e: EventToolsEnv): { write: Tool[] } {
+/** The id and kind of an event link (a whole URL or the text after its #): `#ev=` / `#evs=` = peer, `#ev_host=` / `#evs_host=` = host. The app's decoder (event_link.ts) imports modules that plain node cannot load, so only these two fields are read here. */
+function linkOf(url: string): { id: string; kind: 'peer' | 'host' } {
+  const params = new URLSearchParams(url.slice(Math.max(0, url.indexOf('#'))).replace(/^#/, ''))
+  for (const [key, kind] of [['ev', 'peer'], ['ev_host', 'host'], ['evs', 'peer'], ['evs_host', 'host']] as const) {
+    const raw = params.get(key)
+    if (!raw) continue
+    try {
+      const o: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
+      const id = Array.isArray(o) ? o[0] : (o as { id?: unknown } | null)?.id
+      if (typeof id === 'string' && id) return { id, kind }
+    } catch { /* falls through to the error */ }
+  }
+  throw new Error('not an event link')
+}
+
+export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
   const write: Tool[] = [
     {
       name: 'event_create', description: 'Make an event inside a community from a template: name, from (YYYY-MM-DD), to, where, description, roles (named slots), resources (what it needs), followup (note). The sign-up sheet starts empty.',
@@ -203,5 +218,24 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
       },
     },
   ]
-  return { write }
+  // wave43b event-qr-join (MCP parity P02): where an event link opens; nothing is changed.
+  const read: Tool[] = [
+    {
+      name: 'event_link_open', description: 'Say where an event opens: view "edit" (the event\'s edit view: I am its host, organizer or tech support, or the link is the host link) or "normal". Give eventId (id or exact name) or url (an event link or the text after its #).',
+      inputSchema: schema({ eventId: S('event id or exact name'), url: S('an event link, or its #ev=... fragment') }),
+      run: (a) => {
+        const r = e.load()
+        const me = r.me?.displayName ?? ''
+        if (str(a.url).trim()) {
+          const linked = linkOf(str(a.url))
+          const held = (r.events ?? []).find((x) => x.id === linked.id)
+          return { id: linked.id, view: eventLinkView(held ?? { id: linked.id, name: '', from: '', where: '', createdAt: 0, attended: true, fromLink: true }, linked.kind, me, r.people) }
+        }
+        if (!str(a.eventId).trim()) throw new Error('give eventId or url')
+        const ev = eventOf(r, a.eventId)
+        return { id: ev.id, view: eventLinkView(ev, 'peer', me, r.people) }
+      },
+    },
+  ]
+  return { read, write }
 }

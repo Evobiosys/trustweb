@@ -3952,6 +3952,7 @@ export const S = {
       event_invitees_set: 'Choose who is invited to an event',
       event_roles_set: 'Set who organizes, hosts and gives technical support for an event',
       event_person_identify: 'Find a person by name for an event, or add them as new',
+      event_link_open: 'Say whether an event link opens its edit view or the normal view',
       event_settings_set: 'Change who may invite, notifications and name shown for an event',
       event_offers_set: 'Switch support, resources and feed on for an event',
       event_times_set: 'Change when you are at an event',
@@ -4452,4 +4453,13 @@ export const S = {
   filterBadgeAria: (n: number) => `${n} ${n === 1 ? 'filter is' : 'filters are'} on: press to see them, hold to clear all`,
   /** Wave 43 sync-visibility: on a phone the vault and Tana entries sit under Advanced. */
   syncPhoneHint: 'Vault sync runs on a computer; your phone receives the result.',
+  /* wave43b event-qr-join */
+  /** Under the event code: what the short code leaves out (it follows once you are connected). */
+  qrEventTrimmed: 'The code carries the name, dates and hosts. Place, conditions and themes follow once you are connected.',
+  /** Event code still too long for one code even trimmed (a very long name or host list). */
+  qrEventTooLong: 'Too long for one code even without conditions, themes and place. Shorten the name or the host list.',
+  /** Person page: asks from this person that are still open, answerable late. */
+  pastAsksTitle: (name: string) => `Asks from ${name}`,
+  pastAskAnswer: 'Answer now',
+  pastAskWhen: (days: number) => (days < 1 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`),
 } as const

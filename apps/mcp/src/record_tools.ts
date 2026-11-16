@@ -278,5 +278,5 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
   const community = communityTools({ load: () => load(o.file) as never, commit: commit as never, write: o.write, now })
   const events = eventTools({ load: () => load(o.file) as never, commit: commit as never, now })
   const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now })
-  return [...read, ...community.read, ...feed.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write] : []), ...barTools(o), ...webFilterTools(o), ...settingsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
+  return [...read, ...community.read, ...events.read, ...feed.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write] : []), ...barTools(o), ...webFilterTools(o), ...settingsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

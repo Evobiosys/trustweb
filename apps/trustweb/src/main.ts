@@ -303,6 +303,8 @@ import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
+import { afterConnect, eventLinkView } from './event_join'
+import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
@@ -529,6 +531,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
+// Wave 43b: an event link that came with a connect opens after the connect flow (the ring choice) is done, never over it.
+let eventWaitsForConnect = pendingEvent !== null && pendingConnect !== null
 // An intro link (#intro=..., intro_link.ts): the "Intro request" card opens once the app has a record.
 let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
@@ -2403,6 +2407,9 @@ function admitLink(link: StampedLink): { ok: true; legacy: boolean } | { ok: fal
   return v
 }
 
+/** A connect that threw: the event link waiting behind it still opens. */
+const connectFailed = (e: unknown): void => { console.warn('connect', e); afterConnectOpen() }
+
 /** `picked`: the visitor's add sheet ran it (offerPendingConnect) with the typed name and the ring; then their card opens, no second sheet. */
 async function completePendingConnect(picked?: { name: string; ring: Ring }): Promise<void> {
   const link = pendingConnect
@@ -2410,7 +2417,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   pendingConnect = null
   drawCardStack()
   const admitted = admitLink(link)
-  if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); return }
+  if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); afterConnectOpen(); return }
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
@@ -2468,10 +2475,10 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (qrBody?.kind === 'person' && qrBody.username) toast(S.qrScanUsername(peer.displayName, qrBody.username))
   else if (qrBody?.kind === 'tag') toast(S.qrScanTag(qrBody.tag))
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
-  if (demoLink || solo) openPendingShare()
+  if (demoLink || solo) afterConnectOpen()
   else if (picked) {
     viaCard.closed(person.id)
-    if (!openPendingShare()) personSheet(person.id)
+    afterConnectOpen(person.id)
   } else openConnectAdd(peer, person, link.from.displayName)
 }
 
@@ -2502,6 +2509,7 @@ function offerPendingConnect(): void {
 /** "Not now" (Jakob 2026-10-19): the inviter goes to the Curator's Archive, not connected, the link kept on the entry. */
 function declineInvite(link: ConnectLinkParams): void {
   pendingConnect = null
+  afterConnectOpen()
   const p = archivedInvite(link, randomId(8), Date.now())
   st().people.push(p)
   save()
@@ -2578,9 +2586,9 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       viaCard.closed(person.id)
       addedToast(person, ring)
       render()
-      if (!openPendingShare()) personSheet(person.id)
+      afterConnectOpen(person.id)
     },
-    onLater: () => { connectAdd = null; closeSheet(); if (!openPendingShare() && viaCard.closed(person.id)) personSheet(person.id) },
+    onLater: () => { connectAdd = null; closeSheet(); if (pendingShare || viaCard.closed(person.id) || pendingEvent) afterConnectOpen(person.id) },
   })
   connectAdd = { peerId: peer.id, handle }
   const nodes: Node[] = [...handle.nodes]
@@ -2636,7 +2644,7 @@ function screenStart(): Node[] {
     setTimeout(() => void offerApkUpdate(), 4000)
     void net.start().then(announceLink).then(() => refreshPush()).then(pollNotesRelay)
     if (invite && !solo && !demo) offerPendingConnect()
-    else void completePendingConnect()
+    else void completePendingConnect().catch(connectFailed)
     coNotes?.start?.()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
@@ -2933,8 +2941,8 @@ function curatorSheet(): void {
 }
 
 /** The Events screen: the list, or one event's page (from a chip on a person). */
-function openEvents(eventId?: string): void {
-  eventsView.open(eventId)
+function openEvents(eventId?: string, edit = false): void {
+  eventsView.open(eventId, undefined, edit)
   go(Screen.Events)
 }
 
@@ -3643,6 +3651,7 @@ function personSheet(personId: string): void {
     askLinksRow(p),
     passOnRowFor(p),
     askAgainRow(p),
+    pastAsksRow(pastAsksDeps, p),
     leanRow(p),
     eventChipsRow(p),
     knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace),
@@ -3692,7 +3701,7 @@ function cardMore(p: Person): Node[] {
       keepInTouchRow({ state: st, save, redraw: render, toast: (msg, undo) => toast(msg, { onClick: undo }) }, p),
       birthdayRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
       thoughtRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
-      obsidianLink(st(), p.fields?.obsidianNote), seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+      obsidianLink(st(), p.fields?.obsidianNote), seenLine(st(), p.id), personShareRow(p), askAgainRow(p), pastAsksRow(pastAsksDeps, p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
     timeline: () => [timelineSection(p)],
@@ -4696,6 +4705,9 @@ function mayAskAgainWith(peer: Peer): boolean {
 }
 
 /** Wave 6i: under Advanced on a connected person's card: "Get <name>'s earlier asks again" (the same envelope as a tightening). */
+// Wave 43b: "Answer now": the prompt on screen is put back in front; one already waiting in the queue comes by itself; else the held ask is presented again.
+const pastAsksDeps = { state: st, answer: (qid: string): void => { closeSheet(); if (askShowing?.qid === qid) renderAsk(); else if (!askQueue.some((a) => a.qid === qid)) void net.presentHeld(qid) } }
+
 function askAgainRow(p: Person): HTMLElement | null {
   const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
   if (!peer || !mayAskAgainWith(peer)) return null
@@ -5610,10 +5622,25 @@ function maybeOpenPendingIntro(): void {
   openSheet([introCard(l, { introduce: () => { closeSheet(); introduceHandoff(l) }, notNow: closeSheet, decline: closeSheet })])
 }
 
+/** Wave 43b: an event link opens the event itself: the edit view for a host, organizer or tech support (or a host link), else the normal one. */
+function linkOpensEdit(ev: LinkedEvent): boolean {
+  const held = st().events?.find((e) => e.id === ev.id)
+  return !!held && eventLinkView(held, ev.kind, st().me.displayName, st().people) === 'edit'
+}
+
+/** Wave 43b: the connect flow after a scan is over (its add sheet with the ring choice is done): the event opens next, else the share, else the person's card. */
+function afterConnectOpen(personId?: string): void {
+  eventWaitsForConnect = false
+  const next = afterConnect({ hasShare: pendingShare !== null, hasEvent: pendingEvent !== null })
+  if (next === 'share') openPendingShare()
+  else if (next === 'event') maybeOpenPendingEvent()
+  else if (personId) personSheet(personId)
+}
+
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
 const openedHits = new Set<string>()
 function maybeOpenPendingEvent(): void {
-  if (!pendingEvent || !state) return
+  if (!pendingEvent || !state || eventWaitsForConnect) return
   const ev = pendingEvent
   pendingEvent = null
   if (!featureOn(st(), 'events')) {
@@ -5629,14 +5656,14 @@ function maybeOpenPendingEvent(): void {
     ])
     return
   }
-  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
+  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id, linkOpensEdit(ev)); return }
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement
   const add = (): void => {
     const now = Date.now()
     const id = joinEvent(st(), ev, now)
     if (ev.by && addBox.checked) addInviter(st(), ev.by, id, S.eventInvitedContext(ev.name), randomId(8), now)
-    save(); closeSheet(); openEvents(id)
+    save(); closeSheet(); openEvents(id, linkOpensEdit(ev))
   }
   // The organizer's logo, if the server has one: filled in later, the sheet never waits for it (the title stays the link's own name).
   const logoSlot = ev.srv ? el('div', { 'data-org-logo': '' }) : null
@@ -8229,7 +8256,7 @@ if (state && !state.testOf?.handedOverAt) {
   appOpened()
   // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable (in the tab that drains, review 6h).
   void net.start().then(announceLink).then(() => net.restoreHeldAsks())
-  void completePendingConnect()
+  void completePendingConnect().catch(connectFailed)
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
   maybeOpenPendingIntro()
