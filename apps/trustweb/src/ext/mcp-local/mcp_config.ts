@@ -25,6 +25,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
   // Wave 43b notify-center
   { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
+  // Wave 43b resources-views
+  { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_set_suggester', write: true },
   // Wave 43 event-feed
   { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
   // Wave 42 settings-llm-first

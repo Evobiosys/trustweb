@@ -160,6 +160,7 @@ import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
+import { resourceViews } from './resource_views_view'
 import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -7788,6 +7789,23 @@ function screenInventory(): Node[] {
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
   // Querying is one tap from Inventory too (wave 2, P9): bottom right as on Web and Chat (wave 27); "Review requests" sits bottom left.
+  const invRow = (item: InventoryItem): HTMLElement => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
+    el('div', { class: 'inv-main' }, [
+      el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
+        item.text, isDemoItem(s, item.id) ? dummyChip() : null,
+        recentChip(item.createdAt, Date.now()),
+        provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
+      ]),
+      el('div', { class: 'inv-actions' }, [
+        audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
+        degreesPill(item, () => itemSheet(item.id)),
+      ]),
+    ]),
+    el('div', { class: 'inv-side' }, [
+      el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']),
+      onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
+    ]),
+  ])
   const zin = zoom.inventory
   const list = el('div', { class: 'scroll pad', 'data-zoom-level': zin ? 'in' : 'out' }, zin ? [...outlinerItems(s), ...(cal?.resourcesSection?.() ?? [])] : [
       s.testOf ? foundView(s) : null,
@@ -7799,23 +7817,11 @@ function screenInventory(): Node[] {
       invQuery.trim() && s.inventory.length > 0 && shown.length === 0 ? noMatchLine() : null,
       // Jakob's sketch (10-07, #21/#22): the X top right of the item, the on/off switch below it on the right;
       // under the text first who can ask, then how far it may travel.
-      ...shown.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
-        el('div', { class: 'inv-main' }, [
-          el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
-            item.text, isDemoItem(s, item.id) ? dummyChip() : null,
-            recentChip(item.createdAt, Date.now()),
-            provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
-          ]),
-          el('div', { class: 'inv-actions' }, [
-            audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
-            degreesPill(item, () => itemSheet(item.id)),
-          ]),
-        ]),
-        el('div', { class: 'inv-side' }, [
-          el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']),
-          onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
-        ]),
-      ])),
+      // Wave 43b resources-views: the view switcher, filters and the two sections; protected rows come from resource_views_view.ts.
+      ...resourceViews({
+        items: shown, people: s.people, tags: loadColourTags(), row: invRow, open: itemSheet, save, render,
+        record: (item) => { if (draftInProgress()) { toast(S.resViews.recordBusy); return }; newDraft(); draft.mode = RecordMode.Solo; draft.about = AboutKind.What; draft.name = item.text; draft.itemId = item.id; go(recordScreen()); void startSolo() },
+      }),
       ...invitationsSection(invitationIo()),
       ...(cal?.resourcesSection?.() ?? []),
       backup.card(),
