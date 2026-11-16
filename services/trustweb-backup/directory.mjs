@@ -70,7 +70,11 @@ export function verifyDid(did, message, sig) {
 }
 
 const text = (v, max) => typeof v === 'string' && v.trim().length > 0 && v.length <= max
-const recordMessage = (r) => `tw-name-v1\n${normName(r.first, r.last)}\n${r.key}\n${r.ts}\n${r.open ? 1 : 0}\n${r.srv ? 1 : 0}`
+// Wave 44b profile-page: the optional signed `extra` (profile fields the owner marked discoverable); mirrors apps/trustweb/src/name_record.ts.
+const EXTRA_KEYS = ['prefix', 'middle', 'suffix', 'nickname', 'bio', 'pronouns', 'languages', 'location', 'link0', 'link1', 'link2', 'link3']
+const extraOk = (x) => typeof x === 'object' && x !== null && !Array.isArray(x) && Object.entries(x).every(([k, v]) => EXTRA_KEYS.includes(k) && typeof v === 'string' && v.length > 0 && v.length <= 340)
+const extraMessage = (x) => (x === undefined ? '' : `\n${JSON.stringify(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1)))}`)
+const recordMessage = (r) => `tw-name-v1\n${normName(r.first, r.last)}\n${r.key}\n${r.ts}\n${r.open ? 1 : 0}\n${r.srv ? 1 : 0}${extraMessage(r.extra)}`
 const intentMessage = (i) => `tw-intent-v1\n${i.to}\n${i.from.key}\n${normName(i.from.first, i.from.last)}\n${i.ts}`
 
 /** A well-formed, validly signed record that allows a server; returns the stored form (no hosts) or null. */
@@ -79,8 +83,9 @@ export function checkRecord(r) {
   if (!text(r.first, MAX_NAME) || !text(r.last, MAX_NAME) || !text(r.key, MAX_DID) || !text(r.sig, 200)) return null
   if (typeof r.ts !== 'number' || !Number.isFinite(r.ts) || typeof r.open !== 'boolean' || r.srv !== true) return null
   if (!Array.isArray(r.hosts) || r.hosts.length > 20 || !r.hosts.every((h) => text(h, MAX_DID))) return null
+  if (r.extra !== undefined && !extraOk(r.extra)) return null
   if (!verifyDid(r.key, recordMessage(r), r.sig)) return null
-  return { v: 1, first: r.first.trim(), last: r.last.trim(), key: r.key, ts: r.ts, open: r.open, srv: true, hosts: [], sig: r.sig }
+  return { v: 1, first: r.first.trim(), last: r.last.trim(), key: r.key, ts: r.ts, open: r.open, srv: true, hosts: [], sig: r.sig, ...(r.extra ? { extra: r.extra } : {}) }
 }
 
 export function checkIntent(i) {

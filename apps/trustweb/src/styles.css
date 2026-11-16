@@ -2140,3 +2140,19 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .feed-target{font-size:12px; color:var(--ink-soft)}
 .feed-target summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
 .feed-target .meta{margin:4px 0}
+
+/* wave44b profile-page */
+.profile-page{display:flex; flex-direction:column; gap:10px}
+.profile-head{display:flex; align-items:center; gap:10px}
+.profile-head input{flex:1 1 auto; min-width:0}
+.profile-field{display:flex; align-items:center; gap:6px; min-width:0}
+.profile-field label{flex:0 0 7.5em; font-size:12px; color:var(--ink-soft)}
+.profile-field input,.profile-field textarea{flex:1 1 auto; min-width:0}
+.profile-opt input,.profile-opt textarea{font-size:11px; color:var(--ink-soft); opacity:.75; padding:4px 8px; min-height:0}
+.profile-opt label{font-size:11px; opacity:.75}
+.profile-vis{flex:0 0 auto; font-size:11px; color:var(--ink-soft); background:none; border:1px solid var(--line); border-radius:999px; padding:2px 8px; min-height:28px; text-decoration:underline; cursor:pointer}
+.profile-vis[data-vis=discoverable]{border-color:var(--teal); color:var(--teal)}
+.profile-link{display:flex; align-items:center; gap:6px; font-size:12px; min-width:0; flex-wrap:wrap}
+.profile-link a{min-width:0; overflow-wrap:anywhere}
+.profile-more[hidden]{display:none}
+.profile-more{display:flex; flex-direction:column; gap:8px; margin-left:12px; padding-left:10px; border-left:2px solid var(--line)}

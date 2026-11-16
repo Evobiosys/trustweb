@@ -292,6 +292,7 @@ import { purgeDue, recentlyDeleted } from './deleted_people'
 import { trustZonesGroup, zoneSidebar } from './trustzones_view'
 import { ringShown } from './rings_filter'
 import { ownProfilePage } from './own_profile_view'
+import { profilePage } from './profile_page_view'
 import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
@@ -2982,9 +2983,13 @@ function webPageScreen(page: WebPage): Node[] {
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'me') {
-    return [header(S.ownProfileTitle, { back }), ownProfilePage({
-      profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl), name: () => st().me.displayName,
-      editProfile: profileSheet, editName: () => editNameSheet(true),
+    const face = (): HTMLElement => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl)
+    return [header(S.profile44.title, { back }), profilePage({   // wave44b profile-page
+      state: st, save, face, toast, discoverable: social.profileBlock, redraw: render, fetch: (u, i) => fetch(u, i), origin: location.origin,
+      zones: () => ownProfilePage({
+        profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face, name: () => st().me.displayName,
+        editProfile: profileSheet, editName: () => editNameSheet(true),
+      }),
     })]
   }
   if (page.kind === 'more') {
@@ -7669,7 +7674,7 @@ function settingsSheet(): void {
     ],
     general: [
     settingsSection('you', S.setSecYou, [
-      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
       ]),
       el('button', { class: 'conn-row', 'data-primary-email': '1', onclick: () => editEmailSheet() }, [
@@ -7807,7 +7812,7 @@ function settingsSheet(): void {
     simpleBlock({
       state: () => st() as unknown as Record<string, unknown>, save, render: () => { renderTabs(); render() }, redraw: settingsSheet,
       actions: {
-        'ui.profile': () => editNameSheet(), 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
+        'ui.profile': () => { closeSheet(); openWebPage({ kind: 'me' }) }, 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
         'ui.import': () => openServicesImport(importHooks()), 'ui.help': () => openSheet([el('h3', {}, [S.setTitle]), ...aboutGroup()]),
       },
     }),
