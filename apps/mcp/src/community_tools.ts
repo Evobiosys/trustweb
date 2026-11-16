@@ -7,13 +7,14 @@
  */
 import { NAV, TILES, addMember, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { CommunityData, CommunityKind } from '../../trustweb/src/ext/community-mighty/community_data.ts'
+import { personQrLink } from '../../trustweb/src/person_qr_link.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; fields?: Record<string, unknown>; deleted_at?: string }
 interface Ask extends Obj { id: string; chips: string[]; note: string; until: number; to: string[]; here: string[]; queued?: true; agent?: true; cancelled?: true }
 interface In extends Obj { id: string; peerId: string; chips: string[]; note: string; until: number }
-interface Rec extends Obj { people: Person[]; extData?: Record<string, unknown>; supportAsks?: Ask[]; supportIn?: In[] }
+interface Rec extends Obj { people: Person[]; peers?: { id: string; did?: string }[]; extData?: Record<string, unknown>; supportAsks?: Ask[]; supportIn?: In[] }
 
 export interface CommunityToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean; write: boolean; now: () => Date }
 
@@ -62,6 +63,18 @@ function resolve(r: Rec, tokens: readonly unknown[]): string[] {
 
 export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Tool[] } {
   const read: Tool[] = [
+    /* wave44 steer-people-picker */
+    {
+      name: 'person_qr_target', description: 'What the QR code on ONE person\'s card is bound to: the person\'s DID (their local id until a DID is known) and the fragment the connect link gets (`to=...`). Append `fragment` to the own connect link; the app does this on the card.',
+      inputSchema: schema({ person: S('id or exact name') }, ['person']),
+      run: (a) => {
+        const r = e.load()
+        const p = person(r, a.person)
+        const did = (r.peers ?? []).find((x) => x.id === p.peerId)?.did ?? (typeof p.did === 'string' ? p.did : undefined)
+        const target = did ?? p.id
+        return { id: p.id, name: p.name, target, title: `Connect with ${p.name}`, fragment: personQrLink('', { id: p.id, ...(did ? { did } : {}) }).slice(1) }
+      },
+    },
     {
       name: 'community_list', description: 'The communities I have: id, name, kind (managed = has organizers; informal = my own representation of a group) and member count.',
       inputSchema: schema({}),

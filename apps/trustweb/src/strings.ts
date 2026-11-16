@@ -4726,4 +4726,12 @@ export const S = {
     calBad: 'A calendar needs a name.',
     calDrafts: (n: number) => `Drafts (${n})`,
   },
+  /* wave44 steer-people-picker */
+  w44pp: {
+    pickTitle: (tag: string) => `Add to ${tag}`,
+    pickHint: 'People you know. Type a name, @name for people, #tag for a group.',
+    addNew: 'Add a new person',
+    added: (name: string, tag: string) => `Saved. ${name} is in ${tag}.`,
+    connectWith: (name: string) => `Connect with ${name}`,
+  },
 } as const

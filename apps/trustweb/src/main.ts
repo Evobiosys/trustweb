@@ -126,6 +126,8 @@ import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './chan
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { contactFragment, parsePersonShare, personShareLink, shareOfLink } from './person_share_link'
+import { personQrLink } from './person_qr_link'   // wave 44 steer-people-picker
+import { openMemberPicker } from './member_picker_view'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
 import { pollRelay, postNote, readRelayOn, type RelayDeps } from './notes_relay'
@@ -3527,7 +3529,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
       return
     }
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
-    if (communityTag && addMember(st().people, out.person.id, communityTag)) save()
+    if (communityTag && addMember(st().people, out.person.id, communityTag)) { save(); twBus.emit('community-go', 'members') }
     render()
     // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.
     const noteId = out.previous === undefined ? null : namePreviousId(out.previous)
@@ -3552,6 +3554,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
     closeSheet()
     toast(S.savedToast(n, S.ringLabel[picked]))
     render()
+    if (communityTag) twBus.emit('community-go', 'members')   // wave 44: the Members grid shows the new person
   }
   const addBtn = el('button', { class: 'btn btn-electric', 'data-add-person': '', onclick: add }, [S.addSave])
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
@@ -3769,7 +3772,8 @@ function personSheet(personId: string): void {
 }
 
 function personQr(p: Person): void {
-  void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
+  const did = st().peers.find((x) => x.id === p.peerId)?.did ?? p.did   // wave 44: the code is made for exactly this person
+  void qrPage((link) => ({ kind: 'person', link: personQrLink(link, { id: p.id, ...(did ? { did } : {}) }), name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
@@ -5326,7 +5330,12 @@ twBus.on('support-ask', (d) => {   // wave 42: the Community view's "Ask for sup
   const used = (key: string): void => { st().extData = { ...st().extData, 'community-mighty': rememberAudience(parseCommunity(st().extData?.['community-mighty']), tag, key) }; save() }
   openSheet([el('h3', {}, [S.supportTitle]), supportForm(supportIo, closeSheet, { tag, remembered: meta.audiences ?? [], used })])
 })
-twBus.on('add-member', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) addPersonSheet(Ring.Friend, false, tag) })   // wave 42: the add-person flow, scoped to a community
+twBus.on('add-member', (d) => {   // wave 44 steer-people-picker: "+" opens the people I know first, "Add a new person" below; no AI gate (wave 42 went straight to the add view)
+  const tag = (d as { tag?: string } | undefined)?.tag
+  if (!tag) return
+  const tagLabel = loadColourTags().find((x) => x.id === tag)?.label ?? tag
+  openMemberPicker({ state: st, save: () => save(), newId: () => randomId(8), tag, tagLabel, open: openSheet, done: (m) => { closeSheet(); toast(m); render(); twBus.emit('community-go', 'members') }, addNew: () => addPersonSheet(Ring.Friend, false, tag) })
+})
 /** Wave 42 community-event: "New event" in a community opens the assistant with the event template; its cards are approved one by one. */
 let eventCommunity: string | undefined
 /** Wave 43b (B33): the menu's Add event: Hosted (true), Informal (false); absent from the older "New event" button. */
