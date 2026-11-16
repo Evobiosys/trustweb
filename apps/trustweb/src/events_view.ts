@@ -212,7 +212,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   /** "Identify a person": the shared picker (event_person_picker.ts); a pick tags the person with this event. */
   function picker(ev: TwEvent): HTMLElement {
     return el('div', {}, [el('h3', {}, [S.eventsIdentify]), eventPersonPicker(h, ev.id, {
-      exclude: [...listedAttendees(attendees(h.state(), ev.id), ev.id), ...attendees(h.state(), ev.id).filter((p) => !searchableAttendees([p], ev.id).length)].map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
+      exclude: [...listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true), ...attendees(h.state(), ev.id).filter((p) => !searchableAttendees([p], ev.id).length)].map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
       renderPerson: (p) => el('span', {}, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])]),
       decorate: (chip, p) => { contextPress(chip, () => h.curatorPerson(p.id)); dragPerson(chip, p) },
       onPick: (id) => { tagPerson(h.state(), id, ev.id); h.save(); h.redraw() },
@@ -489,7 +489,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   }
 
   function page(ev: TwEvent): Node[] {
-    const people = listedAttendees(attendees(h.state(), ev.id), ev.id)   // wave 44 steer-event-visibility: discoverable / off people stay out of the open list
+    const people = listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true)   // wave 44 steer-event-visibility: discoverable / off people stay out of the open list
     const attended = el('button', {
       class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },

@@ -45,7 +45,7 @@ export interface EditorOpen {
   leave: () => void
 }
 
-const ERRORS: Record<EditorError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo, core: S.eventsErrCore, link: S.ev44.errLink }
+const ERRORS: Record<EditorError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo, core: S.eventsErrCore, link: S.ev44.errLink, window: S.w44os.errWindow }
 const IN_MORE: readonly EditorFocus[] = ['conditions', 'themes', 'organizer']
 
 export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => Node[] } {
@@ -80,6 +80,26 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
   const chip = (on: boolean, text_: string, attrs: Record<string, string>, onclick: () => void, disabled = false): HTMLElement =>
     el('button', { class: 'chip' + (on ? ' on' : ' tw-off'), type: 'button', 'aria-pressed': String(on), ...attrs, ...(disabled ? { disabled: '' } : {}), onclick }, [text_])
 
+  /** Wave 44 steer-open-space: the type of the event. An open space has a day with a start and an end time; it stays one once it holds activities. */
+  function typeRow(): HTMLElement {
+    const locked = !!o.existing?.openSpace?.acts.length
+    const set = (open: boolean): void => {
+      f.openSpace = open
+      if (open) {   // the window needs times: a full-day event gets 09:00 to 17:00
+        if (f.from.length <= 10) f.from = `${f.from}T09:00`
+        if (f.to.length <= 10) f.to = `${f.to || f.from.slice(0, 10)}T17:00`
+      }
+      redraw()
+    }
+    return el('div', { class: 'ev-row', 'data-editor-type-row': '' }, [
+      el('div', { class: 'chips', role: 'group', 'aria-label': S.w44os.typeLabel }, [
+        chip(!f.openSpace, S.w44os.typeEvent, { 'data-editor-type': 'event' }, () => set(false), locked),
+        chip(!!f.openSpace, S.w44os.typeOpenSpace, { 'data-editor-type': 'open-space' }, () => set(true)),
+      ]),
+      el('p', { class: 'meta opt-min' }, [locked ? S.w44os.typeLocked : f.openSpace ? S.w44os.typeHint : '']),
+    ])
+  }
+
   function timeRow(): HTMLElement {
     const allDay = f.from.length <= 10
     const date = (key: 'from' | 'to', aria: string): HTMLInputElement => {
@@ -96,7 +116,7 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
     }
     return el('div', { class: 'ev-row ev-time', 'data-editor-row': 'time' }, [
       el('div', { class: 'ev-span' }, [date('from', S.ev44.starts), el('span', { 'aria-hidden': 'true' }, ['–']), date('to', S.ev44.until)]),
-      el('div', { class: 'ev-span' }, [chip(allDay, S.ev44.fullDay, { 'data-editor-fullday': '' }, flip), repeat]),
+      el('div', { class: 'ev-span' }, [...(f.openSpace ? [] : [chip(allDay, S.ev44.fullDay, { 'data-editor-fullday': '' }, flip)]), repeat]),
     ])
   }
 
@@ -235,6 +255,10 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
         chip(f.techTakeover, S.ev44.takeover, { 'data-editor-takeover-toggle': '' }, () => { f.techTakeover = !f.techTakeover; redraw() }),
         el('p', { class: 'meta' }, [S.ev44.takeoverHint]),
       ]) : null,
+      host ? el('div', { 'data-editor-show-all': String(!!f.showAll) }, [
+        chip(!!f.showAll, S.w44os.showAll, { 'data-editor-show-all-toggle': '' }, () => { f.showAll = !f.showAll; redraw() }),
+        el('p', { class: 'meta' }, [S.w44os.showAllHint]),
+      ]) : null,
       groupPick(),
     ])
   }
@@ -280,6 +304,7 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
           text('name', { class: 'field ev-name', placeholder: S.ev44.namePh, 'aria-label': S.ev44.namePh, 'data-editor-name': '' }),
           el('p', { class: 'meta opt-min' }, [S.ev44.nameCaption]),
         ]),
+        typeRow(),
         timeRow(),
         guestsRow(),
         locationRow(),

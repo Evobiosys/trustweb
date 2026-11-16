@@ -2197,3 +2197,10 @@ html.tw-bw :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) o
 .inapp-banner{position:fixed; top:0; left:0; right:0; z-index:60; padding:8px 12px; background:var(--surface,#fff); border-bottom:1px solid currentColor; display:flex; flex-direction:column; gap:4px; max-height:40vh; overflow:auto; font-size:13px}
 .inapp-note{font-size:12px; opacity:.75}
 body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
+
+/* wave44 steer-open-space */
+.os-act{padding:.5rem 0;border-top:1px solid var(--line,rgba(127,127,127,.25))}
+.os-head{display:flex;align-items:center;gap:.5rem}
+.os-slot{flex:0 0 auto;font-variant-numeric:tabular-nums}
+.os-title{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.os-form{display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem}

@@ -15,12 +15,16 @@ import type { EventError } from './events'
 import { FAMILY_FIELD } from './rings_layout'
 import type { AppState, Person, TwEvent } from './model'
 
+/** An open space is one day with a start and an end time. */
+const validWindow = (from: string, to: string): boolean => from.length > 10 && to.length > 10 && from.slice(0, 10) === to.slice(0, 10) && to > from
+
 export const EDITOR_ROWS = ['name', 'time', 'guests', 'location', 'description', 'calendar', 'more'] as const
 
-export type EditorError = EventError | 'link'
+/** 'window': an open space needs a start and an end time on one day (end after start). */
+export type EditorError = EventError | 'link' | 'window'
 
 /** What the editor owns on an event: cleared in the editor = cleared on the event. Everything else (sign-up, settings, links) is kept. */
-const OWNED = ['to', 'core', 'conditions', 'themes', 'organizer', 'organizers', 'hosts', 'techSupport', 'tagName', 'tagLocked', 'repeat', 'conference', 'attachment', 'calendar', 'people', 'communityId', 'techTakeover'] as const
+const OWNED = ['to', 'core', 'conditions', 'themes', 'organizer', 'organizers', 'hosts', 'techSupport', 'tagName', 'tagLocked', 'repeat', 'conference', 'attachment', 'calendar', 'people', 'communityId', 'techTakeover', 'showAll', 'openSpace'] as const
 
 /** An event read back into the editor. The creator (me) is not listed among the co-hosts: meRole says what I am. */
 export function fieldsOf(s: Pick<AppState, 'me' | 'people'>, ev: TwEvent): EditorFields {
@@ -36,11 +40,13 @@ export function fieldsOf(s: Pick<AppState, 'me' | 'people'>, ev: TwEvent): Edito
     where: ev.where, conference: (ev.conference ?? []).map((c) => ({ ...c })), description: ev.docs?.description ?? '', attachment: ev.attachment ?? '', calendar: ev.calendar ?? 'mine',
     tagName: ev.tagName ?? '', coreFrom: ev.core?.from ?? '', coreTo: ev.core?.to ?? '', conditions: ev.conditions ?? '', themes: ev.themes?.join(', ') ?? '',
     organizers: eventOrganizers(ev), techSupport: tech.filter((r) => !isMe(r)), communityId: ev.communityId ?? '', techTakeover: ev.techTakeover === true,
+    openSpace: ev.openSpace !== undefined, showAll: ev.showAll === true,
   }
 }
 
 /** The event the fields make, or the first field that fails (form order; a bad conference or attachment link = 'link'). */
 export function eventFromFields(s: Pick<AppState, 'me' | 'people'>, f: EditorFields, o: { id: string; now: number; existing?: TwEvent }): TwEvent | EditorError {
+  if (f.openSpace && !validWindow(f.from, f.to)) return 'window'
   const made = newEvent({
     name: f.name, from: f.from, to: f.to, where: f.where, conditions: f.conditions, themes: splitThemes(f.themes), core: { from: f.coreFrom, to: f.coreTo },
     ...(o.existing ? { attended: o.existing.attended } : {}),
@@ -60,7 +66,10 @@ export function eventFromFields(s: Pick<AppState, 'me' | 'people'>, f: EditorFie
     techSupport: f.meRole === 'tech' && me ? [...f.techSupport, me] : f.techSupport,
   })
   inviteGuests(ev, f.guests)
-  applyEventSettings(ev, { communityId: f.communityId, techTakeover: f.techTakeover })
+  applyEventSettings(ev, { communityId: f.communityId, techTakeover: f.techTakeover, showAll: f.showAll === true })
+  // Wave 44 steer-open-space: the activities stay when the event is edited; the type cannot go while there are some (the editor disables the chip).
+  if (f.openSpace) ev.openSpace = o.existing?.openSpace ?? { acts: [] }
+  else if (o.existing?.openSpace?.acts.length) ev.openSpace = o.existing.openSpace
   const tag = f.tagName.trim()
   if (tag && tag !== made.name) { ev.tagName = tag; ev.tagLocked = true }
   return ev

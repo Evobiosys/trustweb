@@ -327,9 +327,10 @@ import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { eventForLink } from './event_roles'
-import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
+import { addInviter, applyHostLink, attendees, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
 import { createEventEnvelopes } from './event_envelope'
+import { openSpaceSection } from './open_space_view'
 import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
@@ -5408,6 +5409,7 @@ const eventEnv = createEventEnvelopes<Peer>({
   state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
   link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
   members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
+  recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
 })
 announceDue = () => { eventEnv.announceDue() }
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
@@ -5423,7 +5425,7 @@ const eventsView = createEventsView({
   showQr: (ev, host) => eventQr(ev, false, host),
   askSupport: () => supportSheet(supportIo),
   feedRow: (ev) => feed.eventRow(ev),
-  plan: (ev) => eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }),
+  plan: (ev) => [...eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }), ...openSpaceSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), push: (e) => { void eventEnv.pushOpenSpace(e) }, noteFor: (e, a) => coNotes?.activityNote?.(e, a) ?? null })],
   extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),
 })

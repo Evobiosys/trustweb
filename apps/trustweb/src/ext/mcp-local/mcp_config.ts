@@ -74,6 +74,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'connect_placement', write: false }, { name: 'connect_link_check', write: false }, { name: 'connect_placement_set', write: true },
   /* wave44 steer-invite-link */
   { name: 'invite_link_create', write: true }, { name: 'invite_link_revoke', write: true }, { name: 'invite_link_status', write: false },
+  /* wave44 steer-open-space */
+  { name: 'open_space_propose', write: true }, { name: 'open_space_join', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

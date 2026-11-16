@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 36 (co-notes): the extension's screen parts (settings switch, list under Resources > Notes), the store and the relay timers. */
 import { el } from '../../../../demo/src/ui/dom'
-import type { TwEvent } from '../../model'
+import type { OsActivity, TwEvent } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
-import { isPast } from '../../events'
+import { attendees, isPast } from '../../events'
 import { bottomLine } from './co_lines'
 import { desiresDoc, ensureMine, type EventKind } from './co_desires'
 import { newDoc, type CoDoc, type CoPerson } from './co_doc'
@@ -118,6 +118,19 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
     openCoNote(ctx, line.doc.id, line.id)
   }
 
+  /** Wave 44 steer-open-space: the shared notes of one activity of an open space: one note per activity, the same id on every device, shared with the event's people who have a did. Null while co-notes are off. */
+  const activityNote = (ev: TwEvent, act: OsActivity): (() => void) | null => {
+    if (!on()) return null
+    return () => {
+      const id = `os-${ev.id}-${act.id}`.slice(0, 40)
+      const ids = [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])]
+      const others = ids.flatMap((pid) => { const did = h.didOf(pid); const p = st().people.find((x) => x.id === pid); return did && p ? [{ did, name: p.name }] : [] })
+      const doc = docs().find((d) => d.id === id) ?? { ...newDoc({ id, title: act.title, me: me(), at: Date.now() }), eventId: ev.id, people: [me(), ...others.filter((p) => p.did !== me().did)] }
+      if (!docs().includes(doc)) put(doc, true)
+      openCoNote(ctx, id)
+    }
+  }
+
   const eventSection = (ev: TwEvent): Node[] => {
     if (!on()) return []
     const kinds: EventKind[] = isPast(ev, Date.now()) ? ['desires', 'memories'] : ['desires']
@@ -137,6 +150,7 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
   return {
     body: () => [],
     eventSection,
+    activityNote,
     notesSection: () => (on() ? [list()] : []),
     settingsRows: () => [
       el('button', {
