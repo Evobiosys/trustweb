@@ -19,6 +19,7 @@
  * No chat, no unread badges, notifications off by default.
  */
 import { createViaCard } from './via_card'
+import { compactProfiles, moreFeatures } from './more_features'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
@@ -1338,13 +1339,13 @@ function bringIntoRow(id: BarId): void {
 /** Wave 40: the Variations in one compact line of chips (the same choices as Settings > Variations), for the ⋮ list. */
 function variationChips(after: () => void): HTMLElement {
   const cur = profileOf(st().twSettings)
-  return el('div', { class: 'var-chips', role: 'radiogroup', 'aria-label': S.var.title, 'data-var-compact': '' }, [
+  return moreFeatures({ attr: 'data-var-more' }, [el('div', { class: 'var-chips', role: 'radiogroup', 'aria-label': S.var.title, 'data-var-compact': '' }, [   // wave 44 (item 9)
     el('button', { class: 'chip', 'data-variation-compact': 'dex', onclick: () => showDesktopVersion(UiView.Dex) }, [S.var.dex]),
-    ...TW_PROFILES.map((p) => el('button', {
+    ...compactProfiles(cur).map((p) => el('button', {
       class: 'chip' + (p.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(p.id === cur), 'data-variation-compact': p.id,
       onclick: () => chooseProfile(p.id, after),
     }, [(p.id === cur ? '✓ ' : '') + S.var.names[p.id]])),
-  ])
+  ])])
 }
 
 /** Wave 35: ⋮ lists the views that are not in the bar as direct buttons (wave 40: in row order, a tap moves one into the row; Variations below, compact). */

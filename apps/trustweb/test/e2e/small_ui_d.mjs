@@ -43,7 +43,10 @@ try {
     const deco = await page.locator('[data-bar-more]').evaluate((b) => getComputedStyle(b).textDecorationLine)
     check(`${w}: ⋮ button has no line under it (was: underline)`, deco === 'none', deco)
     await page.locator('[data-bar-more]').click(); await page.waitForTimeout(300)
-    check(`${w}: ⋮ shows Variations compactly (Dex + four)`, (await page.locator('.sheet.on [data-variation-compact]').count()) === 5)
+    // wave 44 (item 9): the Variations sit behind "Show more features"; Reader and Note taker live in "change bottom row"
+    check(`${w}: ⋮ says Show more features, Variations folded`, (await page.locator('.sheet.on [data-var-more]').innerText()).includes('Show more features') && !(await page.locator('.sheet.on [data-var-compact]').isVisible()))
+    await page.locator('.sheet.on [data-var-more]').click(); await page.waitForTimeout(200)
+    check(`${w}: ⋮ shows Variations compactly (Dex + Full + IYG)`, (await page.locator('.sheet.on [data-variation-compact]').count()) === 3)
     check(`${w}: the compact Variations stay inside one short block`, (await page.locator('.sheet.on [data-var-compact]').evaluate((n) => n.getBoundingClientRect().height)) < 140)
     await shot(page, '1-more-variations', w)
     await page.locator('.sheet.on [data-variation-compact="iyg-support"]').click(); await page.waitForTimeout(700)

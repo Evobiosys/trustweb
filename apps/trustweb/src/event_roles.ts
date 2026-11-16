@@ -128,6 +128,12 @@ export function isEventHost(ev: TwEvent, meName: string, people: readonly Pick<P
   return roleNames(ev, people, ['hosts', 'organizers', 'techSupport']).some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !eventOrganizers(ev).length)
 }
 
+/** Wave 44 (43-D7): who approves (invites, co-hosts, the invite policy): hosts and organizers, and an event I made alone; technical support only sees it until a host lets them take over (techTakeover). */
+export function mayApprove(ev: TwEvent, meName: string, people: readonly Pick<Person, 'id' | 'name'>[] = []): boolean {
+  const keys: RoleKey[] = ev.techTakeover ? ['hosts', 'organizers', 'techSupport'] : ['hosts', 'organizers']
+  return roleNames(ev, people, keys).some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !eventOrganizers(ev).length)
+}
+
 /** Wave 43b event-qr-join: where an event link opens: the event's edit view for a host, organizer or tech support (or when the link is the host link), else the normal view. */
 export function eventLinkView(ev: TwEvent, kind: LinkKind, meName: string, people: readonly Pick<Person, 'id' | 'name'>[]): 'edit' | 'normal' {
   return kind === 'host' || isEventHost(ev, meName, people) ? 'edit' : 'normal'

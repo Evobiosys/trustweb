@@ -6,6 +6,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { contextPress } from './context_press'
+import { loadColourTags } from './colour_tags'
 import { eventOrganizers, roleLabels, rolesSummary, setRoles } from './event_roles'
 import type { RoleKey, Roles } from './event_roles'
 import { eventPersonPicker } from './event_person_picker'
@@ -48,6 +49,7 @@ function roleRow(h: RolesHooks, ev: TwEvent, key: RoleKey, label: string): HTMLE
   const picker = eventPersonPicker(h, ev.id, {
     exclude: refs, ariaLabel: label, placeholder: S.eventsTagSearch, inputAttr: 'data-role-search', personAttr: 'data-role-pick', quietWhenEmpty: true,
     onPick: (id) => change([...refs, id]),
+    tags: loadColourTags, onPickMany: (ids) => change([...refs, ...ids]),   // wave 44 (item 11): # adds a whole group
   })
   return el('div', { class: 'role-row', 'data-role': key }, [
     el('label', { class: 'meta' }, [label]),

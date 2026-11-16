@@ -5,12 +5,14 @@
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
 import type { EventOffers } from './events'
-import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, localSettings, mayEdit, nameRevealOf, newEvent, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
+import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, mayEdit, nameRevealOf, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
-import { eventOrganizers, eventForLink, refsForNames, relatedOthers, roleLabels, setRoles } from './event_roles'
+import { eventForLink, isEventHost, mayApprove, relatedOthers } from './event_roles'
+import { createEventEditor } from './event_editor_view'
+import { draftsOf, rsvpTense } from './event_draft'
+import type { EventDraft } from './event_draft'
 import { eventPersonPicker } from './event_person_picker'
 import { rolesSection } from './event_roles_view'
-import type { EventError, EventFields } from './events'
 import { dragEvent, dragPerson } from './drag_payload'
 import { PERSON_GREEN, loadColourTags } from './colour_tags'
 import { listCommunities, parseCommunity } from './ext/community-mighty/community_data'
@@ -74,9 +76,8 @@ export interface EventsView {
 }
 
 type EventField = 'name' | 'where' | 'conditions' | 'themes' | 'organizer'
-type View = { kind: 'list' } | { kind: 'page'; id: string; noBack?: boolean } | { kind: 'form'; id?: string; from?: string; focus?: EventField }
+type View = { kind: 'list' } | { kind: 'page'; id: string; noBack?: boolean } | { kind: 'form'; id?: string; from?: string; focus?: EventField; draftId?: string }
 
-const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo, core: S.eventsErrCore }
 
 export function createEventsView(h: EventsViewHooks): EventsView {
   let view: View = { kind: 'list' }
@@ -93,7 +94,9 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   let timesOpen = false
   let notifyHint = false
   let revealOpen = false
-  const show = (v: View): void => { view = v; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; sinceOpen = false; timesOpen = false; notifyHint = false; revealOpen = false; h.redraw() }
+  /** Wave 44: the open editor keeps what was typed across redraws; a change of view ends it. */
+  let editor: { body: () => Node[] } | undefined
+  const show = (v: View): void => { view = v; editor = undefined; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; sinceOpen = false; timesOpen = false; notifyHint = false; revealOpen = false; h.redraw() }
   const find = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
 
   function row(ev: TwEvent): HTMLElement {
@@ -107,6 +110,13 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   function invitationRow(r: { id: string; name: string; from: string; where: string }): HTMLElement {
     return el('button', { class: 'prow', 'data-event-invitation': r.id, onclick: () => { const i = h.state().invitations?.find((x) => x.id === r.id); if (i) h.openInvitation?.(i) } }, [
       el('span', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [[r.from || S.invitedUndated, r.where].filter(Boolean).join(' · ')]), el('span', { class: 'tagpill', 'data-invitation-tag': '' }, [S.invitedTag])]),
+    ])
+  }
+
+  /** Wave 44: an event not saved yet, with a Draft pill; a tap opens it in the editor. */
+  function draftRow(d: EventDraft): HTMLElement {
+    return el('button', { class: 'prow', 'data-event-draft': d.id, onclick: () => show({ kind: 'form', draftId: d.id }) }, [
+      el('span', { class: 'who' }, [el('b', {}, [d.fields.name.trim() || S.ev44.draftUntitled]), el('i', {}, [[d.fields.from, d.fields.where].filter(Boolean).join(' · ')]), el('span', { class: 'tagpill', 'data-draft-pill': '' }, [S.ev44.draftPill])]),
     ])
   }
 
@@ -129,7 +139,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const { upcoming, past } = eventsSorted(h.state(), Date.now())
     const add = el('button', { class: 'btn btn-electric wide', 'data-event-add': '', onclick: () => show({ kind: 'form' }) }, [S.eventsAdd])
     const invited = (): HTMLElement[] => invitationEventRows(h.state(), '').map(invitationRow)
-    if (!upcoming.length && !past.length && !invited().length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [el('p', { class: 'empty' }, [S.eventsEmpty]), add, pasteRow()])]
+    const drafts = draftsOf(h.state()).map(draftRow)
+    if (!upcoming.length && !past.length && !invited().length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [...drafts, el('p', { class: 'empty' }, [S.eventsEmpty]), add, pasteRow()])]
     const rows = el('div', {}, [])
     const draw = (q: string): void => {
       const [up, pa] = [upcoming, past].map((l) => l.filter((e) => eventMatches(e, q)))
@@ -143,7 +154,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const filter = upcoming.length + past.length + invited().length > 0
       ? el('input', { class: 'field', placeholder: S.eventsFilter, 'aria-label': S.eventsFilter, 'data-event-filter': '', oninput: (e: Event) => draw((e.target as HTMLInputElement).value) })
       : null
-    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [filter, rows, add, pasteRow()])]
+    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [...drafts, filter, rows, add, pasteRow()])]
   }
 
   function field(label: string, input: HTMLElement): Node[] {
@@ -163,68 +174,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return pick
   }
 
-  function form(existing?: TwEvent, presetFrom?: string): Node[] {
-    const text = (v = ''): HTMLInputElement => el('input', { class: 'field', value: v })
-    // A date that carries a time (the since editor sets one) keeps it: a date input would blank it.
-    const date = (v = ''): HTMLInputElement => el('input', { class: 'field', type: v.length > 10 ? 'datetime-local' : 'date', value: v })
-    const name = text(existing?.name)
-    const tag = text(existing?.tagName)
-    const showSame = (): void => { tag.placeholder = name.value.trim() || S.eventsTagNameSame }
-    name.addEventListener('input', showSame)
-    showSame()
-    const from = date(existing?.from ?? presetFrom ?? todayIso(new Date()))
-    if (!existing && !presetFrom) {
-      from.classList.add('default')
-      from.addEventListener('input', () => from.classList.remove('default'))
-    }
-    const to = date(existing?.to)
-    const coreFrom = date(existing?.core?.from)
-    const coreTo = date(existing?.core?.to)
-    const where = text(existing?.where)
-    where.placeholder = S.eventWherePlaceholder
-    const conditions = el('textarea', { class: 'field', rows: 3 }, [existing?.conditions ?? ''])
-    const themes = text(existing?.themes?.join(', '))
-    const organizer = text(existing ? roleLabels(h.state(), eventOrganizers(existing)).join(', ') : '')
-    const hosts = el('div', {}, [])
-    const addHost = (v = ''): void => { hosts.append(text(v)) }
-    ;(existing ? roleLabels(h.state(), existing.hosts ?? []) : [h.state().me.displayName]).forEach(addHost)
-    if (!hosts.children.length) addHost()
-    const community = communityPick(existing?.communityId)
-    const error = el('p', { class: 'warn', 'data-event-error': '', hidden: true })
-    const focus = view.kind === 'form' ? view.focus : undefined   // wave 43: a long press on a line of the page opens the sheet on that field
-    if (focus) setTimeout(() => ({ name, where, conditions, themes, organizer })[focus].focus())
-    const save = (): void => {
-      const fields: EventFields = {
-        name: name.value, from: from.value, to: to.value, core: { from: coreFrom.value, to: coreTo.value }, where: where.value, conditions: conditions.value,
-        themes: splitThemes(themes.value), attended: existing?.attended,
-      }
-      const made = newEvent(fields, existing?.id ?? h.newId(), existing?.createdAt ?? Date.now())
-      if (typeof made === 'string') { error.textContent = ERRORS[made]; error.hidden = false; return }
-      const ev = { ...made, ...(existing ? localSettings(existing) : {}) }
-      setRoles(h.state(), ev, {
-        organizers: refsForNames(h.state(), organizer.value.split(','), existing ? eventOrganizers(existing) : []),
-        hosts: refsForNames(h.state(), [...hosts.querySelectorAll('input')].map((i) => i.value), existing?.hosts),
-        techSupport: existing?.techSupport ?? [],
-      })
-      applyEventSettings(ev, { communityId: community.value })
-      const tagged = tag.value.trim()
-      if (tagged && tagged !== made.name) { ev.tagName = tagged; ev.tagLocked = true } else { delete ev.tagName; delete ev.tagLocked }
-      const s = h.state()
-      s.events = [...(s.events ?? []).filter((e) => e.id !== ev.id), ev]
-      h.save()
-      show({ kind: 'page', id: ev.id })
-    }
-    const cancel = (): void => show(existing ? { kind: 'page', id: existing.id } : { kind: 'list' })
-    return [h.header(existing ? S.eventsEdit : S.eventsNew, { back: cancel }), el('div', { class: 'scroll' }, [
-      ...field(S.eventsName, name), ...field(S.eventsTagNameField, tag), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsCoreFrom, coreFrom), ...field(S.eventsCoreTo, coreTo), ...field(S.eventsWhere, where),
-      ...field(S.eventsConditions, conditions), ...field(S.eventsThemes, themes), ...field(S.eventsOrganizer, organizer),
-      ...field(S.eventsHost, hosts), el('button', { class: 'btn btn-ghost btn-sm', 'data-event-cohost': '', onclick: () => addHost() }, [S.eventsCoHost]),
-      ...field(S.w43answers.community, community), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
-      error,
-      el('button', { class: 'btn btn-electric wide', 'data-event-save': '', onclick: save }, [S.eventsSave]),
-      el('button', { class: 'btn btn-ghost wide', onclick: cancel }, [S.eventsCancel]),
-    ])]
-  }
+  // Wave 44 event-editor: the add/edit form is event_editor_view.ts (old form archived: trustweb-ops DEVLOG/wave44/archive/event-editor).
 
   /** The avatar in its ring colour; without a ring: dashed, and a hint beside it. */
   function personBadge(p: Person): HTMLElement {
@@ -265,6 +215,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       renderPerson: (p) => el('span', {}, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])]),
       decorate: (chip, p) => { contextPress(chip, () => h.curatorPerson(p.id)); dragPerson(chip, p) },
       onPick: (id) => { tagPerson(h.state(), id, ev.id); h.save(); h.redraw() },
+      tags: loadColourTags, onPickMany: (ids) => { ids.forEach((id) => tagPerson(h.state(), id, ev.id)); h.save(); h.redraw() },   // wave 44 (item 11): # adds a whole group
     })])
   }
 
@@ -401,7 +352,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...field(S.eventTagName, name),
       el('label', { class: 'meta' }, [hostNames, ' ', S.eventHostNamesTags]),
       ...others(ev),
-      mayEdit(ev, h.state().me.displayName, h.state().people) ? el('div', { 'data-event-invite-policy': policy }, [
+      mayApprove(ev, h.state().me.displayName, h.state().people) ? el('div', { 'data-event-invite-policy': policy }, [
         el('label', { class: 'meta' }, [T.invitePolicy]),
         el('div', { class: 'seg', role: 'group', 'aria-label': T.invitePolicy }, INVITE_POLICIES.map((p) => el('button', {
           type: 'button', class: p === policy ? 'on' : '', 'aria-pressed': String(p === policy), 'data-event-invite-policy-opt': p,
@@ -425,7 +376,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...field(S.w43answers.myNickname, myNicknameInput(ev)), el('p', { class: 'meta' }, [S.w43answers.myNicknameHint]),
       el('label', { class: 'meta' }, [T.offers]),
       el('div', { class: 'chips', 'data-event-offers': '' }, offerRows.map(([k, label]) => toggle(offers[k], label, `data-event-offer-${k}`, () => { applyEventSettings(ev, { offers: { [k]: !offers[k] } }); h.save(); h.redraw() }))),
-      el('p', { class: 'meta', 'data-event-feed-hint': '' }, [S.shellFix2.feedPressHint]),
+      el('p', { class: 'meta', 'data-event-feed-hint': '' }, [S.ev44.feedHint]),
     ])
     box.open = advancedOpen
     box.addEventListener('toggle', () => { advancedOpen = box.open })
@@ -447,12 +398,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const label = sinceLabel(ev, today)
     const until = label.startsWith('since') ? untilLabel(ev) : ''
     const more = !!(until || ev.core)
-    const head = el('button', { class: 'press event-since', type: 'button', 'aria-expanded': String(sinceOpen), 'data-event-since': '' }, [el('b', {}, [label]), more ? el('span', { class: 'chev', 'aria-hidden': 'true' }, [sinceOpen ? ' ⌃' : ' ⌄']) : null])
+    const head = el('button', { class: 'press event-since', type: 'button', 'aria-expanded': String(sinceOpen), 'data-event-since': '' }, [el('b', {}, [label])])
+    // Wave 44 (item 10): the V toggle at the right shows until and the core time; open it turns into the roof (the contact editor's expander).
+    const vee = more ? el('button', { class: 'tw-expander', type: 'button', 'aria-expanded': String(sinceOpen), 'aria-label': sinceOpen ? S.w43press.collapse : S.w43press.expand, 'data-event-since-toggle': '', onclick: () => { sinceOpen = !sinceOpen; h.redraw() } }, [sinceOpen ? '▴' : '▾']) : null
     head.title = sinceOpen ? S.w43press.collapse : S.w43press.expand
     head.addEventListener('click', () => { if (more) sinceOpen = !sinceOpen; else timesOpen = true; h.redraw() })
     contextPress(head, () => { timesOpen = true; h.redraw() })
     return el('div', { 'data-event-when': '' }, [
-      head,
+      el('div', { class: 'roles-line' }, [head, vee]),
       sinceOpen && until ? el('p', { class: 'meta', 'data-event-until': '' }, [until]) : null,
       sinceOpen && ev.core ? el('p', { class: 'meta', 'data-event-core': '' }, [coreLabel(ev)]) : null,
       timesOpen ? timesEditor(ev) : null,
@@ -482,12 +435,19 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return box
   }
 
+  /** Wave 44 (43-D7): technical support sees the event; it approves only once a host lets it take over. */
+  function techLine(ev: TwEvent): HTMLElement | null {
+    const st = h.state()
+    if (!isEventHost(ev, st.me.displayName, st.people) || mayApprove({ ...ev, techTakeover: undefined }, st.me.displayName, st.people)) return null
+    return el('p', { class: 'meta', 'data-event-tech-line': ev.techTakeover ? 'takeover' : 'sees' }, [ev.techTakeover ? S.ev44.techCan : S.ev44.techSees])
+  }
+
   function page(ev: TwEvent): Node[] {
     const people = attendees(h.state(), ev.id)
     const attended = el('button', {
       class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
-    }, [S.eventsAttended])
+    }, [rsvpTense(ev, Date.now()) === 'future' ? S.ev44.willAttend : S.eventsAttended])   // wave 44 (item 13)
     // review-fixes-43: one switch for this event's notifications; it also covers the "I'm here now" bell (a muted bell of older records shows as off, switching on clears it).
     const st = h.state()
     const notifyNow = notifyOn(ev) && !(st.atEvent?.eventId === ev.id && st.atEvent.bell === false)
@@ -511,6 +471,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       sinceLine(ev),
       ev.where ? editable(el('p', { 'data-event-where': '' }, [ev.where]), ev, 'where') : null,
       rolesSection(h, ev),
+      techLine(ev),
       ev.themes ? editable(el('div', { class: 'chips', 'data-event-themes': '' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))), ev, 'themes') : null,
       ev.conditions ? editable(el('p', { 'data-event-conditions': '' }, [ev.conditions]), ev, 'conditions') : null,
       ...(h.plan?.(ev) ?? []),
@@ -542,7 +503,17 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     open: (id, noBack, edit) => { view = id ? (edit ? { kind: 'form', id } : { kind: 'page', id, ...(noBack ? { noBack } : {}) }) : { kind: 'list' } },
     body: () => {
       const ev = view.kind === 'list' ? undefined : find(view.id ?? '')
-      if (view.kind === 'form') return form(ev, view.from)
+      if (view.kind === 'form') {
+        const v = view
+        const draft = v.draftId ? draftsOf(h.state()).find((d) => d.id === v.draftId) : undefined
+        editor ??= createEventEditor(h, {
+          ...(ev ? { existing: ev } : draft?.eventId ? { existing: find(draft.eventId) } : {}), ...(draft ? { draft } : {}), ...(v.from ? { presetFrom: v.from } : {}), ...(v.focus ? { focus: v.focus } : {}),
+          done: (id) => show({ kind: 'page', id }),
+          // Left without saving: back to the event, else to the plain list, where a saved draft now waits (the calendar would hide it).
+          leave: () => { if (ev) show({ kind: 'page', id: ev.id }); else { show({ kind: 'list' }); plain = true; h.redraw() } },
+        })
+        return editor.body()
+      }
       if (view.kind === 'page' && ev) return page(ev)
       view = { kind: 'list' }
       return list()

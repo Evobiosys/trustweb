@@ -54,6 +54,9 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
 
   /* wave44 home-dashboard */
   { name: 'home_layout_get', write: false }, { name: 'home_layout_set', write: true }, { name: 'dashboard_open', write: true },
+
+  /* wave44 event-editor */
+  { name: 'event_drafts_list', write: false }, { name: 'event_draft_save', write: true }, { name: 'event_invite', write: true }, { name: 'event_details_set', write: true }, { name: 'calendar_add', write: true }, { name: 'calendar_tag_toggle', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

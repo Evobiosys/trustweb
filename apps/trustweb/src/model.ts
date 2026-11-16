@@ -20,6 +20,7 @@ import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { HandshakeLogEntry, HandshakeMode } from './handshake_status'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
+import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
 import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -415,6 +416,16 @@ export interface TwEvent {
   invitees?: string[]
   /** Wave 42 (P04): the event has a celebration, shown only per celebrationVisible. */
   celebration?: true
+  /** Wave 44 event-editor (event_draft.ts): how it repeats; absent = does not repeat. Local only. */
+  repeat?: Repeat
+  /** Wave 44: conference links next to the place (kMeet, Zoom, Jitsi, custom). Local only. */
+  conference?: ConferenceLink[]
+  /** Wave 44: a kDrive (https) attachment link. Local only. */
+  attachment?: string
+  /** Wave 44: the calendar it sits in (event_draft.ts calendarOf); absent = My events, or Shared with me for an event from a link. */
+  calendar?: string
+  /** Wave 44 (43-D7): the host lets technical support take over (approve, invite under a hosts-only policy). Absent = sees only. */
+  techTakeover?: true
 }
 
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
@@ -1191,6 +1202,10 @@ export interface AppState {
   invitations?: Invitation[]
   /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
   atEvent?: { eventId: string; since: number; bell?: boolean }
+  /** Wave 44 event-editor: events not saved yet (event_draft.ts). THIS DEVICE ONLY, never in an ask or a link. */
+  eventDrafts?: EventDraft[]
+  /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
+  calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
   availability?: Availability
   /** Other people's availability snapshots I keep (their own book link, one tap). */
