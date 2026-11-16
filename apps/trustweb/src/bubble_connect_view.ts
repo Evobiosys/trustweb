@@ -7,9 +7,11 @@
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { el } from '../../demo/src/ui/dom'
 import { addOnce, introduceBlock, MERGE_HOLD_MS, takeById, takeIntroQueue, type IntroInbox } from './bubble_connect'
+import { cardConnectLink, createIntroLink, type Card } from './bubble_card'
 import { gateText, parseGateText } from './bubble_gate'
 import { codeText, requestText } from './bubble_links'
 import { LogOutcome } from './model'
+import { linkEntries } from './person_links'
 import type { AppState } from './model'
 import { S } from './strings'
 
@@ -44,11 +46,17 @@ export interface BubbleConnectDeps {
   sendProtocol(peerId: string, text: string): Promise<void>
   /** The acceptor said yes: connects to the requester's link, landing them in Friends (main.ts completePendingConnect). */
   connectVia(link: string): void
+  /** My own connect link (starts the relay when needed). */
+  myLink(): Promise<string>
+  renderQr(target: HTMLElement, payload: string): Promise<void>
+  copy(text: string): void
+  /** Settings > Advanced "profile in QR" (AppState.qrProfileOption). */
+  profileOption(): boolean
 }
 
 const linkReads = (link: string): boolean => { try { return parseConnectLinkParams(new URL(link).search) !== null } catch { return false } }
 
-export function createBubbleConnect(d: BubbleConnectDeps): { introduce(requesterId: string, acceptorId: string): void; receive(peerId: string, text: string): void; drain(): void } {
+export function createBubbleConnect(d: BubbleConnectDeps): { introduce(requesterId: string, acceptorId: string): void; offerCard(card: Card): void; receive(peerId: string, text: string): void; drain(): void } {
   /** Asks the acceptor; resolves to the toast text. The requester is told it was asked; the code follows after the yes (receive). */
   const send = async (requesterId: string, acceptorId: string): Promise<string> => {
     const s = d.st()
@@ -68,11 +76,46 @@ export function createBubbleConnect(d: BubbleConnectDeps): { introduce(requester
     d.save()
     return S.introduceDone(a.name, b.name)
   }
+  const connected = (p: { peerId?: string }): boolean => d.st().peers.some((x) => x.id === p.peerId && x.did)
+  /** Link + QR for a dragged person I am not connected to: opening it connects them with me and brings the target's card (bubble_card.ts). */
+  const linkSheet = async (draggedId: string, targetId: string): Promise<void> => {
+    const s = d.st()
+    const a = s.people.find((p) => p.id === draggedId)!
+    const b = s.people.find((p) => p.id === targetId)!
+    const out = createIntroLink(s, draggedId, targetId, await d.myLink(), d.profileOption(), linkEntries(b)[0]?.url)
+    if (!out.ok) { d.toast(S.introduceBlock[out.reason] ?? S.introduceBlock.unknown); return }
+    const qr = el('div', { class: 'qrwrap', 'data-introduce-qr': '' })
+    void d.renderQr(qr, out.link)
+    const share = typeof navigator.share === 'function' ? el('button', { class: 'btn btn-ghost', 'data-introduce-share': '', onclick: () => { void navigator.share({ text: out.link }).catch(() => undefined) } }, [S.introduceLinkShare]) : null
+    d.openSheet([
+      el('div', { 'data-introduce-link-sheet': '' }, [
+        el('h3', {}, [S.introduceLinkTitle(a.name, b.name)]),
+        el('p', { class: 'meta' }, [S.introduceLinkBody(a.name, b.name)]),
+        qr,
+        el('input', { class: 'field', readonly: '', value: out.link, 'aria-label': S.introduceLinkTitle(a.name, b.name), 'data-introduce-link': '' }),
+        el('button', { class: 'btn btn-electric', 'data-introduce-copy': '', onclick: () => d.copy(out.link) }, [S.introduceLinkCopy]),
+        share,
+        el('button', { class: 'btn btn-ghost', 'data-introduce-close': '', onclick: d.closeSheet }, [S.introduceLinkClose]),
+      ]),
+    ])
+    s.log.unshift({ id: `intro-link-${Date.now().toString(36)}`, at: Date.now(), from: s.me.displayName, text: S.introduceLinkLog(a.name, b.name), outcome: LogOutcome.Shared })
+    d.save()
+  }
+  /** The opener's sheet (they came by an introduction link): "<name> was introduced to you: connect too?" */
+  const offerCard = (card: Card): void => d.openSheet([
+    el('div', { 'data-introduce-card': '' }, [
+      el('h3', {}, [S.introduceCardTitle(card.n)]),
+      card.u ? el('p', { class: 'meta', 'data-introduce-card-username': '' }, [S.introduceCardUsername(card.u)]) : null,
+      el('button', { class: 'btn btn-electric', 'data-introduce-card-connect': '', onclick: () => { d.closeSheet(); d.connectVia(cardConnectLink(card)) } }, [S.introduceCardConnect(card.n)]),
+      el('button', { class: 'btn btn-ghost', 'data-introduce-card-no': '', onclick: d.closeSheet }, [S.introduceCardNo]),
+    ]),
+  ])
   const introduce = (requesterId: string, acceptorId: string): void => {
     const s = d.st()
     const a = s.people.find((p) => p.id === requesterId)
     const b = s.people.find((p) => p.id === acceptorId)
     if (!a || !b) return
+    if (!connected(a)) { void linkSheet(a.id, b.id); return } // wave 44 steer-bubble-connect-3: the dragged person is not on TrustWeb with me yet
     const block = introduceBlock(a, b, s.peers)
     if (block) { d.toast(S.introduceBlock[block]); return }
     d.openSheet([
@@ -136,5 +179,5 @@ export function createBubbleConnect(d: BubbleConnectDeps): { introduce(requester
     const waiting = d.st().introInbox?.[0]
     if (waiting) ask(waiting)
   }
-  return { introduce, receive, drain }
+  return { introduce, offerCard, receive, drain }
 }

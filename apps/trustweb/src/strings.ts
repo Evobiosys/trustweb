@@ -4687,5 +4687,18 @@ export const S = {
     'ask-first': 'This person wants to be asked first.',
     unknown: 'One of them is not in your web.',
     'too-long': 'The code does not fit one message.',
+    'target-not-connected': 'The person you dropped onto needs to be connected on TrustWeb.',
+    'dragged-connected': 'This person is already connected.',
   } as Record<string, string>,
+  /* wave44 steer-bubble-connect-3 */
+  introduceLinkTitle: (dragged: string, target: string) => `Link for ${dragged}, to meet ${target}`,
+  introduceLinkBody: (dragged: string, target: string) => `${dragged} is not on TrustWeb with you yet. When ${dragged} opens this link or scans the code, ${dragged} connects with you as acquainted and gets ${target}'s card, to connect with ${target} too. The card holds only what ${target} lets others pass on.`,
+  introduceLinkCopy: 'Copy link',
+  introduceLinkShare: 'Share',
+  introduceLinkClose: 'Done',
+  introduceLinkLog: (dragged: string, target: string) => `Made an introduction link for ${dragged} with ${target}'s card.`,
+  introduceCardTitle: (name: string) => `You were introduced to ${name}`,
+  introduceCardUsername: (u: string) => `Public username: ${u}`,
+  introduceCardConnect: (name: string) => `Connect with ${name}`,
+  introduceCardNo: 'Not now',
 } as const

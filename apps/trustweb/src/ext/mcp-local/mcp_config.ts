@@ -12,6 +12,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'web_filter_get', write: false }, { name: 'web_filter_set', write: true },
   { name: 'remove_person', write: true }, { name: 'restore_person', write: true },
   { name: 'introduce_people', write: true }, // wave 44 steer-bubble-connect
+  { name: 'introduce_link_create', write: true }, // wave 44 steer-bubble-connect-3
   { name: 'assistant_providers', write: false }, { name: 'assistant_ask', write: false }, { name: 'assistant_set_model', write: true },
   // Wave 42 mcp-parity: every registry action reachable
   { name: 'set_ring', write: true }, { name: 'remove_tag', write: true }, { name: 'set_field', write: true }, { name: 'create_group_tag', write: true }, { name: 'app_action', write: true },

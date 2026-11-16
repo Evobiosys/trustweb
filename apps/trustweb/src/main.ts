@@ -354,6 +354,7 @@ import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { createWebView, RINGS_SIZE } from './web_view'
+import { readCard } from './bubble_card'
 import { createBubbleConnect } from './bubble_connect_view'
 import { expanseList } from './expanse'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
@@ -554,6 +555,8 @@ rememberEventMode(pendingEvent)   // wave 43b: mode=event keeps this session in 
 let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
 const qrBody = pendingConnect ? decodeModeLink(location.href) : null
+// Wave 44 steer-bubble-connect-3: the card of the person an introduction link brings (bubble_card.ts); offered once the connect flow is done.
+let cardFromLink = pendingConnect ? readCard(location.hash) : null
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 // A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
 let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
@@ -5256,7 +5259,8 @@ const curator = createCurator({
 /** Wave 44 steer-bubble-connect: a short hold of one bubble on another introduces them (bubble_connect.ts). */
 const bubble = createBubbleConnect({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), appUrl: APP_URL, send: (peerId, text) => submitText(chatIo(), peerId, text),
   sendProtocol: async (peerId, text) => { const peer = st().peers.find((x) => x.id === peerId); if (!peer) throw new Error('no peer'); await net.sendText(peer, text) },
-  connectVia: (link) => { pendingConnect = { ...connectLinkOf(new URL(link).search)!, exempt: true }; void completePendingConnect() } })
+  connectVia: (link) => { pendingConnect = { ...connectLinkOf(new URL(link).search)!, exempt: true }; void completePendingConnect() },
+  myLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, renderQr, copy: (t) => copyLink(t, S.meetCopied), profileOption: () => Boolean(st().qrProfileOption) })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
   curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), introduce: solo ? null : bubble.introduce, dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
@@ -5753,6 +5757,7 @@ function linkOpensEdit(ev: LinkedEvent): boolean {
 /** Wave 43b: the connect flow after a scan is over (its add sheet with the ring choice is done): the event opens next, else the share, else the person's card. */
 function afterConnectOpen(personId?: string): void {
   eventWaitsForConnect = false
+  if (cardFromLink) { const c = cardFromLink; cardFromLink = null; bubble.offerCard(c); return }
   const next = afterConnect({ hasShare: pendingShare !== null, hasEvent: pendingEvent !== null })
   if (next === 'share') openPendingShare()
   else if (next === 'event') maybeOpenPendingEvent()

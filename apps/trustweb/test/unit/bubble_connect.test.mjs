@@ -141,3 +141,76 @@ describe('an introduced connect link', () => {
     expect(connectLinkOf('?connect=did%3Apeer%3A2.b&id=peer-b&name=Ben')?.introduced).toBeUndefined()
   })
 })
+
+import { CARD_LINK_MAX, cardConnectLink, cardOf, introLink, linkBlock, readCard } from '../../src/bubble_card.ts'
+import { mode } from '../../src/qr_modes.ts'
+
+describe('introduce link for a person not yet connected (steer-bubble-connect-3)', () => {
+  const peersL = [{ id: 'peer-b', did: 'did:peer:2.b', displayName: 'Ben' }]
+  const me = 'https://app.trustweb.one/?connect=did%3Apeer%3A2.me&id=me1&name=Jakob'
+  const benLink = 'https://app.trustweb.one/?connect=did%3Apeer%3A2.b&id=peer-b&name=Ben'
+  const ben = (x = {}) => P('b', { name: 'Ben', publicUsername: 'ben.b', ...x })
+  const kaja = P('k', { name: 'Kaja', peerId: undefined })
+  it('is link mode only when the target is connected and nobody is blocked or ask-first', () => {
+    expect(linkBlock(kaja, ben(), peersL)).toBeNull()
+    expect(linkBlock(kaja, kaja, peersL)).toBe('same')
+    expect(linkBlock(kaja, P('x', { peerId: undefined }), peersL)).toBe('target-not-connected')
+    expect(linkBlock(kaja, ben({ blocked: 1 }), peersL)).toBe('blocked')
+    expect(linkBlock({ ...kaja, blocked: 1 }, ben(), peersL)).toBe('blocked')
+    expect(linkBlock(kaja, ben({ introducePermission: 'ask-first' }), peersL)).toBe('ask-first')
+  })
+  it('the link connects them with me (acq=1) and carries the target card, both readable', () => {
+    const link = introLink(me, cardOf(ben(), benLink, false))
+    const u = new URL(link)
+    expect(u.searchParams.get('connect')).toBe('did:peer:2.me')
+    expect(u.searchParams.get('acq')).toBe('1')
+    expect(connectLinkOf(u.search)).toMatchObject({ did: 'did:peer:2.me', introduced: true })
+    expect(u.search).not.toContain('Ben') // the card rides in the fragment, never sent to the host
+    const card = readCard(u.hash)
+    expect(card).toEqual({ n: 'Ben', l: benLink, u: 'ben.b' })
+    expect(new URL(cardConnectLink(card)).searchParams.get('acq')).toBe('1')
+    expect(connectLinkOf(new URL(cardConnectLink(card)).search)).toMatchObject({ did: 'did:peer:2.b', introduced: true })
+  })
+  it('shares only what the visibility rules allow, the same as the QR modes', () => {
+    for (const perm of ['public', 'one-ring-closer', 'ask-first']) for (const opt of [false, true]) {
+      const t = ben({ introducePermission: perm, profile: 'https://signal.me/#p/+43' })
+      const c = cardOf(t, benLink, opt)
+      const m = mode({ kind: 'person', link: benLink, name: 'Ben', username: 'ben.b', introducePermission: perm, profile: t.profile }, ['username', 'profile'], opt)
+      expect(m.chosen.includes('username')).toBe(c.u !== undefined)
+      expect(m.chosen.includes('profile')).toBe(c.p !== undefined)
+    }
+    expect(cardOf(ben({ introducePermission: 'one-ring-closer', profile: 'x' }), benLink, false).p).toBeUndefined()
+    expect(cardOf(ben({ introducePermission: 'public', profile: 'x' }), benLink, true).p).toBeUndefined()
+  })
+  it('too long for a QR gives null; a mangled or foreign fragment reads as no card', () => {
+    expect(introLink(me, { n: 'x'.repeat(CARD_LINK_MAX), l: benLink })).toBeNull()
+    expect(readCard('')).toBeNull()
+    expect(readCard('#ic=%%%')).toBeNull()
+    expect(readCard('#ic=' + btoa('{"n":"A","l":"https://x/?nothing=1"}'))).toBeNull()
+  })
+})
+
+describe('MCP introduce_link_create', () => {
+  const setup = (extra = {}) => {
+    const file = path.join(mkdtempSync(path.join(tmpdir(), 'tw-bub-')), 'record.json')
+    writeFileSync(file, JSON.stringify({ v: 1, people: [P('b', { name: 'Ben', publicUsername: 'ben.b' }), P('k', { name: 'Kaja', peerId: undefined }), P('c', { peerId: undefined })], peers, connectCode: { url: 'https://app.trustweb.one/?connect=did%3Apeer%3A2.me&id=me1&name=Jakob' }, ...extra }))
+    return file
+  }
+  const tool = (file) => bubbleTools({ file, write: true }).find((t) => t.name === 'introduce_link_create')
+  it('returns a link that carries me and the target card; refuses what the sheet refuses', () => {
+    const t = tool(setup())
+    const { link } = t.run({ dragged: 'k', target: 'b' })
+    expect(new URL(link).searchParams.get('acq')).toBe('1')
+    expect(readCard(new URL(link).hash)).toMatchObject({ n: 'Ben', u: 'ben.b' })
+    expect(() => t.run({ dragged: 'k', target: 'c' })).toThrow('target-not-connected')
+    expect(() => t.run({ dragged: 'b', target: 'k' })).toThrow('target-not-connected')
+    expect(() => t.run({ dragged: 'k' })).toThrow('required')
+  })
+  it('is refused for an ask-first target, and names a missing connect code', () => {
+    const file = setup()
+    const r = JSON.parse(readFileSync(file, 'utf8')); r.people[0].introducePermission = 'ask-first'; writeFileSync(file, JSON.stringify(r))
+    expect(() => tool(file).run({ dragged: 'k', target: 'b' })).toThrow('ask-first')
+    const f2 = setup({ connectCode: undefined })
+    expect(() => tool(f2).run({ dragged: 'k', target: 'b' })).toThrow('connect link')
+  })
+})

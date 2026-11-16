@@ -2039,3 +2039,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .hold-ring circle{fill:none; stroke:var(--electric,#12a8e3); stroke-width:3; stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:100; animation:hold-ring-fill var(--hold-ms,1500ms) linear forwards}
 @keyframes hold-ring-fill{to{stroke-dashoffset:0}}
 @media (prefers-reduced-motion:reduce){.hold-ring circle{animation-duration:.01ms}}
+/* wave44 steer-bubble-connect-3: the introduction link sheet (link + QR + Copy / Share) */
+[data-introduce-link-sheet] .qrwrap{display:flex; justify-content:center; margin:8px 0}
+[data-introduce-link-sheet] canvas{width:min(100%,180px) !important; height:auto !important}
+[data-introduce-link-sheet] .field{width:100%; box-sizing:border-box; margin:6px 0}

@@ -8,8 +8,8 @@ let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const person = (id, name, extra = {}) => ({ id, name, ring: 'friend', lines: [], context: 'Fair', metAt: Date.now() - 86_400_000, peerId: `peer-${id}`, ...extra })
 const peer = (id, name) => ({ id: `peer-${id}`, displayName: name, did: `did:peer:2.${id}`, nonceSelf: 'x', noncePeer: 'y', connectedAt: 1, blocked: false })
-const record = (extra = {}) => JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Jakob' }, peers: [peer('p2', 'Kaja'), peer('p3', 'Ben'), peer('p4', 'Cleo')], log: [], inventory: [],
-  people: [person('p2', 'Kaja'), person('p3', 'Ben'), person('p4', 'Cleo', { introducePermission: 'ask-first' })], ...extra })
+const record = (extra = {}) => JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Jakob' }, peers: [peer('p2', 'Kaja'), peer('p3', 'Ben'), peer('p4', 'Cleo'), peer('p6', 'Dan')], log: [], inventory: [],
+  people: [person('p2', 'Kaja'), person('p3', 'Ben'), person('p4', 'Cleo', { introducePermission: 'ask-first' }), person('p5', 'Zoe', { peerId: undefined }), person('p6', 'Dan', { publicUsername: 'dan.d' })], ...extra })
 const centre = async (page, id) => { const b = await page.locator(`.rings-wrap [data-pid="${id}"]:visible`).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } }
 
 /** Drag p2 onto `to`, hold `ms` there, release. kind: mouse | touch. Returns after the release. */
@@ -79,13 +79,38 @@ try {
     check(`${tag}: ask-first person: says why`, /asked first/.test(await page.locator('body').innerText()))
     // 4. long hold = merge offer, no introduce sheet
     await fresh()
-    await drag(page, kind, 'p2', 'p3', 1900, false)
+    await drag(page, kind, 'p2', 'p3', 2400, false)
     check(`${tag}: long hold shows the merge offer`, (await page.locator('[data-merge-offer]').count()) === 1)
     check(`${tag}: long hold has no introduce sheet`, (await page.locator('[data-introduce-sheet]').count()) === 0)
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/steer-bubble-connect-${tag}-merge.png` })
     await (kind === 'mouse' ? page.mouse.up() : page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', isPrimary: true, pointerId: 7 }))))
     await page.waitForTimeout(300)
     check(`${tag}: releasing the merge offer cancels it, nobody introduced`, await page.evaluate(() => !JSON.parse(localStorage.getItem('trustweb.v1.me')).chats))
+    // 6. steer-bubble-connect-3: the dragged person is NOT connected yet -> link + QR with the target's card
+    await fresh()
+    await drag(page, kind, 'p5', 'p6', 600)
+    await page.waitForTimeout(1200)
+    check(`${tag}: unconnected dragged: link sheet, not the relay sheet`, (await page.locator('[data-introduce-link-sheet]').count()) === 1 && (await page.locator('[data-introduce-sheet]').count()) === 0)
+    const href = await page.locator('[data-introduce-link]').inputValue()
+    const u = new globalThis.URL(href)
+    check(`${tag}: link connects to me as acquainted and carries Dan's card`, u.searchParams.get('acq') === '1' && !!u.searchParams.get('connect') && u.hash.startsWith('#ic='))
+    check(`${tag}: QR drawn`, (await page.locator('[data-introduce-qr] canvas').count()) === 1)
+    check(`${tag}: Copy and Done buttons fit the viewport`, await page.locator('[data-introduce-copy], [data-introduce-close]').evaluateAll((ns) => ns.length === 2 && ns.every((n) => { const r = n.getBoundingClientRect(); return r.bottom <= innerHeight && r.right <= innerWidth })))
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/steer-bubble-connect-${tag}-link.png` })
+    await page.locator('[data-introduce-close]').click(); await page.waitForTimeout(300)
+    await drag(page, kind, 'p5', 'p4', 600)
+    await page.waitForTimeout(1200)
+    check(`${tag}: ask-first target: no link, says why`, (await page.locator('.sheet.on [data-introduce-link-sheet]').count()) === 0 && /asked first/.test(await page.locator('body').innerText()))
+    // 7. the opener of that link: connect flow, then Dan's card with a Connect button
+    const opener = await (await browser.newContext({ viewport: { width, height }, hasTouch: kind === 'touch' })).newPage()
+    await opener.goto(URL); await opener.waitForTimeout(1200)
+    await opener.evaluate((r) => localStorage.setItem('trustweb.v1.me', r), JSON.stringify({ v: 1, me: { id: 'zoe', displayName: 'Zoe' }, peers: [], people: [], log: [], inventory: [] }))
+    await opener.goto(URL + u.search + u.hash); await opener.addStyleTag({ content: '.twf, .twf-ok, [data-notice-layer] { display: none !important }' }); await opener.waitForTimeout(1500)
+    await opener.locator('.sheet.on .btn-electric').first().click(); await opener.waitForTimeout(1500)
+    check(`${tag}: opener sees Dan's card with a Connect button`, (await opener.locator('[data-introduce-card-connect]').count()) === 1 && /Dan/.test(await opener.locator('[data-introduce-card]').innerText()))
+    check(`${tag}: card shows the shared username`, /dan\.d/.test(await opener.locator('[data-introduce-card]').innerText()))
+    if (SHOTS) await opener.screenshot({ path: `${SHOTS}/steer-bubble-connect-${tag}-card.png` })
+    await opener.context().close()
     // 5. an introduced link adds the person into Friends & acquainted community members
     check(`${tag}: no horizontal scroll`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     check(`${tag}: no page errors`, errors.length === 0)
