@@ -2020,3 +2020,12 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
 /* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
 #notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}
+
+/* wave44 steer-ask-escalation */
+.esc-box{margin:10px 0; padding:10px; border:1px dashed currentColor; border-radius:10px}
+.esc-box .seg button{min-height:36px}
+.asked-who{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
+.asked-who-list{margin:4px 0 0; padding-left:18px}
+.know-note{width:100%; margin:8px 0}
+.place-wrap{display:flex; gap:6px; align-items:center; margin-top:4px}
+.place-wrap input{flex:1; opacity:.7; font-size:12px; min-height:28px}

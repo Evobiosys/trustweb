@@ -313,8 +313,14 @@ export interface QueryEnvelope {
    * organisation or topic the asker wants an introduction to). Both optional and always together; `freeText` still carries the readable
    * request, so an older build (which ignores both fields) shows it as an ordinary ask. No schema bump.
    */
-  kind?: 'intro'
+  kind?: 'intro' | 'know'
   target?: string
+  /**
+   * Wave 44 steer-ask-escalation: `kind: 'know'` = the second round "Do you know someone who has this?" (no target; freeText is the original
+   * question). `askedNames`: who this ask went to, sent ONLY to a recipient the asker placed as Closest few or Close and only when the asker
+   * left it on (1..50 display names). Both optional; older builds ignore them (the ask then reads as an ordinary one).
+   */
+  askedNames?: string[]
   // ----- BEGIN TrustWeb wave 6 (U1): how far an ask travels (hops) -----
   // All optional; an older build's parseQuery copies known fields only, so it
   // ignores every one of them (the ask then behaves as one hop, as before).

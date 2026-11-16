@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 43b resources-views (POLICY P02, MCP parity): the Resources page's views, filters, kind and "recommended by", as tools over the record file. */
 import { listResources, setKind, setRecommender } from '../../trustweb/src/resource_views.ts'
+import { setPhysical } from '../../trustweb/src/physical_place.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { InventoryItem } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
@@ -48,6 +49,19 @@ export function resourceTools(e: ResourceToolsEnv): { read: Tool[]; write: Tool[
         let by = ''
         e.commit((r) => { by = whoOf(r, a.by); setRecommender({ inventory: r.inventory ?? [] }, str(a.id), by) })
         return { id: str(a.id), recommendedBy: by }
+      },
+    },
+    {
+      name: 'resource_set_physical', description: 'Mark a resource as something to pick up (physical:true) with the place where it is, or take the mark off (physical:false). A physical thing needs a place: without one nothing changes and the answer says needsPlace; confirm_no_place:true continues anyway ("Are you sure? Without a place nobody can pick it up.").',
+      inputSchema: schema({ id: S('resource id'), physical: { type: 'boolean' }, place: S('where it physically is'), confirm_no_place: { type: 'boolean' } }, ['id', 'physical']),
+      run: (a) => {
+        let out: 'ok' | 'needs-place' = 'ok'
+        e.commit((r) => {
+          const item = (r.inventory ?? []).find((i) => i.id === str(a.id))
+          if (!item) throw new Error('no such resource')
+          out = setPhysical(item, a.physical === true, str(a.place), a.confirm_no_place === true)
+        })
+        return out === 'ok' ? { id: str(a.id), physical: a.physical === true, place: str(a.place).trim() } : { id: str(a.id), needsPlace: true, message: 'Are you sure? Without a place nobody can pick it up. Send place, or confirm_no_place:true.' }
       },
     },
   ]

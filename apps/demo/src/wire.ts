@@ -85,10 +85,15 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   if ('direct' in o && o.direct !== true) return null
   const direct = o.direct === true ? (true as const) : undefined
   // TrustWeb wave 33 (types.ts QueryEnvelope.kind/target): both or neither; a present-and-malformed pair rejects the envelope.
+  // Wave 44: kind 'know' stands alone (no target).
   if ('kind' in o || 'target' in o) {
-    if (o.kind !== 'intro' || !isNonEmptyString(o.target) || o.target.length > 80) return null
+    if (o.kind === 'know') { if ('target' in o) return null }
+    else if (o.kind !== 'intro' || !isNonEmptyString(o.target) || o.target.length > 80) return null
   }
-  const intro = o.kind === 'intro' && isNonEmptyString(o.target) ? { kind: 'intro' as const, target: o.target } : undefined
+  const intro = o.kind === 'intro' && isNonEmptyString(o.target) ? { kind: 'intro' as const, target: o.target } : o.kind === 'know' ? { kind: 'know' as const } : undefined
+  // Wave 44: askedNames, 1..ASKED_NAMES_MAX display names (the same strictness: present-and-malformed rejects the envelope).
+  if ('askedNames' in o && !(Array.isArray(o.askedNames) && o.askedNames.length >= 1 && o.askedNames.length <= 50 && o.askedNames.every((n) => isNonEmptyString(n) && n.length <= 80))) return null
+  const askedNames = Array.isArray(o.askedNames) ? { askedNames: o.askedNames as string[] } : undefined
   const hops = parseHopFields(o)
   if (hops === null) return null
   // TrustWeb wave 6i (types.ts QueryEnvelope.reask): the same strictness once more.
@@ -111,6 +116,7 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
     ...(escalated ? { escalated } : {}),
     ...(direct ? { direct } : {}),
     ...(intro ?? {}),
+    ...(askedNames ?? {}),
     ...hops,
     ...(reask ? { reask } : {}),
   }

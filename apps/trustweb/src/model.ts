@@ -699,6 +699,10 @@ export interface InventoryItem {
   link?: string
   /** The "Recommended by X?" suggestion was dismissed. */
   recommenderDismissed?: boolean
+  /** Wave 44: a physical thing (something to pick up). It needs `place` unless the person confirmed they have none (physical_place.ts). This phone only. */
+  physical?: true
+  /** Wave 44: where the physical thing is. This phone only; never sent by itself. */
+  place?: string
 }
 
 export type ResourceKind = 'book' | 'publication' | 'reference' | 'recording' | 'link' | 'other'
@@ -813,6 +817,11 @@ export interface HeldAsk {
   yesAt?: number
   /** Wave 33: an intro ask's target (net.ts IncomingAsk.intro). */
   intro?: string
+  /** Wave 44: the second round "Do you know someone who has this?" (QueryEnvelope kind 'know'); `note` is the tip the person typed with their yes. */
+  know?: true
+  note?: string
+  /** Wave 44: who the asker asked, when the asker placed this phone as Closest few or Close and left it on. */
+  askedNames?: string[]
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring: when it was first asked. */
   earlierAt?: number
   /** Wave 6i: the qid of that first ask (so the same earlier ask is not shown twice). */
@@ -1355,6 +1364,12 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /** Wave 44: the person picked Custom under "How far?" (so 1 to 3 stay a custom value). Absent: a fixed choice. */
+  askReachCustom?: true
+  /** Wave 44: false = an ask does not tell Closest few and Close who else was asked (Ask > Advanced). Absent: on. */
+  askShowAsked?: false
+  /** Wave 44: a second round an assistant queued (MCP ask_escalation_set): the Ask page shows it as a card; Send asks, Discard drops it. */
+  askEscalate?: { text: string; zone: 'closest' | 'close' | 'friend' }
   /** Wave 43b (audience_filter.ts): the ask audience the filter view keeps: zone (closest, close, friend; absent = every connected person) and the added / hidden `person:<id>` / `tag:<id>` chips. The degree is `askReach`. An older build ignores it. */
   askAudience?: { zone?: 'closest' | 'close' | 'friend'; add: string[]; exclude: string[] }
   /** Wave 25: "Your city" (Settings > Profile); the ask sheet's example names it. Absent: Vienna. An older build ignores it. */

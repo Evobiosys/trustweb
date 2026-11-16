@@ -28,7 +28,7 @@ function fixture(over = {}) {
 
 describe('read tools', () => {
   it('with writes off only the read tools exist', () => {
-    expect(fixture().tools.map((t) => t.name).sort()).toEqual(['ask_audience_get', 'bar_list', 'community_list', 'community_menu_get', 'community_settings_get', 'connect_code', 'connect_redeem', 'directory_search', 'event_link_open', 'feed_list', 'get_person', 'list_notes', 'list_people', 'list_tags', 'notices_list', 'notifications_inbox_list', 'notifications_list', 'resources_list', 'search', 'settings_get', 'settings_list', 'settings_search', 'settings_sync_capabilities', 'support_inbox', 'web_default_view_get', 'web_filter_get'])
+    expect(fixture().tools.map((t) => t.name).sort()).toEqual(['ask_audience_get', 'ask_escalation_get', 'bar_list', 'community_list', 'community_menu_get', 'community_settings_get', 'connect_code', 'connect_redeem', 'directory_search', 'event_link_open', 'feed_list', 'get_person', 'list_notes', 'list_people', 'list_tags', 'notices_list', 'notifications_inbox_list', 'notifications_list', 'resources_list', 'search', 'settings_get', 'settings_list', 'settings_search', 'settings_sync_capabilities', 'support_inbox', 'web_default_view_get', 'web_filter_get'])
   })
   it('list_people hides deleted people and filters by tag and zone', () => {
     const { by } = fixture()
