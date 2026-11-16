@@ -4862,4 +4862,9 @@ export const S = {
   introduceCardUsername: (u: string) => `Public username: ${u}`,
   introduceCardConnect: (name: string) => `Connect with ${name}`,
   introduceCardNo: 'Not now',
+  /* wave44 steer-strike-mode */
+  w44bw: {
+    title: 'Black and white mode',
+    hint: 'Switched-off options get a line through them, and pictures turn grey, for greyscale screens.',
+  },
 } as const

@@ -115,6 +115,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   flag('general.notificationsOn', 'general', 'Notifications', 'notificationsOn', false, false, 'The app asks the system for permission when you switch it on; here the record only keeps the choice.'),
   sparse('mcp.applyDirectly', 'general', 'MCP applies directly', 'mcpApplyDirectly', false, true, 'Personal preview: what an agent changes through MCP is taken at once, without a card to approve.'),
   /* wave43c sync-devices: this device's switch (never synced); Settings > My devices shows it struck through when off */
+  sparse('variations.bw', 'general', 'Black and white mode', 'bwMode', false, true, 'Switched-off options get a line through them, for greyscale screens.'),
   sparse('general.syncAuto', 'general', 'Auto sync between my devices', 'syncAutoOff', true, true, 'Off: changes go to your other devices only with Sync now.'),
   // Wave 43c social-hosting: the global profile, hosting for friends, trusted-only mode and the directory servers (UI: social_hosting_view.ts; MCP: apps/mcp/src/social_tools.ts).
   sparse('profile.discoverable', 'general', 'Discoverable by name', 'discoverable', false, true, 'Publish your first and last name and public key so people can find you by name. Off by default.'),

@@ -1881,7 +1881,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 
 /* wave 43 event-roles */
 /* P2: an OFF toggle is struck through, never colour alone (greyscale / e-ink screens) */
-.tw-off{text-decoration:line-through}
+.tw-off{opacity:.55}
 .tw-expander{flex:0 0 44px; min-height:44px; background:none; border:0; font-size:15px; cursor:pointer; color:var(--ink); text-decoration:underline}
 .roles-line{display:flex; align-items:center; gap:6px}
 .roles-line .roles-summary{flex:1 1 auto; min-width:0; text-align:left; background:none; border:0; padding:8px 0; font:inherit; color:var(--ink-soft); cursor:pointer; text-decoration:underline; overflow-wrap:anywhere}
@@ -1906,7 +1906,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .feed-compose .btn{align-self:flex-end; text-decoration:underline}
 .post-actions{display:flex; gap:6px; margin-top:6px}
 .post-actions .btn{text-decoration:underline}
-.post-actions .btn.tw-off{text-decoration:underline line-through}
+.post-actions .btn.tw-off{text-decoration:underline}
 .event-feed-row{margin:8px 0}
 .event-feed-panel{display:flex; flex-direction:column; gap:4px; padding:6px 4px}
 .event-feed-panel[hidden]{display:none}
@@ -1961,7 +1961,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .rv-bar{display:flex; flex-direction:column; gap:6px; margin:0 0 10px}
 .rv-switch,.rv-chips{display:flex; flex-wrap:wrap; gap:4px}
 .rv-bar .btn,.rv-item .btn,.rv-protected .btn{text-decoration:underline}
-.rv-bar .btn.tw-off{text-decoration:underline line-through}
+.rv-bar .btn.tw-off{text-decoration:underline}
 .rv-section h3{margin:12px 0 6px}
 .rv-indent{margin-left:12px}
 .rv-indent h4{margin:8px 0 4px; font-size:13px; color:var(--ink-soft)}
@@ -2125,3 +2125,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 [data-introduce-link-sheet] .qrwrap{display:flex; justify-content:center; margin:8px 0}
 [data-introduce-link-sheet] canvas{width:min(100%,180px) !important; height:auto !important}
 [data-introduce-link-sheet] .field{width:100%; box-sizing:border-box; margin:6px 0}
+/* wave44 steer-strike-mode: the line through OFF options (P2) only in Black and white mode (html.tw-bw); pictures grey like images=grey */
+html.tw-bw .tw-off{text-decoration:line-through}
+html.tw-bw .post-actions .btn.tw-off,html.tw-bw .rv-bar .btn.tw-off{text-decoration:underline line-through}
+html.tw-bw :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) opacity(.55)}
