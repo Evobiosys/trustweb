@@ -11,13 +11,13 @@
  * fields).
  */
 
-import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
-import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
+import type { AnswerEnvelope, AskAgainEnvelope, HideReportEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
+import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION, HIDE_BLOB_MAX_JSON, HIDE_KEY_RE, HIDE_REPORT_MAX_JSON } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
 
-export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope | HostEnvelope | EventEnvelope
+export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope | HostEnvelope | EventEnvelope | HideReportEnvelope
 
 /** JSON-serialise an envelope for a QR code. */
 export function encodeForQr(env: Envelope): string {
@@ -96,6 +96,8 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   const askedNames = Array.isArray(o.askedNames) ? { askedNames: o.askedNames as string[] } : undefined
   const hops = parseHopFields(o)
   if (hops === null) return null
+  const hide = parseHideFields(o) // wave44b hide-from-crypto
+  if (hide === null) return null
   // TrustWeb wave 6i (types.ts QueryEnvelope.reask): the same strictness once more.
   let reask: ReaskRef | undefined
   if ('reask' in o) {
@@ -119,6 +121,7 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
     ...(askedNames ?? {}),
     ...hops,
     ...(reask ? { reask } : {}),
+    ...hide,
   }
 }
 
@@ -325,7 +328,32 @@ export function decodeFromQr(s: string): Envelope | null {
       return parseHost(o)
     case 'event':
       return parseEvent(o)
+    case 'hide-report':
+      return parseHideReport(o)
     default:
       return null
   }
+}
+
+/* wave44b hide-from-crypto */
+const isSmallObject = (v: unknown, max: number): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v) && JSON.stringify(v).length <= max
+
+/** QueryEnvelope.hx / hk: absent is fine; present-and-malformed or too large rejects the envelope. The blob itself is checked by the receiver. */
+function parseHideFields(o: Record<string, unknown>): Pick<QueryEnvelope, 'hx' | 'hk'> | null {
+  const out: Pick<QueryEnvelope, 'hx' | 'hk'> = {}
+  if ('hx' in o) {
+    if (!isSmallObject(o.hx, HIDE_BLOB_MAX_JSON)) return null
+    out.hx = o.hx
+  }
+  if ('hk' in o) {
+    if (typeof o.hk !== 'string' || !HIDE_KEY_RE.test(o.hk)) return null
+    out.hk = o.hk
+  }
+  return out
+}
+
+function parseHideReport(o: Record<string, unknown>): HideReportEnvelope | null {
+  if (typeof o.qid !== 'string' || !QID_RE.test(o.qid) || !isSmallObject(o.rep, HIDE_REPORT_MAX_JSON)) return null
+  return { v: WIRE_VERSION, t: 'hide-report', qid: o.qid, rep: o.rep }
 }

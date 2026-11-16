@@ -84,6 +84,9 @@ import { personOf } from './peer_cards'
 import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
 import { acceptsReaskFrom, askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk, undoReasked } from './reask'
 import type { EarlierAsk, ReaskPlan } from './reask'
+import { HideFromNet, NO_GATE } from './hide_from_net' // wave44b hide-from-crypto
+import type { HideGate } from './hide_from_net'
+import type { HideReportEntry } from './hide_reports'
 
 export type { PushSubscriptionJson, RelayStatus }
 
@@ -218,6 +221,8 @@ export interface NetHooks {
   inviteVerdict?(inv: string, fromDid: string): boolean
   /** Wave 44 steer-invite-link: the connection with an accepted invite token exists (its card too): join it to the community. */
   onInviteAccepted?(peer: Peer, inv: string): void
+  /** Wave 44b (hide_from_net.ts): a verified report that a device on the way changed (or could not check) an ask's hidden list. */
+  onHideReport?(e: HideReportEntry): void
   /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
   mayPassOnFrom(peer: Peer): boolean
   /**
@@ -320,6 +325,8 @@ export class Net {
   private readonly relayOrigin: string | undefined
   /** Wave 11: this device's Web Push subscription for the relay (undefined: nothing to say; null: withdraw). */
   private pushSub: PushSubscriptionJson | null | undefined = undefined
+  /** Wave 44b hide-from-crypto: the sealed "Hide from" list of asks that travel. */
+  private readonly hide: HideFromNet
 
   /** This phone's answer window (ask_window.ts): what its asks carry and what the dock counts down. */
   get answerWindowMs(): number {
@@ -329,6 +336,10 @@ export class Net {
   constructor(private readonly hooks: NetHooks, opts: NetOptions = {}) {
     this.windowMs = opts.answerWindowMs ?? ANSWER_WINDOW_MS
     this.relayOrigin = opts.relayOrigin
+    this.hide = new HideFromNet({
+      identity: () => this.ensureIdentity(), state: () => this.hooks.state(), save: () => this.hooks.save(), onReport: (e) => this.hooks.onHideReport?.(e),
+      send: async (did, env) => { if (this.channel) await this.channel.send(did, env, await this.keyFor(did)) },
+    })
   }
 
   /** This device's relay identity, minted once and kept in the app's own record. */
@@ -649,6 +660,7 @@ export class Net {
     // Wave 43c: the connection names its other devices; only its own sealed channel can, and never a DID of another connection or of mine.
     if (env.t === 'devices' && from && addAlsoDids(this.hooks.state().peers, from, env.dids, [this.ensureIdentity().did])) this.hooks.save()
     if (env.t === 'event' && from) this.hooks.onEvent?.(from, env)
+    if (env.t === 'hide-report' && from) await this.hide.onReport(env, [from.did, ...(from.alsoDids ?? []), fromDid])
     // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
   }
 
@@ -757,6 +769,9 @@ export class Net {
     // is remembered as shown only when its prompt is presented (earlierFields), so one that matched nothing may come again.
     const earlier = this.earlierOf(q, info, peer, receivedAt)
     const quietEarlier = earlier !== null && !showsEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, receivedAt)
+    // Wave 44b: the asker's sealed "Hide from" list: changed (reported back), not checkable, or hiding this phone = like a repeat.
+    const hide = repeat || cycle ? NO_GATE : await this.hide.gate(q, { root: info.root, maxHops: info.maxHops, hop: info.hop, senderDid: fromDid, now: receivedAt })
+    if (hide.drop) { await this.replier(q.qid, templateFor(text).id, peer, await this.pairKey(peer), receivedAt, receivedAt + answerDelayMs(info, windowMs), Promise.resolve(NO_HARVEST)).atMoment([]); return }
     // Its asker stopped waiting long ago (this phone was closed or asleep). A repeat or a cycle stays as silent as it is live (review 6f).
     if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, windowMs))) {
       if (repeat || cycle || quietEarlier) return
@@ -780,7 +795,7 @@ export class Net {
     // Passed on the moment it arrives, never waiting for the person here: the next step's answers are
     // in before this phone's own moment, whatever the person does.
     const harvest = !silent && mayCascade(q) && this.hooks.mayPassOnFrom(peer)
-      ? this.passOn(q, info, peer, deadline, windowMs)
+      ? this.passOn(q, info, peer, deadline, windowMs, hide)
       : Promise.resolve(NO_HARVEST)
     const reply = this.replier(q.qid, tpl.id, peer, key, receivedAt, deadline, harvest)
 
@@ -1120,7 +1135,7 @@ export class Net {
    * `seen`, nobody only intended, closest rings first, at most MAX_FANOUT)
    * and gathers what they shared until shortly before this phone's moment.
    */
-  private async passOn(q: QueryEnvelope, info: HopInfo, sender: Peer, deadline: number, windowMs: number): Promise<HopHarvest> {
+  private async passOn(q: QueryEnvelope, info: HopInfo, sender: Peer, deadline: number, windowMs: number, hide: HideGate = NO_GATE): Promise<HopHarvest> {
     const s = this.hooks.state()
     const root = info.root
     if (!root) return NO_HARVEST
@@ -1132,6 +1147,7 @@ export class Net {
       if (targets.length >= MAX_FANOUT) break
       if (p.did === sender.did || p.ring === Ring.Intending || this.hooks.samePerson(p, sender)) continue
       if (excluded.has(await seenHash(root, p.id))) continue
+      if (await this.hide.hides(hide, info.hop, [p.did, ...(p.alsoDids ?? [])])) continue
       targets.push(p)
     }
     if (!targets.length) return NO_HARVEST
@@ -1140,7 +1156,10 @@ export class Net {
     const fields = { ...cascadeFields(q, info, [self, fromSender], sender.displayName), ...passOnWindowFields(q, windowMs) }
     const waitMs = Math.max(0, deadline - Date.now() - windowMs * HOP_COLLECT_LEAD)
     // Each target is bounded by waitMs on its own (sendAsk never waits on a send), so one stalled contact costs nothing but its line.
-    const answers = await Promise.all(targets.map((p) => this.sendAsk(p, q.freeText ?? '', fields, waitMs)))
+    const answers = await Promise.all(targets.map((p) => {
+      const qid = randomId(12)
+      return this.sendAsk(p, q.freeText ?? '', { ...fields, ...this.hide.passOn(hide, { qid, upQid: q.qid, upDid: sender.did, toDid: p.did }) }, waitMs, qid)
+    }))
     const items = answers.flatMap((d) => (d?.outcome === 'shared' && d.shared ? sanitizeHopItems(d.shared.items) : []))
     return { asked: targets.length, items }
   }
@@ -1182,12 +1201,14 @@ export class Net {
    * Wave 43b: `only` (audience_filter.ts) limits the ask to those peer ids; null or absent = every connected peer.
    * Wave 6h: every ask carries this phone's window, and is remembered per connection so a later yes can still land (late_answers.ts).
    */
-  async ask(text: string, reachOverride?: number, only?: readonly string[] | null, opts: { know?: boolean } = {}): Promise<AskResult[]> {
+  async ask(text: string, reachOverride?: number, only?: readonly string[] | null, hidden: readonly string[] = [], opts: { know?: boolean } = {}): Promise<AskResult[]> {
     await this.start()
     const s = this.hooks.state()
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
     // Wave 16: a together request carries its own reach for this one ask; "Ask only my direct contacts" still wins and the dock's choice is not touched.
-    const reach = reachOverride !== undefined && s.askDirectOnly !== true ? reachOverride : askReachOf(s)
+    const chosen = reachOverride !== undefined && s.askDirectOnly !== true ? reachOverride : askReachOf(s)
+    // Wave 44b: a "Hide from" list too long to seal keeps the ask with direct contacts (fail closed).
+    const reach = HideFromNet.tooMany(hidden) ? HOPS_DEFAULT : chosen
     const root = randomId(12)
     // Wave 44: the second round "Do you know someone who has this?" stays with the people asked (direct, one step) and carries kind 'know'.
     const extra: Partial<QueryEnvelope> = opts.know
@@ -1196,6 +1217,9 @@ export class Net {
     const timeoutMs = askTimeoutMs(opts.know ? HOPS_DEFAULT : reach, this.windowMs)
     const now = Date.now()
     const outgoing = askPeers(s).filter((peer) => !only || only.includes(peer.id)).map((peer) => ({ peer, qid: randomId(12) }))
+    if (extra.maxHops !== undefined && s.askDirectOnly !== true) {
+      Object.assign(extra, await this.hide.outgoing({ text: freeText, root, maxHops: hopInfo(extra).maxHops, issuedAt: now, hidden, qids: outgoing.map((o) => o.qid) }))
+    }
     s.sentAsks = addSentAsk(s.sentAsks, { id: root, text: freeText, at: now, to: outgoing.map(({ peer, qid }) => ({ peerId: peer.id, qid })) }, now)
     this.hooks.save()
     // Wave 44: who was asked goes only to a recipient this phone placed as Closest few or Close, and only while "show who was asked" is on.

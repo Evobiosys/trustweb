@@ -5163,4 +5163,13 @@ export const S = {
     pasteTitle: 'Paste an outline', pasteAria: 'Outline to paste', pastePh: '- one\n  - under it\n- two', pasteGo: 'Add as lines',
     requests: (n: number) => `Review requests (${n} waiting)`,
   },
+  /* wave44b hide-from-crypto */
+  hideFrom: {
+    /** Under the "Hide from" row, with a lock glyph. */
+    sealed: 'Friends relay this list sealed; they cannot read or edit it',
+    noticeTitle: 'Your ask was changed on the way',
+    /** `step`: 1 = a direct contact, 2 = a friend of a friend. */
+    tampered: (step: number) => `A device on the way changed your ask's hidden list (hop ${step}). The ask stopped there.`,
+    unsupported: (step: number) => `A device on the way could not check your ask's hidden list (hop ${step}) and did not pass it on.`,
+  },
 } as const
