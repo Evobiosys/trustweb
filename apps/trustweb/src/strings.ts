@@ -5218,4 +5218,5 @@ export const S = {
     posted: 'Posted to your Feed',
     card: (scope: string) => `Send a ${scope === 'line' ? 'line' : 'block'} of a resource to a chat`,
   },
+  verdictNote: { ph: 'note (optional), sent with Needs work', aria: 'Note for this verdict' },
 } as const

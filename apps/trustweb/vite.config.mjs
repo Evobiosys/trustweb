@@ -16,7 +16,7 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import { matchesReply } from './vite_matches.mjs'
 import { editStreamReply, liveRecordReply, mcpEventsReply, mcpInfoReply } from './vite_dev_record.mjs'
-import { approveMergeRoute, diagnosticsFor, fixConflictRoute, ghBin, jobQueue, launchError, opsDevlogRoot, readyToGo } from './dev_preview_rules.mjs'
+import { approveMergeRoute, diagnosticsFor, fixConflictRoute, ghBin, jobQueue, launchError, opsDevlogRoot, readyToGo, verdictArgs } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 // execFile ignores `stdio`, so stdin stays an open pipe: close it, a command that reads stdin (a git/gh prompt) gets EOF instead of waiting out its timeout.
@@ -430,7 +430,7 @@ function previewApi() {
         if (sub === '/' && typeof b?.feature === 'string' && typeof b.checked === 'boolean' && readPreview().features.some((f) => f.key === b.feature)) args = ['toggle', b.feature, b.checked ? 'on' : 'off']
         const keys = readPreview().features.map((f) => f.key)
         if (sub === '/' && b?.set && keys.length === Object.keys(b.set).length && keys.every((k) => typeof b.set[k] === 'boolean')) args = ['set', keys.map((k) => `${k}=${b.set[k] ? 'on' : 'off'}`).join(',')]
-        if (sub === '/verdict' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature) && [null, 'merge', 'needs-work', 'changes'].includes(b.verdict)) args = ['verdict', b.feature, b.verdict ?? 'clear']
+        if (sub === '/verdict') args = verdictArgs(b, keys)   // wave44 answers-44b: with the optional note
         if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
         if (sub === '/mark-merged' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature)) args = ['mark-merged', b.feature]   // wave 42 B01: the row is already in main (ops gate.action "mark-merged <key>")
         if (!args) { json(res, { error: 'bad request' }, 400); return }
