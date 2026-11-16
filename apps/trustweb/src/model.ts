@@ -19,6 +19,7 @@ import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
+import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { TwSettings } from './ext/profiles'
@@ -1144,9 +1145,9 @@ export interface AppState {
   /** Wave 43c (directory_client.ts serversOf): the directory servers I chose. Absent or empty: the Swiss default (this app's origin, questhub). */
   directoryServers?: string[]
   /** Wave 43c (social_hosting.ts): records I hold for friends by owner did; lookup cache by name; verified intents waiting to become people. This phone only, never synced. */
-  hosted?: Record<string, import('./name_record').NameRecord>
-  nameCache?: Record<string, { recs: import('./name_record').NameRecord[]; at: number }>
-  intentsIn?: import('./name_record').Intent[]
+  hosted?: Record<string, NameRecord>
+  nameCache?: Record<string, { recs: NameRecord[]; at: number }>
+  intentsIn?: Intent[]
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
   /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */
