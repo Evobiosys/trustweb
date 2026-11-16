@@ -29,6 +29,11 @@ import type { ChatBook } from './chat'
 import type { TwSettings } from './ext/profiles'
 import type { SharedNote } from './notes_outline'
 import type { CoMsg } from './ext/co_notes/co_chat'
+// review-44: top-level type imports (the packages/cli no_network scan reads an inline type import as a value import)
+import type { Profile } from './profile_fields'
+import type { EmbedRecord } from './feed_embed'
+import type { HomeLayout } from './home_layout'
+import type { SavedFilter } from './saved_filters'
 import type { CoDoc } from './ext/co_notes/co_doc'
 import type { CoGuest, CoInvite } from './ext/co_notes/co_invite'
 import type { ConnectRecord } from './connect_code'
@@ -905,7 +910,7 @@ export interface Me {
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
   otherEmails?: string[]
   /** Wave 44b profile-page (profile_fields.ts): phone-book name parts, bio, pronouns, languages, place, up to four links, a visibility per field. Local; only discoverable fields leave in the directory record. */
-  profile?: import('./profile_fields').Profile
+  profile?: Profile
 }
 
 /**
@@ -1140,7 +1145,7 @@ export interface AppState {
   feedPosts?: SocialPost[]
   feedStars?: string[]
   /** Wave 44 (feed_embed.ts): posts embedded from a pasted link, newest first, at most 200. Absent: none. */
-  feedEmbeds?: import('./feed_embed').EmbedRecord[]
+  feedEmbeds?: EmbedRecord[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
@@ -1236,9 +1241,9 @@ export interface AppState {
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
   /** Wave 44 home-dashboard (home_layout.ts): the Home tile board's columns. Absent: the default (Web centre, others' requests left, mine right). Syncs with the record. */
-  homeLayout?: import('./home_layout').HomeLayout
+  homeLayout?: HomeLayout
   /** Wave 44b filters-communities: saved filter states (in / out chips), some pinned above the filter row (saved_filters.ts; schema 4). */
-  savedFilters?: import('./saved_filters').SavedFilter[]
+  savedFilters?: SavedFilter[]
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
