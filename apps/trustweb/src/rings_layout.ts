@@ -60,6 +60,8 @@ export interface RingsGeometry {
   laps: Partial<Record<Ring, number>>
   /** Outer edge of the outermost avatar: the view scales to fit it. */
   extent: number
+  /** Wave 44: radius of the band outside every ring where second-hand people sit; absent when there are none. */
+  beyondRadius?: number
 }
 
 /** Degrees (0 = top, clockwise) of a point `dx`, `dy` from the centre, in 0..360. */
@@ -115,7 +117,7 @@ export function restoreAngles(s: Pick<AppState, 'people'>, before: ReadonlyMap<s
 }
 
 /** Where each ring sits for `counts` people (`custom`: radii the user dragged rings to, wave 39): a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. With `angles` (per ring, in layout order) the laps follow from where the dots sit. `k` is the view scale (see closeFit). */
-export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}, k = 1, custom: Partial<Record<Ring, number>> = {}): RingsGeometry {
+export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}, k = 1, custom: Partial<Record<Ring, number>> = {}, beyond = 0): RingsGeometry {
   const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), lapOf: {}, laps: {}, extent: 0 }
   let prev = { r: 0, dot: 0, band: 0, pushed: false }
   for (const ring of g.rings) {
@@ -134,6 +136,7 @@ export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Reco
   }
   const edge = prev.r + prev.band + prev.dot / 2
   g.extent = edge
+  if (beyond > 0) { g.beyondRadius = edge + BEYOND_GAP + BEYOND_DOT / 2; g.extent = g.beyondRadius + BEYOND_DOT / 2 }
   return g
 }
 
@@ -215,4 +218,16 @@ export function nudgeAngles(dots: readonly { id: string; angle: number; radius: 
     placed.push({ ...at(angle, d.radius), r: d.r })
   }
   return out
+}
+
+/** Wave 44 web-rings-polish: someone I see only through a friend (Person.via) is not on any ring: they sit in a band outside the outermost one, never as a further ring. */
+export const BEYOND_GAP = 8
+export const BEYOND_DOT = 28
+export const isBeyond = (p: Pick<Person, 'via'>): boolean => typeof p.via === 'string' && p.via !== ''
+export const beyondPeople = <P extends Pick<Person, 'via'>>(people: readonly P[]): P[] => people.filter(isBeyond)
+
+/** Evenly spaced angles around the band, in id order, so a person never jumps between renders. */
+export function beyondSlots<P extends { id: string }>(people: readonly P[]): (P & { angle: number })[] {
+  const sorted = [...people].sort((a, b) => (a.id < b.id ? -1 : 1))
+  return sorted.map((p, i) => ({ ...p, angle: (360 * i) / sorted.length }))
 }

@@ -4662,4 +4662,8 @@ export const S = {
     tanaPullCancel: 'Cancel',
     tanaPullSkipped: (n: number) => `${n} could not be read and were left as they are.`,
   },
+  /* wave44 web-rings-polish */
+  beyondVia: (name: string) => `via ${name}`,
+  personMenu: { tag: 'Tag…', hide: 'Hide', open: 'Open', aria: (name: string) => `${name}: quick menu`, tagAsk: 'Tag name', hidden: (name: string) => `${name} is hidden.`, tagged: (name: string, tag: string) => `${name} tagged ${tag}.` },
+  tapEventHint: 'Tap the event',
 } as const
