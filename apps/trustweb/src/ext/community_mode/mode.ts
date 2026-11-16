@@ -166,3 +166,8 @@ export function restoreVersion(d: ModeData, id: string): ModeData {
 }
 
 export const removeVersion = (d: ModeData, id: string): ModeData => ({ ...d, versions: (d.versions ?? []).filter((x) => x.id !== id) })
+
+/** Wave 44: the Community bar = the Personal bar with the community's own Home first and Web second (Web leads in Personal). Pure; `home` is the id of the Home button. */
+export function communityLead(ids: readonly string[], home: string): string[] {
+  return [home, ...ids.filter((i) => i === 'web'), ...ids.filter((i) => i !== 'web')]
+}

@@ -19,7 +19,7 @@ const people = [
   { id: 'p3', name: 'Cleo Probe', context: '', ring: 'acquaintance', metAt: 1, lines: [] },
 ]
 const EVENT = { id: 'e1', name: 'Winter Probe', tagName: 'Probe Days', from: `${today}T09:30`, where: 'Probe Hall', conditions: 'Bring a mug', themes: ['soil', 'water'], createdAt: 1, attended: true, hosts: ['Tester'], organizers: ['p3'], organizer: 'Cleo Probe', offers: { feed: true, support: true, resources: true } }
-const record = { v: 1, me: { id: 'me1', displayName: 'Tester' }, peers: [], log: [], inventory: [], people, events: [EVENT], atEvent: { eventId: 'e1', since: Date.now() - 3600e3 } }
+const record = { v: 1, me: { id: 'me1', displayName: 'Tester' }, peers: [], log: [], inventory: [], people, events: [EVENT], atEvent: { eventId: 'e1', since: Date.now() - 3600e3 }, uiBar: { order: ['web', 'chat', 'feed', 'events', 'inventory'], hidden: ['record'], primary: 'feed' } /* wave 44: the stock bar has no Feed; this test needs it */ }
 
 /** Every visible control (button, input, select, textarea, link, summary), its box clipped to the viewport and every scrolling/clipping ancestor; pairs that intersect by more than 2 px and are not nested. */
 const overlaps = (page) => page.evaluate(() => {

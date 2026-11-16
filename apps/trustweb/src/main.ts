@@ -141,7 +141,7 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import { communityChatRows } from './chat_communities'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, askFloating, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, defaultPair, defaultPrimary, activeProfile, askFloating, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
@@ -299,6 +299,7 @@ import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { createWebFocus } from './web_focus'
 import { createModeShell } from './ext/community_mode/shell'
+import { communityLead } from './ext/community_mode/mode'
 import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createActions } from './actions'
@@ -1310,18 +1311,22 @@ function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
   // Wave 37 (co-notes-link): a guest of a co-note link gets the nested shell instead (Web, Chat in the centre, Resources; Events too for an event note).
   const guest = state?.coGuest && state.coNotesOn ? guestShell(Boolean(state.coGuest.eventId)) : null
-  const { ids, primary, pair } = guest ? { ids: guest.tabs, primary: guest.primary, pair: [] } : resolveBar(state?.uiBar, barFlags(), barMax())
-  const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
+  const resolved = guest ? { ids: guest.tabs, primary: guest.primary, pair: [] } : resolveBar(state?.uiBar, barFlags(), barMax())
+  const lead = guest ? null : modeShell.homeButton() // wave 44: Community = the Personal bar with the community Home first, Web second
+  const { ids } = resolved
+  const { shown: laid } = guest ? { shown: ids } : barLayout(ids, resolved.primary, lead ? barMax() - 1 : barMax())
+  const shown = lead ? communityLead(laid, 'community:home') as BarId[] : laid
+  const own = !lead || state?.uiBar?.primary !== undefined
+  const primary = own ? resolved.primary : defaultPrimary(shown)
+  const pair = own ? resolved.pair : defaultPair(shown)
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
-  const community = guest ? null : modeShell.tabs() // wave 41: the Community interface has its own row
-  const halo = new Set(guest || community ? [] : haloOf(state?.uiBar, ids, [primary, ...pair].filter((x): x is BarId => x !== null)))
-  tabs.replaceChildren(...(community ?? shown.map((id) => barButton(id, id === primary || pair.includes(id), halo.has(id)))), ...(guest || community ? [] : [more]))
-  document.body.toggleAttribute('data-community-mode', community !== null)
-  tabs.classList.toggle('four', (community ?? shown).length > 3)
-  tabs.classList.toggle('many', (community ?? shown).length > 5)
-  tabs.classList.toggle('pair', !community && pair.length > 0)
-  phone.classList.toggle('ask-in-bar', !community && !askFloating(shown))
+  const halo = new Set(guest ? [] : haloOf(state?.uiBar, ids, [primary, ...pair].filter((x): x is BarId => x !== null)))
+  tabs.replaceChildren(...shown.map((id) => (lead && (id as string) === 'community:home' ? lead : barButton(id, id === primary || pair.includes(id), halo.has(id)))), ...(guest ? [] : [more]))
+  tabs.classList.toggle('four', shown.length > 3)
+  tabs.classList.toggle('many', shown.length > 5)
+  tabs.classList.toggle('pair', pair.length > 0)
+  phone.classList.toggle('ask-in-bar', !askFloating(shown))
   updateChatBadge()
 }
 renderTabs()
