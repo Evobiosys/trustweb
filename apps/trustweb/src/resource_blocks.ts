@@ -51,7 +51,8 @@ export function toggleCollapsed(blocks: ResBlock[], id: string): boolean {
 
 export function removeBlock(blocks: ResBlock[], id: string): void { const at = need(blocks, id); at.siblings.splice(at.index, 1) }
 
-/** Tab / Shift+Tab / move up / move down. False when the move is not possible (first block cannot indent, a top block cannot outdent, ends cannot move). */
+/** Tab / Shift+Tab / move up / move down. False when the move is not possible (first block cannot indent, a top block cannot outdent, ends cannot move).
+ *  Outdent adopts the following siblings as children (Logseq). */
 export function moveBlock(blocks: ResBlock[], id: string, how: MoveHow): boolean {
   const at = need(blocks, id)
   if (how === 'up' || how === 'down') {
@@ -71,7 +72,9 @@ export function moveBlock(blocks: ResBlock[], id: string, how: MoveHow): boolean
   if (!at.parent) return false
   const up = locate(blocks, at.parent.id)
   if (!up) return false
-  at.siblings.splice(at.index, 1)
+  // answers-44b (Logseq): the following siblings become the outdented block's last children.
+  const adopted = at.siblings.splice(at.index, at.siblings.length - at.index).slice(1)
+  if (adopted.length) { at.block.children.push(...adopted); delete at.block.collapsed }
   up.siblings.splice(up.index + 1, 0, at.block)
   return true
 }

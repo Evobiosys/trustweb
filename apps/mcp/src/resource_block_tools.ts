@@ -51,7 +51,7 @@ export function resourceBlockTools(e: ResourceToolsEnv): { read: Tool[]; write: 
       run: (a) => { e.commit((r) => { editBlock(itemOf(r.inventory, str(a.id)).blocks ?? [], str(a.blockId), str(a.text)) }); return { id: str(a.id), blockId: str(a.blockId) } },
     },
     {
-      name: 'resource_block_move', description: `Move a block: ${MOVES.join(', ')} (indent = under the block above, outdent = out of its parent). moved:false when it cannot move that way.`,
+      name: 'resource_block_move', description: `Move a block: ${MOVES.join(', ')} (indent = under the block above, outdent = out of its parent, the following siblings become its children like Logseq). moved:false when it cannot move that way.`,
       inputSchema: schema({ id: S('resource id'), blockId: S('block id'), how: S(MOVES.join(', ')) }, ['id', 'blockId', 'how']),
       run: (a) => {
         const how = str(a.how)
