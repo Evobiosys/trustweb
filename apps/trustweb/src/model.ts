@@ -356,7 +356,12 @@ export interface TwEvent {
   /** What was shared with participants: arriving, on what conditions. */
   conditions?: string
   themes?: string[]
+  /** Deprecated wave 43: use `organizers` (event_roles.ts eventOrganizers). Kept readable for older callers and links; never deleted. */
   organizer?: string
+  /** Wave 43 (event-roles): who organizes it; person ids or free names. Legacy `organizer` migrates in once (event_roles.ts migrateEventRoles). */
+  organizers?: string[]
+  /** Wave 43: the person who sets this app up for the organizers; person ids or free names. Never in an event link. */
+  techSupport?: string[]
   createdAt: number
   /** My own attendance, set when I add or join it. */
   attended: boolean

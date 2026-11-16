@@ -1883,3 +1883,15 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* wave 42 in-person-e2e: the two bottom-left pills sat on the first tab of the bottom bar (P06); they stand above the bar */
 .demo-toggle{bottom:104px}
 .demo-toggle.desk-toggle{bottom:160px}
+
+/* wave 43 event-roles */
+/* P2: an OFF toggle is struck through, never colour alone (greyscale / e-ink screens) */
+.tw-off{text-decoration:line-through}
+.tw-expander{flex:0 0 44px; min-height:44px; background:none; border:0; font-size:15px; cursor:pointer; color:var(--ink); text-decoration:underline}
+.roles-line{display:flex; align-items:center; gap:6px}
+.roles-line .roles-summary{flex:1 1 auto; min-width:0; text-align:left; background:none; border:0; padding:8px 0; font:inherit; color:var(--ink-soft); cursor:pointer; text-decoration:underline; overflow-wrap:anywhere}
+.roles-line .roles-summary.empty{font-style:italic}
+.roles-list .role-row{margin:8px 0}
+.roles-list .role-chips{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0}
+.event-tag-chip{display:inline-block; margin:2px 0 6px; text-decoration:underline}
+.picker-create{font-style:italic; text-decoration:underline}

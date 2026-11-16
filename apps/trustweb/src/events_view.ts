@@ -4,8 +4,11 @@
  */
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
-import { DEFAULT_NAME_REVEAL, NAME_REVEALS, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, nameRevealOf, newEvent, restoreEvent, revealedBy, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
+import { DEFAULT_NAME_REVEAL, NAME_REVEALS, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, localSettings, nameRevealOf, newEvent, restoreEvent, revealedBy, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
+import { eventOrganizers, eventForLink, refsForNames, relatedOthers, roleLabels, setRoles } from './event_roles'
+import { eventPersonPicker } from './event_person_picker'
+import { rolesSection } from './event_roles_view'
 import type { EventError, EventFields } from './events'
 import { dragEvent, dragPerson } from './drag_payload'
 import { PERSON_GREEN } from './colour_tags'
@@ -151,21 +154,25 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     where.placeholder = S.eventWherePlaceholder
     const conditions = el('textarea', { class: 'field', rows: 3 }, [existing?.conditions ?? ''])
     const themes = text(existing?.themes?.join(', '))
-    const organizer = text(existing?.organizer)
+    const organizer = text(existing ? roleLabels(h.state(), eventOrganizers(existing)).join(', ') : '')
     const hosts = el('div', {}, [])
     const addHost = (v = ''): void => { hosts.append(text(v)) }
-    ;(existing ? existing.hosts ?? [] : [h.state().me.displayName]).forEach(addHost)
+    ;(existing ? roleLabels(h.state(), existing.hosts ?? []) : [h.state().me.displayName]).forEach(addHost)
     if (!hosts.children.length) addHost()
     const error = el('p', { class: 'warn', 'data-event-error': '', hidden: true })
     const save = (): void => {
       const fields: EventFields = {
         name: name.value, from: from.value, to: to.value, core: { from: coreFrom.value, to: coreTo.value }, where: where.value, conditions: conditions.value,
-        themes: splitThemes(themes.value), organizer: organizer.value, attended: existing?.attended,
-        hosts: [...hosts.querySelectorAll('input')].map((i) => i.value),
+        themes: splitThemes(themes.value), attended: existing?.attended,
       }
       const made = newEvent(fields, existing?.id ?? h.newId(), existing?.createdAt ?? Date.now())
       if (typeof made === 'string') { error.textContent = ERRORS[made]; error.hidden = false; return }
       const ev = { ...made, ...(existing ? localSettings(existing) : {}) }
+      setRoles(h.state(), ev, {
+        organizers: refsForNames(h.state(), organizer.value.split(','), existing ? eventOrganizers(existing) : []),
+        hosts: refsForNames(h.state(), [...hosts.querySelectorAll('input')].map((i) => i.value), existing?.hosts),
+        techSupport: existing?.techSupport ?? [],
+      })
       const tagged = tag.value.trim()
       if (tagged && tagged !== made.name) { ev.tagName = tagged; ev.tagLocked = true } else { delete ev.tagName; delete ev.tagLocked }
       const s = h.state()
@@ -208,24 +215,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return row
   }
 
+  /** "Identify a person": the shared picker (event_person_picker.ts); a pick tags the person with this event. */
   function picker(ev: TwEvent): HTMLElement {
-    const input = el('input', { class: 'field', placeholder: S.eventsTagSearch, 'aria-label': S.eventsTagPerson, 'data-event-tag-search': '' })
-    const results = el('div', {})
-    const draw = (): void => {
-      const open = h.state().people.filter((p) => !p.events?.includes(ev.id))
-      results.replaceChildren(...matchPeople(open, input.value).map((p) => {
-        const chip = el('button', {
-          class: 'chip', 'data-tag-person': p.id,
-          onclick: () => { tagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
-        }, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])])
-        contextPress(chip, () => h.curatorPerson(p.id))
-        dragPerson(chip, p)
-        return chip
-      }))
-    }
-    input.addEventListener('input', draw)
-    draw()
-    return el('div', {}, [el('h3', {}, [S.eventsTagPerson]), input, el('div', { class: 'chips' }, [results])])
+    return el('div', {}, [el('h3', {}, [S.eventsIdentify]), eventPersonPicker(h, ev.id, {
+      exclude: attendees(h.state(), ev.id).map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
+      renderPerson: (p) => el('span', {}, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])]),
+      decorate: (chip, p) => { contextPress(chip, () => h.curatorPerson(p.id)); dragPerson(chip, p) },
+      onPick: (id) => { tagPerson(h.state(), id, ev.id); h.save(); h.redraw() },
+    })])
   }
 
   function remove(ev: TwEvent): void {
@@ -239,7 +236,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
 
   /** Copies the link the toggle now shows (the host one says so in the toast) and redraws to preview it. E3: the peer link says of me only what the event's name reveal allows. */
   function copyShown(ev: TwEvent): void {
-    lastLink = encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer', hostLink ? undefined : revealedBy(h.by(), ev))
+    lastLink = encodeEventLink(eventForLink(h.state(), ev), h.origin, hostLink ? 'host' : 'peer', hostLink ? undefined : revealedBy(h.by(), ev))
     h.copyLink(lastLink, hostLink ? S.eventHostLinkCopied : undefined)
     h.redraw()
   }
@@ -285,6 +282,13 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     ])
   }
 
+  /** Wave 43: people tied to the event only through roles or invitations; read-only chips, a press opens the person page. */
+  function others(ev: TwEvent): Node[] {
+    const list = relatedOthers(h.state(), ev)
+    if (!list.length) return []
+    return [el('h3', {}, [S.eventsOthersRelated]), el('div', { class: 'chips', 'data-event-others': '' }, list.map((p) => el('button', { class: 'chip', type: 'button', 'data-other-person': p.id, onclick: () => h.curatorPerson(p.id) }, [p.name])))]
+  }
+
   /** Renaming the tag locks it against the host and copies the link now showing (host or peer) again at once with the new name. */
   function advanced(ev: TwEvent): HTMLElement {
     const name = el('input', { class: 'field', value: tagLabel(ev), 'aria-label': S.eventTagName, 'data-event-tag-name': '' })
@@ -303,6 +307,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       el('summary', {}, [S.eventAdvanced]),
       ...field(S.eventTagName, name),
       el('label', { class: 'meta' }, [hostNames, ' ', S.eventHostNamesTags]),
+      ...others(ev),
     ])
     box.open = advancedOpen
     box.addEventListener('toggle', () => { advancedOpen = box.open })
@@ -312,16 +317,19 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   function page(ev: TwEvent): Node[] {
     const people = attendees(h.state(), ev.id)
     const attended = el('button', {
-      class: 'chip' + (ev.attended ? ' on' : ''), role: 'switch', 'aria-checked': String(ev.attended), 'data-event-attended': '',
+      class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
     }, [S.eventsAttended])
     const title = h.header(ev.name, view.kind === 'page' && view.noBack ? {} : { back: () => show({ kind: 'list' }) })   // wave 40: from the calendar it is a regular event card, no Back button
     dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
+    const tagChip = el('button', { class: 'chip event-tag-chip', type: 'button', 'data-event-tag-chip': ev.name, 'aria-label': S.eventsTagChipAria(eventTagLabel(ev.name)), onclick: () => h.copyLink(eventTagSlug(ev.name), S.eventsTagCopied) }, [eventTagLabel(ev.name)])
+    contextPress(tagChip, () => show({ kind: 'form', id: ev.id }))
     return [title, el('div', { class: 'scroll events-page' }, [
+      tagChip,
       el('p', {}, [el('b', {}, [whenLabel(ev)])]),
       ev.core ? el('p', { 'data-event-core': '' }, [coreLabel(ev)]) : null,
       ev.where ? el('p', {}, [ev.where]) : null,
-      ev.organizer ? el('p', { class: 'meta' }, [S.eventsOrganizedBy(ev.organizer)]) : null,
+      rolesSection(h, ev),
       ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
       ev.conditions ? el('p', {}, [ev.conditions]) : null,
       ...(h.plan?.(ev) ?? []),
@@ -332,7 +340,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       linkPreview(),
       el('p', { class: 'meta' }, [S.eventLinkHint]),
       nameReveal(ev),
-      el('h3', {}, [S.eventsTagged(tagLabel(ev))]),
+      el('h3', {}, [S.eventsAssociated(tagLabel(ev))]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),

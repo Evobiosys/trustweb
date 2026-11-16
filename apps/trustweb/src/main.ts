@@ -300,6 +300,7 @@ import { obsidianLink } from './ext/obsidian/obsidian_card'
 import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
+import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import type { EventBy } from './event_link'
@@ -1700,7 +1701,7 @@ function screenQr(plain = false): void {
 
 function eventQr(ev: TwEvent, plain = false): void {
   // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy).
-  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)) }), plain)
+  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)) }), plain)
 }
 
 /** The tag's code carries the tag and the public usernames of the people who carry it (never those who asked to be asked first). */
@@ -5158,7 +5159,7 @@ const extHooks: ExtHooks = {
   atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
   openItem: (id) => { closeSheet(); itemSheet(id) },
   openCalendar: () => { closeSheet(); go(Screen.Events) },
-  eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+  eventLink: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
   sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
   me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
   sendInvite: async (personId, text) => {

@@ -68,8 +68,8 @@ export function setRsvp(d: EventsData, id: string, v: Rsvp): EventsData {
 export interface EventItem extends EventCard { rsvp: Rsvp | null }
 
 /** Upcoming soonest first, then past. My answer, else "going" for an event the app already marks as attended. */
-export function buildEventList(events: readonly TwEvent[] | undefined, d: EventsData, now: number): EventItem[] {
-  return buildEvents(events, now).map((c) => { const r = d.rsvp?.[c.id]; return { ...c, rsvp: r === 'none' ? null : r ?? (c.going ? 'going' : null) } })
+export function buildEventList(events: readonly TwEvent[] | undefined, d: EventsData, now: number, people: readonly { id: string; name: string }[] = []): EventItem[] {
+  return buildEvents(events, now, people).map((c) => { const r = d.rsvp?.[c.id]; return { ...c, rsvp: r === 'none' ? null : r ?? (c.going ? 'going' : null) } })
 }
 
 export const eventShareText = (c: Pick<EventCard, 'name' | 'from' | 'to' | 'where'>): string =>
