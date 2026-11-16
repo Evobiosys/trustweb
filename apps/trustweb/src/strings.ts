@@ -4740,6 +4740,8 @@ export const S = {
     shareNeedsCommunity: 'Pick the community under "Part of a community or group" first.',
     announceTitle: (name: string) => `New event: ${name}`,
     announceBody: (from: string, host: string) => [from, host && `from ${host}`].filter(Boolean).join(' · '),
+    alertEvents: 'Alert me about new events in my communities',
+    alertEventsHint: 'Off: a new event a community member shares is dropped silently, with no row and no badge.',
     calendar: 'Calendar',
     calendarEmpty: 'No events in this community on this day.',
     strike: 'Strike through switched-off options',

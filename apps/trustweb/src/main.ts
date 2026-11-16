@@ -3029,6 +3029,11 @@ function notificationsCard(s: AppState): HTMLElement {
       class: 'radio' + (s.missedPopupOff ? '' : ' on'), 'aria-pressed': String(!s.missedPopupOff), 'data-missed-setting': '',
       onclick: () => { if (s.missedPopupOff) delete s.missedPopupOff; else s.missedPopupOff = true; save(); settingsSheet() },
     }, [el('b', {}, [S.missedSetting]), el('small', {}, [S.missedSettingHint])]),
+    // Wave 44 steer-event-visibility-2: only "off" is stored; absent means on.
+    el('button', {
+      class: 'radio' + (s.eventAlerts === false ? '' : ' on'), role: 'switch', 'aria-checked': String(s.eventAlerts !== false), 'aria-pressed': String(s.eventAlerts !== false), 'data-event-alerts': '',
+      onclick: () => { if (s.eventAlerts === false) delete s.eventAlerts; else s.eventAlerts = false; save(); settingsSheet() },
+    }, [el('b', {}, [S.w44vis.alertEvents]), el('small', {}, [S.w44vis.alertEventsHint])]),
     s.notificationsOn ? el('button', { class: 'btn btn-ghost btn-sm', 'data-notif-test': '', onclick: () => void showNotification(S.appName, S.notifTestBody) }, [S.notifTestButton]) : null,
   ])
 }

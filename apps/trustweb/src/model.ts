@@ -1367,6 +1367,8 @@ export interface AppState {
   showRingNames?: boolean
   /** Wave 44 steer-event-visibility: Settings > Variations "Strike through switched-off options"; absent = off (switched-off options show dimmed). */
   strikeSwitchedOff?: boolean
+  /** Wave 44 steer-event-visibility-2: Settings > Notifications "Alert me about new events in my communities"; absent = on, false = announces dropped silently. */
+  eventAlerts?: false
   /**
    * Settings > Advanced (wave 3): ask only my direct contacts. On: every ask
    * carries `direct: true` and nobody passes it on. Absent or anything but

@@ -132,6 +132,24 @@ describe('share with the whole community: announce', () => {
     expect(await got.env.onEnvelope({ id: 'stranger' }, sender.sent[0].env)).not.toBe('filled')
     expect(got.state.events).toHaveLength(0)
   })
+  it('the receiver\'s "Alert me about new events" switch off drops the announce silently (no event, no row)', async () => {
+    const sender = harness([community()])
+    sender.env.announceDue()
+    const got = harness([])
+    got.state.people = [{ id: 'ben', name: 'Ben Example', peerId: 'pb' }]
+    const r = {}
+    expect(readSetting(r, 'events.alertCommunity')).toBe(true)
+    writeSetting(r, 'events.alertCommunity', false)
+    expect(r.eventAlerts).toBe(false)
+    got.state.eventAlerts = false
+    expect(await got.env.onEnvelope({ id: 'pb' }, sender.sent[0].env)).toBe('ignored')
+    expect(got.state.events).toHaveLength(0)
+    expect(got.state.notifInbox ?? []).toHaveLength(0)
+    writeSetting(r, 'events.alertCommunity', true)
+    expect('eventAlerts' in r).toBe(false)
+    delete got.state.eventAlerts
+    expect(await got.env.onEnvelope({ id: 'pb' }, sender.sent[0].env)).toBe('filled')
+  })
   it('the settings patch switches sharing on and off', () => {
     const e = ev()
     applyEventSettings(e, { shareCommunity: true })

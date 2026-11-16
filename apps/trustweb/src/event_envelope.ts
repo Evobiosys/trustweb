@@ -60,7 +60,7 @@ export function receiveAnnounce(s: Pick<AppState, 'events' | 'notifInbox'>, ev: 
 }
 
 export interface EnvelopeHost<P extends { id: string }> {
-  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox'>>
+  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts'>>
   /** Wave 44: the connected peers of the people who carry this community tag (the ones an announce goes to). */
   members?(tag: string): P[]
   save(): void
@@ -128,6 +128,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       if (!linked) return 'ignored'
       const who = host.state().people.find((p) => p.peerId === peer.id)
       if (who && env.show) { noteShow(who, linked.id, env.show); host.save() }   // wave 44: how they show at this event
+      if (env.announce && host.state().eventAlerts === false) return 'ignored'   // wave 44: the receiver turned the community alert off
       if (env.announce && who && receiveAnnounce(host.state() as Pick<AppState, 'events' | 'notifInbox'>, linked, who.name, host.now())) { host.save(); host.changed(); return 'filled' }
       const mine = held(linked.id)
       if (mine) {
