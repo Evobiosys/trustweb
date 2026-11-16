@@ -5,11 +5,12 @@
  * as data (text via htmlToText, picture and link addresses via safeRemoteUrl), never inserted as markup; no remote iframe, script or player is ever
  * built (video = title + thumbnail + link). Anything that fails, and every network without a public read (X, LinkedIn, Pixelfed, other pages),
  * becomes a link card that shows the domain.
- * A leaf on purpose (type imports only): apps/mcp loads it under plain node, where extension-less imports do not resolve, so the small read helpers
- * below mirror fediverse.ts (htmlToText, safeRemoteUrl, getJson) instead of importing them.
+ * apps/mcp loads it under plain node, where extension-less imports do not resolve: its one value import is the leaf remote_read.ts, by its `.ts`
+ * path (review-44: the read helpers htmlToText, safeRemoteUrl, getJson used to be copies of fediverse.ts here).
  */
 import type { Post, PostKind } from './feed'
-import type { FetchFn } from './fediverse'
+import { getJsonOrProblem, htmlToText, isRemoteProblem, REMOTE_TEXT_MAX as TEXT_MAX, safeRemoteUrl, stripRemoteUnsafe as stripUnsafe } from './remote_read.ts'
+import type { FetchFn } from './remote_read.ts'
 
 export type Network = 'mastodon' | 'pixelfed' | 'peertube' | 'bluesky' | 'vimeo' | 'x' | 'linkedin' | 'other'
 
@@ -39,46 +40,12 @@ export interface EmbedRecord {
 
 /** At most this many embeds are kept, newest first. */
 export const EMBED_MAX = 200
-const TEXT_MAX = 500
 const BSKY_API = 'https://public.api.bsky.app/xrpc'
 
-const HOST_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
-const RESERVED = ['localhost', 'local', 'internal', 'intranet', 'lan', 'home', 'corp', 'private', 'arpa', 'test', 'invalid', 'example', 'onion']
-const UNSAFE_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
-const FETCH_TIMEOUT_MS = 8_000
-const BODY_MAX = 1_000_000
-const stripUnsafe = (t: string): string => t.replace(UNSAFE_RE, '')
-
-/** A public https address: DNS name (no address literal, no reserved name), no port, no login; pictures never SVG. */
-function safeRemoteUrl(u: unknown, image = false): string | undefined {
-  if (typeof u !== 'string' || u.length > 2000) return undefined
-  let url: URL
-  try { url = new URL(u) } catch { return undefined }
-  const host = url.hostname
-  if (url.protocol !== 'https:' || url.port || url.username || url.password || !HOST_RE.test(host) || RESERVED.includes(host.split('.').pop() ?? '')) return undefined
-  if (image && /\.svgz?$/i.test(url.pathname)) return undefined
-  return url.toString()
-}
-
-/** Remote HTML -> plain text: scripts and styles gone, tags dropped, line breaks kept, entities decoded; never inserted as markup. */
-function htmlToText(html: string): string {
-  const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' }
-  const text = html.slice(0, 20_000).replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
-    .replace(/<(script|style|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '').replace(/<[^>]*>/g, '')
-    .replace(/&(#?[a-z0-9]+);/gi, (m, e: string) => entities[e.toLowerCase()] ?? (/^#\d{1,7}$/.test(e) ? String.fromCodePoint(Number(e.slice(1))) : m))
-  return stripUnsafe(text).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, TEXT_MAX)
-}
-
-/** One GET, no cookies, no referrer, no redirect, 8 s, 1 MB: the parsed JSON or null. */
-async function getJson(url: string, f: FetchFn): Promise<unknown> {
-  const ctl = new AbortController()
-  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const res = await f(url, { headers: { Accept: 'application/json' }, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: ctl.signal })
-    if (!res.ok || Number(res.headers.get('Content-Length') ?? 0) > BODY_MAX) return null
-    const text = await res.text()
-    return text.length > BODY_MAX ? null : JSON.parse(text)
-  } catch { return null } finally { clearTimeout(timer) }
+/** One GET as JSON, null on any problem (remote_read.ts: no cookies, no referrer, no redirect, 8 s, 1 MB). */
+const getJson = async (url: string, f: FetchFn): Promise<unknown> => {
+  const v = await getJsonOrProblem(url, f)
+  return isRemoteProblem(v) ? null : v
 }
 
 const rules: { network: Network; re: RegExp }[] = [
@@ -133,7 +100,7 @@ async function mastodon(link: PostLink, f: FetchFn, now: number): Promise<EmbedR
   const user = str(a.username, 100) || str(a.acct, 100).split('@')[0]
   if (!text || !user) return null
   const acct = str(a.acct, 200)
-  const imageUrl = safeRemoteUrl(media?.preview_url, true) ?? safeRemoteUrl(media?.url, true)
+  const imageUrl = safeRemoteUrl(media?.preview_url, false, true) ?? safeRemoteUrl(media?.url, false, true)
   return recordOf(link, now, {
     who: str(a.display_name, 100) || user, handle: '@' + (acct.includes('@') ? acct : `${acct || user}@${link.host}`), text, at: time(v.created_at, now),
     url: safeRemoteUrl(v.url) ?? link.url, ...(imageUrl ? { imageUrl } : {}),
@@ -157,7 +124,7 @@ async function bluesky(link: PostLink, f: FetchFn, now: number): Promise<EmbedRe
   if (!text || !handle) return null
   const embed = obj(post?.embed)
   const image = Array.isArray(embed?.images) ? obj(embed.images[0]) : obj(embed?.external)
-  const imageUrl = safeRemoteUrl(image?.thumb, true)
+  const imageUrl = safeRemoteUrl(image?.thumb, false, true)
   return recordOf(link, now, { who: str(author?.displayName, 100) || handle, handle: '@' + handle, text, at: time(rec?.createdAt, now), ...(imageUrl ? { imageUrl } : {}) })
 }
 
@@ -167,7 +134,7 @@ async function oembed(link: PostLink, f: FetchFn, now: number): Promise<EmbedRec
   const v = obj(await getJson(api + encodeURIComponent(link.url), f))
   const title = str(v?.title, 300)
   if (!title) return null
-  const imageUrl = safeRemoteUrl(v?.thumbnail_url, true)
+  const imageUrl = safeRemoteUrl(v?.thumbnail_url, false, true)
   return recordOf(link, now, { who: str(v?.author_name, 100) || link.host, text: title, at: time(v?.upload_date, now), ...(imageUrl ? { imageUrl } : {}) })
 }
 
