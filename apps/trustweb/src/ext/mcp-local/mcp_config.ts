@@ -54,6 +54,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'home_layout_get', write: false }, { name: 'home_layout_set', write: true }, { name: 'dashboard_open', write: true },
   /* wave44 steer-ask-placement-2 */
   { name: 'ai_provider_get', write: false }, { name: 'ai_provider_set', write: true },
+  /* wave44 steer-settings-sync */
+  { name: 'settings_keep_copy', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
