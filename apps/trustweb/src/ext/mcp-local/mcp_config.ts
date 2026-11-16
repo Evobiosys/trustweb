@@ -64,6 +64,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'feed_source_toggle', write: true }, { name: 'feed_algorithm_set', write: true }, { name: 'feed_no_public_read_set', write: true }, { name: 'feed_publish_target_set', write: true },
   /* wave44 event-editor */
   { name: 'event_drafts_list', write: false }, { name: 'event_draft_save', write: true }, { name: 'event_invite', write: true }, { name: 'event_details_set', write: true }, { name: 'calendar_add', write: true }, { name: 'calendar_tag_toggle', write: true },
+  /* wave44 handshake-crypto */
+  { name: 'handshake_status', write: false },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

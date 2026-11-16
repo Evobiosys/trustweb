@@ -3,12 +3,12 @@
  * (src/sw/sw.ts peekDrain) against the real RelayServer: after a wake it reads the waiting wires under the pair keys,
  * names the kinds, and acks NOTHING, so the page still gets every wire when it opens. Node's own WebSocket (node >= 22).
  */
+import { sealConnectAck } from '../../src/handshake_crypto.ts'
 import { RelayServer } from '../../../../packages/transport/src/relay_server.ts'
 import { InMemoryRelayQueueStore } from '../../../../packages/transport/src/relay_queue_store.ts'
 import { createIdentity, ecdhSharedSecret, serializeIdentity } from '../../../demo/src/did.ts'
 import { buildOuterWire, encryptEnvelope } from '../../../demo/src/relay.ts'
 import { deriveEcdhPairKey } from '../../../demo/src/crypto.ts'
-import { encodeForQr } from '../../../demo/src/wire.ts'
 import { ALL_KINDS_ON, kindOfWire, kindsOf, wantsKind, workerLines, WORKER_FALLBACK } from '../../src/notify_kinds.ts'
 import { peekDrain } from '../../src/sw/sw.ts'
 
@@ -58,7 +58,7 @@ describe('service worker peek', () => {
     const key = await deriveEcdhPairKey(ecdhSharedSecret(max, me.did))
     const chat = await encryptEnvelope({ v: 1, t: 'chat', from: { id: 'max00001', displayName: 'Max' }, text: 'hi', ts: Date.now() }, key)
     const ask = await encryptEnvelope({ v: 1, t: 'query', from: { id: 'max00001', displayName: 'Max' }, templateId: 'free', templateVersion: 1, qid: 'q1234567', issuedAt: Date.now(), freeText: 'spare bike?' }, key)
-    const ack = encodeForQr({ v: 1, t: 'connect-ack', from: { id: 'str00001', displayName: 'Nora' }, did: stranger.did })
+    const ack = await sealConnectAck({ v: 1, t: 'connect-ack', from: { id: 'str00001', displayName: 'Nora' }, did: stranger.did }, stranger.did, me.did) // wave 44: sealed; the worker opens it with the identity it holds
     expect(relay.submit(buildOuterWire(me.did, max.did, chat)).routed).toBe('accepted')
     expect(relay.submit(buildOuterWire(me.did, max.did, ask)).routed).toBe('accepted')
     expect(relay.submit(buildOuterWire(me.did, stranger.did, ack)).routed).toBe('accepted')

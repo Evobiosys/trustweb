@@ -19,6 +19,7 @@ import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
+import type { HandshakeLogEntry, HandshakeMode } from './handshake_status'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
@@ -660,6 +661,10 @@ export interface Peer {
   synced?: true
   /** Wave 43c: the set of my other devices this device last told this connection (device_alias.ts toldKey). This device only. */
   toldDevices?: string
+  /** Wave 44 (handshake_crypto.ts): the connect handshake with them was sealed (v2): 'qr' with the QR key, 'did' without a QR. Absent: before v2. */
+  handshake?: HandshakeMode
+  /** Wave 44: the QR secret of their link, kept so a re-sent connect-ack is sealed with it again. This device only. */
+  qk?: string
 }
 
 export interface Offer { id: string; title: string }
@@ -1299,6 +1304,10 @@ export interface AppState {
   connectCode?: ConnectRecord
   /** Connect nonces this phone accepted (connect_freshness.ts), pruned past the window: a link used once is refused the second time. */
   seenConnectNonces?: SeenNonce[]
+  /** Wave 44 (handshake_crypto.ts): nonces of the sealed connect-acks this phone opened (replay ledger, bounded). This device only. */
+  seenHandshakeNonces?: string[]
+  /** Wave 44: refused connect handshakes (tampered, replayed, an app before v2), newest first, bounded. This device only. */
+  handshakeLog?: HandshakeLogEntry[]
   /**
    * Wave 15 (sync_code.ts): further connect codes of this account that linked devices brought (a different code from another device whose names did
    * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.

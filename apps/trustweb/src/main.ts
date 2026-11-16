@@ -112,6 +112,7 @@ import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloNa
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
+import { HANDSHAKE_NOTICE_MS } from './handshake_crypto'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
@@ -795,6 +796,7 @@ const net = new Net({
   onPush: (outcome) => { pushState = outcome },
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
+  onHandshakeRefused: (r) => showNotice(S.handshake.noticeTitle, r === 'unsupported' ? S.handshake.unsupportedBody : S.handshake.noticeBody, [], HANDSHAKE_NOTICE_MS), // wave44 handshake-crypto
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
     queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken,
@@ -2675,7 +2677,7 @@ function offerPendingConnect(): void {
     name: link.from.displayName,
     ring: Ring.Intending,
     lead: S.connectAddLeadInvite,
-    onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }) },
+    onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }).catch(connectFailed) },
     onLater: () => { closeSheet(); declineInvite(link) },
   }).nodes)
 }
@@ -7603,7 +7605,7 @@ function settingsSheet(): void {
         el('p', { class: 'meta skins-store', 'data-skins-store': '', 'aria-disabled': 'true', title: S.setSkinsStoreHint }, [S.setSkinsStore, el('small', {}, [S.setSkinsStoreHint])]),
       ]),
     ], true),
-    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => linkableProfile(profileOf(s.twSettings), s.twSettings), toast: (m) => toast(m) })]),
+    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => linkableProfile(profileOf(s.twSettings), s.twSettings), toast: (m) => toast(m) }), el('p', { class: 'meta', 'data-handshake-line': '' }, [S.handshake.settingsLine])]),
     settingsSection('advanced-web', S.setAdvanced, [
     // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
     HAS_MAP_VIEW ? el('label', { class: 'radio', 'data-pin-view': 'map' }, [

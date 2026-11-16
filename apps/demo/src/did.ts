@@ -30,6 +30,8 @@
  * outside this repo.
  */
 import { ed25519, x25519 } from '@noble/curves/ed25519.js'
+import { hkdf } from '@noble/hashes/hkdf.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 import { base58btc } from 'multiformats/bases/base58'
 import { fromB64u, toB64u } from './crypto'
 
@@ -271,4 +273,22 @@ export function resolveDidPeer(did: string): ResolvedDid {
 export function ecdhSharedSecret(identity: Identity, theirDid: string): Uint8Array {
   const resolved = resolveDidPeer(theirDid)
   return x25519.getSharedSecret(identity.keyAgreement.secretKey, resolved.keyAgreementPublicKey)
+}
+
+/**
+ * Wave 44 handshake-crypto (apps/trustweb/src/handshake_crypto.ts): the raw X25519 and HKDF steps of the sealed connect handshake, kept
+ * here because this file owns the @noble dependency. A fresh ephemeral key pair, a raw shared secret, and a synchronous HKDF-SHA256 (the
+ * QR secret is derived while a connect link is built, which is synchronous).
+ */
+export function x25519Ephemeral(): KeyPair {
+  const secretKey = x25519.utils.randomSecretKey()
+  return { secretKey, publicKey: x25519.getPublicKey(secretKey) }
+}
+
+export function x25519Shared(secretKey: Uint8Array, publicKey: Uint8Array): Uint8Array {
+  return x25519.getSharedSecret(secretKey, publicKey)
+}
+
+export function hkdfSha256(ikm: Uint8Array, salt: Uint8Array, info: string, length: number): Uint8Array {
+  return hkdf(sha256, ikm, salt, utf8ToBytes(info), length)
 }

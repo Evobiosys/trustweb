@@ -110,6 +110,8 @@ import type { ConnectAckEnvelope, Identity } from './types'
 const PARAM_CONNECT = 'connect'
 const PARAM_ID = 'id'
 const PARAM_NAME = 'name'
+/** Wave 44 handshake-crypto (TrustWeb): the QR secret the scanner seals its connect-ack with (apps/trustweb/src/handshake_crypto.ts). */
+export const PARAM_QR_KEY = 'k'
 
 /**
  * Build the one-scan connect URL a phone's native camera app can open:
@@ -132,19 +134,22 @@ const PARAM_NAME = 'name'
  * "we cannot derive a key" -- which looks identical to an actual decline
  * (I3) and would be a very confusing way to fail.
  */
-export function buildConnectLinkUrl(origin: string, did: string, from: Identity): string {
+export function buildConnectLinkUrl(origin: string, did: string, from: Identity, qrKey?: string): string {
   const url = new URL(origin)
   url.search = ''
   url.hash = ''
   url.searchParams.set(PARAM_CONNECT, did)
   url.searchParams.set(PARAM_ID, from.id)
   url.searchParams.set(PARAM_NAME, from.displayName)
+  if (qrKey) url.searchParams.set(PARAM_QR_KEY, qrKey)
   return url.toString()
 }
 
 export interface ConnectLinkParams {
   did: string
   from: Identity
+  /** Wave 44 (TrustWeb handshake v2, read by apps/trustweb add_by_code.ts connectLinkOf): the link's QR secret; null = a link of an app before v2 (no k=); absent = not from a link (a DID add). */
+  qk?: string | null
 }
 
 /**

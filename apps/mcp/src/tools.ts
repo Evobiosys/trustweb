@@ -12,6 +12,7 @@ import { bubbleTools } from './bubble_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
 import { homeTools } from './home_tools.ts'
 import { feedSourcesTools } from './feed_sources_tools.ts' // wave44 feed-sources
+import { handshakeTools } from './handshake_tools.ts'
 import { importTools } from './import_tools.ts'
 import { parityTools } from './parity_tools.ts'
 import { previewTools } from './preview_tools.ts'
@@ -37,6 +38,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave44 steer-ask-placement-2 */ ...aiChoiceTools({ ...o, write }),
     /* wave44 feed-sources */ ...feedSourcesTools({ ...o, write }),
     /* wave44 steer-bubble-connect */ ...bubbleTools({ ...o, write }),
+    /* wave44 handshake-crypto */ ...handshakeTools(o),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

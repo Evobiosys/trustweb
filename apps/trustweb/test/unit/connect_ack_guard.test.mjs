@@ -9,7 +9,7 @@ import { InMemoryRelayQueueStore } from '../../../../packages/transport/src/rela
 import { createIdentity } from '../../../demo/src/did.ts'
 import { createRelayChannel } from '../../../demo/src/relay.ts'
 import { randomId } from '../../../demo/src/crypto.ts'
-import { encodeForQr } from '../../../demo/src/wire.ts'
+import { sealConnectAck } from '../../src/handshake_crypto.ts'
 import { Net } from '../../src/net.ts'
 import { Ring } from '../../src/model.ts'
 
@@ -71,7 +71,8 @@ async function forger() {
   return { identity, channel }
 }
 
-const ack = (from, did) => encodeForQr({ v: 1, t: 'connect-ack', from, did })
+/** Wave 44: acks are sealed (handshake_crypto.ts); the forger seals as its own DID (did mode), the guard below still applies after opening. */
+const ack = (from, did, sender, to) => sealConnectAck({ v: 1, t: 'connect-ack', from, did }, sender, to)
 
 describe('a forged connect-ack cannot take a held connection over', () => {
   let A, B, M
@@ -85,7 +86,7 @@ describe('a forged connect-ack cannot take a held connection over', () => {
 
   it('an ack naming Ben\'s id under another DID adds a separate connection with an id of its own; Ben keeps his DID', async () => {
     const ben = A.state.peers.find((x) => x.did === B.did)
-    await M.channel.sendRaw(A.did, ack({ id: ben.id, displayName: 'Mallory' }, M.identity.did))
+    await M.channel.sendRaw(A.did, await ack({ id: ben.id, displayName: 'Mallory' }, M.identity.did, M.identity.did, A.did))
     await until(() => A.state.peers.some((x) => x.did === M.identity.did))
     const mallory = A.state.peers.find((x) => x.did === M.identity.did)
     expect(mallory.id).not.toBe(ben.id)
@@ -95,7 +96,7 @@ describe('a forged connect-ack cannot take a held connection over', () => {
 
   it('an ack claiming Ben\'s DID with another name and id leaves Ben\'s record as it is', async () => {
     const before = { ...A.state.peers.find((x) => x.did === B.did) }
-    await M.channel.sendRaw(A.did, ack({ id: 'zzz', displayName: 'Mallory' }, B.did))
+    await M.channel.sendRaw(A.did, await ack({ id: 'zzz', displayName: 'Mallory' }, B.did, M.identity.did, A.did))
     // the wire goes through the unsealed path: give the drain a moment, then look
     await sleep(300)
     const ben = A.state.peers.find((x) => x.did === B.did)
@@ -106,7 +107,7 @@ describe('a forged connect-ack cannot take a held connection over', () => {
 
   it('an ack whose did disagrees with the outer from is ignored', async () => {
     const count = A.state.peers.length
-    await M.channel.sendRaw(A.did, ack({ id: randomId(12), displayName: 'Nobody' }, 'did:peer:2.' + randomId(40)))
+    await M.channel.sendRaw(A.did, await ack({ id: randomId(12), displayName: 'Nobody' }, 'did:peer:2.' + randomId(40), M.identity.did, A.did))
     await sleep(300)
     expect(A.state.peers.length).toBe(count)
   })
