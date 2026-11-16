@@ -17,7 +17,7 @@ import { SchemaNewerError, assertReadable } from './schema_version'
 import { parseRecord } from './store'
 import { S } from './strings'
 
-const infoKey = (persona: string, storeCtx?: string): string => `trustweb.backup.${persona}${storeCtx ? '.' + storeCtx : ''}`
+export const infoKey = (persona: string, storeCtx?: string): string => `trustweb.backup.${persona}${storeCtx ? '.' + storeCtx : ''}`
 
 /** The recovery key text this device backs up with, or null (snapshot_view.ts uses the same key for its local snapshots). */
 export function backupKeyText(persona: string, storeCtx?: string): string | null {

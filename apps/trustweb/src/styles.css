@@ -2068,3 +2068,5 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .dash-dot{display:inline-block; width:9px; height:9px; margin-right:6px; border-radius:50%; background:var(--trust,#2e7d32)}
 .dash-dot.flash{animation:dash-flash 1.2s ease-out 1}
 @keyframes dash-flash{0%{box-shadow:0 0 0 0 var(--trust,#2e7d32)} 100%{box-shadow:0 0 0 12px transparent}}
+/* wave44 steer-settings-sync */
+.sheet summary[hidden], .sheet h4[hidden], .sheet .eyebrow[hidden] { display: none !important; }
