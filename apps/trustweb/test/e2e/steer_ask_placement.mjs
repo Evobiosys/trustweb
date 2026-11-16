@@ -23,7 +23,7 @@ try {
       for (const [id, name] of SCREENS) {
         await page.evaluate((i) => document.querySelector(`[data-go="${i}"]`)?.click(), id); await page.waitForTimeout(500)
         const tag = `${w}: ${name}${withAsk ? ' (Ask in bar)' : ''}`
-        check(`${tag}: no Ask/AI control in the header`, (await page.locator('.hdr [data-ai-button], .hdr [data-open-query], .hdr .ai-btn').count()) === 0)
+        check(`${tag}: no Ask control in the header (the sparkle is the AI button and stays)`, (await page.locator('.hdr [data-open-query]').count()) === 0 && (await page.locator('.hdr [data-ai-button]').count()) === 1)
         const pill = page.locator('.query-fab[data-open-query]:visible')
         if (withAsk) {
           check(`${tag}: overlay pill hidden`, (await pill.count()) === 0)

@@ -319,7 +319,6 @@ import { eventDropItem } from './event_drop'
 import { eventPlanSection } from './event_plan_view'
 import { defineEventActions } from './event_actions'
 import { defineSyncActions } from './sync_actions' // wave43c sync-devices
-import { templatePrompt } from './event_plan'
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
 import type { LinkedEvent } from './event_link'
@@ -1783,6 +1782,16 @@ function inboxButton(): HTMLElement {
   return b
 }
 
+/** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). Restored by steer-ask-placement-2 (Jakob: it never should have gone). */
+function mountAiButton(): void {
+  if (!isEnabled('ai-button')) return   // wave 39 review: the Extensions switch "AI button" (and the profiles) decide
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right || right.querySelector('[data-ai-button]')) return
+  const ai = iconButton('sparkle', S.aiButton, openAiButton, 'ai-btn')
+  ai.setAttribute('data-ai-button', '')
+  right.append(ai)
+}
+
 /** Wave 28: what the QR button shows for what is on screen: an open event, the tag the web is filtered to, else the connect code (Meet). */
 function screenQr(plain = false): void {
   const ev = screen === Screen.Events ? eventsView.current() : undefined
@@ -1904,7 +1913,7 @@ function mountHeaderControls(): void {
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   const nodes = (ids: readonly string[]): Node[] => ids.flatMap((c) => parts[c] ?? []).filter((n): n is Node => n !== null)
   // Wave 44: the right cluster is the same everywhere (QR, settings; no Ask/AI control, steer-ask-placement); the screen's own tools get their row.
-  right.replaceChildren(...nodes(headerRight()))
+  right.replaceChildren(...nodes(headerRight(false)))
   const tools = nodes(headerTools(screen))
   if (tools.length) host.querySelector('.hdr')?.append(el('div', { class: 'hdr-tools' }, tools))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
@@ -2081,6 +2090,7 @@ function render(): void {
   mountHeaderControls()
   mountSettingsGear()
   mountAskButton()
+  mountAiButton()
   modeShell.mount(host)
   modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
@@ -5331,10 +5341,9 @@ twBus.on('new-event', (d) => {
   if (!tag) return
   eventCommunity = tag
   eventHosted = typeof hosted === 'boolean' ? hosted : undefined
-  if (!isEnabled('assistant') || !chainOf(st().advanced).length) { toast(S.w42ev.assistantNeeded); sparkleFallback(); return }   // review wave 42: the same test as the sparkle (any provider of the chain)
-  const send = (): void => twBus.emit('assistant-prefill', templatePrompt(loadColourTags().find((x) => x.id === tag)?.label ?? tag, eventHosted))
-  if (twRegistry.isActive('assistant')) { send(); return }
-  void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) send(); else sparkleFallback() })
+  // Wave 44 steer-ask-placement: the event editor opens directly (the community preselected); the assistant stays optional, behind the sparkle.
+  eventsView.openForm(undefined, tag)
+  if (screen === Screen.Events) render(); else go(Screen.Events)
 })
 twBus.on('open-chat', (id) => { if (typeof id === 'string') chatSheet(id) })   // wave 40: the Community view lists the regular chats
 function twCtx(): TwCtx {

@@ -1431,7 +1431,7 @@ export interface AppState {
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
   features?: { events?: false; inventory?: false }
   /** Settings > AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
-  advanced?: { ai?: AiEndpoint; /** Wave 42: the assistant's provider chain settings (ext/assistant/providers.ts). */ assistant?: AssistantCfg }
+  advanced?: { ai?: AiEndpoint; /** Wave 44: the other endpoint of "Which AI answers?" while this one is active (ai_choice.ts). */ aiAlt?: AiEndpoint; /** Wave 42: the assistant's provider chain settings (ext/assistant/providers.ts). */ assistant?: AssistantCfg }
   /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
   agent?: AgentLink
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */

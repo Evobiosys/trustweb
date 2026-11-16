@@ -4662,4 +4662,12 @@ export const S = {
     tanaPullCancel: 'Cancel',
     tanaPullSkipped: (n: number) => `${n} could not be read and were left as they are.`,
   },
+  /* wave44 steer-ask-placement-2: Settings > Your AI, "Which AI answers?" */
+  w44ai: {
+    chooseTitle: 'Which AI answers?',
+    claude: 'Claude (TrustInTheWeb subscription)',
+    own: 'My own computer (pc24)',
+    needSub: 'Sign up for a plan below first; then Claude can answer.',
+    both: 'Both stay set up; one tap switches.',
+  },
 } as const
