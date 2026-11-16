@@ -2005,3 +2005,17 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .social-find-inputs .field{flex:1 1 120px; min-width:0}
 .social-hits{display:flex; flex-direction:column; gap:4px}
 .find-hit .who{min-width:0; overflow-wrap:anywhere}
+/* wave43c shell-fix-2 (43-D4): P06 at 360x780 and 1280x900, the older overlaps; the e2e sweeps no longer exclude them. */
+/* The raised centre tab rises 28 px above the bar: the page ends above it, so nothing scrolls under the circle. */
+.phone:has(.tabs .tab-primary) .screen:not(.start){bottom:calc(86px + 28px + env(safe-area-inset-bottom,0px))}
+/* The ⋮ sits inside the bar, after the last tab, not on its top edge. */
+.bar-more{position:static; flex:0 0 26px; align-self:center; margin:0 0 0 2px}
+/* The "i" badge of a header button sits above it, clear of the next button. */
+.hdr .hint-i{top:-23px}
+/* Desktop: the "Show demo content" chip sits inside the bar at its left end; the tabs make room. */
+@media (min-width:961px){
+  .demo-toggle:not(.desk-toggle){bottom:21px; z-index:40}
+  body:has(.demo-toggle:not(.desk-toggle):not([hidden])) .tabs{padding-left:220px}
+}
+/* The ⋮ sheet clears the raised centre tab too (86 px bar + 28 px raise + a gap). */
+.sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}

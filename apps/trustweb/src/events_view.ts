@@ -408,6 +408,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
           onclick: () => { applyEventSettings(ev, { invitePolicy: p }); h.save(); h.redraw() },
         }, [T.invitePolicyOpt[p]]))),
         el('p', { class: 'meta' }, [T.invitePolicyHint]),
+        el('p', { class: 'meta', 'data-event-host-only-hint': '' }, [S.shellFix2.hostOnlyHint]),
       ]) : null,
       ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [
         ...field(S.w43answers.community, communityPick(ev.communityId, (id) => { applyEventSettings(ev, { communityId: id }); h.save() })), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
@@ -424,6 +425,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...field(S.w43answers.myNickname, myNicknameInput(ev)), el('p', { class: 'meta' }, [S.w43answers.myNicknameHint]),
       el('label', { class: 'meta' }, [T.offers]),
       el('div', { class: 'chips', 'data-event-offers': '' }, offerRows.map(([k, label]) => toggle(offers[k], label, `data-event-offer-${k}`, () => { applyEventSettings(ev, { offers: { [k]: !offers[k] } }); h.save(); h.redraw() }))),
+      el('p', { class: 'meta', 'data-event-feed-hint': '' }, [S.shellFix2.feedPressHint]),
     ])
     box.open = advancedOpen
     box.addEventListener('toggle', () => { advancedOpen = box.open })

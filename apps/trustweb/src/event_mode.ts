@@ -15,3 +15,8 @@ export function rememberEventMode(link: { linkMode?: 'event' } | null): void {
   if (link?.linkMode !== 'event') return
   try { sessionStorage.setItem(KEY, 'event') } catch { /* the variant then lasts until the next load only */ }
 }
+
+/** Wave 43c shell-fix-2 (43b-D8): "Open the full app" in the ⋮ sheet (and a long press on the app title) ends the variant for this session. */
+export function leaveEventMode(): void {
+  try { sessionStorage.removeItem(KEY) } catch { /* nothing stored, or storage blocked: the variant ended with the page then */ }
+}

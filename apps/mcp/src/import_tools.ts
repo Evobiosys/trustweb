@@ -9,6 +9,9 @@
 import { renameSync, readFileSync, writeFileSync } from 'node:fs'
 import { DEFAULT_IMPORT_NOTE, IMPORT_SOURCES, importTagId } from '../../trustweb/src/import_registry.ts'
 import { fingerprint } from '../../trustweb/src/safe_text.ts'
+import { applyPull, planPull, readPersons } from '../../trustweb/src/tana_pull.ts'
+import { connect } from '../../crm/scripts/tana_pull_persons.mjs'
+import { PERSON_FIELDS } from '../../crm/src/person_fields.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
@@ -129,6 +132,21 @@ export function importTools(o: ImportToolsOptions): Tool[] {
         const out = stage(r, 'obsidian-ai', chosen.map((s) => ({ name: s.name, file: s.path, note: ['Found by AI in your notes; check it.', s.why ? `- ${s.why}` : '', `Sources: ${s.path}`].filter(Boolean).join('\n') })), true)
         r.extData = { ...r.extData, obsidian: { ...ob, suggestions: list.filter((s) => !chosen.includes(s)), suggestedAt: now().getTime() } }
         save(o.file, r)
+        return out
+      },
+    },
+    {
+      name: 'import_tana_pull', description: 'Pull people from Tana through its local API (127.0.0.1:8262, read-only on Tana). Default is a preview: how many people would be added or updated, nothing written. apply:true adds the new people and fills Tana fields and lines the record lacks (names, rings and your own lines stay). Token: argument or env TW_CRM_TANA_TOKEN.',
+      inputSchema: schema({ apply: { type: 'boolean', description: 'write the changes (default false: preview only)' }, token: { type: 'string', description: 'Tana API token (default: env TW_CRM_TANA_TOKEN)' } }),
+      run: async (a) => {
+        const token = str(a.token, 400) || process.env.TW_CRM_TANA_TOKEN || ''
+        if (!token) throw new Error('no Tana token: pass token or set TW_CRM_TANA_TOKEN')
+        const { call } = await connect(token)
+        const read = await readPersons(call, PERSON_FIELDS as never, { today: now().toISOString().slice(0, 10) })
+        const r = load(o.file)
+        const plan = planPull(r.people as never, read.entities)
+        const out = { listed: read.listed, unreadable: read.unreadable.length, add: plan.add.length, update: plan.update.length, same: plan.same, applied: false }
+        if (a.apply === true && (plan.add.length || plan.update.length)) { applyPull(r.people as never, plan); save(o.file, r); out.applied = true }
         return out
       },
     },

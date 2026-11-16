@@ -41,6 +41,7 @@ import type { IntroLink } from './intro_link'
 import { introAskText } from './intro_ask'
 import { cardInvitationsRow, invitationSheet, invitationsSection } from './invitations_view'
 import type { InvitationIo } from './invitations_view'
+import { sourceNotifies } from './event_notify'
 import { addSupportIn, supportCards, supportForm, supportInbox, supportLine, supportSheet } from './support_ask_view'
 import { applyCancel, categoryAsk } from './support_inbox'
 import { planFlush } from './support_flush'
@@ -311,7 +312,7 @@ import { afterConnect, eventLinkView } from './event_join'
 import { createEventEnvelopes } from './event_envelope'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
-import { eventModeOn, rememberEventMode } from './event_mode'
+import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
@@ -1338,6 +1339,15 @@ function variationChips(after: () => void): HTMLElement {
 }
 
 /** Wave 35: ⋮ lists the views that are not in the bar as direct buttons (wave 40: in row order, a tap moves one into the row; Variations below, compact). */
+/** Wave 43c shell-fix-2 (43b-D8): ends the event-only variant for this session (the ⋮ sheet, or a long press on the app title in it). */
+function openFullApp(): void {
+  leaveEventMode()
+  closeSheet()
+  renderTabs()
+  render()
+  toast(S.shellFix2.openFullAppDone)
+}
+
 function barMoreTap(): void {
   const s = st()
   const f = barFlags()
@@ -1349,6 +1359,7 @@ function barMoreTap(): void {
     el('h4', { class: 'eyebrow' }, alphaHeading(S.var.title)),
     variationChips(barMoreTap),
     el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
+    eventModeOn() ? el('div', { class: 'full-app-row' }, [el('button', { class: 'btn btn-ghost', 'data-open-full-app': '', onclick: openFullApp }, [S.shellFix2.openFullApp]), el('p', { class: 'meta' }, [S.shellFix2.openFullAppHint])]) : null,
   ])
   sheet.dataset.kind = 'bar-more' // wave 43: styles.css lifts the sheet above the bottom bar
 }
@@ -1712,6 +1723,13 @@ function brandMark(cls = 'brand-mark'): HTMLElement {
   return m
 }
 
+/** The header's mark; in the event-only variant a long press (or right click) on it opens the full app (P1). */
+function appTitleMark(): HTMLElement {
+  const m = brandMark()
+  if (eventModeOn()) contextPress(m, openFullApp)
+  return m
+}
+
 /**
  * Every header: title left; right, the screen's own button and then the
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
@@ -1725,7 +1743,7 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
-      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : brandMark(),
+      opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : appTitleMark(),
       el('h2', {}, [title]),
       opts.glyph ?? null,
     ]),
@@ -1749,6 +1767,16 @@ function mountAskButton(): void {
   const right = host.querySelector('.hdr .hdr-right')
   if (!right || right.querySelector('[data-open-query]')) return
   right.insertBefore(queryFab(), right.querySelector('[data-chat-dots]'))
+}
+
+/** Wave 43c shell-fix-2 (43b-D6): "Review requests" on Resources as a plain header button beside Ask your web (it floated bottom left and covered rows). */
+function mountRequestsButton(): void {
+  if (screen !== Screen.Inventory) return
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right || right.querySelector('[data-open-requests]')) return
+  const b = iconButton('inbox', S.reqAria, requestsSheet, 'requests-btn')
+  b.setAttribute('data-open-requests', '1')
+  right.insertBefore(b, right.querySelector('[data-open-query]'))
 }
 
 /** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
@@ -2054,6 +2082,7 @@ function render(): void {
   mountHeaderControls()
   mountSettingsGear()
   mountAskButton()
+  mountRequestsButton()
   mountAiButton()
   modeShell.mount(host)
   modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
@@ -4671,7 +4700,7 @@ function onSupportText(peer: Peer, text: string): void {
     if (!person || ask.until <= Date.now()) return
     s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id }, Date.now())
     save()
-    toast(S.supportGotOne(person.name))
+    if (sourceNotifies(s, { kind: 'support', peerId: peer.id })) toast(S.supportGotOne(person.name))
     if (screen === Screen.Web) render()
     return
   }
@@ -7831,10 +7860,7 @@ function screenInventory(): Node[] {
   const byQuery = invQuery.trim() ? s.inventory.filter((i) => i.text.toLowerCase().includes(invQuery.trim().toLowerCase())) : s.inventory
   const shown = invOnly ? byQuery.filter((i) => invOnly!.ids.has(i.id)) : byQuery
   const onlyChip = invOnly ? tagFilterChip(invOnly.label, () => { invOnly = null; render() }) : null
-  const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
-    el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
-  ])
-  // Querying is one tap from Inventory too (wave 2, P9): bottom right as on Web and Chat (wave 27); "Review requests" sits bottom left.
+  // Querying is one tap from Inventory too (wave 2, P9); wave 43c shell-fix-2: "Review requests" is a header button next to it (mountRequestsButton), no floating element.
   const invRow = (item: InventoryItem): HTMLElement => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
     el('div', { class: 'inv-main' }, [
       el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
@@ -7885,7 +7911,6 @@ function screenInventory(): Node[] {
   return [
     header(S.invTitle, { glyph: el('span', { class: 'hdr-pair' }, [zoomGlyph('inventory'), info]) }),
     list,
-    requests,
   ]
 }
 

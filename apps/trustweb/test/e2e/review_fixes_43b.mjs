@@ -51,9 +51,8 @@ const overlaps = (page) => page.evaluate(() => {
     return box.r - box.l > 1 && box.b - box.t > 1 ? box : null
   }
   const shown = (n) => n.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && n.getClientRects().length > 0
-  // Older than wave 43b, listed in review-fixes-43 (D4) / this report (D-lines), not failed here: hint "i" badge, the bar's ⋮ circle, the raised centre tab,
-  // the stock demo chip, the floating "Review requests" button on Resources (wave 27).
-  const known = (n) => n.matches('.hint-i, .bar-more, .demo-toggle, .tab.tab-primary, .requests-fab')
+  // Wave 43c shell-fix-2: no exclusions any more (hint "i", bar ⋮, raised centre tab, demo chip and the requests button were fixed or moved); `known` stays as the hook.
+  const known = () => false
   // The community drawer and its veil are a modal layer too (inside the community shadow root).
   const layer = (x) => x?.closest('.page-layer, .sheet.on, [role=dialog], .scrim, .veil, .drawer-open .nav') ?? null
   const deepTop = (x, y) => { let t = document.elementFromPoint(x, y); while (t?.shadowRoot) { const inner = t.shadowRoot.elementFromPoint(x, y); if (!inner || inner === t) break; t = inner } return t }

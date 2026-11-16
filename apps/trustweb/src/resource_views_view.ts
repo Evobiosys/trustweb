@@ -66,10 +66,9 @@ export function resourceViews(c: ResourceViewsCtx): Node[] {
       el('b', {}, [i.text]),
       el('div', { class: 'cal-chips' }, [el('span', { class: 'cal-chip' }, [S.resViews.protectedChip]), el('span', { class: 'cal-chip' }, [S.resViews.kind[kindOf(i)]])]),
       el('div', { class: 'rv-actions' }, [
-        // B20 review 43b: "start the recording immediately" = play it, link unseen; Record (a memo about it) stays as built, see D-line.
+        // B20 review 43b: "start the recording immediately" = play it, link unseen. Wave 43c shell-fix-2 (43b-D5): no Record button here.
         url ? el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-play': i.id, onclick: () => c.play(url) }, [S.resViews.play]) : null,
         i.link ? el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-link-toggle': i.id, 'aria-expanded': String(open), onclick: () => { revealed = revealLinks(revealed, i.id); c.render() } }, [open ? S.resViews.hideLink : S.resViews.showLink]) : null,
-        el('button', { class: 'btn btn-ghost btn-sm', 'data-rv-record': i.id, 'aria-label': S.resViews.record, onclick: () => c.record(i) }, [S.resViews.record]),
       ]),
       i.link && open ? el('div', { class: 'rv-link', 'data-rv-link': i.id }, [i.link]) : null,
     ]))

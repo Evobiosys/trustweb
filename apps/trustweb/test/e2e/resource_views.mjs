@@ -64,7 +64,7 @@ try {
     check(`${name}: press reveals that link only`, (await page.locator('[data-rv-link]').count()) === 1 && (await page.locator('[data-rv-link="i3"]').count()) === 1)
     await page.locator('[data-rv-link-toggle="i4"]').click(); await page.waitForTimeout(200)
     check(`${name}: one at a time: the second press hides the first`, (await page.locator('[data-rv-link]').count()) === 1 && (await page.locator('[data-rv-link="i4"]').count()) === 1)
-    check(`${name}: protected row can start a recording`, (await page.locator('[data-rv-record="i3"]').count()) === 1)
+    check(`${name}: protected row has no Record button (43b-D5)`, (await page.locator('[data-rv-record="i3"]').count()) === 0)
     await page.screenshot({ path: `${SHOTS}/resource-views-${name}-protected.png` })
     // recommender chip
     const sug = page.locator('[data-rv-suggest="i1"]')
