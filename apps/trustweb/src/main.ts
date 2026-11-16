@@ -354,6 +354,7 @@ import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { createWebView, RINGS_SIZE } from './web_view'
+import { createBubbleConnect } from './bubble_connect_view'
 import { expanseList } from './expanse'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
@@ -2526,7 +2527,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); afterConnectOpen(); return }
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
-  const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
+  const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo || link.introduced ? Ring.Friend : Ring.Acquaintance) // wave 44: an introduced code lands in Friends & acquainted community members
   const peer = await net.completeConnect(link, ring, reachOut)
   void eventEnv.afterConnect(peer)   // wave 43c: the scanned event's place, conditions and themes come from the shower's device
   const s = st()
@@ -2537,7 +2538,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   } else if (picked) {
     if (picked.name) person.name = picked.name
     person.ring = ring
-  }
+  } else if (link.introduced && [Ring.Acquaintance, Ring.Intending, Ring.Unsorted].includes(person.ring)) person.ring = ring // the other side's click made them first
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   if (treeLink?.family) applyFamily(person)
   if (personShare?.contact) mergeContact(person, personShare.contact, Date.now())
@@ -4500,6 +4501,7 @@ function messageAbout(peerId: string, qid: string, text: string, at: number): vo
 /** Relay back up: send everything that waited. */
 async function flushAllChats(): Promise<void> {
   if (!state) return
+  bubble.drain() // wave 44: introductions an MCP client queued
   for (const id of peersWithPending(st().chats ?? NO_CHATS)) await flushPending(chatIo(), id)
   // An open chat shows "Waiting" until it is redrawn from the book the flush just updated.
   openChat?.refresh()
@@ -5250,9 +5252,11 @@ const curator = createCurator({
   closeDesk: closeSheet,
   showPhoneVersion,
 })
+/** Wave 44 steer-bubble-connect: a short hold of one bubble on another introduces them (bubble_connect.ts). */
+const bubble = createBubbleConnect({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), appUrl: APP_URL, send: (peerId, text) => submitText(chatIo(), peerId, text) })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
-  curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
+  curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), introduce: solo ? null : bubble.introduce, dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
 /** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
 const eventEnv = createEventEnvelopes<Peer>({

@@ -7,6 +7,7 @@
 import { announce } from './events.ts'
 import { assistantTools } from './assistant_tools.ts'
 import { billingTools } from './billing_tools.ts'
+import { bubbleTools } from './bubble_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
 import { importTools } from './import_tools.ts'
 import { parityTools } from './parity_tools.ts'
@@ -30,6 +31,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     ...recordTools({ ...o, write }), ...assistantTools({ ...o, write }), ...parityTools({ ...o, write }), ...connectExtrasTools({ ...o, write }), ...importTools({ ...o, write }),
     ...billingTools({ file: o.file, write, apiBase: o.apiBase || 'https://app.trustweb.one' }),
     /* wave43c sync-devices */ ...syncTools({ ...o, write }),
+    /* wave44 steer-bubble-connect */ ...bubbleTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

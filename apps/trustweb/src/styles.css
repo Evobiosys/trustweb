@@ -2034,3 +2034,8 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 @media (prefers-reduced-motion:reduce){.tap-event-hint{animation:none}}
 .rings-wrap.card-open .tap-event-hint{display:none}
 .person-menu input{font:inherit; padding:6px 8px; border:1px solid var(--line-strong); border-radius:8px; background:var(--card); color:var(--ink); min-width:150px}
+/* wave44 steer-bubble-connect: the ring that fills while one bubble is held on another (full = merge); drawn as a stroke, so greyscale reads it too */
+.hold-ring{position:absolute; inset:-6px; width:calc(100% + 12px); height:calc(100% + 12px); pointer-events:none; transform:rotate(-90deg); z-index:7}
+.hold-ring circle{fill:none; stroke:var(--electric,#12a8e3); stroke-width:3; stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:100; animation:hold-ring-fill var(--hold-ms,1500ms) linear forwards}
+@keyframes hold-ring-fill{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.hold-ring circle{animation-duration:.01ms}}

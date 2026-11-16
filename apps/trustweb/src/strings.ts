@@ -4666,4 +4666,19 @@ export const S = {
   beyondVia: (name: string) => `via ${name}`,
   personMenu: { tag: 'Tag…', hide: 'Hide', open: 'Open', aria: (name: string) => `${name}: quick menu`, tagAsk: 'Tag name', hidden: (name: string) => `${name} is hidden.`, tagged: (name: string, tag: string) => `${name} tagged ${tag}.` },
   tapEventHint: 'Tap the event',
+  /* wave44 steer-bubble-connect */
+  introduceTitle: (a: string, b: string) => `Introduce ${a} and ${b}?`,
+  introduceBody: 'Each gets the other\'s code. They land with each other as friends and acquainted community members once they accept.',
+  introduceYes: 'Introduce',
+  introduceNo: 'Cancel',
+  introduceDone: (a: string, b: string) => `${a} and ${b} each got the other's code.`,
+  introduceLog: (a: string, b: string) => `Introduced ${a} and ${b}.`,
+  introduceBlock: {
+    same: 'Pick two different people.',
+    'not-connected': 'Both need to be connected on TrustWeb to be introduced.',
+    blocked: 'A blocked person cannot be introduced.',
+    'ask-first': 'This person wants to be asked first.',
+    unknown: 'One of them is not in your web.',
+    'too-long': 'The code does not fit one message.',
+  } as Record<string, string>,
 } as const
