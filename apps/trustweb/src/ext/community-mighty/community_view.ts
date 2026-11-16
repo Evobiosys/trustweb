@@ -12,6 +12,7 @@ import { addGroupPost } from '../../feed_sources'
 import type { AppState } from '../../model'
 import { hasColourTag, loadColourTags, saveColourTags } from '../../colour_tags'
 import { contextPress } from '../../context_press'
+import { strikeOff } from '../../bw_mode'
 import { ICONS } from '../../icons'
 import type { TwCtx } from '../tw_registry'
 import {
@@ -19,11 +20,12 @@ import {
   joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
   adoptMetaTags, canEditSettings, createCommunity, leftNav, listCommunities, metaOf, setKind, setSettings, type CommunityKind,
 } from './community_model'
-import { legacyLinksPatch, TILES, type TileId } from './community_data'
+import { SUBCOMMUNITY_FREE_LIMIT, canAddSub, communityTree, descendantsOf, legacyLinksPatch, rootOf, subCommunityCount, TILES, type TileId } from './community_data'
 import {
   WHATSAPP_BRIDGE_ENABLED, dashboardSocial, followTiles, setShareLayout, shareLayoutOn, tilePercents, tileSetOf, type TileAggregate, chatCommunities, chatOnlyCommunity, communityChatRows, connectEvents, homeTiles, isManager, menuItems, recordTileUse,
   renameCommunity, setChatOnly, setConnectEvents, setManagedTiles, setOwnTiles, startLayout, toggleTile,
 } from './community_data'
+import { createCommunityCalendar } from './community_calendar_view'
 import { fetchAggregate, layoutShareAllowed, sendTileSet } from './community_server'
 import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
@@ -53,7 +55,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const box = el('div', { class: 'community-host', 'data-community': '' })
   hostEl.append(box)
   const root = box.attachShadow({ mode: 'open' })
-  const ui: { nav: NavId; space: string | null; drawer: boolean; hiddenOpen: boolean; note: string; chatNote: string; switcher: boolean; settings: boolean; addEvent: boolean; rename: boolean; tilesOpen: boolean } = { nav: 'home', space: null, drawer: false, hiddenOpen: false, note: '', chatNote: '', switcher: false, settings: false, addEvent: false, rename: false, tilesOpen: false }
+  const ui: { nav: NavId | 'calendar'; space: string | null; drawer: boolean; hiddenOpen: boolean; note: string; chatNote: string; switcher: boolean; settings: boolean; addEvent: boolean; rename: boolean; tilesOpen: boolean; folded: string[]; more: string | null } = { nav: 'home', space: null, drawer: false, hiddenOpen: false, note: '', chatNote: '', switcher: false, settings: false, addEvent: false, rename: false, tilesOpen: false, folded: [], more: null }
   const w43 = ctx.strings.w43shell
 
   try { if (localStorage.getItem(OPEN_CHAT_KEY)) { localStorage.removeItem(OPEN_CHAT_KEY); ui.nav = 'chat' } } catch { /* storage blocked: the pane stays closed */ }
@@ -65,7 +67,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   /** The community in force: my pick, else the rings' community tag, else the first. */
   const tagNow = (): string | null => communityTagOf(data(), st(), loadColourTags())
 
-  function go(n: NavId): void {
+  function go(n: NavId | 'calendar'): void {
     ui.drawer = false
     ui.settings = false
     ui.switcher = false
@@ -256,6 +258,8 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const name = tags.find((x) => x.id === tag)?.label ?? tag
     return [
       el('p', { class: 'meta' }, [t.membersOf(name, list.length)]),
+      // wave44 steer-invite-link: the invite links (personal / open), placed like the event's share row; the app opens the sheet.
+      el('div', { class: 'row invite-row' }, [btn(`${ctx.strings.w43press.iconLink} ${ctx.strings.invite.button}`, () => ctx.bus.emit('community-invite', { tag }), { 'data-community-invite': '' }, 'lnk strong')]),
       list.length ? null : el('p', { class: 'empty' }, [t.membersEmpty]),
       // Wave 42: the add tile has the size of a member tile, only a centred "+", last in the grid; it opens the add-person flow for this community.
       el('div', { class: 'grid members' }, [
@@ -351,25 +355,62 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     ]
   }
 
+  /** Wave 44b: a sub-community is hidden while any community above it is folded. */
+  function hiddenByFold(id: string): boolean {
+    for (let p = data().meta?.[id]?.parent, n = 0; p && n < 50; p = data().meta?.[p]?.parent, n++) if (ui.folded.includes(p)) return true
+    return false
+  }
+
+  /** Wave 44b: above SUBCOMMUNITY_FREE_LIMIT sub-communities under one root, "Request more" asks for room (the support ask, scoped to the root community; Q in the report: a message to the hosting contact). */
+  function moreDialog(root: string): HTMLElement {
+    const w = ctx.strings.w44fc
+    const name = listCommunities(data(), loadColourTags(), st().people).find((r) => r.id === root)?.name ?? root
+    return el('div', { class: 'card sub-more', role: 'dialog', 'aria-label': w.subMoreTitle, 'data-community-sub-more': '' }, [
+      el('h3', {}, [w.subMoreTitle]),
+      el('p', { class: 'meta' }, [w.subMoreText(name, subCommunityCount(data(), root)), ' ', w.subCount(subCommunityCount(data(), root), SUBCOMMUNITY_FREE_LIMIT)]),
+      btn(w.subMoreAsk, () => { ui.more = null; ctx.bus.emit('support-ask', { tag: root }); draw() }, { 'data-community-sub-more-ask': '' }, 'lnk strong'),
+      btn(w.subMoreClose, () => { ui.more = null; draw() }, { 'data-community-sub-more-close': '' }, 'lnk'),
+    ])
+  }
+
   // ---- Wave 42: the community switcher and the per-community settings -----------------------------------------------------
   function switcher(): HTMLElement {
     const w = ctx.strings.w42
     const rows = listCommunities(data(), loadColourTags(), st().people)
     const name = el('input', { type: 'text', maxlength: '40', placeholder: w.newName, 'aria-label': w.newName, 'data-community-new-name': '' })
     const kind = el('select', { 'aria-label': w.kindLabel, 'data-community-new-kind': '' }, [el('option', { value: 'informal' }, [w.kindInformal]), el('option', { value: 'managed' }, [w.kindManaged])])
+    // Wave 44 home-dashboard: what it is (a community or another group, e.g. family); managed or unmanaged is asked only here, later it lives in Settings.
+    const group = el('select', { 'aria-label': ctx.strings.dashboard.newKind, 'data-community-new-group': '' }, [el('option', { value: '' }, [ctx.strings.dashboard.kinds.community]), el('option', { value: 'otherGroup' }, [ctx.strings.dashboard.kinds.otherGroup])])
+    // Wave 44b (item 5): a community made inside another is its sub-community; the select names the parent (default: the community I am in, or the top level).
+    const parent = el('select', { 'aria-label': ctx.strings.w44fc.subOf, 'data-community-new-parent': '' }, [
+      el('option', { value: '' }, [ctx.strings.w44fc.subTop]),
+      ...rows.map((r) => el('option', { value: r.id, ...(r.current ? { selected: '' } : {}) }, [ctx.strings.w44fc.subOf + ' ' + r.name])),
+    ]) as HTMLSelectElement
     const make = (): void => {
-      const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind)
+      const under = parent.value || undefined
+      if (under && !canAddSub(data(), under)) { ui.more = rootOf(data(), under); draw(); return }   // above SUBCOMMUNITY_FREE_LIMIT: the request dialog
+      const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind, (group as HTMLSelectElement).value === 'otherGroup' ? 'otherGroup' : undefined, under)
       if (!out) { name.focus(); return }
       saveColourTags(out.tags as never)
       ui.switcher = false
       save(out.data)
     }
     return el('div', { class: 'switcher', 'data-community-switcher': '', role: 'menu' }, [
-      ...rows.map((r) => el('button', {
-        class: 'lnk switch-row' + (r.current ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': String(r.current), 'data-community-pick': r.id,
-        onclick: () => { ui.switcher = false; ui.space = null; save({ ...data(), tag: r.id }) },
-      }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${r.kind === 'managed' ? w.kindManaged : w.kindInformal} · ${w.memberCount(r.members)}`])])),
-      el('div', { class: 'row wrap switch-new' }, [name, kind, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
+      ...communityTree(data(), rows).filter((n) => !hiddenByFold(n.row.id)).map((n) => {
+        const r = n.row
+        const kids = descendantsOf(data(), r.id).length > 0
+        const folded = ui.folded.includes(r.id)
+        return el('div', { class: 'switch-line', style: `padding-left:${n.depth * 14}px`, 'data-community-depth': String(n.depth) }, [
+          kids ? el('button', { class: 'lnk fold', type: 'button', 'aria-expanded': String(!folded), 'aria-label': folded ? ctx.strings.w44fc.subExpand(r.name) : ctx.strings.w44fc.subCollapse(r.name), 'data-community-fold': r.id,
+            onclick: () => { ui.folded = folded ? ui.folded.filter((x) => x !== r.id) : [...ui.folded, r.id]; draw() } }, [folded ? '▸' : '▾']) : el('span', { class: 'fold-gap', 'aria-hidden': 'true' }, ['']),
+          el('button', {
+            class: 'lnk switch-row' + (r.current ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': String(r.current), 'data-community-pick': r.id,
+            onclick: () => { ui.switcher = false; ui.space = null; save({ ...data(), tag: r.id }) },
+          }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${w.memberCount(r.members)}`])]),
+        ])
+      }),
+      el('div', { class: 'row wrap switch-new' }, [name, group, kind, parent, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
+      ui.more ? moreDialog(ui.more) : null,
     ])
   }
 
@@ -444,15 +485,17 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     ]
   }
 
+  const calendar = createCommunityCalendar(ctx.strings, st, (id) => ctx.bus.emit('open-event', id), () => draw())
+
   function draw(): void {
     const tag = tagNow()
     const items = leftNav(data(), tag)
-    if (!items.includes(ui.nav)) ui.nav = items[0] ?? 'home'
-    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '')
+    if (!(items as readonly string[]).includes(ui.nav) && !(ui.nav === 'calendar' && items.includes('events'))) ui.nav = items[0] ?? 'home'
+    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '') + (strikeOff(st()) ? ' tw-bw' : '')
     cm.dataset.nav = ui.nav
     bar.replaceChildren(
       btn('☰ ' + t.menu, () => { ui.drawer = !ui.drawer; draw() }, { 'aria-expanded': String(ui.drawer), 'data-community-menu': '' }, 'lnk menu'),
-      el('h3', { class: 'section' }, [t.nav[ui.nav], ' ', el('sub', { class: 'alpha', 'data-community-alpha': '' }, [ctx.strings.alphaLabel])]),
+      el('h3', { class: 'section' }, [ui.nav === 'calendar' ? ctx.strings.w44vis.calendar : t.nav[ui.nav], ' ', el('sub', { class: 'alpha', 'data-community-alpha': '' }, [ctx.strings.alphaLabel])]),
     )
     veil?.remove()
     veil = ui.drawer ? el('div', { class: 'veil', 'data-community-veil': '', onclick: () => { ui.drawer = false; draw() } }) : null
@@ -461,9 +504,11 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       tag ? nameDropdown(tag) : null,
       ...(tag ? eventBlock(tag) : []),
       tag ? el('div', { class: 'nav-sep', 'aria-hidden': 'true' }) : null,
-      ...menuItems(data(), tag).map((n) => n === 'ask'
-        ? btn(ctx.strings.w42.askButton, () => { ui.drawer = false; ctx.bus.emit('support-ask', { tag }); draw() }, { 'data-community-ask': '' }, 'navlnk')
-        : btn(t.nav[n], () => go(n), { 'data-community-nav': n, ...(n === ui.nav ? { 'aria-current': 'page' } : {}) }, 'navlnk')),
+      ...menuItems(data(), tag).flatMap((n) => n === 'ask'
+        ? [btn(ctx.strings.w42.askButton, () => { ui.drawer = false; ctx.bus.emit('support-ask', { tag }); draw() }, { 'data-community-ask': '' }, 'navlnk')]
+        : [btn(t.nav[n], () => go(n), { 'data-community-nav': n, ...(n === ui.nav ? { 'aria-current': 'page' } : {}) }, 'navlnk'),
+          // Wave 44 steer-event-visibility (item 4): "Calendar" sits right under Events.
+          ...(n === 'events' ? [btn(ctx.strings.w44vis.calendar, () => go('calendar'), { 'data-community-nav': 'calendar', ...(ui.nav === 'calendar' ? { 'aria-current': 'page' } : {}) }, 'navlnk')] : [])]),
       // B33: at the bottom only the gear, no words.
       tag ? el('button', { class: 'navlnk gear', type: 'button', 'aria-label': w43.settingsGear, title: w43.settingsGear, 'data-community-settings': '', onclick: () => { ui.drawer = false; ui.settings = true; draw() } }) : null,
     ])
@@ -471,7 +516,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     if (gear) gear.innerHTML = ICONS.settings
     navEl.replaceWith(nav)
     navEl = nav
-    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : ui.nav === 'chat' ? chatPage() : ui.nav === 'timeline' ? timeline() : home()
+    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'calendar' ? calendar(tag) : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : ui.nav === 'chat' ? chatPage() : ui.nav === 'timeline' ? timeline() : home()
     const main = el('main', { class: 'main' }, [...section, ui.note ? el('p', { class: 'note' }, [ui.note]) : null])
     mainEl.replaceWith(main)
     mainEl = main

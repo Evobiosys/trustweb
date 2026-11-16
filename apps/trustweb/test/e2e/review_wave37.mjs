@@ -56,6 +56,8 @@ try {
     check(`${name}: three plan cards`, (await page.locator('[data-ai-plan]').count()) === 3)
     await page.screenshot({ path: `${SHOTS}/review-app-${name}-plans.png` })
     check(`${name}: plans no sideways scroll`, await noSide(page))
+    // review-44: the sparkle opens the AI plans sheet now (wave 41); Settings and its search come from the gear.
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300); await page.locator('[data-settings-gear]').first().click(); await page.waitForTimeout(500)
     const search = page.locator('[data-settings-search]')
     await search.fill('birthday'); await page.waitForTimeout(300)
     check(`${name}: settings search keeps Birthday reminders`, await page.locator('[data-birthday-reminders]').isVisible())

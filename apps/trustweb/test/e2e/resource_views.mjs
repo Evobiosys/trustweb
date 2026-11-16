@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const it = (id, text, over = {}) => ({ id, text, audience: 'friends', included: true, createdAt: 1, ...over })
-const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], events: [],
+const record = JSON.stringify({ v: 1, bwMode: true, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], events: [],
   people: [{ id: 'p1', name: 'Ada Lovelace', ring: 1, lines: [], context: '', metAt: 1 }, { id: 'p2', name: 'Ben Huber', ring: 1, lines: [], context: '', metAt: 1 }],
   inventory: [
     it('i1', 'Cosmos, recommended by Ada Lovelace', { kind: 'book' }),
@@ -64,7 +64,7 @@ try {
     check(`${name}: press reveals that link only`, (await page.locator('[data-rv-link]').count()) === 1 && (await page.locator('[data-rv-link="i3"]').count()) === 1)
     await page.locator('[data-rv-link-toggle="i4"]').click(); await page.waitForTimeout(200)
     check(`${name}: one at a time: the second press hides the first`, (await page.locator('[data-rv-link]').count()) === 1 && (await page.locator('[data-rv-link="i4"]').count()) === 1)
-    check(`${name}: protected row has no Record button (43b-D5)`, (await page.locator('[data-rv-record="i3"]').count()) === 0)
+    check(`${name}: protected row has Record and Play (flip 43b-D5)`, (await page.locator('[data-rv-record="i3"]').count()) === 1 && (await page.locator('[data-rv-play="i3"]').count()) === 1)
     await page.screenshot({ path: `${SHOTS}/resource-views-${name}-protected.png` })
     // recommender chip
     const sug = page.locator('[data-rv-suggest="i1"]')

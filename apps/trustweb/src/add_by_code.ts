@@ -12,10 +12,11 @@
  * origin, for a local build) in the ?connect= shape that the existing parser reads. A pasted https url on any other host is rejected
  * at parse time and never fetched. A DID connects over the relay only: no server is asked for it.
  */
-import { parseConnectLinkParams } from '../../demo/src/connect_link'
+import { PARAM_QR_KEY, parseConnectLinkParams } from '../../demo/src/connect_link'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import { resolveDidPeer } from '../../demo/src/did'
 import { CONNECT_CODE_RE, NAME_RE } from './connect_code'
+import { introducedRing } from './bubble_links'
 import { readStamp } from './connect_freshness'
 import type { Stamped } from './connect_freshness'
 import { fingerprint, stripUnsafe } from './safe_text'
@@ -24,12 +25,13 @@ import { SHORT_LINK_ORIGINS } from './short_link'
 export { NAME_RE }
 
 /** A connect link with the freshness stamp of connect_freshness.ts (absent on a link of an older app and on the public address). */
-export type StampedLink = ConnectLinkParams & Stamped
+export type StampedLink = ConnectLinkParams & Stamped & { introduced?: true }
 
 /** The ?connect= link of a query string, with its stamp. */
 export const connectLinkOf = (search: string): StampedLink | null => {
   const link = parseConnectLinkParams(search)
-  return link && { ...link, ...readStamp(search) }
+  // wave44 handshake-crypto: the QR key of a v2 link; null = a link of an app before v2 (the connect is refused, never sent in the clear)
+  return link && { ...link, qk: new URLSearchParams(search).get(PARAM_QR_KEY) || null, ...readStamp(search), ...(introducedRing(search) ? { introduced: true as const } : {}) }
 }
 /** One lookup waits this long. */
 export const RESOLVE_TIMEOUT_MS = 10_000

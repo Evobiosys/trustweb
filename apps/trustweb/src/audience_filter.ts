@@ -16,6 +16,7 @@ import { ZONES } from './audience_zones'
 import type { AudienceFilter, Zone, Degree } from './audience_zones'
 import { addTagTo } from './card_small'
 import { createTag } from './tag_create'
+import { hideSealedLine } from './hide_from_view'
 
 /** What a form adds to the stored filter: a community scope (its tag) and the support-only "not Closest few" switch. */
 export interface FilterExtras { only?: string; notClosest?: boolean }
@@ -92,8 +93,10 @@ export interface FilterView {
   changed: () => void
   /** Hints and intros: the zone can be un-picked (= everybody); support always has one. */
   zoneRequired: boolean
-  /** Inside Advanced: the form's own controls (reach chooser, the "not Closest few" switch). */
+  /** Inside Advanced: the form's own controls (the "not Closest few" switch). */
   advanced: readonly (Node | null)[]
+  /** Wave 44: controls on the main form, under the Hide from row (the "How far?" chooser). */
+  main?: readonly (Node | null)[]
   /** Overlay for "Create tag": hands over the rows to show; main.ts supplies the sheet. */
   openSheet: (children: (Node | null)[]) => void
   closeSheet: () => void
@@ -195,6 +198,8 @@ export function audienceFilterView(v: FilterView): HTMLElement {
     }, [S.askPage.onlyTag(tagName(f.only, tags)) + ' ×'])]) : null,
     chipRow(v, 'add'),
     chipRow(v, 'exclude'),
+    ...(v.main ?? []),
+    (v.steps ?? 1) !== 1 ? hideSealedLine() : null, // wave44b hide-from-crypto
     hideLeaks({ exclude: f.exclude, degree: v.steps ?? 1 }) ? el('p', { class: 'hint', 'data-aud-hide-travels': '' }, [S.askPage.hideTravels]) : null,
     advancedBox(v),
   ].filter((n): n is HTMLElement => n !== null))

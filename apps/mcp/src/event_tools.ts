@@ -5,13 +5,15 @@
  * network: a resource ask is written as one queued support ask and the app shows a card and sends it on a tap (support_flush.ts). On this side the
  * person is always "me".
  */
-import { DEFAULT_INVITE_POLICY, applyEventSettings, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
+import { DEFAULT_EVENT_VISIBILITY, DEFAULT_INVITE_POLICY, answerHostDefault, applyEventSettings, hostDefaultPending, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
-import { eventLinkView, identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
+import { eventLinkView, identifyPerson, isEventHost, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { SupportAsk } from '../../trustweb/src/support_ask.ts'
 import type { AppState, TwEvent } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
+import { eventEditorTools } from './event_editor_tools.ts'
+import { openSpaceTools } from './open_space_tools.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; did?: string; fields?: Record<string, unknown>; deleted_at?: string }
@@ -172,17 +174,39 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
     },
     // Wave 43 event-press-share
     {
-      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite; default everyone), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me), communityId (the community colour tag id this event is part of; empty = an isolated event), mastodonInstance (host whose public hashtag posts the event Feed merges, e.g. mastodon.social; empty = none). Only the fields given change.',
-      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none') }, ['event']),
+      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite; default everyone), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me), communityId (the community colour tag id this event is part of; empty = an isolated event), mastodonInstance (host whose public hashtag posts the event Feed merges, e.g. mastodon.social; empty = none), showMe open|discoverable|off (wave 44: how I show to the others at this event; default discoverable), shareCommunity (wave 44: the host shares the event with the whole community; the app tells the community members once, with a notification), showAll (wave 44: host flag "Everyone can see everyone"), openSpace (wave 44: online open space type). Only the fields given change.',
+      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none'), techTakeover: { type: 'boolean', description: 'wave 44: the host lets technical support take over (approve, invite)' }, showMe: S('open | discoverable | off'), shareCommunity: { type: 'boolean', description: 'wave 44: share this event with the whole community' }, showAll: { type: 'boolean', description: 'wave 44: host flag "Everyone can see everyone" (small, intimate events: everyone but those who switched off is listed)' }, openSpace: { type: 'boolean', description: 'wave 44: make this an online open space (day and window = the event from..to on one day); cannot go back once it holds activities' } }, ['event']),
       run: (a) => {
         let out: Obj = {}
         e.commit((r) => {
           const ev = eventOf(r, a.event)
-          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}) })
+          applyEventSettings(ev, { ...(typeof a.showAll === 'boolean' ? { showAll: a.showAll } : {}), ...(typeof a.openSpace === 'boolean' ? { openSpace: a.openSpace } : {}), ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}), ...(typeof a.techTakeover === 'boolean' ? { techTakeover: a.techTakeover } : {}), ...(a.showMe !== undefined ? { showMe: str(a.showMe) } : {}), ...(typeof a.shareCommunity === 'boolean' ? { shareCommunity: a.shareCommunity } : {}) })
           // review-fixes-43: one switch per event, as on the event page: notifications on also lift a muted "I'm here now" bell of this event.
           const here = (r as { atEvent?: { eventId?: string; bell?: boolean } }).atEvent
           if (a.notify === true && here?.eventId === ev.id) delete here.bell
-          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}) }
+          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}), ...(ev.techTakeover ? { techTakeover: true } : {}), showMe: ev.showMe ?? DEFAULT_EVENT_VISIBILITY, shareCommunity: ev.shareCommunity === true, showAll: ev.showAll === true, openSpace: ev.openSpace !== undefined, ...(ev.announcedAt !== undefined ? { announcedAt: ev.announcedAt } : {}) }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_visibility_default', description: 'The host\'s suggested "How I show at this event" for participants (wave 44): `default` open|discoverable|off sets it (organizers, hosts and technical support only; travels in the event link). `answer` keep|change answers a host\'s suggestion on this device, once: keep adopts it as my mode, change leaves my mode as it is; my own choice (event_settings_set showMe) always wins afterwards. With neither, reads the state.',
+      inputSchema: schema({ event: S('event id or exact name'), default: S('open | discoverable | off'), answer: S('keep | change') }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const host = isEventHost(ev, r.me?.displayName ?? '', r.people)
+          if (a.default !== undefined) {
+            if (!host) throw new Error('only an organizer, host or technical support sets the default for participants')
+            applyEventSettings(ev, { hostDefault: str(a.default) })
+          }
+          if (a.answer !== undefined) {
+            if (a.answer !== 'keep' && a.answer !== 'change') throw new Error('answer must be keep or change')
+            if (!hostDefaultPending(ev, host)) throw new Error('no suggestion waits for an answer on this event')
+            answerHostDefault(ev, a.answer)
+          }
+          out = { id: ev.id, hostDefault: ev.hostDefault ?? null, answered: ev.hostDefaultAnswered === true, waiting: hostDefaultPending(ev, host) ?? null, showMe: ev.showMe ?? DEFAULT_EVENT_VISIBILITY }
         })
         return out
       },
@@ -249,5 +273,7 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
       },
     },
   ]
-  return { read, write }
+  const editor = eventEditorTools(e as never)   // wave 44 event-editor
+  const openSpace = openSpaceTools(e as never)   // wave 44 steer-open-space
+  return { read: [...read, ...editor.read], write: [...write, ...editor.write, ...openSpace.write] }
 }

@@ -43,7 +43,7 @@ import type { Identity as DidIdentity, SerializedIdentityV1 } from '../../demo/s
 import { createRelayChannel } from '../../demo/src/relay'
 import type { PushSubscriptionJson, RelayChannel, RelayStatus } from '../../demo/src/relay'
 import { deriveEcdhPairKey, randomId } from '../../demo/src/crypto'
-import { decodeFromQr, encodeForQr } from '../../demo/src/wire'
+import { decodeFromQr } from '../../demo/src/wire'
 import type { Envelope } from '../../demo/src/wire'
 import { buildConnectAck, buildConnectLinkUrl } from '../../demo/src/connect_link'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
@@ -52,7 +52,10 @@ import { sealRelayAnswer } from '../../demo/src/answer_key'
 import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
-import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ChatThread, DecodedAnswer, EventEnvelope, HostEnvelope, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ConnectAckEnvelope, ChatRe, ChatThread, DecodedAnswer, EventEnvelope, HostEnvelope, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import { HANDSHAKE_PLAINTEXT_FALLBACK, HandshakeError, isCleartextAck, linkHandshake, logHandshake, openConnectAck, parseHandshakeWire, qrSecretOf, sealConnectAck } from './handshake_crypto'
+import type { HandshakeFailure, HandshakeMode, HandshakeWire } from './handshake_crypto'
+import { fingerprint } from './safe_text'
 import { ackDue, attemptAllowed, nextAttempts, noteAckSent, noteHeard } from './ack_retry'
 import { addAlsoDids, devicesToTell, peerForDid, toldKey } from './device_alias'
 import type { AckAttempts } from './ack_retry'
@@ -64,6 +67,7 @@ import { createDrainLock, drainLockName } from './drain_lock'
 import type { DrainLock, LockManagerLike } from './drain_lock'
 import { directFlag, surfacesHere } from './direct_ask'
 import { introAskText, parseIntroTarget } from './intro_ask'
+import { KNOW_CONTEXT, KNOW_NOTE_MAX, KNOW_WHEN, knowItems, shownAskedNames } from './ask_escalation'
 import {
   askerOf, askFields, askReachOf, HOPS_DEFAULT, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
   mayCascade, RootMemory, sanitizeHopItems, seenHash, throughOf,
@@ -80,6 +84,10 @@ import { personOf } from './peer_cards'
 import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
 import { acceptsReaskFrom, askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk, undoReasked } from './reask'
 import type { EarlierAsk, ReaskPlan } from './reask'
+import { HideFromNet, NO_GATE } from './hide_from_net' // wave44b hide-from-crypto
+import { parseHideReportWire } from './hide_from_crypto' // answers-44a
+import type { HideGate } from './hide_from_net'
+import type { HideReportEntry } from './hide_reports'
 
 export type { PushSubscriptionJson, RelayStatus }
 
@@ -120,6 +128,14 @@ interface HopHarvest {
 
 const NO_HARVEST: HopHarvest = { asked: 0, items: [] }
 
+/** Wave 44: what this phone shares with a yes: its matched lines, or for a 'know' ask the tip the person typed. */
+const ownItems = (held: Pick<HeldAsk, 'know' | 'note' | 'matches'>): SharedItem[] => (held.know ? knowItems(held.note, KNOW_CONTEXT, KNOW_WHEN) : sharedItems(held.matches))
+
+/** Wave 44: the 'know' mark and the asked names an incoming ask puts on its held prompt. */
+const knowFields = (q: Pick<QueryEnvelope, 'askedNames'>, know: boolean): Pick<HeldAsk, 'know' | 'askedNames'> => ({
+  ...(know ? { know: true as const } : {}), ...(q.askedNames?.length ? { askedNames: q.askedNames } : {}),
+})
+
 export interface IncomingAsk {
   qid: string
   fromName: string
@@ -138,6 +154,10 @@ export interface IncomingAsk {
   doorName: string | null
   /** Wave 33: an intro ask: who or what the asker wants an introduction to (the card shows it whether or not anything matched). */
   intro?: string
+  /** Wave 44: the second round "Do you know someone who has this?": the card takes a free-text tip instead of showing matches. */
+  know?: true
+  /** Wave 44: who the asker asked (only when the asker placed this phone as Closest few or Close and left it on). */
+  askedNames?: string[]
   /** Wave 6h: the answer moment on this phone's clock. */
   deadline: number
   /** Wave 6h: a yes after the moment reaches the asker as "answered later" (the ask carried its window, ask_window.ts). */
@@ -151,7 +171,8 @@ export interface IncomingAsk {
   askerPeerId: string | null
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring; `at` null: shown without a date. */
   earlier: { at: number | null } | null
-  decide(share: boolean): Promise<void>
+  /** `note`: the tip of a 'know' ask (ignored on any other). */
+  decide(share: boolean, note?: string): Promise<void>
 }
 
 export interface AskResult {
@@ -195,6 +216,14 @@ export interface NetHooks {
   /** Wave 43c (social_hosting.ts): any sealed wire opened with this peer's key arrived (they are online), and a `host` wire's body (the small hosting protocol). */
   onHeard?(fromDid: string): void
   onHost?(fromDid: string, m: Record<string, unknown>): void
+  /** Wave 44 (handshake_crypto.ts): a connect handshake was refused (tampered, replayed, or an app before v2); nothing was added. */
+  onHandshakeRefused?(reason: HandshakeFailure): void
+  /** Wave 44 steer-invite-link (invite_policy.ts redeemInvite): a connect-ack carried an invite token; false = refused, nothing is added. */
+  inviteVerdict?(inv: string, fromDid: string): boolean
+  /** Wave 44 steer-invite-link: the connection with an accepted invite token exists (its card too): join it to the community. */
+  onInviteAccepted?(peer: Peer, inv: string): void
+  /** Wave 44b (hide_from_net.ts): a verified report that a device on the way changed (or could not check) an ask's hidden list. */
+  onHideReport?(e: HideReportEntry): void
   /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
   mayPassOnFrom(peer: Peer): boolean
   /**
@@ -297,6 +326,8 @@ export class Net {
   private readonly relayOrigin: string | undefined
   /** Wave 11: this device's Web Push subscription for the relay (undefined: nothing to say; null: withdraw). */
   private pushSub: PushSubscriptionJson | null | undefined = undefined
+  /** Wave 44b hide-from-crypto: the sealed "Hide from" list of asks that travel. */
+  private readonly hide: HideFromNet
 
   /** This phone's answer window (ask_window.ts): what its asks carry and what the dock counts down. */
   get answerWindowMs(): number {
@@ -306,6 +337,10 @@ export class Net {
   constructor(private readonly hooks: NetHooks, opts: NetOptions = {}) {
     this.windowMs = opts.answerWindowMs ?? ANSWER_WINDOW_MS
     this.relayOrigin = opts.relayOrigin
+    this.hide = new HideFromNet({
+      identity: () => this.ensureIdentity(), state: () => this.hooks.state(), save: () => this.hooks.save(), onReport: (e) => this.hooks.onHideReport?.(e),
+      sendRaw: async (did, wire) => { if (this.channel) await this.channel.sendRaw(did, wire) },
+    })
   }
 
   /** This device's relay identity, minted once and kept in the app's own record. */
@@ -440,13 +475,17 @@ export class Net {
 
   /** The URL a phone camera opens to connect to this device (one scan). */
   connectLink(appUrl: string): string {
-    return buildConnectLinkUrl(appUrl, this.ensureIdentity().did, this.hooks.state().me)
+    const identity = this.ensureIdentity()
+    return buildConnectLinkUrl(appUrl, identity.did, this.hooks.state().me, qrSecretOf(identity))
   }
 
   /** The scanning side of the one-scan ceremony: add the peer, tell them who we are. */
-  async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false): Promise<Peer> {
+  async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false, inv?: string): Promise<Peer> {
     const s = this.hooks.state()
     this.ensureIdentity()
+    // Wave 44: a QR of an app before v2 carries no key: refused before anything is added (never a cleartext ack).
+    const mode = linkHandshake(params)
+    if (mode === 'unsupported') { this.refuseHandshake('unsupported', params.did); throw new HandshakeError('unsupported') }
     // A connection this phone already holds under that DID keeps its id and name (a bare-DID add made it up, a scan may bring the real ones).
     const known = s.peers.find((x) => x.did === params.did)
     const peer = upsertPeer(s, {
@@ -456,6 +495,9 @@ export class Net {
       ring,
       connectedAt: Date.now(),
       ...(reachOut ? { reachOut: true as const } : {}),
+      handshake: mode,
+      ...(mode === 'qr' && params.qk ? { qk: params.qk } : {}),
+      ...(inv ? { inv } : {}),
     })
     this.hooks.save()
     await this.start()
@@ -464,7 +506,8 @@ export class Net {
   }
 
   /**
-   * One connect-ack to `peer` (the cleartext bootstrap wire of connect_link.ts, byte-for-byte the same every time). Counted only when
+   * One connect-ack to `peer`, sealed (wave 44, handshake_crypto.ts: with the QR key of their link when this phone scanned one, else with
+   * their DID's key alone; a fresh ephemeral key and nonce every time). Counted only when
    * the relay accepted it; a failure is retried by resendAcks (ack_retry.ts). Never two at once for one peer.
    */
   private async sendAck(peer: Peer): Promise<void> {
@@ -473,7 +516,8 @@ export class Net {
     try {
       if (!this.channel) return
       this.ackAttempts.set(peer.did, nextAttempts(this.ackAttempts.get(peer.did), Date.now()))
-      await this.channel.sendRaw(peer.did, encodeForQr(buildConnectAck(this.hooks.state().me, this.ensureIdentity(), peer.reachOut === true)))
+      const identity = this.ensureIdentity()
+      await this.channel.sendRaw(peer.did, await sealConnectAck({ ...buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true), ...(peer.inv ? { inv: peer.inv } : {}) }, identity, peer.did, peer.qk))
       const stored = this.peerByDid(peer.did)
       if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
     } catch {
@@ -507,10 +551,54 @@ export class Net {
     if (noteHeard(peer, Date.now())) this.hooks.save()
   }
 
-  /** Only a cleartext connect-ack is ever recognised here; every other wire is ciphertext. */
-  private handleRaw(fromDid: string, payload: string): boolean {
+  /**
+   * Wave 44: the sealed connect-ack (handshake_crypto.ts) is the bootstrap wire; a cleartext one (an app before v2) is refused while
+   * HANDSHAKE_PLAINTEXT_FALLBACK is off. Every other wire is ciphertext under the pair key and is not handled here.
+   */
+  private handleRaw(fromDid: string, payload: string): boolean | Promise<boolean> {
+    const report = parseHideReportWire(payload) // answers-44a: sealed to this DID, its sender not kept
+    if (report) return this.hide.onReport(report).then(() => true)
+    const sealed = parseHandshakeWire(payload)
+    if (sealed) return this.openAck(sealed, fromDid)
+    if (!isCleartextAck(payload)) return false
     const env = decodeFromQr(payload)
     if (!env || env.t !== 'connect-ack' || env.did !== fromDid) return false
+    if (!HANDSHAKE_PLAINTEXT_FALLBACK) { this.refuseHandshake('unsupported', fromDid); return true }
+    return this.acceptAck(env, undefined)
+  }
+
+  /** Nonces of sealed acks being opened or opened in this visit (two deliveries of one wire at once are one). */
+  private readonly hsNonces = new Set<string>()
+
+  private async openAck(wire: HandshakeWire, fromDid: string): Promise<boolean> {
+    const s = this.hooks.state()
+    const quietReplay = (): boolean => { this.refuseHandshake('replay', fromDid, this.peerByDid(fromDid) !== undefined); return true }
+    if (this.hsNonces.has(wire.n)) return quietReplay()
+    this.hsNonces.add(wire.n)
+    try {
+      const got = await openConnectAck(wire, this.ensureIdentity(), fromDid, s.seenHandshakeNonces ?? [])
+      s.seenHandshakeNonces = got.seen
+      return this.acceptAck(got.ack, got.mode)
+    } catch (e) {
+      // a nonce counts as used only once its wire opened: a tampered copy must not burn the genuine one's nonce
+      if (!(e instanceof HandshakeError)) { this.hsNonces.delete(wire.n); throw e }
+      if (e.reason === 'replay') return quietReplay()
+      this.hsNonces.delete(wire.n)
+      this.refuseHandshake(e.reason, fromDid)
+      return true
+    }
+  }
+
+  /** A refused handshake: one line in the record (I6, a DID fingerprint, never a name), the notice unless `quiet`. Nothing is added. */
+  private refuseHandshake(reason: HandshakeFailure, did: string, quiet = false): void {
+    const s = this.hooks.state()
+    s.handshakeLog = logHandshake(s.handshakeLog, { at: Date.now(), reason, from: fingerprint(did) })
+    this.hooks.save()
+    if (!quiet) this.hooks.onHandshakeRefused?.(reason)
+  }
+
+  /** An authentic connect-ack (sealed in `mode`; undefined = the cleartext fallback). */
+  private acceptAck(env: ConnectAckEnvelope, mode: HandshakeMode | undefined): boolean {
     const s = this.hooks.state()
     const known = this.peerByDid(env.did)
     // Review 2026-10-19: the outer `from` is not authenticated by the relay, so a repeated ack never renames or re-ids a held
@@ -522,19 +610,25 @@ export class Net {
       did: env.did,
       ring: known?.ring ?? this.hooks.ringForNewPeer(),
       connectedAt: Date.now(),
+      ...(mode ? { handshake: known?.handshake ?? mode } : {}),
     }
+    // Wave 44 steer-invite-link: a refused invite (used, expired, revoked, tampered, rate) adds nothing; an accepted one is not held.
+    const inv = env.inv
+    if (inv && this.hooks.inviteVerdict?.(inv, env.did) === false) return true
     if (known) {
       const peer = upsertPeer(s, incoming)
       noteHeard(peer, Date.now())
       this.hooks.save()
       this.hooks.onPeerConfirmed(peer)
+      if (inv) this.hooks.onInviteAccepted?.(peer, inv)
       return true
     }
-    if (this.hooks.holdPeer(incoming)) return true
-    if (env.reachOut && this.hooks.refuseReachOut?.()) return true
-    const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut ? { ring: Ring.Intending, reachOut: true as const } : {}) })
+    if (!inv && this.hooks.holdPeer(incoming)) return true
+    if (!inv && env.reachOut && this.hooks.refuseReachOut?.()) return true
+    const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut && !inv ? { ring: Ring.Intending, reachOut: true as const } : {}) })
     this.hooks.save()
     this.hooks.onPeerConnected(peer)
+    if (inv) this.hooks.onInviteAccepted?.(peer, inv)
     return true
   }
 
@@ -677,6 +771,9 @@ export class Net {
     // is remembered as shown only when its prompt is presented (earlierFields), so one that matched nothing may come again.
     const earlier = this.earlierOf(q, info, peer, receivedAt)
     const quietEarlier = earlier !== null && !showsEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, receivedAt)
+    // Wave 44b: the asker's sealed "Hide from" list: changed (reported back), not checkable, or hiding this phone = like a repeat.
+    const hide = repeat || cycle ? NO_GATE : await this.hide.gate(q, { root: info.root, maxHops: info.maxHops, hop: info.hop, senderDid: fromDid, now: receivedAt })
+    if (hide.drop) { await this.replier(q.qid, templateFor(text).id, peer, await this.pairKey(peer), receivedAt, receivedAt + answerDelayMs(info, windowMs), Promise.resolve(NO_HARVEST)).atMoment([]); return }
     // Its asker stopped waiting long ago (this phone was closed or asleep). A repeat or a cycle stays as silent as it is live (review 6f).
     if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, windowMs))) {
       if (repeat || cycle || quietEarlier) return
@@ -693,12 +790,14 @@ export class Net {
     const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     // Wave 33: an intro ask always reaches the person (the card names the target), whatever the matcher found: no silent PASS.
     const intro = q.kind === 'intro' && !silent ? parseIntroTarget(q.target) : undefined
-    const surface = classifyIncomingQuery(match, false, Boolean(text)).surface || intro !== undefined
+    // Wave 44: the second round always reaches the person too (the card asks for a tip), so a no looks like every other no (I3).
+    const know = q.kind === 'know' && !silent && Boolean(text)
+    const surface = classifyIncomingQuery(match, false, Boolean(text)).surface || intro !== undefined || know
     const key = await this.pairKey(peer)
     // Passed on the moment it arrives, never waiting for the person here: the next step's answers are
     // in before this phone's own moment, whatever the person does.
     const harvest = !silent && mayCascade(q) && this.hooks.mayPassOnFrom(peer)
-      ? this.passOn(q, info, peer, deadline, windowMs)
+      ? this.passOn(q, info, peer, deadline, windowMs, hide)
       : Promise.resolve(NO_HARVEST)
     const reply = this.replier(q.qid, tpl.id, peer, key, receivedAt, deadline, harvest)
 
@@ -723,7 +822,7 @@ export class Net {
       through: info.door ? [] : throughOf(info, peer.displayName),
       doorName: info.door ? peer.displayName : null,
       relayed: q.relayed === true && (info.door || !info.travels),
-      matches, receivedAt, deadline, lateMode, ...(intro ? { intro } : {}), ...this.earlierFields(earlier, peer, receivedAt),
+      matches: know ? [] : matches, receivedAt, deadline, lateMode, ...(intro ? { intro } : {}), ...knowFields(q, know), ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, reply)
   }
 
@@ -779,14 +878,16 @@ export class Net {
       qid: held.qid, fromName: held.fromName, text: held.text, matches: held.matches, receivedAt: held.receivedAt,
       relayed: held.relayed, through: held.through, doorName: held.doorName,
       deadline: held.deadline, lateMode: held.lateMode, arrivedLate: held.arrivedLate === true, ...(held.intro ? { intro: held.intro } : {}),
+      ...(held.know ? { know: true as const } : {}), ...(held.askedNames ? { askedNames: held.askedNames } : {}),
       askerPeerId: !held.relayed && held.doorName === null && held.through.length === 0 ? held.peerId : null,
       earlier: held.reaskOf !== undefined ? { at: held.earlierAt ?? null } : null,
-      decide: async (share: boolean) => {
+      decide: async (share: boolean, note?: string) => {
         if (decided) return
         decided = true
+        if (held.know && note) held.note = note.trim().slice(0, KNOW_NOTE_MAX)
         const entry = this.log(peer, held.text, share ? LogOutcome.Shared : LogOutcome.Declined)
         if (held.arrivedLate) entry.away = true
-        const own = share ? sharedItems(held.matches) : []
+        const own = share ? ownItems(held) : []
         const late = held.lateMode && (held.arrivedLate === true || atMoment !== null || Date.now() >= held.deadline)
         if (!late) {
           // Review 6h: a yes before the moment stays in the record until it has left (a tab closed right after the yes, a reload, the
@@ -845,7 +946,7 @@ export class Net {
    */
   private async sendLateYes(held: HeldAsk, reply: Replier, momentFirst: boolean): Promise<void> {
     if (momentFirst && !(await reply.atMoment([])).sent) return
-    if (await reply.late(sharedItems(held.matches))) this.unhold(held.qid)
+    if (await reply.late(ownItems(held))) this.unhold(held.qid)
   }
 
   /**
@@ -888,7 +989,7 @@ export class Net {
       const reply = await this.heldReplier(held, peer)
       // Review 6h: a yes given before the moment that had not left yet leaves at the moment; past it, flushLateYes sends it below.
       if (held.yesAt !== undefined) {
-        if (now < held.deadline) void reply.atMoment(sharedItems(held.matches)).then((m) => { if (m.sent) this.unhold(held.qid) })
+        if (now < held.deadline) void reply.atMoment(ownItems(held)).then((m) => { if (m.sent) this.unhold(held.qid) })
         continue
       }
       this.present(held, peer, reply)
@@ -954,7 +1055,8 @@ export class Net {
     const { threads, refs } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer), this.hooks.askerTags?.(peer))
     const match = matchAsk(text, threads)
     const intro = q.kind === 'intro' ? parseIntroTarget(q.target) : undefined
-    if (!intro && !classifyIncomingQuery(match, false, true).surface) {
+    const know = q.kind === 'know'
+    if (!intro && !know && !classifyIncomingQuery(match, false, true).surface) {
       // Wave 6i: an earlier ask that came again and still matches nothing stays silent (no log row, no card).
       if (earlier) return
       const entry = this.log(peer, text, LogOutcome.NoMatch)
@@ -963,12 +1065,12 @@ export class Net {
       this.noteUnmatched(q, peer, info, text, receivedAt)
       return
     }
-    const matches = match.hits.map((h) => refs.get(h.threadId)).filter((r): r is LineRef => Boolean(r))
+    const matches = know ? [] : match.hits.map((h) => refs.get(h.threadId)).filter((r): r is LineRef => Boolean(r))
     const key = await this.pairKey(peer)
     const tplId = templateFor(text).id
     this.present({
       qid: q.qid, peerId: peer.id, text, fromName: peer.displayName, through: [], doorName: null, relayed: false,
-      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true, ...(intro ? { intro } : {}), ...this.earlierFields(earlier, peer, receivedAt),
+      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true, ...(intro ? { intro } : {}), ...knowFields(q, know), ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, this.replier(q.qid, tplId, peer, key, receivedAt, receivedAt, Promise.resolve(NO_HARVEST)))
   }
 
@@ -1035,7 +1137,7 @@ export class Net {
    * `seen`, nobody only intended, closest rings first, at most MAX_FANOUT)
    * and gathers what they shared until shortly before this phone's moment.
    */
-  private async passOn(q: QueryEnvelope, info: HopInfo, sender: Peer, deadline: number, windowMs: number): Promise<HopHarvest> {
+  private async passOn(q: QueryEnvelope, info: HopInfo, sender: Peer, deadline: number, windowMs: number, hide: HideGate = NO_GATE): Promise<HopHarvest> {
     const s = this.hooks.state()
     const root = info.root
     if (!root) return NO_HARVEST
@@ -1047,6 +1149,7 @@ export class Net {
       if (targets.length >= MAX_FANOUT) break
       if (p.did === sender.did || p.ring === Ring.Intending || this.hooks.samePerson(p, sender)) continue
       if (excluded.has(await seenHash(root, p.id))) continue
+      if (await this.hide.hides(hide, info.hop, [p.did, ...(p.alsoDids ?? [])])) continue
       targets.push(p)
     }
     if (!targets.length) return NO_HARVEST
@@ -1055,7 +1158,10 @@ export class Net {
     const fields = { ...cascadeFields(q, info, [self, fromSender], sender.displayName), ...passOnWindowFields(q, windowMs) }
     const waitMs = Math.max(0, deadline - Date.now() - windowMs * HOP_COLLECT_LEAD)
     // Each target is bounded by waitMs on its own (sendAsk never waits on a send), so one stalled contact costs nothing but its line.
-    const answers = await Promise.all(targets.map((p) => this.sendAsk(p, q.freeText ?? '', fields, waitMs)))
+    const answers = await Promise.all(targets.map((p) => {
+      const qid = randomId(12)
+      return this.sendAsk(p, q.freeText ?? '', { ...fields, ...this.hide.passOn(hide) }, waitMs, qid)
+    }))
     const items = answers.flatMap((d) => (d?.outcome === 'shared' && d.shared ? sanitizeHopItems(d.shared.items) : []))
     return { asked: targets.length, items }
   }
@@ -1097,27 +1203,38 @@ export class Net {
    * Wave 43b: `only` (audience_filter.ts) limits the ask to those peer ids; null or absent = every connected peer.
    * Wave 6h: every ask carries this phone's window, and is remembered per connection so a later yes can still land (late_answers.ts).
    */
-  async ask(text: string, reachOverride?: number, only?: readonly string[] | null): Promise<AskResult[]> {
+  async ask(text: string, reachOverride?: number, only?: readonly string[] | null, hidden: readonly string[] = [], opts: { know?: boolean } = {}): Promise<AskResult[]> {
     await this.start()
     const s = this.hooks.state()
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
     // Wave 16: a together request carries its own reach for this one ask; "Ask only my direct contacts" still wins and the dock's choice is not touched.
-    const reach = reachOverride !== undefined && s.askDirectOnly !== true ? reachOverride : askReachOf(s)
+    const chosen = reachOverride !== undefined && s.askDirectOnly !== true ? reachOverride : askReachOf(s)
+    // Wave 44b: a "Hide from" list too long to seal keeps the ask with direct contacts (fail closed).
+    const reach = HideFromNet.tooMany(hidden) ? HOPS_DEFAULT : chosen
     const root = randomId(12)
-    const extra: Partial<QueryEnvelope> = {
-      ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs),
-    }
-    const timeoutMs = askTimeoutMs(reach, this.windowMs)
+    // Wave 44: the second round "Do you know someone who has this?" stays with the people asked (direct, one step) and carries kind 'know'.
+    const extra: Partial<QueryEnvelope> = opts.know
+      ? { ...directFlag(true), kind: 'know', ...windowFields(this.windowMs) }
+      : { ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs) }
+    const timeoutMs = askTimeoutMs(opts.know ? HOPS_DEFAULT : reach, this.windowMs)
     const now = Date.now()
     const outgoing = askPeers(s).filter((peer) => !only || only.includes(peer.id)).map((peer) => ({ peer, qid: randomId(12) }))
+    if (extra.maxHops !== undefined && s.askDirectOnly !== true) {
+      Object.assign(extra, await this.hide.outgoing({ text: freeText, root, maxHops: hopInfo(extra).maxHops, issuedAt: now, hidden }))
+    }
     s.sentAsks = addSentAsk(s.sentAsks, { id: root, text: freeText, at: now, to: outgoing.map(({ peer, qid }) => ({ peerId: peer.id, qid })) }, now)
     this.hooks.save()
-    const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({
-      peerId: peer.id,
-      peerName: peer.displayName,
-      qid,
-      decoded: await this.sendAsk(peer, freeText, extra, timeoutMs, qid),
-    })))
+    // Wave 44: who was asked goes only to a recipient this phone placed as Closest few or Close, and only while "show who was asked" is on.
+    const askedAll = outgoing.map(({ peer }) => peer.displayName)
+    const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => {
+      const names = shownAskedNames(peer.ring, s.askShowAsked !== false, askedAll)
+      return {
+        peerId: peer.id,
+        peerName: peer.displayName,
+        qid,
+        decoded: await this.sendAsk(peer, freeText, names ? { ...extra, askedNames: names } : extra, timeoutMs, qid),
+      }
+    }))
     // Review 6h: who shared at the moment has answered; a second answer of theirs for this ask is not a late one.
     const answered = outgoing.filter((_, i) => results[i].decoded?.outcome === 'shared')
     if (answered.length) {

@@ -18,6 +18,8 @@ import { tasksOn } from './tasks'
 import { createScheduling } from './scheduling_view'
 import { createIcs } from './ics_view'
 import { inviteText, invitees, personDropOnEvent, removeInvitee } from './invitees'
+import { calendarTagsRow } from './calendar_tags_view'
+import { calendarVisible } from '../../event_draft'
 
 const timeOf = (ev: TwEvent): string => (ev.from.length > 10 ? ev.from.slice(11) : S.cal.allDay)
 
@@ -130,11 +132,12 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
     /** One timer for tasks and the event bell: 30 s while I am at an event, else 60 s. */
     start: () => { const loop = (): void => { tasks.tick(); here.tick(); setTimeout(loop, h.state().atEvent ? 30_000 : 60_000) }; loop() },
     body: () => {
-      const events = h.state().events ?? []
+      const events = (h.state().events ?? []).filter((e) => calendarVisible(h.state(), e))   // wave 44: calendars switched off by tag
       const due = h.state().tasks ?? []
       if (mode === 'tasks') return [h.header(S.cal.title, { back: h.leave }), el('div', { class: 'scroll cal' }, [switcher(), ...tasks.list()])]
       return [h.header(S.cal.title, { back: h.leave }), el('div', { class: 'scroll cal' }, [
         switcher(),
+        calendarTagsRow(h),
         el('div', { class: 'cal-nav' }, [
           el('button', { class: 'btn btn-ghost btn-sm', 'data-cal-prev': '', 'aria-label': S.cal.prev, onclick: () => go(-1) }, ['‹']),
           el('b', {}, [S.cal.monthTitle(shown.year, shown.month0)]),

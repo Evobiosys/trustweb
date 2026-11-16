@@ -16,19 +16,23 @@ export function settingsMatches(query: string, text: string): boolean {
   return q.split(' ').every((w) => t.includes(w))
 }
 
+const HEADING = 'h3, h4, .eyebrow, .settings-group-title'
 const hits = (e: Element, q: string): boolean => settingsMatches(q, e.textContent ?? '')
 
 /**
- * Hide every row under `root` that misses `query`. A group or section whose own title matches stays whole; one with a
- * matching row keeps its header and opens; one without any match hides. An empty query shows everything again.
+ * Hide every row under `root` that misses `query`. A group or section whose own title matches keeps all its rows; one with a
+ * matching row opens; one without any match hides. While a query stands, no heading (summary, eyebrow) shows, only rows
+ * (wave 44). An empty query shows everything again.
  */
 export function filterSettings(root: Element, query: string): void {
   const rows = (box: Element): Element[] => Array.from(box.children).filter((c) => c.tagName !== 'SUMMARY')
   const walk = (box: Element, q: string): boolean => {
     const title = box.querySelector(':scope > summary')
+    if (title) (title as HTMLElement).hidden = !!q
     const whole = !q || (title !== null && hits(title, q))
     let any = whole
     for (const r of rows(box)) {
+      if (r.matches(HEADING)) { (r as HTMLElement).hidden = !!q; continue }
       const nested = r.matches('details')
       const ok = nested ? walk(r, whole ? '' : q) || whole : whole || hits(r, q)
       ;(r as HTMLElement).hidden = !ok

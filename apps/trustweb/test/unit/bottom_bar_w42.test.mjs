@@ -31,13 +31,13 @@ describe('B04 raisedIndices', () => {
   })
 })
 
-describe('D2 stock bar: Web, Chat, Feed, Events, Resources', () => {
+describe('D2 stock bar: Web, Chat, Events, Resources (wave 44: no Feed)', () => {
   const mods = { ...all, mods: ['feed', 'events', 'community'] }
-  it('the unsaved default is exactly the five, no module button, only the centre (Feed) raised', () => {
+  it('the unsaved default is exactly the four, no module button, the inner pair raised', () => {
     const r = resolveBar(undefined, mods)
-    expect(r.ids).toEqual(['web', 'chat', 'feed', 'events', 'inventory'])
-    expect(r.primary).toBe('feed')
-    expect(r.pair).toEqual([])
+    expect(r.ids).toEqual(['web', 'chat', 'events', 'inventory'])
+    expect(r.primary).toBeNull()
+    expect(r.pair).toEqual(['chat', 'events'])
   })
   it('the modules (Community too) stay reachable from the ⋮ list', () => {
     const r = resolveBar(undefined, mods)
@@ -45,12 +45,12 @@ describe('D2 stock bar: Web, Chat, Feed, Events, Resources', () => {
   })
   it('the first edit keeps the modules out of the row', () => {
     const bar = toggleBar(undefined, 'chat', mods)
-    expect(resolveBar(bar, mods).ids).toEqual(['web', 'feed', 'events', 'inventory'])
+    expect(resolveBar(bar, mods).ids).toEqual(['web', 'events', 'inventory'])
   })
   it('a custom bar made from the stock row keeps Record and the modules out', async () => {
     const { customFrom } = await import('../../src/bottom_bar.ts')
     const ids = resolveBar(undefined, mods).ids
-    expect(resolveBar(customFrom(undefined, ids, 'feed', mods), mods).ids).toEqual(ids)
+    expect(resolveBar(customFrom(undefined, ids, null, mods), mods).ids).toEqual(ids)
   })
   it('the Feed is on without a stored choice, off when the user switched it off', async () => {
     const { feedOn } = await import('../../src/model.ts')

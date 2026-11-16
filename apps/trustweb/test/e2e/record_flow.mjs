@@ -12,6 +12,10 @@
  * - Tapping empty space in the web adds someone; Curate lists connections;
  *   the Inventory settings sit behind a cog; the backup card asks about the
  *   Swiss server; a take the phone ends is kept; dark mode is a real palette.
+ * answers-44a: rewritten on the current flows (ring tap by data-ring, Curate in
+ * Settings, search through the header magnifier, the card's Connect panel,
+ * Record through the Note taker variation, the ⋮ arrange list); the main flow
+ * runs at 360x780 and 1280x900, data attributes instead of fixed pixels.
  *
  * Chromium's fake microphone stands in for a real one. Local only: a real
  * RelayServer + Vite dev server. TW_SHOTS=<dir> saves a screenshot per step.
@@ -22,7 +26,7 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chooseMode, saveChannel } from '../helpers/share_box.mjs'
+import { chooseMode, openAdvanced, saveChannel } from '../helpers/share_box.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TW_ROOT = path.resolve(HERE, '../..')
@@ -31,7 +35,32 @@ const PORT = Number(process.env.TW_PORT || 5198)
 const SHOTS = process.env.TW_SHOTS
 
 let failures = 0
-const ok = (name, cond, detail = '') => {
+/** review-44 / answers-44a: the dev overlays (.twf/.twp) stay out of the way on every load of a context (a reload drops a style tag). */
+const hideOverlays = (ctx) => ctx.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+  const st = document.createElement('style'); st.textContent = '.twf, .twf-ok, .twp { display: none !important }'; document.head.append(st)
+}))
+/** answers-44a: the ring a tap lands on, from the drawn circle (data-ring), never a fixed pixel: a point on its right edge. */
+async function tapRing(page, ring) {
+  const c = await page.locator(`.rings-wrap circle[data-ring="${ring}"]`).boundingBox()
+  await page.mouse.click(c.x + c.width - 1, c.y + c.height / 2)
+}
+/** answers-44a: Settings with every fold open, settled; a sheet closes with Escape (at 360 the sheet covers the veil's corner). */
+async function openSettings(page) {
+  await page.locator('.hdr [data-settings-gear]').click()
+  await page.locator('.sheet.on').waitFor(); await page.waitForTimeout(400)
+  await page.evaluate(() => document.querySelectorAll('.sheet.on details').forEach((d) => { d.open = true }))
+}
+async function closeSheet(page) {
+  await page.keyboard.press('Escape'); await page.locator('.sheet.on').waitFor({ state: 'detached', timeout: 5_000 }).catch(() => {}); await page.waitForTimeout(300)
+}
+/** answers-44a: Record left the stock bar (wave 33 presets); the Note taker variation brings it back. */
+async function noteTaker(page) {
+  await openSettings(page)
+  await page.locator('.sheet.on .radio', { hasText: 'Note taker' }).first().click(); await page.waitForTimeout(300)
+  await closeSheet(page)
+}
+let ok = null
+const okAt = (name, cond, detail = '') => {
   if (cond) console.log(`  PASS  ${name}`)
   else { failures++; console.log(`  FAIL  ${name}${detail ? '  ->  ' + detail : ''}`) }
 }
@@ -52,7 +81,8 @@ async function main() {
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
   const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
   const { port: relayPort } = await relay.listen(0, '127.0.0.1')
-  const viteProc = spawn(process.execPath, [path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
+  // review-44: the vite of swiss_harness.mjs (TW_VITE_BIN, apps/crm's Vite 8 that the app config needs), else apps/demo's.
+  const viteProc = spawn(process.execPath, [process.env.TW_VITE_BIN || path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,
     env: { ...process.env, TW_PORT: String(PORT), TW_RELAY_PROXY: `http://127.0.0.1:${relayPort}` },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -67,78 +97,103 @@ async function main() {
   let n = 0
   const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_${name}.png`) }) }
   try {
-    browser = await engine.launch({ headless: true, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })
-    const ctx = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone', 'clipboard-read', 'clipboard-write'] })
-    // No on-device speech in this run: headless Chromium crashes on the
-    // SpeechRecognition.available() probe, so the browser behaves like one
-    // without it (the TalkWeave path has its own live test).
-    const noSpeech = () => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition }
-    await ctx.addInitScript(noSpeech)
+    browser = await engine.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--use-mock-keychain', '--password-store=basic', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] }) // review-44: the local headless shell
+    // answers-44a: the main flow at 360x780 and 1280x900 (the wide one in its default full-width layout)
+    for (const [w, h] of [[360, 780], [1280, 900]]) {
+      ok = (name, cond, detail) => okAt(`${w}: ${name}`, cond, detail)
+      await phoneRun(browser, base, w, h, shot)
+    }
+    ok = okAt
+    await extras(browser, base, shot)
+  } finally {
+    await browser?.close()
+    viteProc.kill()
+    await relay.close?.()
+  }
+  console.log(failures ? `\n${failures} FAILURE(S)` : '\nrecord-flow: ALL PASS')
+  process.exit(failures ? 1 : 0)
+}
+
+/** No on-device speech in these runs: headless Chromium crashes on the SpeechRecognition.available() probe, so the browser behaves like one
+ * without it (the TalkWeave path has its own live test). */
+const noSpeech = () => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition }
+
+async function phoneRun(browser, base, w, h, shot) {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, permissions: ['microphone', 'clipboard-read', 'clipboard-write'] })
+  await ctx.addInitScript(noSpeech)
+  await hideOverlays(ctx)
+  try {
     const page = await ctx.newPage()
     const errors = []
     page.on('pageerror', (e) => { errors.push(e.message); console.log('  [pageerror]', e.message) })
     page.on('dialog', (d) => void d.accept())
     await page.goto(base)
+    // review-44: a fresh dev server reloads once after optimising dependencies
+    await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(1500)
     await page.getByLabel('Your first name').fill('Jakob')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
     await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
+    await page.locator('.demo-friends').getByRole('button', { name: 'No thanks' }).click({ timeout: 3_000 }).catch(() => {})
 
     // Web: no welcome line, no ring caption; QR in the header; Curate; tap to add
     const webText = await page.locator('.screen').innerText()
     ok('Web has no welcome/count line and no ring caption', !/Welcome to your TrustWeb/.test(webText) && !/The rings: close friends/.test(webText))
     ok('the header shows a QR button, not an "Online" dot', await page.locator('.hdr .status-pill.qr svg').count() === 1 && !/Online/.test(await page.locator('.hdr').innerText()))
-    await page.locator('.rings-wrap').click({ position: { x: 176 + 114, y: 176 } })
+    await tapRing(page, 'friend') // answers-44a: the ring from its drawn circle (data-ring), no fixed pixel
     await page.getByRole('heading', { name: 'Add someone to your web?' }).waitFor({ timeout: 5_000 })
     ok('tapping empty space in the web offers to add someone', true)
-    ok('the ring is preselected by where you tapped', (await page.locator('.add-rings .radio.on').innerText()).startsWith('Friend'))
+    ok('the ring is preselected by where you tapped', await page.locator('.add-rings .radio.on').getAttribute('data-ring') === 'friend')
     await page.getByPlaceholder('Name').first().fill('Lena')
-    await page.getByRole('button', { name: 'Add to my web' }).click()
+    await page.locator('[data-add-person]').click()
     await page.locator('.node', { hasText: 'Lena' }).waitFor({ timeout: 5_000 })
     ok('the new person appears on the rings', true)
-    await shot(page, 'web')
-    // search: contacts only, with "Curate your web" as the first option
-    await page.getByRole('button', { name: 'Search contacts' }).click()
-    await page.getByPlaceholder('Search your contacts').fill('len')
-    ok('search finds Lena', /Lena/.test(await page.locator('#search-results').innerText()))
-    await page.getByPlaceholder('Search your contacts').fill('zzz')
-    ok('search says when nobody matches', /Nobody by that name yet/.test(await page.locator('#search-results').innerText()))
-    await page.getByRole('button', { name: /Curate your web/ }).click()
-    await page.getByRole('heading', { name: 'Curate' }).waitFor({ timeout: 5_000 })
-    ok('Curate is reached from search and lists the connections', /Lena/.test(await page.locator('.ppl').innerText()))
-    await page.getByRole('button', { name: 'Back' }).click()
-    await page.getByRole('button', { name: 'Close search' }).click()
+    await shot(page, `web_${w}`)
+    // answers-44a: search is the magnifier in the header (wave 28): the field opens over the view heading, Enter opens People with the query.
+    await page.locator('.hdr .web-search-btn').click()
+    await page.locator('[data-web-search]').fill('len')
+    await page.locator('[data-web-search]').press('Enter')
+    await page.locator('.screen', { hasText: 'Lena' }).first().waitFor({ timeout: 5_000 })
+    ok('search finds Lena', /Lena/.test(await page.locator('.screen').innerText()))
+    await page.goBack(); await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 5_000 })
+    // answers-44a: Curate is Settings > "Curate your web" (the Contacts sheet of the Web Curator)
+    await openSettings(page)
+    await page.locator('[data-settings-curate]').first().scrollIntoViewIfNeeded(); await page.locator('[data-settings-curate]').first().click()
+    const cur = page.locator('.sheet[data-kind="curator"]')
+    await cur.locator('[data-action="toggle-all-groups"]').click({ timeout: 15_000 })
+    await cur.getByText('Lena').first().waitFor({ timeout: 10_000 })
+    ok('Curate lists the connections', true)
+    await closeSheet(page)
+    await noteTaker(page)
 
-    // the person sheet: messenger links in the owner's order, opening the apps
+    // the person's card: messenger links in the owner's order, opening the apps (answers-44a: the card page's Connect panel, person_links.ts)
     await page.locator('.node', { hasText: 'Lena' }).click()
-    ok('contact info starts collapsed: no empty rows, one "Add other ways" button',
-      await page.locator('.ch-row').count() === 0 && await page.getByRole('button', { name: /Add other ways to contact them/ }).isVisible())
-    await page.getByRole('button', { name: /Add other ways to contact them/ }).click()
-    const chOrder = (await page.locator('.ch-name').allInnerTexts()).map((t) => t.trim())
-    ok('messengers in order: Signal, WhatsApp, Matrix, Delta Chat, Telegram, Messenger',
-      JSON.stringify(chOrder) === JSON.stringify(['Signal', 'WhatsApp', 'Matrix', 'Delta Chat', 'Telegram', 'Messenger']), JSON.stringify(chOrder))
-    const addCh = async (i, value) => {
-      await page.locator('.ch-row').nth(i).getByRole('button', { name: /Add/ }).click()
-      await page.locator('.ch-row.editing input').fill(value)
-      await page.locator('.ch-row.editing').getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('heading', { name: 'Card' }).waitFor({ timeout: 5_000 })
+    const panel = page.locator('[data-connect-panel]')
+    ok('ways to reach them start folded behind Connect', await panel.isHidden() && await page.locator('[data-connect-first]').isVisible())
+    await page.locator('[data-connect-first]').click()
+    const kinds = await panel.locator('[data-add-link]').evaluateAll((els) => els.map((e) => e.getAttribute('data-add-link')))
+    ok('messengers in order: Signal, WhatsApp, other', JSON.stringify(kinds) === JSON.stringify(['signal', 'whatsapp', 'other']), JSON.stringify(kinds))
+    const addLink = async (kind, value) => {
+      await panel.locator(`[data-add-link="${kind}"]`).click()
+      await panel.locator(`[data-link-input="${kind}"]`).fill(value)
+      await panel.locator(`[data-link-save="${kind}"]`).click()
     }
-    await addCh(0, '+43 660 123 4567')
-    await addCh(1, '0043 660 123 4567')
-    await page.locator('.ch-row').nth(2).getByRole('button', { name: /Add/ }).click()
-    await page.locator('.ch-row.editing input').fill('lena-without-server')
-    await page.locator('.ch-row.editing').getByRole('button', { name: 'Save' }).click()
-    ok('a malformed Matrix address is refused', /A Matrix address looks like/.test(await page.locator('.ch-row.editing').innerText()))
-    await page.locator('.ch-row.editing input').fill('@lena:matrix.example.org')
-    await page.locator('.ch-row.editing').getByRole('button', { name: 'Save' }).click()
-    await addCh(4, '@lena_tw')
-    const hrefs = await page.locator('.ch-open').evaluateAll((els) => els.map((e) => e.getAttribute('href')))
+    await addLink('signal', 'https://signal.me/#p/+436601234567')
+    await addLink('whatsapp', 'https://wa.me/436601234567')
+    await addLink('other', 'lena-without-server')
+    ok('a link that is not an http(s) address is refused', await panel.locator('[data-card-link="other"]').count() === 0 && await panel.locator('[data-link-input="other"]').count() === 1)
+    await panel.locator('[data-link-input="other"]').fill('https://matrix.to/#/@lena:matrix.example.org')
+    await panel.locator('[data-link-save="other"]').click()
+    const hrefs = await panel.locator('[data-card-link] a').evaluateAll((els) => els.map((e) => e.getAttribute('href')))
     ok('links open the apps directly', JSON.stringify(hrefs) === JSON.stringify([
-      'https://signal.me/#p/+436601234567', 'https://wa.me/436601234567', 'https://matrix.to/#/@lena:matrix.example.org', 'https://t.me/lena_tw',
+      'https://signal.me/#p/+436601234567', 'https://wa.me/436601234567', 'https://matrix.to/#/@lena:matrix.example.org',
     ]), JSON.stringify(hrefs))
-    await shot(page, 'person_channels')
-    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    await shot(page, `person_channels_${w}`)
+    await page.goBack(); await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 5_000 })
     await page.locator('.node', { hasText: 'Lena' }).click()
-    ok('reopened, only the known messengers show', await page.locator('.ch-row').count() === 4)
-    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    await page.getByRole('heading', { name: 'Card' }).waitFor({ timeout: 5_000 })
+    ok('reopened, only the known messengers show', await page.locator('[data-connect-panel] [data-card-link]').count() === 3)
+    await page.goBack(); await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 5_000 })
 
     // Meet: ONE code (wave 6b); my Signal link rides in it, or becomes the code under Advanced > Only Signal
     await page.locator('.hdr .status-pill.qr').click()
@@ -147,13 +202,16 @@ async function main() {
     ok('Meet has no Signal page any more: no Signal tab', (await page.getByRole('tab', { name: 'Signal' }).count()) === 0)
     await chooseMode(page, 'only-signal')
     ok('Advanced > Only Signal: Meet shows my Signal code once added', (await page.getAttribute('.qrwrap', 'data-payload')) === 'https://signal.me/#eu/jakobDemo123')
-    await chooseMode(page, 'trustweb-signal')
+    // answers-44a: a mode chosen once moves onto the Meet row ([data-share-row]); the press goes to whichever copy is shown
+    await openAdvanced(page)
+    await page.locator('[data-mode="trustweb-signal"]:visible').first().click()
     ok('the unified code is the TrustWeb code', /connect=|\/c\//.test(await page.getAttribute('.qrwrap', 'data-payload') ?? ''))
     await page.getByRole('button', { name: 'Back' }).click()
-    ok('the call button explains itself on hover', /resonance/.test(await page.getByRole('button', { name: 'Ask your web' }).getAttribute('title') ?? ''))
+    ok('the call button explains itself on hover', /Ask your web and feel the vibrations come back/.test(await page.locator('[data-open-query]').first().getAttribute('title') ?? ''))
 
     // Record (solo): Tana voice-memo layout
     const qrOnWeb = await page.locator('.status-pill.qr').boundingBox()
+    const gearOnWeb = await page.locator('.hdr [data-settings-gear]').boundingBox()
     await page.locator('nav.tabs .tab-record').click()
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
     ok('Record has the Tana-style circle and clock, discard and send (the circle itself records)',
@@ -161,14 +219,16 @@ async function main() {
     ok('Record carries the Meeting button (two people, handshake) top right', await page.getByRole('button', { name: 'Meeting', exact: true }).isVisible() && await page.locator('.meet-btn svg circle').count() === 2 && await page.locator('.meet-btn svg rect').count() === 2)
     const meetSlot = await page.locator('.meet-btn').boundingBox()
     const qrOnRecord = await page.locator('.status-pill.qr').boundingBox()
-    ok('the QR sits exactly where it sits on Web (muscle memory)', qrOnRecord !== null && Math.abs(qrOnRecord.x - qrOnWeb.x) < 1 && Math.abs(qrOnRecord.y - qrOnWeb.y) < 1, JSON.stringify([qrOnWeb, qrOnRecord]))
+    const gearOnRecord = await page.locator('.hdr [data-settings-gear]').boundingBox()
+    // answers-44a (header-layout, item 23): the top right ends the same everywhere (Settings, AI); on Record the Meeting button sits before the QR.
+    ok('the Settings gear sits exactly where it sits on Web, the QR on the same row (muscle memory)', gearOnRecord !== null && Math.abs(gearOnRecord.x - gearOnWeb.x) < 1 && Math.abs(gearOnRecord.y - gearOnWeb.y) < 1 && qrOnRecord !== null && Math.abs(qrOnRecord.y - qrOnWeb.y) < 1, JSON.stringify([gearOnWeb, gearOnRecord, qrOnWeb, qrOnRecord]))
     ok('no consent wording on solo Record', !/agreed to/.test(await page.locator('.screen').innerText()))
     // "Listen for" prompts (owner 2026-10-06): what to note or create; a tap opens that Advanced section
     ok('Record prompts what to listen for: opportunity, resource, looking for, offer, talent', await page.locator('.rec-prompts .chip.prompt').count() === 5 && /Listen for/.test(await page.locator('.rec-prompts').innerText()))
     await page.locator('.rec-prompts .chip.prompt', { hasText: 'what they offer' }).click()
     ok('a prompt opens Advanced with that field focused', await page.locator('.adv.open').count() === 1 && await page.evaluate(() => document.activeElement?.closest('[data-adv]')?.getAttribute('data-adv')) === 'offer')
-    await page.locator('.adv-toggle').click()
-    ok('the Past meetings link sits under the recording', /Past meetings/.test(await page.locator('.past-link').innerText()))
+    await page.locator('.screen .adv-toggle').click()
+    ok('the Past recordings link sits under the recording (solo Record names them recordings)', /Past recordings/.test(await page.locator('.past-link').innerText()))
     await shot(page, 'record_idle')
     await page.locator('.rec-circle').click()
     await page.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
@@ -183,14 +243,17 @@ async function main() {
     await shot(page, 'record_paused')
     await page.locator('.rec-circle').click()
     await page.waitForTimeout(1200)
-    await page.getByRole('button', { name: 'Web' }).click()
+    await page.locator('nav.tabs [data-go="web"]').click()
     ok('the pill follows you to Web', await page.locator('.status-pill.rec').isVisible())
     await page.locator('.status-pill.rec').click()
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
-    await page.getByRole('button', { name: 'Send' }).click()
+    // answers-44a: Send no longer asks; who it was about is picked on the About row ("Who"), its sheet lists the people
+    await page.locator('.screen .about-kind.who').click()
     await page.getByRole('heading', { name: 'Who was this about?' }).waitFor({ timeout: 5_000 })
-    ok('send asks who it was about', true)
-    await page.locator('.sheet .chip', { hasText: 'Lena' }).click()
+    ok('the About row asks who it was about', true)
+    await page.locator('.sheet.on .chip', { hasText: 'Lena' }).click()
+    ok('the About row then names Lena', (await page.locator('.about-row .about-value').innerText()) === 'Lena')
+    await page.locator('[data-record-send]').click()
     await page.getByRole('heading', { name: /Notes about Lena/ }).waitFor({ timeout: 10_000 })
     ok('then goes to Review with the recording card', await page.locator('.rec-card').isVisible())
     const memoLines = await page.locator('.line-text').evaluateAll((els) => els.map((e) => e.value))
@@ -205,7 +268,7 @@ async function main() {
     await page.locator('.rec-circle').click()
     await page.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
     await page.waitForTimeout(800)
-    await page.getByRole('button', { name: 'Discard' }).click()
+    await page.locator('[data-record-discard]').click()
     ok('discard drops a take in progress', await page.locator('.rec-circle.live, .rec-circle.paused').count() === 0 && /0:00/.test(await page.locator('#rec-clock').innerText()))
 
     // Meeting view
@@ -230,7 +293,7 @@ async function main() {
     await page.getByRole('button', { name: 'How to start' }).click()
     ok('the info button shows how to start', await page.getByText('Okay, we\'re recording now.', { exact: false }).isVisible())
     ok('an active-transcribing switch is there', await page.getByRole('switch', { name: /Transcribing/ }).isVisible())
-    ok('the Meeting view prompts what to listen for too', await page.locator('.rec-prompts .chip.prompt').count() === 5 && await page.locator('.adv-toggle').isVisible())
+    ok('the Meeting view prompts what to listen for too', await page.locator('.rec-prompts .chip.prompt').count() === 5 && await page.locator('.screen .adv-toggle').isVisible())
     // Headless Chromium crashes on the on-device speech probe, so this run
     // records audio only; the TalkWeave path has its own live probe test.
     await page.getByRole('switch', { name: /Transcribing/ }).click()
@@ -293,7 +356,7 @@ async function main() {
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
 
     // QR from a header: no notes, generic title
-    await page.getByRole('button', { name: 'Web' }).click()
+    await page.locator('nav.tabs [data-go="web"]').click()
     await page.locator('.hdr .status-pill.qr').click()
     await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
     const qrLink = await page.getAttribute('.qrwrap', 'data-payload')
@@ -301,46 +364,65 @@ async function main() {
     await page.getByRole('button', { name: 'Back' }).click()
 
     // Inventory: cog settings, backup question
-    await page.getByRole('button', { name: 'Resources' }).click()
+    await page.locator('nav.tabs [data-go="inventory"]').click()
     ok('Inventory settings sit behind a cog (Lucide settings path)', await page.locator('.hdr-btn.icon-only svg path[d^="M12.22 2h"]').count() === 1)
     await page.waitForTimeout(500)
     ok('without a backup service the backup card stays hidden (backup_flow covers it live)', await page.getByText('Do you want to back it up on a Swiss server?').count() === 0)
     await shot(page, 'inventory')
-    await page.getByRole('button', { name: 'Settings' }).click()
-    await page.getByRole('button', { name: 'Resources on the left, Web on the right' }).click()
-    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    // answers-44a: the row is arranged in the ⋮ sheet (wave 40, data-bar-move): Web one place to the right
+    await page.locator('nav.tabs [data-bar-more]').click()
+    await page.locator('.sheet.on [data-bar-open-settings]').click()
+    await page.locator('.sheet.on [data-bar-move="web:1"]').first().click()
+    await closeSheet(page)
     const tabs = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
-    // Wave 2 (P9): the Feed is off by default, so the bar is the old three.
-    ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['Resources', 'Record', 'Web']), JSON.stringify(tabs))
+    ok('the ⋮ arrows move Web one place to the right', tabs[0] === 'Chat' && tabs[1] === 'Web', JSON.stringify(tabs))
     // the alternative: magnifier "Query", Curate list top right; switched in the ⋮ menu's Settings
-    await page.getByRole('button', { name: 'Web', exact: true }).click()
-    await page.locator('.hdr [aria-label="Settings"]').click()
-    await page.locator('.radio', { hasText: 'A magnifying glass' }).click()
-    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
-    ok('the Query alternative shows a magnifier "Query" and the Curate list top right',
-      await page.getByRole('button', { name: 'Query', exact: true }).isVisible() && await page.locator('.hdr-right').getByRole('button', { name: 'Curate', exact: true }).isVisible())
+    await page.locator('nav.tabs [data-go="web"]').click()
+    await openSettings(page)
+    await page.locator('.sheet.on .radio', { hasText: 'A magnifying glass' }).click()
+    await closeSheet(page)
+    // answers-44a: the header is the same everywhere (item 23), so Curate stays in Settings; the button itself turns into the magnifier "Query"
+    const fab = page.locator('[data-open-query]').first()
+    ok('the Query alternative shows a magnifier "Query" in place of "Ask your web"',
+      await fab.isVisible() && await fab.getAttribute('aria-label') === 'Query' && !(await fab.getAttribute('class')).includes('call'))
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
+  } finally {
+    await ctx.close()
+  }
+}
 
-    // a populated web: with the query dock open, every person stays above it
-    const demo = await ctx.newPage()
+/** The populated web, dark mode, the wide page, a take the phone ends, Settings > Recording: once each. */
+async function extras(browser, base, shot) {
+  const errors = []
+
+    // a populated web: no person sits under the "Ask your web" button (answers-44a: Ask opens its own page now, so the wave-6 query dock
+    // over the rings is gone; the check is on the web before asking), and the button opens Ask
+    const demoCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    await hideOverlays(demoCtx)
+    const demo = await demoCtx.newPage()
     await demo.goto(base + 'ea-demo/')
+    await demo.waitForLoadState('networkidle').catch(() => {}); await demo.waitForTimeout(1000)
     const maya = demo.frameLocator('iframe[title="Device 1"]')
     await maya.getByLabel('Your first name').fill('Maya')
     await maya.getByRole('button', { name: 'Start on this phone' }).click()
-    await maya.getByRole('button', { name: 'Ask your web' }).click({ timeout: 30_000 })
-    await demo.waitForTimeout(400)
+    await maya.locator('.rings-wrap .node:not(.you)').first().waitFor({ timeout: 30_000 })
     const fit = await demo.evaluate(() => {
-      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 1")
+      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === 'Device 1')
       const doc = f?.contentDocument
-      const dock = doc?.querySelector('.query-dock')?.getBoundingClientRect()
-      const nodes = [...(doc?.querySelectorAll('.rings-wrap .node') ?? [])].map((x) => x.getBoundingClientRect().bottom)
-      return { dockTop: dock?.top ?? 0, lowest: Math.max(...nodes), count: nodes.length }
+      const fab = doc?.querySelector('[data-open-query]')?.getBoundingClientRect()
+      const nodes = [...(doc?.querySelectorAll('.rings-wrap .node') ?? [])].map((x) => x.getBoundingClientRect())
+      const under = nodes.filter((r) => fab && r.right > fab.left && r.left < fab.right && r.bottom > fab.top && r.top < fab.bottom).length
+      return { count: nodes.length, under }
     })
-    ok(`all ${fit.count} people stay above the query dock`, fit.count > 3 && fit.lowest <= fit.dockTop, JSON.stringify(fit))
-    await demo.close()
+    ok(`all ${fit.count} people stay clear of the "Ask your web" button`, fit.count > 3 && fit.under === 0, JSON.stringify(fit))
+    await maya.locator('[data-open-query]').first().click()
+    await maya.getByRole('heading', { name: 'Ask your web' }).first().waitFor({ timeout: 10_000 })
+    ok('"Ask your web" opens Ask', true)
+    await demoCtx.close()
 
     // dark mode is a real palette, not a darkened beige
-    const dark = await browser.newContext({ viewport: { width: 1000, height: 1000 }, colorScheme: 'dark' })
+    const dark = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'dark' })
+    await hideOverlays(dark)
     const dp = await dark.newPage()
     await dp.goto(base + 'ea-demo/')
     const dm = dp.frameLocator('iframe[title="Device 1"]')
@@ -352,29 +434,39 @@ async function main() {
       const s = f?.contentDocument?.querySelector('.screen')
       return s ? getComputedStyle(s).backgroundColor : ''
     })
-    ok('dark mode uses the plum night surface', bg === 'rgb(31, 23, 41)', bg)
-    if (SHOTS) await dp.locator('iframe[title="Device 1"]').screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_dark_web.png`) })
+    // answers-44a: the design system (2026-11-07, design/tokens.css --surface-1 dark #26241F) replaced the plum night surface
+    ok('dark mode uses the design system\'s dark surface', bg === 'rgb(38, 36, 31)', bg)
+    if (SHOTS) await dp.locator('iframe[title="Device 1"]').screenshot({ path: path.join(SHOTS, `record_flow_dark_web.png`) })
     await dark.close()
 
     // wide screen: a "+" outside the phone opens the side-by-side demo
     const wide = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    await hideOverlays(wide)
+    // answers-44a: the phone frame on a wide tab is Settings > "TrustWeb mobile" (layout_pick.ts); full width by default hides the dock
+    await wide.addInitScript(() => localStorage.setItem('trustweb.ui.layout', 'mobile'))
     const wp = await wide.newPage()
     await wp.goto(base)
+    await wp.waitForLoadState('networkidle').catch(() => {}); await wp.waitForTimeout(1000)
     const addLink = wp.getByRole('link', { name: /Add another device to see how it works side by side/ })
     ok('the "+ add another device" link sits outside the phone on a wide screen', await addLink.isVisible() && /\/demo\/$/.test(await addLink.getAttribute('href') ?? ''))
     await wide.close()
 
     // the phone ending a take (call, lock, mic taken) keeps what was recorded
-    const ctx2 = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone'] })
+    const ctx2 = await browser.newContext({ viewport: { width: 360, height: 780 }, permissions: ['microphone'] })
     await ctx2.addInitScript(noSpeech)
     await ctx2.addInitScript(() => {
       const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
       navigator.mediaDevices.getUserMedia = async (c) => { const st = await orig(c); window.__streams = [...(window.__streams || []), st]; return st }
     })
+    await hideOverlays(ctx2)
     const p2 = await ctx2.newPage()
     await p2.goto(base)
+    await p2.waitForLoadState('networkidle').catch(() => {}); await p2.waitForTimeout(1500)
     await p2.getByLabel('Your first name').fill('Jakob')
     await p2.getByRole('button', { name: 'Start on this phone' }).click()
+    await p2.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
+    await p2.locator('.demo-friends').getByRole('button', { name: 'No thanks' }).click({ timeout: 3_000 }).catch(() => {})
+    await noteTaker(p2)
     await p2.locator('nav.tabs .tab-record').click()
     await p2.locator('.rec-circle').click()
     await p2.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
@@ -386,16 +478,20 @@ async function main() {
     await ctx2.close()
 
     // Settings > Recording (owner 2026-10-06): transcription choice and what the Record tab starts with
-    const ctx3 = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone'] })
+    const ctx3 = await browser.newContext({ viewport: { width: 360, height: 780 }, permissions: ['microphone'] })
     await ctx3.addInitScript(noSpeech)
+    await hideOverlays(ctx3)
     const p3 = await ctx3.newPage()
     const loopback = []
     p3.on('request', (r) => { if (/127\.0\.0\.1:8990|\/talkweave\//.test(r.url())) loopback.push(r.url()) })
     p3.on('pageerror', (e) => { errors.push(e.message); console.log('  [pageerror]', e.message) })
     await p3.goto(base)
+    await p3.waitForLoadState('networkidle').catch(() => {}); await p3.waitForTimeout(1500)
     await p3.getByLabel('Your first name').fill('Jakob')
     await p3.getByRole('button', { name: 'Start on this phone' }).click()
     await p3.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
+    await p3.locator('.demo-friends').getByRole('button', { name: 'No thanks' }).click({ timeout: 3_000 }).catch(() => {})
+    await noteTaker(p3)
     // an older record that opted into "Use TalkWeave on this computer" keeps it
     await p3.evaluate(() => {
       for (let i = 0; i < localStorage.length; i++) {
@@ -407,16 +503,15 @@ async function main() {
     await p3.reload()
     await p3.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     // The sheet redraws once the server's status is in (no server here: "did not answer"); wait for that, so no click lands on the old sheet.
-    const openSettings = async () => {
-      await p3.locator('.hdr [aria-label="Settings"]').click()
-      await p3.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 })
-    }
-    await openSettings()
+    await openSettings(p3)
+    await p3.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 })
+    await p3.waitForTimeout(400)
+    await p3.evaluate(() => document.querySelectorAll('.sheet.on details').forEach((d) => { d.open = true }))
     const onLabel = async (attr) => (await p3.locator(`.radio.on[${attr}]`).allInnerTexts()).map((t) => t.split('\n')[0].trim())
     ok('Settings > Recording: an old TalkWeave opt-in reads as "TalkWeave on this computer"', JSON.stringify(await onLabel('data-transcription')) === '["TalkWeave on this computer"]', JSON.stringify(await onLabel('data-transcription')))
     ok('the Record tab starts with "Just me" by default', JSON.stringify(await onLabel('data-default-recording')) === '["Just me"]')
     await p3.locator('.radio[data-transcription="later"]').scrollIntoViewIfNeeded()
-    if (SHOTS) await p3.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_settings_recording.png`) })
+    await shot(p3, 'settings_recording')
     await p3.locator('.radio[data-transcription="later"]').click()
     await p3.locator('.radio[data-default-recording="meeting"]').click()
     const stored = await p3.evaluate(() => {
@@ -427,18 +522,16 @@ async function main() {
       return null
     })
     ok('choosing replaces the old switch for good', JSON.stringify(stored) === JSON.stringify({ t: 'later', d: 'meeting', old: false }), JSON.stringify(stored))
-    await p3.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
-    // a note started from a person stays a solo note, whatever the Record tab starts with
-    await p3.locator('.rings-wrap').click({ position: { x: 176 + 114, y: 176 } })
+    await closeSheet(p3)
+    // answers-44a: a person's card no longer starts a recording ("Add a note" of the wave-6 person sheet is gone: notes live on the card);
+    // the origin rule is what stays: from Web, the Record tab opens "Just me" whatever Settings says.
+    await tapRing(p3, 'friend')
+    await p3.getByRole('heading', { name: 'Add someone to your web?' }).waitFor({ timeout: 5_000 })
     await p3.getByPlaceholder('Name').first().fill('Lena')
-    await p3.getByRole('button', { name: 'Add to my web' }).click()
-    await p3.locator('.node', { hasText: 'Lena' }).click()
-    await p3.getByRole('button', { name: 'Add a note' }).click()
-    await p3.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
-    ok('a note started from a person opens solo Record even with "A meeting"', true)
+    await p3.locator('[data-add-person]').click()
+    await p3.locator('.node', { hasText: 'Lena' }).waitFor({ timeout: 5_000 })
     p3.on('dialog', (d) => void d.accept())
-    await p3.getByRole('button', { name: 'Discard' }).click()
-    await p3.getByRole('button', { name: 'Web', exact: true }).click()
+    await p3.locator('nav.tabs [data-go="web"]').click()
     await p3.locator('nav.tabs .tab-record').click()
     await p3.getByRole('heading', { name: 'Record', exact: true }).waitFor({ timeout: 5_000 })
     ok('from Web, the Record tab opens "Just me" even with "A meeting" in Settings (the origin wins)', true)
@@ -453,16 +546,9 @@ async function main() {
     ok('"Transcribe later" says so and never reaches for TalkWeave',
       (await p3.locator('.tr-engine').innerText()).trim() === 'No transcriber here: the recording is transcribed later on your computer' && loopback.length === 0,
       JSON.stringify([await p3.locator('.tr-engine').innerText(), loopback]))
-    if (SHOTS) await p3.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_meeting_default.png`) })
+    await shot(p3, 'meeting_default')
     await ctx3.close()
     ok('no page errors in the settings run', errors.length === 0, JSON.stringify(errors))
-  } finally {
-    await browser?.close()
-    viteProc.kill()
-    await relay.close?.()
-  }
-  console.log(failures ? `\n${failures} FAILURE(S)` : '\nrecord-flow: ALL PASS')
-  process.exit(failures ? 1 : 0)
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

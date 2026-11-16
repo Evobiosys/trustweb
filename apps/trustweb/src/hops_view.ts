@@ -35,8 +35,8 @@ export interface ReachAudience { zone?: Zone; add: readonly string[]; exclude: r
 const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1)
 
 /** "How far?" in the ask dock: the first three choices word the degree from the zone (friends of friends ...), then 3+ steps with its diagram, custom, no limit, and Public (disabled). */
-export function reachChooser(reach: number, disabled: boolean, onChange: (reach: number) => void, aud?: ReachAudience): HTMLElement {
-  const current = reachChoice(reach)
+export function reachChooser(reach: number, disabled: boolean, onChange: (reach: number, custom: boolean) => void, aud?: ReachAudience, customOn = false): HTMLElement {
+  const current = reachChoice(reach, customOn)
   const steps = effectiveMaxHops(reach)
   const custom = current === ReachChoice.Custom ? steps : 4
   const label = (c: ReachChoice): string => {
@@ -53,13 +53,13 @@ export function reachChooser(reach: number, disabled: boolean, onChange: (reach:
     el('div', { class: 'chips reach-chips', role: 'radiogroup', 'aria-label': S.reachTitle }, [
       ...REACH_CHOICES.map((c) => el('button', {
         class: 'chip' + (c === current ? ' on' : ''), role: 'radio', 'aria-checked': String(c === current), 'data-reach-choice': c, disabled,
-        onclick: () => onChange(reachFor(c, custom)),
+        onclick: () => onChange(reachFor(c, custom), c === ReachChoice.Custom),
       }, [label(c)])),
       // Posting publicly (the questhub server) waits for the Mastodon decision.
       el('button', { class: 'chip', role: 'radio', 'aria-checked': 'false', 'data-reach-public': '', disabled: !PUBLIC_ASK_ENABLED, title: S.askPage.publicSoon }, [`${S.askPage.publicLbl} · ${S.askPage.publicSoon}`]),
     ]),
     current === ReachChoice.Custom && !disabled
-      ? customBox(steps, 1, HOP_CAP, S.reachCustomAria, (n) => onChange(reachFor(ReachChoice.Custom, n)), 'data-reach-custom')
+      ? customBox(steps, 1, HOP_CAP, S.reachCustomAria, (n) => onChange(reachFor(ReachChoice.Custom, n), true), 'data-reach-custom')
       : null,
     diagram.childElementCount ? diagram : null,
     el('p', { class: 'hint', 'data-reach-hint': '1' }, [S.reachHint(steps, reach === HOPS_UNBOUNDED)]),

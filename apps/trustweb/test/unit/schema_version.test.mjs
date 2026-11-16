@@ -92,7 +92,7 @@ describe('bottom bar order reset (wave 33)', () => {
     const low = base({ uiBar: { order: ['chat', 'record'], orderVersion: 1 } })
     migrate(low)
     expect(low.uiBar.order).toEqual(NEW)
-    const done = base({ schemaVersion: 2, uiBar: { order: ['chat', 'record'], orderVersion: 2 } })
+    const done = base({ schemaVersion: 4, uiBar: { order: ['chat', 'record'], orderVersion: 2 } })
     expect(migrate(done)).toBe(false)
     expect(done.uiBar.order).toEqual(['chat', 'record'])
   })
@@ -120,7 +120,7 @@ describe('bottom bar order reset (wave 33)', () => {
       expect(s.uiBar.order).toEqual(order)
     }
   })
-  it('the schema version stays 2: older builds keep syncing', () => {
-    expect(SCHEMA_VERSION).toBe(2)
+  it('wave 44: the schema version is 4 (colourMode + homeLayout + savedFilters); older builds refuse a newer record', () => {
+    expect(SCHEMA_VERSION).toBe(4)
   })
 })

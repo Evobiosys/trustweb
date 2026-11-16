@@ -1881,7 +1881,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 
 /* wave 43 event-roles */
 /* P2: an OFF toggle is struck through, never colour alone (greyscale / e-ink screens) */
-.tw-off{text-decoration:line-through}
+.tw-off{opacity:.55}
 .tw-expander{flex:0 0 44px; min-height:44px; background:none; border:0; font-size:15px; cursor:pointer; color:var(--ink); text-decoration:underline}
 .roles-line{display:flex; align-items:center; gap:6px}
 .roles-line .roles-summary{flex:1 1 auto; min-width:0; text-align:left; background:none; border:0; padding:8px 0; font:inherit; color:var(--ink-soft); cursor:pointer; text-decoration:underline; overflow-wrap:anywhere}
@@ -1906,7 +1906,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .feed-compose .btn{align-self:flex-end; text-decoration:underline}
 .post-actions{display:flex; gap:6px; margin-top:6px}
 .post-actions .btn{text-decoration:underline}
-.post-actions .btn.tw-off{text-decoration:underline line-through}
+.post-actions .btn.tw-off{text-decoration:underline}
 .event-feed-row{margin:8px 0}
 .event-feed-panel{display:flex; flex-direction:column; gap:4px; padding:6px 4px}
 .event-feed-panel[hidden]{display:none}
@@ -1961,7 +1961,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .rv-bar{display:flex; flex-direction:column; gap:6px; margin:0 0 10px}
 .rv-switch,.rv-chips{display:flex; flex-wrap:wrap; gap:4px}
 .rv-bar .btn,.rv-item .btn,.rv-protected .btn{text-decoration:underline}
-.rv-bar .btn.tw-off{text-decoration:underline line-through}
+.rv-bar .btn.tw-off{text-decoration:underline}
 .rv-section h3{margin:12px 0 6px}
 .rv-indent{margin-left:12px}
 .rv-indent h4{margin:8px 0 4px; font-size:13px; color:var(--ink-soft)}
@@ -2020,3 +2020,265 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
 /* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
 #notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}
+
+/* wave44 header-layout */
+.hdr{flex-wrap:wrap; row-gap:4px}
+.hdr-left{flex:1 1 0}
+.hdr-right{flex:0 0 auto}
+.hdr-tools{flex:0 0 100%; display:flex; align-items:center; justify-content:flex-end; gap:8px; min-width:0}
+.hdr-tools > *{flex-shrink:0}
+@media (max-width:480px){ .hdr-tools{gap:4px} }
+/* wave44 web-rings-polish */
+:root{--person-neutral:var(--surface-2)}
+/* Quiet colours (colourMode 'rings'): the neutral bubble keeps its initial legible; the ring colour is the 2 px stroke set in web_view.ts. */
+/* Second-hand people (Person.via) sit outside every ring: dashed, no fill; a nameless one shows only the outline. */
+.node.beyond .ava{background:transparent; border:2px dashed var(--ink-3); color:var(--ink-2); box-shadow:none}
+.node.beyond:not(:has(span)) .ava{font-size:0}
+/* The ⋮ goes back onto the bar's top line at the right end (Jakob 2026-11-16), as before wave 43c. */
+.bar-more{position:absolute; right:6px; top:-13px; flex:none; align-self:auto; margin:0}
+/* Web focus: "Tap the event" pill, inside the rings box at the top left, clear of the info badge on the right; one pulse. */
+.tap-event-hint{position:absolute; left:6px; top:6px; z-index:6; max-width:calc(100% - 52px); padding:6px 12px; border-radius:999px; border:1px solid var(--trust); background:var(--trust-tint); color:var(--trust-strong); font-weight:600; font-size:13px; line-height:1.2; text-decoration:underline; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; animation:tap-event-pulse 1.1s ease-out 1}
+@keyframes tap-event-pulse{0%{box-shadow:0 0 0 0 rgba(19,132,124,.55)}100%{box-shadow:0 0 0 14px rgba(19,132,124,0)}}
+@media (prefers-reduced-motion:reduce){.tap-event-hint{animation:none}}
+.rings-wrap.card-open .tap-event-hint{display:none}
+.person-menu input{font:inherit; padding:6px 8px; border:1px solid var(--line-strong); border-radius:8px; background:var(--card); color:var(--ink); min-width:150px}
+/* wave44 home-dashboard */
+.home-board{display:flex; flex-direction:column; gap:12px; padding-bottom:16px}
+.home-top{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.home-cols{display:flex; flex-direction:column; gap:12px}
+.home-col{display:flex; flex-direction:column; gap:10px; min-height:48px}
+.home-col[data-home-col=center]{order:0}
+.home-col[data-home-col=left]{order:1}
+.home-col[data-home-col=right]{order:2}
+.home-tile{background:var(--raised); border:1px solid var(--line); border-radius:var(--r-card); padding:12px; display:flex; flex-direction:column; gap:6px; min-width:0; cursor:grab; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none}
+.home-tile.lifted{position:relative; z-index:5; cursor:grabbing; box-shadow:var(--shadow-float); opacity:.92; touch-action:none; pointer-events:auto}
+.home-tile:focus-visible{outline:2px solid var(--electric); outline-offset:2px}
+.home-web{min-height:150px; justify-content:center; align-items:center; text-align:center}
+.home-tile-head{display:flex; justify-content:space-between; gap:8px; align-items:baseline}
+.home-rows{list-style:none; padding:0; display:flex; flex-direction:column; gap:4px; font-size:13px; overflow-wrap:anywhere}
+@media (min-width:700px){
+  .home-cols{display:grid; grid-template-columns:1fr 1.6fr 1fr; align-items:start; gap:14px}
+  .home-col[data-home-col=left],.home-col[data-home-col=center],.home-col[data-home-col=right]{order:0}
+  .home-web{min-height:240px}
+}
+.dash{display:flex; flex-direction:column; gap:12px}
+.dash-chooser{max-width:100%}
+.dash-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px}
+.dash .tile{display:flex; flex-direction:column; gap:4px; text-align:left; font:inherit; color:inherit}
+.dash-dot{display:inline-block; width:9px; height:9px; margin-right:6px; border-radius:50%; background:var(--trust,#2e7d32)}
+.dash-dot.flash{animation:dash-flash 1.2s ease-out 1}
+@keyframes dash-flash{0%{box-shadow:0 0 0 0 var(--trust,#2e7d32)} 100%{box-shadow:0 0 0 12px transparent}}
+/* wave44 steer-settings-sync */
+.sheet summary[hidden], .sheet h4[hidden], .sheet .eyebrow[hidden] { display: none !important; }
+/* wave44 feed-hopes */
+.co-explain{font-size:12px; margin:2px 0 8px}
+/* wave44 feed-look: Mastodon-style status list (pattern only): full-width rows with 1px dividers, avatar column left, icon action row */
+.posts{gap:0}
+.posts .post{background:none; border-radius:0; box-shadow:none; padding:12px 4px; border-bottom:1px solid var(--line)}
+.posts .post:last-child{border-bottom:0}
+.post-main .ava{width:46px; height:46px; flex:none; font-size:18px}
+@media (min-width:600px){ .post-main .ava{width:40px; height:40px; font-size:16px} }
+.post-head{flex-wrap:nowrap; gap:0 6px; min-width:0}
+.post-head .post-name{flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.post-head .post-handle{flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px}
+.post-head .post-age{flex:none; margin-left:auto; font-size:13px}
+.post-boost{font-size:12.5px; margin-bottom:2px}
+.post-tags{margin-top:3px; font-size:11.5px; align-items:center}
+.post-tags .chip{padding:1px 7px; font-size:11.5px; border-width:1px; cursor:default}
+.post-indent{padding-left:58px}
+@media (min-width:600px){ .post-indent{padding-left:52px} }
+.post-indent:empty{display:none}
+.post-indent .post-img{margin-top:6px}
+.post-card{display:block; margin-top:8px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); font-size:13px; text-decoration:underline; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.post-actions{display:flex; justify-content:space-between; max-width:300px; margin-top:6px}
+.post-actions .act{position:relative; width:40px; height:36px; display:flex; align-items:center; justify-content:center; border:0; background:none; color:var(--ink-soft); cursor:pointer; border-radius:8px}
+.post-actions .act svg{width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.post-actions .act.on{color:var(--teal)}
+.post-actions .act.on svg{fill:currentColor}
+.post-actions .act.tw-off{text-decoration:line-through; opacity:.75}
+.post-actions .act.tw-off::after{content:""; position:absolute; left:11px; right:11px; top:50%; border-top:2px solid currentColor; transform:rotate(-35deg)}
+.post-actions .act[disabled]{cursor:default}
+.post-compact{background:none; box-shadow:none; border-radius:0; padding:6px 0; border-bottom:1px solid var(--line)}
+.post-compact .post-text{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:14px}
+.post-compact .post-main .ava{width:32px; height:32px; font-size:14px}
+.post-compact-wrap:last-child .post-compact{border-bottom:0}
+/* wave44 feed-sources: the Sources page, the "Only <source>" chips, the publish target */
+.sources-page{display:flex; flex-direction:column; gap:6px; min-width:0}
+.sources-page .eyebrow{margin:14px 0 0}
+.src-row{display:flex; flex-direction:column; gap:4px; min-width:0}
+.src-main{display:flex; align-items:center; gap:4px}
+.src-main .radio{flex:1 1 auto; min-width:0; margin-top:6px; overflow-wrap:anywhere}
+.src-filters{display:flex; flex-direction:column; gap:6px; padding:4px 0 8px 10px; min-width:0}
+.src-filters[hidden]{display:none}
+.src-opt{font-size:11px; color:var(--ink-soft); opacity:.7; padding:4px 8px; min-height:0}
+.algo-row{display:flex; flex-direction:column; gap:2px; min-width:0}
+.algo-range{width:100%; min-height:32px}
+.feed-target{font-size:12px; color:var(--ink-soft)}
+.feed-target summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
+.feed-target .meta{margin:4px 0}
+/* wave44 steer-bubble-connect: the ring that fills while one bubble is held on another (full = merge); drawn as a stroke, so greyscale reads it too */
+.hold-ring{position:absolute; inset:-6px; width:calc(100% + 12px); height:calc(100% + 12px); pointer-events:none; transform:rotate(-90deg); z-index:7}
+.hold-ring circle{fill:none; stroke:var(--electric,#12a8e3); stroke-width:3; stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:100; animation:hold-ring-fill var(--hold-ms,1500ms) linear forwards}
+@keyframes hold-ring-fill{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.hold-ring circle{animation-duration:.01ms}}
+/* wave44 steer-bubble-connect-3: the introduction link sheet (link + QR + Copy / Share) */
+[data-introduce-link-sheet] .qrwrap{display:flex; justify-content:center; margin:8px 0}
+[data-introduce-link-sheet] canvas{width:min(100%,180px) !important; height:auto !important}
+[data-introduce-link-sheet] .field{width:100%; box-sizing:border-box; margin:6px 0}
+/* wave44 steer-strike-mode: the line through OFF options (P2) only in Black and white mode (html.tw-bw); pictures grey like images=grey */
+html.tw-bw .tw-off{text-decoration:line-through}
+html.tw-bw .post-actions .btn.tw-off,html.tw-bw .rv-bar .btn.tw-off{text-decoration:underline line-through}
+html.tw-bw :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) opacity(.55)}
+/* wave44 event-editor */
+/* P7: an optional input looks optional: minuscule and greyed until used. */
+.opt-min{font-size:12px; color:var(--ink-soft); opacity:.72}
+.field.opt-min{padding:5px 8px; border-style:dashed}
+.chip.opt-min{font-size:11.5px}
+.more-features{margin-top:12px}
+.more-features-line{flex:1; min-width:0; text-align:left; background:none; border:0; font:inherit; color:var(--ink); padding:10px 2px; cursor:pointer; text-decoration:underline}
+.more-features-panel{display:flex; flex-direction:column; gap:6px; padding-bottom:6px}
+.more-features-panel[hidden]{display:none}
+.ev-editor .ev-row{display:flex; flex-direction:column; gap:6px; padding:10px 0; border-bottom:1px solid var(--line, rgba(0,0,0,.08))}
+.ev-editor .ev-name{font-size:18px; font-weight:600}
+.ev-editor .ev-span{display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0}
+.ev-editor .ev-span>.field{flex:1 1 130px; min-width:0; width:auto}
+.ev-editor .ev-guest{display:flex; align-items:center; gap:6px; min-width:0}
+.ev-editor .ev-guest .who{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ev-editor .ev-loc{display:flex; align-items:center; gap:6px; min-width:0}
+.ev-editor .ev-loc>.field{flex:1; min-width:0; width:auto}
+.ev-editor .ev-conf-btn{flex:none; white-space:nowrap}
+.ev-draft-modal{place-items:center}
+.ev-draft-card{background:var(--linen, #fff); color:var(--ink); border-radius:16px; padding:18px; width:min(340px, 100%); display:flex; flex-direction:column; gap:8px}
+.cal-tags .chips{align-items:center}
+.roles-line>.event-since{flex:1 1 auto; min-width:0; text-align:left}
+
+/* wave44 steer-people-picker-2 */
+.placement-row{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:8px 0; font-size:13px; color:var(--ink-soft)}
+.placement-row select{flex:1 1 12em; min-width:0}
+.scan-code{margin:8px 0}
+.scan-code .btn{width:100%}
+.scan-view .meta{margin:4px 0}
+.scan-video{width:100%; max-height:40vh; margin-top:8px; border-radius:12px; background:#000}
+/* Laptop and desktop: the code, its scan button and zone choice are one column that always fits the viewport (the code shrinks to make room); the rest of Meet scrolls beside it. */
+@media (min-width:900px){
+  .qrwrap{max-width:max(200px, min(440px, calc(100vh - 480px)))}
+  .meet-page{display:grid; grid-template-columns:minmax(300px,480px) minmax(0,1fr); gap:0 28px; align-items:start}
+  .meet-qr-col{position:sticky; top:0}
+}
+/* A toast ("Connected with ...") never lies over a sheet's buttons (the event's "Add to my events"): while a sheet is open the notice layer sits at the top of the frame, above the sheet's content. */
+.phone:has(.sheet.on) #notice-layer{bottom:auto; top:calc(12px + env(safe-area-inset-top,0px)); justify-content:flex-start; max-height:40%}
+
+/* wave44 steer-people-picker-4 */
+.placement-row{margin:6px 0}
+.placement-row .seg{flex:1 1 16em; flex-wrap:wrap; border-radius:18px}
+.placement-row .seg button{flex:1 1 auto; padding:4px 7px; font-size:12px; white-space:nowrap}
+.share-glyph svg{width:18px; height:18px; vertical-align:-3px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+[data-tag-pick] .input{flex:1 1 8em; min-width:0; max-width:14em}
+/* wave44 steer-invite-link */
+.invite-sheet .invite-kind{margin:12px 0}
+.invite-sheet .event-share{display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start}
+.invite-sheet .event-share .btn{width:auto}
+.invite-qr{max-width:240px; margin:8px 0}
+.invite-qr svg, .invite-qr canvas, .invite-qr img{width:100%; height:auto}
+.invite-adv{display:flex; flex-direction:column; gap:8px; margin:6px 0}
+.invite-adv .field.optional{width:6em; padding:2px 6px; font-size:12px; opacity:.6}
+.invite-warn{margin:10px 0}
+/* wave44 steer-event-visibility */
+.post-actions .btn.tw-off,.rv-bar .btn.tw-off{text-decoration:underline}
+/* wave44 steer-ask-escalation */
+.esc-box{margin:10px 0; padding:10px; border:1px dashed currentColor; border-radius:10px}
+.esc-box .seg button{min-height:36px}
+.asked-who{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
+.asked-who-list{margin:4px 0 0; padding-left:18px}
+.know-note{width:100%; margin:8px 0}
+.place-wrap{display:flex; gap:6px; align-items:center; margin-top:4px}
+.place-wrap input{flex:1; opacity:.7; font-size:12px; min-height:28px}
+/* wave44 steer-inapp-browser */
+.inapp-banner{position:fixed; top:0; left:0; right:0; z-index:60; padding:8px 12px; background:var(--surface,#fff); border-bottom:1px solid currentColor; display:flex; flex-direction:column; gap:4px; max-height:40vh; overflow:auto; font-size:13px}
+.inapp-note{font-size:12px; opacity:.75}
+body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
+
+/* wave44 steer-open-space */
+.os-act{padding:.5rem 0;border-top:1px solid var(--line,rgba(127,127,127,.25))}
+.os-head{display:flex;align-items:center;gap:.5rem}
+.os-slot{flex:0 0 auto;font-variant-numeric:tabular-nums}
+.os-title{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.os-form{display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem}
+
+/* wave44b filters-communities */
+.filter-bar{display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:4px 10px; min-width:0}
+.filter-bar .event-mode-pill{display:inline-flex; align-items:center; gap:4px}
+.saved-filters{font-size:13px; margin:6px 0}
+.saved-filters summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
+.saved-filter{display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:2px 0; min-width:0}
+.saved-filter .meta{flex:1 1 120px; min-width:0}
+.switch-line{display:flex; align-items:center; gap:2px; min-width:0}
+.switch-line .fold{min-width:28px; min-height:28px; padding:0}
+.switch-line .fold-gap{display:inline-block; width:28px; flex:none}
+.sub-more{margin:6px 0; padding:8px}
+/* wave44b profile-page */
+.profile-page{display:flex; flex-direction:column; gap:10px}
+.profile-head{display:flex; align-items:center; gap:10px}
+.profile-head input{flex:1 1 auto; min-width:0}
+.profile-field{display:flex; align-items:center; gap:6px; min-width:0}
+.profile-field label{flex:0 0 7.5em; font-size:12px; color:var(--ink-soft)}
+.profile-field input,.profile-field textarea{flex:1 1 auto; min-width:0}
+.profile-opt input,.profile-opt textarea{font-size:11px; color:var(--ink-soft); opacity:.75; padding:4px 8px; min-height:0}
+.profile-opt label{font-size:11px; opacity:.75}
+.profile-vis{flex:0 0 auto; font-size:11px; color:var(--ink-soft); background:none; border:1px solid var(--line); border-radius:999px; padding:2px 8px; min-height:28px; text-decoration:underline; cursor:pointer}
+.profile-vis[data-vis=discoverable]{border-color:var(--teal); color:var(--teal)}
+.profile-link{display:flex; align-items:center; gap:6px; font-size:12px; min-width:0; flex-wrap:wrap}
+.profile-link a{min-width:0; overflow-wrap:anywhere}
+.profile-more[hidden]{display:none}
+.profile-more{display:flex; flex-direction:column; gap:8px; margin-left:12px; padding-left:10px; border-left:2px solid var(--line)}
+/* wave44b resources-outliner */
+.ol{display:flex; flex-direction:column; gap:2px; min-width:0}
+.ol-row{display:flex; align-items:center; gap:4px; min-width:0}
+.ol-bullet{min-width:32px; min-height:32px; background:none; border:0; color:var(--ink-soft); font-size:16px; cursor:pointer}
+.ol-text{flex:1; min-width:0; min-height:32px; border:0; border-bottom:1px solid var(--line, #ddd); background:none; font:inherit; color:inherit}
+.ol-pick,.ol-tools{display:flex; flex-wrap:wrap; gap:4px; margin:2px 0}
+.ol-share{display:flex; flex-direction:column; gap:4px; margin-top:6px; padding:8px; border:1px solid var(--line, #ddd); border-radius:8px}
+.ol-share-text{margin:0; white-space:pre-wrap; font-size:12px; max-height:120px; overflow:auto}
+.ol-import summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center; font-size:12px; color:var(--ink-soft)}
+.ol-paste{width:100%; font-size:12px}
+.req-count{position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 3px; border-radius:8px; font-size:10px; line-height:16px; text-align:center; background:var(--ink, #222); color:var(--paper, #fff)}
+.requests-btn{position:relative}
+/* wave44 steer-circles-view */
+.circles{display:flex; flex-direction:column; gap:var(--s-3,12px); padding-bottom:24px; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none}
+.circles-hint{margin:0}
+/* Phone: the circles sit in one row that scrolls sideways; wide screens wrap them into a grid. */
+.circles-row{display:flex; gap:18px; overflow-x:auto; padding:22px 16px 16px; scroll-snap-type:x proximity; align-items:center}
+.circle{position:relative; flex:none; width:var(--d); height:var(--d); border-radius:50%; border:2px solid var(--c,var(--line-strong)); background:var(--surface-0); scroll-snap-align:center; transition:box-shadow .18s, transform .18s}
+.circle.open{box-shadow:0 0 0 4px color-mix(in srgb, var(--c) 25%, transparent)}
+.circle-body{position:absolute; inset:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; border:0; background:none; color:var(--ink); font:inherit; text-align:center; cursor:pointer; border-radius:50%; overflow:hidden; text-decoration:underline; text-decoration-color:var(--line-strong)}
+.circle-name{font-size:13px; line-height:1.15; max-width:100%; overflow-wrap:break-word; max-height:2.4em; overflow:hidden}
+.circle-count,.circle-more{color:var(--ink-3); font-size:11px}
+.circle-av,.circle-chip{border:0; padding:0; background:none; cursor:grab; touch-action:manipulation; color:var(--ink)}
+.circle-av{position:absolute; width:26px; height:26px; transform:translate(-50%,-50%); border-radius:50%; z-index:1}
+.circle-av .ava{width:26px; height:26px; font-size:12px; box-shadow:0 0 0 2px var(--surface-0)}
+.circle-chip{display:inline-flex; align-items:center; gap:6px; padding:3px 10px 3px 3px; border:1.5px solid var(--line); border-radius:999px; background:var(--card); font-size:13px}
+.circle-chip .ava{width:28px; height:28px; font-size:13px}
+.circle-pname{max-width:12em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.circle-chips{display:flex; flex-wrap:wrap; gap:8px}
+.circle-pool .eyebrow{margin:4px 0 8px}
+/* The empty tile: dashed, no tag yet; its name box is optional, so greyed and small (P7). */
+.circle-new{border-style:dashed; border-color:var(--line-strong); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:10px; text-align:center}
+.circle-new-text{font-size:11px; line-height:1.2; color:var(--ink-2); max-width:100%}
+.circle-new-name{width:78%; min-width:0; font:inherit; font-size:10px; padding:1px 4px; border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--ink-3); text-align:center}
+.circle-new-name::placeholder{color:var(--ink-3); opacity:.7}
+.circle-panel{display:flex; flex-direction:column; gap:8px; padding:10px 12px; border:1.5px solid var(--c); border-radius:var(--r-card,14px); background:var(--surface-0)}
+.circle-panel-head{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.circle-rename{align-self:flex-start; max-width:14em; font:inherit; font-size:11px; padding:1px 4px; border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--ink-3)}
+/* Dragging: the lifted avatar follows the pointer; every circle shows it can take it, the one under the pointer lights up and swells. */
+.circle-ghost{animation:none; position:fixed; z-index:200; transform:translate(-50%,-50%) scale(1.15); pointer-events:none; opacity:.92; margin:0; box-shadow:0 6px 18px rgba(0,0,0,.25); border-radius:999px}
+.circle-av.circle-ghost{width:26px; height:26px}
+.lifted{opacity:.35}
+.circles.dragging .circle{box-shadow:0 0 0 2px color-mix(in srgb, var(--c,var(--line-strong)) 35%, transparent)}
+.circles.dragging .circle.drop{transform:scale(1.08); box-shadow:0 0 0 5px color-mix(in srgb, var(--c,var(--trust)) 55%, transparent)}
+.circles.dragging .circle-new.drop{border-style:solid; border-color:var(--trust)}
+.circle-av{animation:circle-pop .22s ease-out}
+@keyframes circle-pop{0%{opacity:0; transform:translate(-50%,-50%) scale(.3)}100%{opacity:1; transform:translate(-50%,-50%) scale(1)}}
+@media (prefers-reduced-motion:reduce){.circle,.circle-av{animation:none; transition:none}}
+@media (min-width:700px){
+  .circles-row{flex-wrap:wrap; overflow-x:visible; justify-content:flex-start; gap:28px; padding:26px 20px 20px; scroll-snap-type:none}
+}

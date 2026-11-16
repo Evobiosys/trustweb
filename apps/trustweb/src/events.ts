@@ -6,7 +6,7 @@ import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { EventBy, LinkedEvent } from './event_link'
 import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
-import { eventOrganizers, isEventHost, joinEventCommunity, roleNames, sameName } from './event_roles'
+import { eventOrganizers, isEventHost, joinEventCommunity, mayApprove, roleNames, sameName } from './event_roles'
 import { eventNotifies } from './event_notify'
 import { DEFAULT_INVITE_POLICY, NICK_FALLBACK, nameRevealOf, stamp, timesError } from './event_press'
 export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, NICK_FALLBACK, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, migrateNicknames, nameRevealOf, nickFor, nicknamesOf, offersOf, setEventTimes, setNicknames } from './event_press'
@@ -86,12 +86,14 @@ export function eventMatches(ev: Pick<TwEvent, 'name' | 'tagName' | 'where'>, qu
 }
 
 /** The device-local settings an edit of the form must not drop. */
-export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal' | 'notify' | 'invitePolicy' | 'offers' | 'communityId' | 'myNickname' | 'mastodonInstance' | 'linkMode'> {
-  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal, notify, invitePolicy, offers, communityId, myNickname, mastodonInstance, linkMode } = ev
+export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal' | 'notify' | 'invitePolicy' | 'offers' | 'communityId' | 'myNickname' | 'mastodonInstance' | 'linkMode' | 'showMe' | 'shareCommunity' | 'announcedAt' | 'hostDefault' | 'hostDefaultAnswered'> {
+  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal, notify, invitePolicy, offers, communityId, myNickname, mastodonInstance, linkMode, showMe, shareCommunity, announcedAt, hostDefault, hostDefaultAnswered } = ev
   return {
     ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}), ...(nameReveal ? { nameReveal } : {}),
     ...(notify !== undefined ? { notify } : {}), ...(invitePolicy ? { invitePolicy } : {}), ...(offers ? { offers } : {}),
     ...(communityId ? { communityId } : {}), ...(myNickname ? { myNickname } : {}), ...(mastodonInstance ? { mastodonInstance } : {}), ...(linkMode ? { linkMode } : {}),
+    ...(showMe ? { showMe } : {}), ...(shareCommunity ? { shareCommunity } : {}), ...(announcedAt !== undefined ? { announcedAt } : {}),
+    ...(hostDefault ? { hostDefault } : {}), ...(hostDefaultAnswered ? { hostDefaultAnswered } : {}),
   }
 }
 
@@ -209,14 +211,14 @@ export function untilLabel(ev: Pick<TwEvent, 'to'>): string {
 /** Wave 43: notifications of this event (invitations, feed posts, support asks of the people here); on unless switched off. */
 export const notifyOn = eventNotifies
 
-export { isEventHost }
+export { isEventHost, mayApprove }
 
 /** Jakob's answer (2026-11-15, beta): hosts, organizers and technical support may edit the event (one predicate; isEventHost already resolves all three roles). */
 export const mayEdit = isEventHost
 
-/** One predicate for "show the invite button": hosts always; 'everyone' lets attendees; 'trusted' lets attendees when one of the hosts or organizers sits in my Closest or Close ring (family by its closeness). */
+/** One predicate for "show the invite button": hosts always (tech support once it may take over, mayApprove); 'everyone' lets attendees; 'trusted' lets attendees when one of the hosts or organizers sits in my Closest or Close ring (family by its closeness). */
 export function mayInvite(ev: TwEvent, s: Pick<AppState, 'me' | 'people'>): boolean {
-  if (isEventHost(ev, s.me.displayName, s.people)) return true
+  if (mayApprove(ev, s.me.displayName, s.people)) return true   // wave 44 (43-D7): technical support invites only once it may take over
   if (!ev.attended) return false
   const policy = ev.invitePolicy ?? DEFAULT_INVITE_POLICY
   if (policy === 'everyone') return true

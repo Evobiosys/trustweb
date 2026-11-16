@@ -67,6 +67,7 @@ try {
     {
       const { ctx, page, errors, outside } = await open({ width: w, height: h })
       await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(600)
+      await page.locator('[data-settings-advanced-all]').evaluate((d) => { d.open = true }).catch(() => {}); await page.waitForTimeout(200) // review-44: General sits under Settings > Advanced (wave 43c)
       await page.locator('[data-settings-group="general"] > summary').click().catch(() => {}); await page.waitForTimeout(300)
       const ext = page.locator('[data-settings-section="extensions"]')
       await ext.locator('summary').first().scrollIntoViewIfNeeded(); await ext.locator('summary').first().click(); await page.waitForTimeout(300)

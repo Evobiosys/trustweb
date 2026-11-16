@@ -12,13 +12,17 @@ import type { AssistantCfg } from '../../trustweb/src/ext/assistant/providers.ts
 import { barTools } from './bar_tools.ts'
 import { webFilterTools } from './web_filter_tools.ts'
 import { askAudienceTools } from './ask_audience_tools.ts'
+import { askEscalationTools } from './ask_escalation_tools.ts'
 import { socialTools } from './social_tools.ts'
 import { communityTools } from './community_tools.ts'
+import { filterStateTools } from './filter_state_tools.ts'
 import { eventTools } from './event_tools.ts'
 import { resourceTools } from './resource_tools.ts'
+import { resourceBlockTools } from './resource_block_tools.ts'
 import { feedTools } from './feed_tools.ts'
 import { notifyTools } from './notify_tools.ts'
 import { noticeTools } from './notice_tools.ts'
+import { circlesTools } from './circles_tools.ts'
 import type { Tool } from './protocol.ts'
 import { settingsTools } from './settings_tools.ts'
 
@@ -36,6 +40,8 @@ export interface RecordToolsOptions {
   now?: () => Date
   /** Wave 43c: the fetch directory_search uses (tests inject one). */
   fetch?: (url: string) => Promise<{ status: number; json: () => Promise<unknown> }>
+  /** Wave 44 feed-embed: the fetch feed_embed_link uses (tests inject one; default: global fetch). */
+  embedFetch?: (input: string, init?: RequestInit) => Promise<Response>
 }
 
 const MAX_NOTE = 5000
@@ -241,6 +247,19 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
       },
     },
     {
+      name: 'person_hide', description: 'Hide a person from the Web rings (the Expanse, nothing is deleted); the ring stays. The same as the small person menu\'s Hide.',
+      inputSchema: schema({ person: S('id or exact name') }, ['person']),
+      run: (a) => {
+        let who: Person | undefined
+        commit((r) => {
+          who = findPerson(r, a.person)
+          const hidden = (r as { expanse?: string[] }).expanse ?? []
+          if (!hidden.includes(who.id)) (r as { expanse?: string[] }).expanse = [...hidden, who.id]
+        })
+        return { id: who!.id, name: who!.name, hidden: true }
+      },
+    },
+    {
       name: 'restore_person', description: 'Put a removed person back (within their 30 days) on the ring they had.',
       inputSchema: schema({ person: S('id or exact name of the removed person') }, ['person']),
       run: (a) => {
@@ -285,7 +304,8 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
   const community = communityTools({ load: () => load(o.file) as never, commit: commit as never, write: o.write, now })
   const events = eventTools({ load: () => load(o.file) as never, commit: commit as never, now })
   const resources = resourceTools({ load: () => load(o.file) as never, commit: commit as never })
-  const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now })
+  const blocks = resourceBlockTools({ load: () => load(o.file) as never, commit: commit as never })
+  const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now, embedFetch: o.embedFetch })
   const notify = notifyTools({ load: () => load(o.file) as never, commit: commit as never, now })
-  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write] : []), ...barTools(o), ...webFilterTools(o), ...noticeTools(o), ...askAudienceTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
+  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...blocks.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write, ...blocks.write] : []), ...barTools(o), ...webFilterTools(o), ...filterStateTools(o), ...noticeTools(o), ...circlesTools(o), ...askAudienceTools(o), ...askEscalationTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

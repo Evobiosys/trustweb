@@ -19,6 +19,7 @@
  * No chat, no unread badges, notifications off by default.
  */
 import { createViaCard } from './via_card'
+import { compactProfiles, moreFeatures } from './more_features'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
@@ -29,12 +30,13 @@ import { ownDataImported } from './own_data'
 import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
+import { mountInAppBanner } from './inapp_banner_view'
 import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
 import { audienceFilterView } from './audience_filter'
-import { allowedPeerIds, askFilterOf, saveAskFilter } from './ask_audience'
+import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
 import type { IntroLink } from './intro_link'
@@ -111,6 +113,9 @@ import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloNa
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
+import { HANDSHAKE_NOTICE_MS } from './handshake_crypto'
+import { createInvites } from './invite_view'   // wave44 steer-invite-link
+import { announceHideReport } from './hide_from_view'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
@@ -125,6 +130,12 @@ import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './chan
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { contactFragment, parsePersonShare, personShareLink, shareOfLink } from './person_share_link'
+import { foreignCode, personQrLink } from './person_qr_link'   // wave 44 steer-people-picker
+import { connectedPerson, placementOf } from './scan_rules'
+import { placementPills } from './placement_pills'   // wave 44 steer-people-picker-4
+import { tagNamed } from './zone_tags'   // wave 44 steer-people-picker-2
+import { scanButton } from './scan_button'
+import { openMemberPicker } from './member_picker_view'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
 import { pollRelay, postNote, readRelayOn, type RelayDeps } from './notes_relay'
@@ -141,14 +152,19 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import { communityChatRows } from './chat_communities'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, askFloating, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, defaultPair, defaultPrimary, activeProfile, askFloating, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { groupsView } from './groups_view'
+import { createHomeBoard } from './home_view' // wave44 home-dashboard
+import { createDashboard, dashboardOpened } from './dashboard_view'
+import { defineHomeActions } from './home_actions'
+import { resetLayout } from './home_layout'
+import { circlesView } from './circles_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
-import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
+import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, headerRight, headerTools, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel, webViewAfterDefault } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
@@ -162,12 +178,15 @@ import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import { resourceViews } from './resource_views_view'
+import { outlineView } from './resource_outline_view'
+import { refToken } from './resource_blocks'
 import { canShareOn } from './resource_views'
 import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
+import { applyBwMode, bwModeRow } from './bw_mode_view'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
 import { createMapView } from './map_view'
@@ -213,12 +232,15 @@ import { TranscriberEngine, TranscriberStatus, createTranscriber, detectEngine }
 import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
-import { createBackupView } from './backup_view'
+import { createBackupView, infoKey as backupInfoKey } from './backup_view'
+import { loadInfo as loadBackupInfoOf } from './auto_backup'
+import { guardLeaving, lastKept, markCopy, markOffered, wasOffered } from './keep_copy'
 import type { BackupView } from './backup_view'
 import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { createUpdateCheck, reloadFresh, shouldReloadOnce } from './app_update'
 import { devicesSectionChildren } from './devices_section'
+import { syncSectionParts } from './settings_sync_section' // wave44 steer-settings-sync
 import { linkButton, openLinkChange } from './link_change_view'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
 import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
@@ -286,16 +308,22 @@ import { purgeDue, recentlyDeleted } from './deleted_people'
 import { trustZonesGroup, zoneSidebar } from './trustzones_view'
 import { ringShown } from './rings_filter'
 import { ownProfilePage } from './own_profile_view'
+import { profilePage } from './profile_page_view'
 import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { createWebFocus } from './web_focus'
+import { showCommunity } from './filter_active'
+import { mountFilterBar } from './filter_bar_view'
+import { narrowById } from './event_filter_mode'
 import { createModeShell } from './ext/community_mode/shell'
+import { communityLead } from './ext/community_mode/mode'
 import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createActions } from './actions'
 import { chainOf } from './ext/assistant/providers'
+import { setEventAssistantDeps } from './event_assistant_row'
 import { defineAppActions, PLACE_TARGET, type Place as AppPlace } from './app_actions'
 import { ensureTags } from './import_curate_view'
 import { curatePage as curateImportPage } from './services_view'
@@ -307,9 +335,11 @@ import { gateScreen } from './screen_gate'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { eventForLink } from './event_roles'
-import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
+import { addInviter, applyHostLink, attendees, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
 import { createEventEnvelopes } from './event_envelope'
+import { openSpaceSection } from './open_space_view'
+import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
@@ -319,12 +349,11 @@ import { eventDropItem } from './event_drop'
 import { eventPlanSection } from './event_plan_view'
 import { defineEventActions } from './event_actions'
 import { defineSyncActions } from './sync_actions' // wave43c sync-devices
-import { templatePrompt } from './event_plan'
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
-import { PersistState, persistState } from './storage_persist'
+import { PersistState, askPersist, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
@@ -352,15 +381,21 @@ import { ownChannels } from './channel_readers'
 import { readersBlock } from './channel_readers_view'
 import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
+import { escalateBlock, knowTips, askedWhoLine, showAskedRow, knowCard } from './ask_escalation_view'
+import { escalationTargets } from './ask_escalation'
+import { setPhysical } from './physical_place'
+import type { Zone as AskZone } from './audience_zones'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { createWebView, RINGS_SIZE } from './web_view'
+import { readCard } from './bubble_card'
+import { createBubbleConnect } from './bubble_connect_view'
 import { expanseList } from './expanse'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { createMissedPopup } from './notify_popup_view'
-import { createNotifyCenter, hasBell } from './notify_center_view'
+import { createNotifyCenter } from './notify_center_view'
 import { createSocial } from './social_hosting_view'
 import { linkGlobal } from './social_hosting'
 import { newlyAdded } from './notify_center'
@@ -399,10 +434,15 @@ enum Screen {
   Notes = 'notes',
   /** Wave 36: Groups I could join or help (eye menu > Other views), a page like People. */
   Groups = 'groups',
+  /** Wave 44 steer-circles-view: Circles (eye menu > Other views), a page like People. */
+  Circles = 'circles',
   /** Wave 39: an extension module's view (ext/tw_registry.ts views()), `extViewId` names which. */
   Ext = 'ext',
   /** Wave 43b ask-page-filter: Ask your web is its own page (class askpage: .ask is the consent prompt's), Back returns to where it was opened. */
   Ask = 'askpage',
+  /** Wave 44 home-dashboard: the Home tile board and the Dashboard of an affiliation, both pages with Back like People. */
+  Home = 'home',
+  Dashboard = 'dashboard',
 }
 /** Wave 39: which extension module view Screen.Ext shows, and the kept element it is mounted in (ext/view_host.ts). */
 let extViewId: string | null = null
@@ -517,6 +557,11 @@ const ctxParam = params.get('ctx')
 const ctx: DemoContext = isDemoContext(ctxParam) ? ctxParam : DemoContext.Generic
 const storeCtx = solo ? ctx : undefined
 let pendingConnect: StampedLink | null = connectLinkOf(location.search)
+// wave44 steer-invite-link: the community invite (invite_view.ts); its token rides in the fragment, read before the URL is cleaned.
+const invites = createInvites({
+  state: st, save, render, identity: () => net.ownIdentity(), connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
+  openSheet, closeSheet, renderQr, copy: copyLink, notice: (t, b) => showNotice(t, b, [], HANDSHAKE_NOTICE_MS), toast, tags: loadColourTags, saveTags: saveColourTags,
+}, location.hash)
 /** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
 let reachOutPending = false
 let heldToasted = false
@@ -553,6 +598,10 @@ rememberEventMode(pendingEvent)   // wave 43b: mode=event keeps this session in 
 let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
 const qrBody = pendingConnect ? decodeModeLink(location.href) : null
+// Wave 44 steer-bubble-connect-3: the card of the person an introduction link brings (bubble_card.ts); offered once the connect flow is done.
+let cardFromLink = pendingConnect ? readCard(location.hash) : null
+/** Wave 44 steer-people-picker-2: the address as scanned, kept before the fragment is cleared: a code made for one person (`to=`) is checked against this phone's DID. */
+const scannedUrl = pendingConnect ? location.href : ''
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 // A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
 let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
@@ -580,6 +629,7 @@ history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&
 if (!solo) seedDevRecord(persona)
 // Dev only: the define is the literal null in a build, so this branch and the whole panel chunk are dropped from it.
 if (!solo && typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) void import('./dev_preview').then((m) => { m.initDevPreview() })
+if (!solo && typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) void import('./ext/preview-phone/preview_phone').then((m) => { m.initPreviewPhone() }) // wave44b phone-preview-extension: dev only
 if (!solo) initDevFeature()
 let state: AppState | null = loadState(persona, storeCtx)
 // A record that is there but unreadable was kept aside untouched (store.ts);
@@ -591,6 +641,9 @@ let redrawWaiting = false
 let superseded = false
 /** Set once the backup card exists (far below); declared here, above the boot-time saves (migration, carry, repair, dev events), so save() can read it from the first call on. */
 let autoBackup: BackupView | null = null
+/** Also read by save(): declared here so a boot-time save never meets them uninitialised (wave 44 steer-event-visibility-3). announceDue is set once eventEnv exists; mirrorTimer is the push-bundle write timer. */
+let announceDue: () => void = () => undefined
+let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
 if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
@@ -658,6 +711,7 @@ function st(): AppState {
 }
 function save(): void {
   if (state && !superseded) {
+    announceDue()
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
     if (!solo) pushLiveDevRecord(persona, state)
@@ -668,7 +722,6 @@ function save(): void {
 
 // Wave 11: the service worker's copy of what it needs to read a waiting wire (push_bundle.ts), refreshed after a save while
 // notifications are on; one write per tick however many saves.
-let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 function mirrorPushBundle(s: AppState): void {
   if (!s.notificationsOn || !(pushSupported() || nativeApp) || mirrorTimer) return
   mirrorTimer = setTimeout(() => { mirrorTimer = null; void writePushBundleNow() }, 250)
@@ -720,6 +773,9 @@ let askRun: {
   reach: number
 } | null = null
 const askQueue: IncomingAsk[] = []
+/** Wave 44 steer-ask-escalation: the second round ("Do you know someone who has this?"): the zone to ask further, and the tips that came back (never stored). */
+let escZone: AskZone = 'friend'
+let escRun: { busy: boolean; tips: AskResult[] | null } | null = null
 /** Asks a fitting together ask already went ahead of (together_match.ts queueAsk). */
 const askOvertaken = new WeakSet<IncomingAsk>()
 let askShowing: IncomingAsk | null = null
@@ -778,6 +834,9 @@ const net = new Net({
   onPush: (outcome) => { pushState = outcome },
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
+  inviteVerdict: (inv, did) => invites.verdict(inv, did), onInviteAccepted: (peer, inv) => invites.accepted(peer, inv),   // wave44 steer-invite-link
+  onHandshakeRefused: (r) => showNotice(S.handshake.noticeTitle, r === 'unsupported' ? S.handshake.unsupportedBody : S.handshake.noticeBody, [], HANDSHAKE_NOTICE_MS), // wave44 handshake-crypto
+  onHideReport: (e) => announceHideReport(e, (t, b) => showNotice(t, b, [], HANDSHAKE_NOTICE_MS)), // wave44b hide-from-crypto
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
     queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken,
@@ -853,7 +912,7 @@ const net = new Net({
     toast(S.demoApprovedToast(peer.displayName))
     render()
   },
-  ringForNewPeer: () => (solo ? Ring.Friend : Ring.Acquaintance),
+  ringForNewPeer: () => placementOf(st(), solo ? Ring.Friend : Ring.Acquaintance),   // wave 44 steer-people-picker-2: the zone chosen under my code
   onLogChanged: () => { if (screen === Screen.Inventory) render() },
   // A demo account asks: while demo content is on this phone it is matched
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
@@ -1236,7 +1295,7 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users', circles: 'circles' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', timeline: 'list', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
@@ -1300,18 +1359,22 @@ function renderTabs(): void {
   // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
   // Wave 37 (co-notes-link): a guest of a co-note link gets the nested shell instead (Web, Chat in the centre, Resources; Events too for an event note).
   const guest = state?.coGuest && state.coNotesOn ? guestShell(Boolean(state.coGuest.eventId)) : null
-  const { ids, primary, pair } = guest ? { ids: guest.tabs, primary: guest.primary, pair: [] } : resolveBar(state?.uiBar, barFlags(), barMax())
-  const { shown } = guest ? { shown: ids } : barLayout(ids, primary, barMax())
+  const resolved = guest ? { ids: guest.tabs, primary: guest.primary, pair: [] } : resolveBar(state?.uiBar, barFlags(), barMax())
+  const lead = guest ? null : modeShell.homeButton() // wave 44: Community = the Personal bar with the community Home first, Web second
+  const { ids } = resolved
+  const { shown: laid } = guest ? { shown: ids } : barLayout(ids, resolved.primary, lead ? barMax() - 1 : barMax())
+  const shown = lead ? communityLead(laid, 'community:home') as BarId[] : laid
+  const own = !lead || state?.uiBar?.primary !== undefined
+  const primary = own ? resolved.primary : defaultPrimary(shown)
+  const pair = own ? resolved.pair : defaultPair(shown)
   const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barMoreTap }, ['⋮'])
   tabs.toggleAttribute('data-guest-shell', guest !== null)
-  const community = guest ? null : modeShell.tabs() // wave 41: the Community interface has its own row
-  const halo = new Set(guest || community ? [] : haloOf(state?.uiBar, ids, [primary, ...pair].filter((x): x is BarId => x !== null)))
-  tabs.replaceChildren(...(community ?? shown.map((id) => barButton(id, id === primary || pair.includes(id), halo.has(id)))), ...(guest || community ? [] : [more]))
-  document.body.toggleAttribute('data-community-mode', community !== null)
-  tabs.classList.toggle('four', (community ?? shown).length > 3)
-  tabs.classList.toggle('many', (community ?? shown).length > 5)
-  tabs.classList.toggle('pair', !community && pair.length > 0)
-  phone.classList.toggle('ask-in-bar', !community && !askFloating(shown))
+  const halo = new Set(guest ? [] : haloOf(state?.uiBar, ids, [primary, ...pair].filter((x): x is BarId => x !== null)))
+  tabs.replaceChildren(...shown.map((id) => (lead && (id as string) === 'community:home' ? lead : barButton(id, id === primary || pair.includes(id), halo.has(id)))), ...(guest ? [] : [more]))
+  tabs.classList.toggle('four', shown.length > 3)
+  tabs.classList.toggle('many', shown.length > 5)
+  tabs.classList.toggle('pair', pair.length > 0)
+  phone.classList.toggle('ask-in-bar', !askFloating(shown))
   updateChatBadge()
 }
 renderTabs()
@@ -1329,13 +1392,13 @@ function bringIntoRow(id: BarId): void {
 /** Wave 40: the Variations in one compact line of chips (the same choices as Settings > Variations), for the ⋮ list. */
 function variationChips(after: () => void): HTMLElement {
   const cur = profileOf(st().twSettings)
-  return el('div', { class: 'var-chips', role: 'radiogroup', 'aria-label': S.var.title, 'data-var-compact': '' }, [
+  return moreFeatures({ attr: 'data-var-more' }, [el('div', { class: 'var-chips', role: 'radiogroup', 'aria-label': S.var.title, 'data-var-compact': '' }, [   // wave 44 (item 9)
     el('button', { class: 'chip', 'data-variation-compact': 'dex', onclick: () => showDesktopVersion(UiView.Dex) }, [S.var.dex]),
-    ...TW_PROFILES.map((p) => el('button', {
+    ...compactProfiles(cur).map((p) => el('button', {
       class: 'chip' + (p.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(p.id === cur), 'data-variation-compact': p.id,
       onclick: () => chooseProfile(p.id, after),
     }, [(p.id === cur ? '✓ ' : '') + S.var.names[p.id]])),
-  ])
+  ])])
 }
 
 /** Wave 35: ⋮ lists the views that are not in the bar as direct buttons (wave 40: in row order, a tap moves one into the row; Variations below, compact). */
@@ -1354,7 +1417,9 @@ function barMoreTap(): void {
   const rest = moreViews(s.uiBar, f, barMax())
   const halo = new Set(haloOf(s.uiBar, resolveBar(s.uiBar, f).ids))
   openSheet([
-    rest.length ? el('h3', {}, [S.barMoreViews]) : null,
+    el('h3', {}, [S.barMoreViews]),
+    el('button', { class: 'btn btn-ghost bar-more-view', 'data-bar-home': '', onclick: () => { closeSheet(); openHome() } }, [S.home.title]),
+    el('button', { class: 'btn btn-ghost bar-more-view', 'data-bar-dashboard': '', onclick: () => openDashboard() }, [S.dashboard.title]),
     ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view' + (halo.has(id) ? ' tab-halo' : ''), 'data-bar-view': id, onclick: () => bringIntoRow(id) }, [barName(id)])),
     el('h4', { class: 'eyebrow' }, alphaHeading(S.var.title)),
     variationChips(barMoreTap),
@@ -1517,7 +1582,10 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.People:
     case Screen.Notes:
     case Screen.Groups:
+    case Screen.Circles:
     case Screen.Ask:
+    case Screen.Home:
+    case Screen.Dashboard:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1602,11 +1670,49 @@ function openNotes(): void {
   go(Screen.Notes)
 }
 /** Wave 36: Groups I could join or help opens as a page like People, Back returns to the Web. */
+function openCircles(): void {
+  peoplePage = true
+  pageBack = Screen.Web
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Circles)
+}
 function openGroups(): void {
   peoplePage = true
   pageBack = Screen.Web
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Groups)
+}
+/** Wave 44 home-dashboard: Home = the tile board (the Web tab opens it when "Open Home first" is on); the Dashboard sits one tap from it and in the ⋮ list. */
+let dashboardId: string | undefined
+let dashboardFromHome = false
+function openHome(): void {
+  if (screen === Screen.Home) { render(); return }
+  peoplePage = true
+  pageBack = Screen.Web
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Home)
+}
+function openDashboard(affiliation?: string): void {
+  if (affiliation) dashboardId = affiliation
+  closeSheet()
+  if (screen === Screen.Dashboard) { render(); return }
+  dashboardOpened()
+  // From Home it shares Home's history entry (a second one would make Back return to the same screen); its own Back arrow returns to Home.
+  dashboardFromHome = screen === Screen.Home
+  if (!dashboardFromHome) { peoplePage = true; pageBack = Screen.Web; history.pushState({ twPage: 'people' }, '') }
+  go(Screen.Dashboard)
+}
+function screenHome(): Node[] {
+  return [
+    header(S.home.title, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [createHomeBoard({ st, save, redraw: render, openWeb: () => { webViewNow = 'rings'; chooseView('rings') }, openDashboard: () => openDashboard() })]),
+  ]
+}
+function screenDashboard(): Node[] {
+  return [
+    header(S.dashboard.title, { back: () => { if (dashboardFromHome) go(Screen.Home); else history.back() } }),
+    el('div', { class: 'scroll pad' }, [createDashboard({ st, save, redraw: render, feedOn: () => feedOn(st()), openFeed: () => go(Screen.Feed), current: () => dashboardId, choose: (id) => { dashboardId = id } })]),
+  ]
 }
 /** Wave 43b: Ask your web as a page of its own with Back (to the Web, or wherever it was opened from), never over the Web view. */
 function openAskPage(): void {
@@ -1623,6 +1729,12 @@ function screenAsk(): Node[] {
   return [
     header(S.askPage.title, { back: closeAsk }),
     el('div', { class: 'scroll pad ask-page', 'data-ask-page': '' }, [queryDock(st())]),
+  ]
+}
+function screenCircles(): Node[] {
+  return [
+    header(S.viewNames.circles, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [circlesView({ people: () => st().people, save, tags: loadColourTags, saveTags: (t) => saveColourTags([...t]), face: personFace, open: openCardPage, toast: (msg, undo) => toast(msg, { onClick: undo }) }, render)]),
   ]
 }
 function screenGroups(): Node[] {
@@ -1700,7 +1812,7 @@ function shownScreen(target: Screen): Screen {
 
 function go(to: Screen): void {
   const s = shownScreen(to)
-  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Ask
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Ask || x === Screen.Home || x === Screen.Dashboard || x === Screen.Circles
   if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
   if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
@@ -1752,6 +1864,8 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : appTitleMark(),
       el('h2', {}, [title]),
       opts.glyph ?? null,
+      inboxButton(),
+      notifyCenter.bell(),
     ]),
     el('div', { class: 'hdr-right' }, [opts.right ?? null, qr, opts.more ? moreButton() : opts.after ?? null]),
   ])
@@ -1767,25 +1881,23 @@ function mountSettingsGear(): void {
   right.insertBefore(gear, right.querySelector('[data-chat-dots]'))
 }
 
-/** Wave 43b: Ask your web as a plain header button on the screens that had the floating pill (Web, Chat, Resources); the bar's own Ask item replaces it. */
+/** Wave 44 header-layout: Ask your web is back where it was before wave 43b, the floating pill bottom right on Web, Chat and Resources (the bar's own Ask item hides it by CSS). */
 function mountAskButton(): void {
   if (screen !== Screen.Web && screen !== Screen.Chat && screen !== Screen.Inventory) return
-  const right = host.querySelector('.hdr .hdr-right')
-  if (!right || right.querySelector('[data-open-query]')) return
-  right.insertBefore(queryFab(), right.querySelector('[data-chat-dots]'))
+  if (host.querySelector('[data-open-query]')) return
+  host.append(queryFab())
 }
 
-/** Wave 43c shell-fix-2 (43b-D6): "Review requests" on Resources as a plain header button beside Ask your web (it floated bottom left and covered rows). */
-function mountRequestsButton(): void {
-  if (screen !== Screen.Inventory) return
-  const right = host.querySelector('.hdr .hdr-right')
-  if (!right || right.querySelector('[data-open-requests]')) return
-  const b = iconButton('inbox', S.reqAria, requestsSheet, 'requests-btn')
+/** Wave 44 header-layout: the inbox ("Review requests") sits after the logo and the title at the top left of every header (HEADER_LEFT); wave 43c had it top right. */
+function inboxButton(): HTMLElement {
+  const waiting = askQueue.length + (askShowing ? 1 : 0)
+  const b = iconButton('inbox', waiting ? S.resOutliner.requests(waiting) : S.reqAria, requestsSheet, 'requests-btn')
   b.setAttribute('data-open-requests', '1')
-  right.insertBefore(b, right.querySelector('[data-open-query]'))
+  if (waiting) b.append(el('span', { class: 'req-count', 'data-req-count': String(waiting) }, [String(waiting)]))
+  return b
 }
 
-/** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
+/** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). Restored by steer-ask-placement-2 (Jakob: it never should have gone). */
 function mountAiButton(): void {
   if (!isEnabled('ai-button')) return   // wave 39 review: the Extensions switch "AI button" (and the profiles) decide
   const right = host.querySelector('.hdr .hdr-right')
@@ -1865,6 +1977,11 @@ function openAiButton(): void {
   sparkleFallback()
 }
 let assistantPending = false
+// Wave 44 steer-ask-placement-3: the event editor's optional "Draft with assistant" row (event_assistant_row.ts).
+setEventAssistantDeps({
+  ready: () => isEnabled('assistant') && chainOf(st().advanced).length > 0,
+  open: (text) => { openAiButton(); void twRegistry.sync().then(() => twBus.emit('assistant-prefill', text)) },
+})
 
 /** Wave 41: the sparkle without the assistant: the Your AI sheet (screenshot 94df73a3), with or without an endpoint. */
 function sparkleFallback(): void {
@@ -1914,7 +2031,11 @@ function mountHeaderControls(): void {
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
-  right.replaceChildren(...(hasBell(screen) ? [notifyCenter.bell()] : []), ...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
+  const nodes = (ids: readonly string[]): Node[] => ids.flatMap((c) => parts[c] ?? []).filter((n): n is Node => n !== null)
+  // Wave 44: the right cluster is the same everywhere (QR, settings; no Ask/AI control, steer-ask-placement); the screen's own tools get their row.
+  right.replaceChildren(...nodes(headerRight(false)))
+  const tools = nodes(headerTools(screen))
+  if (tools.length) host.querySelector('.hdr')?.append(el('div', { class: 'hdr-tools' }, tools))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
@@ -2032,6 +2153,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 }
 
 function render(): void {
+  applyBwMode(state)   // wave 44 steer-strike-mode
   screen = shownScreen(screen)
   if (screen !== Screen.Web) noticeLayer.slot('wants', null)
   noticeLayer.setOnWeb(screen === Screen.Web)   // review-fixes-43c: ask-result / message cards stay on the Web screen (P06)
@@ -2041,7 +2163,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups || screen === Screen.Home || screen === Screen.Dashboard || screen === Screen.Circles))
       || (target === Screen.Inventory && screen === Screen.Notes)
       || (screen === Screen.Ext && target === `mod:${extViewId}`)
     b.classList.toggle('on', on)
@@ -2078,7 +2200,10 @@ function render(): void {
       case Screen.People: return screenPeople()
       case Screen.Notes: return screenNotes()
       case Screen.Groups: return screenGroups()
+      case Screen.Circles: return screenCircles()
       case Screen.Ask: return screenAsk()
+      case Screen.Home: return screenHome()
+      case Screen.Dashboard: return screenDashboard()
       case Screen.Ext: return screenExt()
     }
   })()
@@ -2087,9 +2212,9 @@ function render(): void {
   if (kept && kept.parentNode === host) { for (const n of [...host.childNodes]) if (n !== kept) n.remove(); kept.before(...(frame ? [frame] : []), ...body.slice(0, -1)) }
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
+  if (screen === Screen.Web || screen === Screen.Chat || screen === Screen.Inventory || screen === Screen.Ask) mountFilterBar(host, { state: st, save, redraw: render })   // wave 44b: event-mode pill + pinned filters
   mountSettingsGear()
   mountAskButton()
-  mountRequestsButton()
   mountAiButton()
   modeShell.mount(host)
   modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
@@ -2522,12 +2647,24 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (!link || !state) return
   pendingConnect = null
   drawCardStack()
+  if (refuseForeign(scannedUrl)) return
   const admitted = admitLink(link)
   if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); afterConnectOpen(); return }
-  const reachOut = reachOutPending && !solo && !demoLink
+  // Wave 44 steer-people-picker-2: an event or tag code from someone I already hold: no second add (and no zone reset), I only join the event.
+  const held = pendingEvent !== null || qrBody?.kind === 'tag' ? connectedPerson(st(), link.did) : undefined
+  if (held && !picked) {
+    const known = st().peers.find((x) => x.did === link.did)
+    if (known) void eventEnv.afterConnect(known)
+    toast(S.w44pp2.alreadyConnected(held.name))
+    afterConnectOpen(held.id)
+    return
+  }
+  const inv = await invites.gate(link)   // wave44 steer-invite-link: the confirmation; false = refused or declined, nothing is sent
+  if (inv === false) { afterConnectOpen(); return }
+  const reachOut = !inv && reachOutPending && !solo && !demoLink
   reachOutPending = false
-  const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
-  const peer = await net.completeConnect(link, ring, reachOut)
+  const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo || link.introduced ? Ring.Friend : Ring.Acquaintance) // wave 44: an introduced code lands in Friends & acquainted community members
+  const peer = await net.completeConnect(link, ring, reachOut, inv ?? undefined)
   void eventEnv.afterConnect(peer)   // wave 43c: the scanned event's place, conditions and themes come from the shower's device
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
@@ -2537,14 +2674,15 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   } else if (picked) {
     if (picked.name) person.name = picked.name
     person.ring = ring
-  }
+  } else if (link.introduced && [Ring.Acquaintance, Ring.Intending, Ring.Unsorted].includes(person.ring)) person.ring = ring // the other side's click made them first
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
+  if (inv) invites.join(inv, link, person)
   if (treeLink?.family) applyFamily(person)
   if (personShare?.contact) mergeContact(person, personShare.contact, Date.now())
   if (noteShare) addReceivedNote(person, noteShare)
   // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
   autoShareToPerson(person)
-  if (admitted.legacy) person.connectedVia = 'legacy-code'
+  if (admitted.legacy && !inv) person.connectedVia = 'legacy-code'   // wave44: an invite's signed token stands for the stamp
   if (sharedNotes) {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
@@ -2604,14 +2742,30 @@ function addedToast(person: Person, ring: Ring, name = person.name): void {
 function offerPendingConnect(): void {
   const link = pendingConnect
   if (!link) return
+  if (refuseForeign(scannedUrl)) { pendingConnect = null; return }
   drawCardStack()
   openSheet(renderConnectAdd({
     name: link.from.displayName,
-    ring: Ring.Intending,
+    ring: Ring.Acquaintance,
     lead: S.connectAddLeadInvite,
-    onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }) },
+    onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }).catch(connectFailed) },
     onLater: () => { closeSheet(); declineInvite(link) },
   }).nodes)
+}
+
+/**
+ * Wave 44 steer-people-picker-2 (Jakob 2026-11-16: "Refuse but explain why so they can tell the person"): a code made for one person that someone else scanned.
+ * Nothing is connected, added or sent; the sheet says the code is for someone else (the code carries no name). True when refused.
+ */
+function refuseForeign(url: string): boolean {
+  if (!foreignCode(url, net.ownIdentity().did)) return false
+  pendingEvent = null; pendingShare = null; eventWaitsForConnect = false
+  openSheet([
+    el('h3', {}, [S.w44pp2.foreignTitle]),
+    el('p', { 'data-foreign-code': '' }, [S.w44pp2.foreign]),
+    el('button', { class: 'btn btn-electric', type: 'button', onclick: closeSheet }, [S.w44pp2.foreignOk]),
+  ])
+  return true
 }
 
 /** "Not now" (Jakob 2026-10-19): the inviter goes to the Curator's Archive, not connected, the link kept on the entry. */
@@ -2933,9 +3087,13 @@ function webPageScreen(page: WebPage): Node[] {
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'me') {
-    return [header(S.ownProfileTitle, { back }), ownProfilePage({
-      profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl), name: () => st().me.displayName,
-      editProfile: profileSheet, editName: () => editNameSheet(true),
+    const face = (): HTMLElement => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl)
+    return [header(S.profile44.title, { back }), profilePage({   // wave44b profile-page
+      state: st, save, face, toast, discoverable: social.profileBlock, redraw: render, fetch: (u, i) => fetch(u, i), origin: location.origin,
+      zones: () => ownProfilePage({
+        profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face, name: () => st().me.displayName,
+        editProfile: profileSheet, editName: () => editNameSheet(true),
+      }),
     })]
   }
   if (page.kind === 'more') {
@@ -2958,6 +3116,7 @@ function webPageScreen(page: WebPage): Node[] {
     kindOf: (i) => S.cardSharesKind[kindKey(i.source?.kind)],
     onRenameResource: (id, next) => { if (renameResource(st(), id, next)) save(); render() },
     onAddResource: (c, title) => { if (addResourceIn(st(), c, title, randomId(8), Date.now())) save(); render() },
+    onPhysical: (id, physical, place) => setPhysicalThing(id, physical, place),
     onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
     heading: cardNameHeading(p), places: connectedPlaces(p), onChat: () => chatSheet(p.id), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
@@ -2967,6 +3126,7 @@ function webPageScreen(page: WebPage): Node[] {
     rings: RINGS.map((ring) => ({ ring, label: S.ringLabel[ring], current: webSlot(p) === ring })),
     onRing: (ring) => placePerson(p.id, ring, true),
     addableTags: tagsAddable(p, tags), onAddTag: (id) => { addTagTo(p, id); save(); render() },
+    onNewTag: (name) => { const out = tagNamed(tags, name); if (!out.tag) return; if (out.created) saveColourTags([...out.tags]); addTagTo(p, out.tag.id); save(); render() },
     chat: cardChatButton(p, false),
     inventory: {
       list: () => peerItemList(p.id),
@@ -3024,6 +3184,11 @@ function notificationsCard(s: AppState): HTMLElement {
       class: 'radio' + (s.missedPopupOff ? '' : ' on'), 'aria-pressed': String(!s.missedPopupOff), 'data-missed-setting': '',
       onclick: () => { if (s.missedPopupOff) delete s.missedPopupOff; else s.missedPopupOff = true; save(); settingsSheet() },
     }, [el('b', {}, [S.missedSetting]), el('small', {}, [S.missedSettingHint])]),
+    // Wave 44 steer-event-visibility-2: only "off" is stored; absent means on.
+    el('button', {
+      class: 'radio' + (s.eventAlerts === false ? '' : ' on'), role: 'switch', 'aria-checked': String(s.eventAlerts !== false), 'aria-pressed': String(s.eventAlerts !== false), 'data-event-alerts': '',
+      onclick: () => { if (s.eventAlerts === false) delete s.eventAlerts; else s.eventAlerts = false; save(); settingsSheet() },
+    }, [el('b', {}, [S.w44vis.alertEvents]), el('small', {}, [S.w44vis.alertEventsHint])]),
     s.notificationsOn ? el('button', { class: 'btn btn-ghost btn-sm', 'data-notif-test': '', onclick: () => void showNotification(S.appName, S.notifTestBody) }, [S.notifTestButton]) : null,
   ])
 }
@@ -3168,7 +3333,7 @@ function viewDrop(current: ViewKey): HTMLElement | null {
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
     ...items.filter((i) => !i.other).map(btn),
     ...twRegistry.views().map((v) => { // wave 39: the views of the extension modules that are on
-      const b = el('button', { class: 'view-opt', role: 'menuitemradio', 'aria-checked': 'false', 'data-mod-view': v.id, onclick: () => openExtView(v.id) })
+      const b = el('button', { class: 'view-opt', role: 'menuitemradio', 'aria-checked': 'false', 'data-mod-view': v.id, onclick: () => { if (v.id === 'community' && showCommunity(st())) save(); openExtView(v.id) } })   // wave 44b: Eye > Community sets the community filter silently
       b.innerHTML = icon(v.icon)
       b.append(el('b', {}, [v.title]))
       return b
@@ -3216,6 +3381,8 @@ function chooseView(view: ViewKey): void {
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   if (view === 'groups') { if (screen === Screen.Groups) render(); else openGroups(); return }
+  if ((view as string) === 'home') { openHome(); return }   // wave 44: webDefault 'home'
+  if (view === 'circles') { if (screen === Screen.Circles) render(); else openCircles(); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -3268,7 +3435,7 @@ function communityChatRow(): HTMLElement | null {
 function chatListBody(): Node[] {
   const s = st()
   const now = Date.now()
-  const people = chatPeople()
+  const people = narrowById(st(), chatPeople())   // wave 44b: event mode lists only the event's people
   const all = chatListRows(s.chats, people, { query: chatQuery, since: dndSince() })
   const tags = loadColourTags()
   const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
@@ -3507,13 +3674,14 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
   const radios = el('div', { class: 'add-rings' })
   const drawRadios = (): void => {
     radios.replaceChildren(...RINGS.map((r) => el('button', {
-      class: 'radio' + (picked === r ? ' on' : ''),
+      class: 'radio' + (picked === r ? ' on' : ''), 'data-ring': r,
       onclick: () => { picked = r; drawRadios() },
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
   }
   drawRadios()
   let after: (() => void) | null = null // set once a person was added and a note still shows: the button then only closes
   const addByCode = async (): Promise<void> => {
+    if (refuseForeign(code.value.trim())) return   // wave 44 steer-people-picker-2
     busy = true
     addBtn.setAttribute('disabled', '')
     codeStatus.textContent = S.addCodeBusy
@@ -3526,7 +3694,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
       return
     }
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
-    if (communityTag && addMember(st().people, out.person.id, communityTag)) save()
+    if (communityTag && addMember(st().people, out.person.id, communityTag)) { save(); twBus.emit('community-go', 'members') }
     render()
     // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.
     const noteId = out.previous === undefined ? null : namePreviousId(out.previous)
@@ -3551,6 +3719,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
     closeSheet()
     toast(S.savedToast(n, S.ringLabel[picked]))
     render()
+    if (communityTag) twBus.emit('community-go', 'members')   // wave 44: the Members grid shows the new person
   }
   const addBtn = el('button', { class: 'btn btn-electric', 'data-add-person': '', onclick: add }, [S.addSave])
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
@@ -3605,17 +3774,23 @@ window.addEventListener(COLOUR_TAGS_EVENT, () => { if (screen === Screen.Web) re
 /** Opens Ask your web (its own page, wave 43b) from anywhere: querying is the one thing (Jakob, wave 2, P6/P9). */
 function openQuery(): void { openAskPage() }
 
-/** Wave 43b: the plain entry, a header button, where the bottom bar has no Ask item (CSS hides it when it has; the IYG support variation asks for support). */
+/** Wave 44: the floating pill as before wave 43b (bottom right); the IYG support variation's pill asks for support. */
 function queryFab(): HTMLElement {
   const support = profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')
+  if (support) {
+    const b = el('button', { class: 'query-fab', 'aria-label': S.supportTitle, 'data-open-query': '1', 'data-support-primary': '', onclick: () => { askMode = AskMode.Support; openQuery() } })
+    b.innerHTML = icon('query')
+    b.append(el('span', {}, [S.supportTitle]))
+    return b
+  }
   const call = !support && queryStyle() === QueryStyle.Call
-  // Review 43b: the call style is "Ask your web" (S.webCall, as the floating pill was), the search style "Query".
-  const label = support ? S.supportTitle : call ? S.webCall : S.webQuery
-  const b = iconButton('query', label, () => { if (support) askMode = AskMode.Support; openQuery() }, 'ask-entry')
+  const b = el('button', { class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1', onclick: openQuery })
   b.innerHTML = call ? askWebIcon(askIconVariant) : icon('query')
-  b.setAttribute('data-open-query', '1')
-  if (support) b.setAttribute('data-support-primary', '')
-  return b
+  b.append(call ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]) : el('span', {}, [S.webQuery]))
+  if (!call) return b
+  const wrapped = withHint(b, HintId.CallWeb)
+  if (wrapped !== b) wrapped.classList.add('fab-hint')
+  return wrapped
 }
 
 function tagChip(tag: Tag, custom?: string): HTMLElement {
@@ -3659,6 +3834,10 @@ function itemSheet(itemId: string): void {
     sourceFor(item.source, item.text),
     itemContextView(item),
     ...provenanceStateView(item),
+    outlineView({
+      item, newId: () => randomId(8), save, canShare: canShareOn(item, loadColourTags()),
+      share: (p) => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(p.text)}&ref=${refToken(p.ref)}` })) },
+    }),
     feed.itemExtras(item),
     // Review 43b (B17): a protected resource offers no way to pass it on (canShareOn).
     canShareOn(item, loadColourTags()) ? el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]) : null,
@@ -3738,6 +3917,7 @@ function personSheet(personId: string): void {
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
+    cardChatButton(p, Boolean(cons)),   // wave 44 steer-people-picker-2: Chat first
     cardNameHeading(p),
     pinButton(p, () => { togglePersonPin(p, Date.now()); save(); render(); personSheet(p.id) }),
     daysSection(st, p),
@@ -3745,7 +3925,6 @@ function personSheet(personId: string): void {
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     cardChannelsRow(p),
-    cardChatButton(p, Boolean(cons)),
     reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
@@ -3768,7 +3947,8 @@ function personSheet(personId: string): void {
 }
 
 function personQr(p: Person): void {
-  void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
+  const did = st().peers.find((x) => x.id === p.peerId)?.did ?? p.did   // wave 44: the code is made for exactly this person
+  void qrPage((link) => ({ kind: 'person', link: personQrLink(link, { id: p.id, ...(did ? { did } : {}) }), name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
@@ -4078,7 +4258,8 @@ function reachedOutRow(p: Person): HTMLElement | null {
 
 /** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
 function curatorPerson(personId: string): void {
-  openSheet([curator.person(personId, closeSheet)])
+  const p = st().people.find((x) => x.id === personId)
+  openSheet([p ? el('div', { 'data-chat-row': '' }, [cardChatButton(p, false)]) : null, curator.person(personId, closeSheet)].filter((n): n is HTMLElement => n !== null))   // wave 44 steer-people-picker-2: Chat first, also for an organizer shown in an event
 }
 
 /** An acquaintance, confirmed or suggested: a link to the person's general note and a five-step "more friend ... more acquaintance" score. A note to myself; the ring never changes. */
@@ -4500,6 +4681,7 @@ function messageAbout(peerId: string, qid: string, text: string, at: number): vo
 /** Relay back up: send everything that waited. */
 async function flushAllChats(): Promise<void> {
   if (!state) return
+  bubble.drain() // wave 44: introductions an MCP client queued
   for (const id of peersWithPending(st().chats ?? NO_CHATS)) await flushPending(chatIo(), id)
   // An open chat shows "Waiting" until it is redrawn from the book the flush just updated.
   openChat?.refresh()
@@ -4694,6 +4876,7 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?:
     case TextKind.Agreement: onAgreementText(peer, text); return
     case TextKind.Forget: onForgetText(peer, text); return
     case TextKind.Support: onSupportText(peer, text); return
+    case TextKind.Intro: bubble.receive(peer.id, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }
@@ -5250,15 +5433,23 @@ const curator = createCurator({
   closeDesk: closeSheet,
   showPhoneVersion,
 })
+/** Wave 44 steer-bubble-connect: a short hold of one bubble on another introduces them (bubble_connect.ts). */
+const bubble = createBubbleConnect({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), appUrl: APP_URL, send: (peerId, text) => submitText(chatIo(), peerId, text),
+  sendProtocol: async (peerId, text) => { const peer = st().peers.find((x) => x.id === peerId); if (!peer) throw new Error('no peer'); await net.sendText(peer, text) },
+  connectVia: (link) => { pendingConnect = { ...connectLinkOf(new URL(link).search)!, exempt: true }; void completePendingConnect() },
+  myLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, renderQr, copy: (t) => copyLink(t, S.meetCopied), profileOption: () => Boolean(st().qrProfileOption) })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
-  curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
+  curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), introduce: solo ? null : bubble.introduce, dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
 /** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
 const eventEnv = createEventEnvelopes<Peer>({
   state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
   link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+  members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
+  recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
 })
+announceDue = () => { eventEnv.announceDue() }
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
@@ -5272,7 +5463,7 @@ const eventsView = createEventsView({
   showQr: (ev, host) => eventQr(ev, false, host),
   askSupport: () => supportSheet(supportIo),
   feedRow: (ev) => feed.eventRow(ev),
-  plan: (ev) => eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }),
+  plan: (ev) => [...eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }), ...openSpaceSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), push: (e) => { void eventEnv.pushOpenSpace(e) }, noteFor: (e, a) => coNotes?.activityNote?.(e, a) ?? null })],
   extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),
 })
@@ -5325,7 +5516,13 @@ twBus.on('support-ask', (d) => {   // wave 42: the Community view's "Ask for sup
   const used = (key: string): void => { st().extData = { ...st().extData, 'community-mighty': rememberAudience(parseCommunity(st().extData?.['community-mighty']), tag, key) }; save() }
   openSheet([el('h3', {}, [S.supportTitle]), supportForm(supportIo, closeSheet, { tag, remembered: meta.audiences ?? [], used })])
 })
-twBus.on('add-member', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) addPersonSheet(Ring.Friend, false, tag) })   // wave 42: the add-person flow, scoped to a community
+twBus.on('community-invite', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) invites.openSheet(tag) })   // wave44 steer-invite-link
+twBus.on('add-member', (d) => {   // wave 44 steer-people-picker: "+" opens the people I know first, "Add a new person" below; no AI gate (wave 42 went straight to the add view)
+  const tag = (d as { tag?: string } | undefined)?.tag
+  if (!tag) return
+  const tagLabel = loadColourTags().find((x) => x.id === tag)?.label ?? tag
+  openMemberPicker({ state: st, save: () => save(), newId: () => randomId(8), tag, tagLabel, open: openSheet, done: (m) => { closeSheet(); toast(m); render(); twBus.emit('community-go', 'members') }, addNew: () => addPersonSheet(Ring.Friend, false, tag) })
+})
 /** Wave 42 community-event: "New event" in a community opens the assistant with the event template; its cards are approved one by one. */
 let eventCommunity: string | undefined
 /** Wave 43b (B33): the menu's Add event: Hosted (true), Informal (false); absent from the older "New event" button. */
@@ -5335,10 +5532,9 @@ twBus.on('new-event', (d) => {
   if (!tag) return
   eventCommunity = tag
   eventHosted = typeof hosted === 'boolean' ? hosted : undefined
-  if (!isEnabled('assistant') || !chainOf(st().advanced).length) { toast(S.w42ev.assistantNeeded); sparkleFallback(); return }   // review wave 42: the same test as the sparkle (any provider of the chain)
-  const send = (): void => twBus.emit('assistant-prefill', templatePrompt(loadColourTags().find((x) => x.id === tag)?.label ?? tag, eventHosted))
-  if (twRegistry.isActive('assistant')) { send(); return }
-  void twRegistry.sync().then(() => { if (twRegistry.isActive('assistant')) send(); else sparkleFallback() })
+  // Wave 44 steer-ask-placement: the event editor opens directly (the community preselected); the assistant stays optional, behind the sparkle.
+  eventsView.openForm(undefined, tag)
+  if (screen === Screen.Events) render(); else go(Screen.Events)
 })
 twBus.on('open-chat', (id) => { if (typeof id === 'string') chatSheet(id) })   // wave 40: the Community view lists the regular chats
 function twCtx(): TwCtx {
@@ -5442,6 +5638,7 @@ defineEventActions(appActions, {
   sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
 })
 defineSyncActions(appActions, devices) // wave43c sync-devices
+defineHomeActions(appActions, { openDashboard }) // wave44 home-dashboard
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
   fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,
@@ -5746,6 +5943,7 @@ function linkOpensEdit(ev: LinkedEvent): boolean {
 /** Wave 43b: the connect flow after a scan is over (its add sheet with the ring choice is done): the event opens next, else the share, else the person's card. */
 function afterConnectOpen(personId?: string): void {
   eventWaitsForConnect = false
+  if (cardFromLink) { const c = cardFromLink; cardFromLink = null; bubble.offerCard(c); return }
   const next = afterConnect({ hasShare: pendingShare !== null, hasEvent: pendingEvent !== null })
   if (next === 'share') openPendingShare()
   else if (next === 'event') maybeOpenPendingEvent()
@@ -6421,12 +6619,20 @@ function meetTrustWebPage(): HTMLElement {
     }
     apply()
   })()
+  const scan = scanButton((text) => void connectScanned(text))
+  // Wave 44 steer-people-picker-2: the code with what belongs to it (scan, zone) is one column that fits the viewport on a laptop; the rest scrolls beside it.
   return el('div', { class: 'meet-page' }, [
-    el('p', { class: 'hint' }, [S.meetLead]),
-    row.el,
-    publicVia,
-    qr,
-    cameraNote,
+    el('div', { class: 'meet-qr-col', 'data-meet-qr-col': '' }, [
+      el('p', { class: 'hint' }, [S.meetLead]),
+      row.el,
+      publicVia,
+      qr,
+      cameraNote,
+      scan.button,
+      placementRow(),
+      scan.view,
+    ]),
+    el('div', { class: 'meet-rest' }, [
     sharing.el,
     el('div', { 'data-contact-box-on-meet': '' }, [
       el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle]),
@@ -6452,7 +6658,25 @@ function meetTrustWebPage(): HTMLElement {
     nfc,
     nfc ? nfcStatus : null,
     seeInActionFoot(),
+    ]),
   ])
+}
+
+/** Wave 44 steer-people-picker-2: under my code, "They will be placed in: <zone>"; whoever scans it lands there (Net ringForNewPeer). */
+function placementRow(): HTMLElement {
+  const dflt = solo ? Ring.Friend : Ring.Acquaintance
+  return el('div', { class: 'placement-row' }, [el('span', {}, [S.w44pp2.placedIn]), placementPills(placementOf(st(), dflt), (r) => { st().connectPlacement = r; save() })])
+}
+
+/** Wave 44 steer-people-picker-2: a code read by "Scan a code": the pasted-code path, then the zone sheet (acquainted or closer); someone already held is not added twice. */
+async function connectScanned(text: string): Promise<void> {
+  if (refuseForeign(text)) return
+  const out = await connectByCode(text, Ring.Acquaintance, '', '')
+  if ('type' in out) { toast(S.addCodeFailed(out)); return }
+  render()
+  if (out.existed) { toast(S.w44pp2.alreadyConnected(out.person.name)); personSheet(out.person.id); return }
+  const peer = st().peers.find((x) => x.id === out.person.peerId)
+  if (peer) openConnectAdd(peer, out.person, out.person.name)
 }
 
 // ---------------------------------------------------------------------------
@@ -7372,6 +7596,7 @@ function variationRows(s: AppState): Node[] {
       class: 'radio variation' + (c.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(c.id === cur), 'data-variation': c.id, onclick: () => appActions.do('set-profile', { profile: c.id }),
     }, [el('b', {}, [(c.id === cur ? '✓ ' : '') + c.name, ' ', alphaSub()]), el('small', {}, [S.var.names[c.base] + (c.id === cur ? ` · ${S.var.current}` : '')])])),
     ...modeShell.settingsRows(), // wave 41: default interface, Community layout, my versions
+    bwModeRow(s, () => { save(); render(); settingsSheet() }),   // wave 44 steer-strike-mode
   ]
 }
 
@@ -7436,6 +7661,47 @@ function tabRowSettings(): (Node | null)[] {
   return [el('button', { class: 'btn btn-ghost', 'data-settings-bar': '', onclick: barSheet }, [S.barOpenSettings])]
 }
 
+/** Wave 44 steer-settings-sync: when the newest copy of the record was made (file copy or server backup), ms; 0 = none. */
+function copyKeptAt(): number { return lastKept(localStorage, loadBackupInfoOf(localStorage, backupInfoKey(persona, storeCtx))?.lastAt ?? 0) }
+
+/** Writes the encrypted snapshot file (the existing snapshot code) and notes the time. */
+async function keepCopy(): Promise<void> {
+  await snapshots.take(S.snReasonManual, true)
+  markCopy(localStorage, Date.now())
+  toast(S.keepCopy.done)
+  void askPersist()
+}
+
+/** The sheet that offers a copy once, on the first run after this change, when there is data to lose. */
+function offerKeepCopy(): void {
+  if (solo || isDemoPersona(persona) || wasOffered(localStorage)) return
+  markOffered(localStorage, Date.now())
+  if (!state?.people.length) return
+  openSheet([el('h3', {}, [S.keepCopy.offerTitle]), el('p', { class: 'meta' }, [S.keepCopy.hint]),
+    el('button', { class: 'btn btn-electric', 'data-keep-copy-offer': '', onclick: () => { closeSheet(); void keepCopy() } }, [S.keepCopy.title]),
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.keepCopy.notNow])])
+}
+
+/** "How syncing works": the same lines as DEVLOG/wave44/SYNC-GUIDE.txt. */
+function syncGuideSheet(): void {
+  openSheet([el('h3', {}, [S.keepCopy.guide]), el('ol', { 'data-sync-guide': '' }, S.syncGuide.map((l) => el('li', {}, [l]))), el('button', { class: 'btn btn-ghost', onclick: settingsSheet }, [S.setTitle])])
+}
+
+/** Wave 44 steer-settings-sync: the Sync section at the bottom of Settings (outside Advanced); on a phone the Obsidian and Tana entries sit in its own Advanced. */
+function syncSettings(): Node | null {
+  const entry = (id: string, label: string): HTMLElement => el('button', { class: 'radio', [`data-settings-sync-${id}`]: '', onclick: () => openServicesImport(importHooks()) }, [el('b', {}, [label])])
+  const parts = syncSectionParts<Node>({ eligible: connectEligible(), devices: () => devices.settingsGroup(), entries: () => [entry('obsidian', S.obsidian.title), entry('tana', S.imp39.tanaTitle)] })
+  const at = copyKeptAt()
+  const persisted = el('small', { 'data-keep-copy-persist': '' }, [])
+  void persistState().then((p) => { if (p !== PersistState.Unsupported) persisted.textContent = p === PersistState.Granted ? S.persistGranted : S.persistNotGranted })
+  return settingsSection('sync', S.setSecSync, [
+    el('button', { class: 'radio', 'data-keep-copy': '', onclick: () => { void keepCopy().then(settingsSheet) } }, [el('b', {}, [S.keepCopy.title]), el('small', {}, [S.keepCopy.hint]), el('small', { 'data-keep-copy-last': '' }, [at ? S.keepCopy.last(whenLabel(at)) : S.keepCopy.never]), persisted]),
+    ...parts.main,
+    parts.advanced.length ? el('details', { class: 'settings-adv', 'data-settings-sync-advanced': '' }, [el('summary', { class: 'adv-toggle' }, [S.setAdvanced]), el('p', { class: 'meta' }, [S.syncPhoneHint]), ...parts.advanced]) : null,
+    el('button', { class: 'btn btn-ghost', 'data-sync-guide-open': '', onclick: syncGuideSheet }, [S.keepCopy.guide]),
+  ], true)
+}
+
 function settingsSheet(): void {
   const s = st()
   if (sheet.dataset.kind !== 'settings') settingsQuery = ''
@@ -7444,6 +7710,17 @@ function settingsSheet(): void {
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
   const groups: Record<SettingsSection, (Node | null)[]> = {
     web: [
+    settingsSection('home', S.home.settingsTitle, [
+      el('label', { class: 'pick' + (webDefaultOf(s) === 'home' ? '' : ' tw-off') }, [
+        el('input', { type: 'checkbox', 'data-home-start': '', role: 'switch', 'aria-checked': String(webDefaultOf(s) === 'home'), ...(webDefaultOf(s) === 'home' ? { checked: '' } : {}), onchange: (e: Event) => {
+          const v = setWebDefault(s.uiViews, (e.target as HTMLInputElement).checked ? 'home' : 'rings'); if (v) s.uiViews = v; else delete s.uiViews
+          save(); render(); settingsSheet()
+        } }),
+        el('span', {}, [S.home.start]),
+      ]),
+      el('p', { class: 'meta' }, [S.home.startHint]),
+      el('button', { class: 'btn btn-ghost', 'data-home-reset': '', onclick: () => { resetLayout(s); save(); render(); toast(S.home.resetDone) } }, [S.home.resetLayout]),
+    ]),
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
@@ -7469,7 +7746,7 @@ function settingsSheet(): void {
         el('p', { class: 'meta skins-store', 'data-skins-store': '', 'aria-disabled': 'true', title: S.setSkinsStoreHint }, [S.setSkinsStore, el('small', {}, [S.setSkinsStoreHint])]),
       ]),
     ], true),
-    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => linkableProfile(profileOf(s.twSettings), s.twSettings), toast: (m) => toast(m) })]),
+    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) }), ...profileLinkSettings({ connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, current: () => linkableProfile(profileOf(s.twSettings), s.twSettings), toast: (m) => toast(m) }), el('p', { class: 'meta', 'data-handshake-line': '' }, [S.handshake.settingsLine])]),
     settingsSection('advanced-web', S.setAdvanced, [
     // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
     HAS_MAP_VIEW ? el('label', { class: 'radio', 'data-pin-view': 'map' }, [
@@ -7601,7 +7878,7 @@ function settingsSheet(): void {
     ],
     general: [
     settingsSection('you', S.setSecYou, [
-      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
       ]),
       el('button', { class: 'conn-row', 'data-primary-email': '1', onclick: () => editEmailSheet() }, [
@@ -7620,7 +7897,7 @@ function settingsSheet(): void {
     ], true),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
-      eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
+      eligible: false, devices: () => [], backupCard: () => (backup.available() === false ? null : backup.card(true)),
     })),
     settingsSection('features', S.setSecFeatures, isEnabled('feed') ? feed.settingsGroup() : []),
     settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
@@ -7714,7 +7991,6 @@ function settingsSheet(): void {
       onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
     }, [S.setHintsAll]),
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
-    installable && !installedHere() ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
     ...apkUpdatesRow(s),
     ...aboutGroup(),
     updateRow(),
@@ -7731,6 +8007,9 @@ function settingsSheet(): void {
   }
   openSheet([
     el('h3', {}, [S.setTitle]),
+    // Wave 44 steer-settings-sync: Install stays pinned at the top until the app is installed.
+    installable && !installedHere() ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', 'data-settings-group': 'install', onclick: openInstallSheet }, [S.setInstall]) : null,
+    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-settings-group': 'install-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     el('input', {
       class: 'field', type: 'search', 'data-settings-search': '', placeholder: S.setSearchPh, 'aria-label': S.setSearchAria, autocomplete: 'off', value: settingsQuery,
       oninput: (e) => { settingsQuery = (e.target as HTMLInputElement).value; filterSettings(sheet, settingsQuery) },
@@ -7739,14 +8018,13 @@ function settingsSheet(): void {
     simpleBlock({
       state: () => st() as unknown as Record<string, unknown>, save, render: () => { renderTabs(); render() }, redraw: settingsSheet,
       actions: {
-        'ui.profile': () => editNameSheet(), 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
+        'ui.profile': () => { closeSheet(); openWebPage({ kind: 'me' }) }, 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
         'ui.import': () => openServicesImport(importHooks()), 'ui.help': () => openSheet([el('h3', {}, [S.setTitle]), ...aboutGroup()]),
       },
     }),
     advancedBlock([
     viewRow(),
     themeRow(),
-    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
@@ -7756,9 +8034,10 @@ function settingsSheet(): void {
     // Wave 41: AI is a section of its own (it sat inside Advanced); same block as the AI sparkle's sheet.
     el('div', { 'data-settings-group': 'ai' }, [settingsSection('ai', S.setSecAi, aiBlock(() => { sheet.dataset.kind = 'settings'; settingsSheet() }))]),
     ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
-    // Wave 40: Import also stands on its own at the very bottom of Settings.
-    solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),
     ]),
+    // Wave 44 steer-settings-sync: Import and Sync sit below Advanced, visible without opening it.
+    solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-group': 'import', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),
+    el('div', { 'data-settings-group': 'sync' }, [syncSettings()]),
   ])
   sheet.dataset.kind = 'settings'
   upgradeSwitches(sheet)
@@ -8047,11 +8326,38 @@ async function runAsk(text: string, reach?: number): Promise<void> {
     if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt, askRun.reach))
   }, 1000)
   render()
-  const results = await net.ask(t, reach, allowed)
+  const results = await net.ask(t, reach, allowed, hiddenDids(st(), loadColourTags())) // wave44b hide-from-crypto: the sealed "Hide from" list
   clearInterval(countdownTimer)
   if (askRun && askRun.text === t) askRun.results = results
   recordFound(t, results)
   if (screen === Screen.Web || screen === Screen.Ask) render()
+}
+
+/** Wave 44 (physical_place.ts): a physical thing needs a place; with none, ONE dialog asks "Are you sure?" (Continue / Add place). */
+function setPhysicalThing(id: string, physical: boolean, place: string): void {
+  const item = st().inventory.find((i) => i.id === id)
+  if (!item) return
+  if (setPhysical(item, physical, place, false) === 'ok') { save(); render(); return }
+  openSheet([
+    el('h3', {}, [S.askPlace.sureTitle]),
+    el('p', {}, [S.askPlace.sure]),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'btn btn-electric', type: 'button', 'data-place-continue': '', onclick: () => { setPhysical(item, true, place, true); save(); closeSheet(); render() } }, [S.askPlace.continue]),
+      el('button', { class: 'btn btn-ghost', type: 'button', 'data-place-add': '', onclick: closeSheet }, [S.askPlace.addPlace]),
+    ]),
+  ])
+}
+
+/** Wave 44: asks the chosen zone (minus those who already shared) whether they know someone who has it; the tips stay in `escRun`, private to this phone. */
+async function escalate(text: string, zone: AskZone, shared: readonly string[]): Promise<void> {
+  if (escRun?.busy) return
+  const s = st()
+  escRun = { busy: true, tips: null }
+  render()
+  const only = escalationTargets(s.people, zone, shared, askFilterOf(s).exclude, tagTester(s.people, loadColourTags()))
+  const tips = await net.ask(text, undefined, only, hiddenDids(st(), loadColourTags()), { know: true })   // the second round keeps the sealed Hide-from list
+  escRun = { busy: false, tips }
+  render()
 }
 
 function resultsView(results: AskResult[], asked: { text: string; at: number }): HTMLElement[] {
@@ -8090,7 +8396,10 @@ function queryDock(s: AppState): HTMLElement {
         askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
         el('p', { class: 'hint' }, [(run.reach === HOPS_DEFAULT ? S.queryWindow : S.queryWindowFar)(Math.round(askWaitMs(run.reach, net.answerWindowMs) / 1000))]),
         run.results
-          ? el('div', {}, [...resultsView(run.results, { text: run.text, at: run.startedAt }), webSearchRow(run.text, webResults).el])
+          ? el('div', {}, [...resultsView(run.results, { text: run.text, at: run.startedAt }), escalateBlock({
+            zone: escZone, setZone: (z) => { escZone = z; render() }, busy: escRun?.busy === true, tips: escRun?.tips ?? null,
+            send: () => { void escalate(run.text, escZone, run.results?.filter((r) => r.decoded?.outcome === 'shared').map((r) => r.peerId) ?? []) },
+          }), webSearchRow(run.text, webResults).el])
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
@@ -8098,12 +8407,13 @@ function queryDock(s: AppState): HTMLElement {
   const filter = askFilterOf(s)
   const tagsNow = loadColourTags()
   const chipName = (c: string): string => (c.startsWith('person:') ? s.people.find((p) => p.id === c.slice(7))?.name ?? '' : tagsNow.find((t) => t.id === c.slice(4))?.label ?? c.slice(4))
-  const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r) => {
+  const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r, custom) => {
     if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
+    if (custom) s.askReachCustom = true; else delete s.askReachCustom
     save(); render()
-  }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) })
+  }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) }, s.askReachCustom === true)
   const audienceBox = audienceFilterView({
-    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, advanced: [reach], openSheet, closeSheet, steps: askReachOf(s),
+    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, main: [reach], advanced: [showAskedRow(s.askShowAsked !== false, () => { if (s.askShowAsked === false) delete s.askShowAsked; else s.askShowAsked = false; save(); render() })], openSheet, closeSheet, steps: askReachOf(s),
     changed: () => { saveAskFilter(s, filter); save(); render() },
   })
   const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {
@@ -8117,6 +8427,13 @@ function queryDock(s: AppState): HTMLElement {
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : modeChips,
+      // Wave 44: a second round an assistant queued (MCP ask_escalation_set) waits here for Send or Discard.
+      !run && s.askEscalate ? el('div', { class: 'esc-box', 'data-escalate-queued': '' }, [
+        el('p', {}, [S.askKnow.queued(s.askEscalate.text)]),
+        el('button', { class: 'btn btn-electric', type: 'button', 'data-escalate-queued-send': '', disabled: escRun?.busy === true, onclick: () => { const q = s.askEscalate; delete s.askEscalate; save(); if (q) void escalate(q.text, q.zone, []) } }, [S.askKnow.send]),
+        el('button', { class: 'btn btn-ghost', type: 'button', 'data-escalate-queued-discard': '', onclick: () => { delete s.askEscalate; save(); render() } }, [S.askKnow.discard]),
+      ]) : null,
+      !run && escRun?.tips ? knowTips(escRun.tips) : null,
       run ? null : askHow(),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
@@ -8197,7 +8514,9 @@ function renderAsk(): void {
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       fitLine(a),
-      a.intro && decided === null
+      a.know && decided === null
+        ? el('div', {}, [...knowCard((note) => decide(true, note), () => decide(false)), a.askedNames ? askedWhoLine(a.askedNames) : null])
+        : a.intro && decided === null
         ? introCard({ by: a.fromName, target: a.intro }, {
             introduce: () => { decide(true); showNextAsk(); introduceHandoff({ by: a.fromName, target: a.intro! }) },
             notNow: showNextAsk,
@@ -8210,6 +8529,7 @@ function renderAsk(): void {
             el('button', { class: 'btn btn-mint', onclick: () => decide(true) }, [S.askShare]),
             el('button', { class: 'btn btn-ghost', onclick: () => decide(false) }, [S.askDecline]),
             el('p', { class: 'ask-foot' }, [yesIsLate(a) ? S.askLateFoot(a.fromName) : S.askFoot(a.fromName)]),
+            a.askedNames ? askedWhoLine(a.askedNames) : null,
           ])
         : el('div', {}, [
             el('p', { class: 'ask-done' }, [decided ? S.askSent : S.askNotSent]),
@@ -8253,13 +8573,13 @@ function yesIsLate(a: IncomingAsk): boolean {
   return a.lateMode && (a.arrivedLate || Date.now() >= a.deadline)
 }
 
-function decide(share: boolean): void {
+function decide(share: boolean, note?: string): void {
   const a = askShowing
   if (!a || askDecision !== null) return
   askDecidedLate = yesIsLate(a)
   askDecision = share
   renderAsk()
-  void a.decide(share)
+  void a.decide(share, note)
 }
 
 // ---------------------------------------------------------------------------
@@ -8365,6 +8685,7 @@ applyVariation()
 applyImageMode()
 bindModeShell((ctx) => modeShell.attach(ctx.bus))
 void twRegistry.start().then(() => { modeShell.start(); flushQueuedAsks(); renderTabs(); render() }) // wave 39 (+ wave 41 mode shell): a heavy module's view joins the row once it has loaded
+mountInAppBanner({ ua: navigator.userAgent, standalone: installedHere(), href: bootHref, search: bootSearch, solo, recordKey: storageKey(persona, storeCtx), now: Date.now() }) // wave 44: Telegram & co. run a separate storage
 // Wave 40: a connection link may suggest a Variation (#tp=<id>); it applies only on a tap.
 if (linkProfile && profileOf(state?.twSettings) !== linkProfile) toast(S.w40.linkVarOffer(S.var.names[linkProfile]), { onClick: () => chooseProfile(linkProfile, () => undefined) })
 render()
@@ -8394,6 +8715,8 @@ if (state && !state.testOf?.handedOverAt) {
   if (state.connectCode) void ensureConnectCode()
   offerApkHint(offerDemoContent)
   offerNotifications()
+  offerKeepCopy()
+  guardLeaving(localStorage, { hasData: () => !!state?.people.length, backupAt: copyKeptAt })
   cal?.start?.()
   coNotes?.start?.()
   checkEngagement()

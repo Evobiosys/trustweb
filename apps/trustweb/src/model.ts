@@ -9,7 +9,10 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
+import type { IntroInbox, IntroPending, IntroQueued } from './bubble_connect'
 import type { AssistantCfg } from './ext/assistant/providers'
+import type { AlgoCfg, SourceCfg } from './feed_sources_page'
+import type { HideReportEntry } from './hide_reports'
 import type { InboxItem } from './notify_inbox'
 import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
@@ -17,14 +20,22 @@ import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
+import type { HandshakeLogEntry, HandshakeMode } from './handshake_status'
+import type { InviteEntry, InviteSettings } from './invite_policy'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
+import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
 import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { TwSettings } from './ext/profiles'
 import type { SharedNote } from './notes_outline'
 import type { CoMsg } from './ext/co_notes/co_chat'
+// review-44: top-level type imports (the packages/cli no_network scan reads an inline type import as a value import)
+import type { Profile } from './profile_fields'
+import type { EmbedRecord } from './feed_embed'
+import type { HomeLayout } from './home_layout'
+import type { SavedFilter } from './saved_filters'
 import type { CoDoc } from './ext/co_notes/co_doc'
 import type { CoGuest, CoInvite } from './ext/co_notes/co_invite'
 import type { ConnectRecord } from './connect_code'
@@ -346,6 +357,10 @@ export interface TwTask {
  * An event I was at or will be at (E1, wave 7). Local only: never sent in a share, pack, answer or cascade
  * (cascade.ts askSources strips it). from/to are "YYYY-MM-DD", optionally with "THH:MM".
  */
+/** Wave 44 steer-open-space: one proposed activity; joins = token of a person (open_space.ts tokenOf) -> time of the last change, positive joined, negative left. */
+export interface OsActivity { id: string; title: string; slot: string; by: string; description?: string; joins: Record<string, number> }
+export interface OpenSpace { acts: OsActivity[] }
+
 export interface TwEvent {
   id: string
   name: string
@@ -392,6 +407,20 @@ export interface TwEvent {
   invitePolicy?: InvitePolicy
   /** Wave 43: what the host switched on; absent = all off (events.ts EVENT_OFFERS_DEFAULT). */
   offers?: Partial<EventOffers>
+  /** Wave 44 steer-event-visibility: how I show at this event; absent = 'discoverable' (event_visibility.ts). Local only. */
+  showMe?: 'open' | 'discoverable' | 'off'
+  /** Wave 44 steer-event-visibility-3: the host's suggested mode for participants; absent = no suggestion. Travels in the event link (event_link.ts); a participant keeps it as the host's word, never as their own choice. */
+  hostDefault?: 'open' | 'discoverable' | 'off'
+  /** Wave 44: the participant answered the host's suggestion once (Keep or Change); their own choice wins from then on. Local only. */
+  hostDefaultAnswered?: true
+  /** Wave 44: the host shares this event with the whole community (communityId, else community); absent = off. Local only. */
+  shareCommunity?: true
+  /** Wave 44: when the community was told about it (once). Local only. */
+  announcedAt?: number
+  /** Wave 44 steer-open-space: host flag "Everyone can see everyone" (small, intimate events): my default turns to show, discoverable people are listed. Travels in the event link. */
+  showAll?: true
+  /** Wave 44 steer-open-space: an online open space; the day and window are from..to. Local; the schedule travels sealed between attendees (event_envelope.ts). */
+  openSpace?: OpenSpace
   /** Wave 42 community-event: the community (colour tag id) this event was made in. */
   community?: string
   /** Wave 43 answers (epsilon): "Part of a community": the community (colour tag id) whose members this event's people join. Absent = an isolated event. Local only. */
@@ -414,6 +443,16 @@ export interface TwEvent {
   invitees?: string[]
   /** Wave 42 (P04): the event has a celebration, shown only per celebrationVisible. */
   celebration?: true
+  /** Wave 44 event-editor (event_draft.ts): how it repeats; absent = does not repeat. Local only. */
+  repeat?: Repeat
+  /** Wave 44: conference links next to the place (kMeet, Zoom, Jitsi, custom). Local only. */
+  conference?: ConferenceLink[]
+  /** Wave 44: a kDrive (https) attachment link. Local only. */
+  attachment?: string
+  /** Wave 44: the calendar it sits in (event_draft.ts calendarOf); absent = My events, or Shared with me for an event from a link. */
+  calendar?: string
+  /** Wave 44 (43-D7): the host lets technical support take over (approve, invite under a hosts-only policy). Absent = sees only. */
+  techTakeover?: true
 }
 
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
@@ -441,12 +480,18 @@ export interface Person {
   peerId?: string
   /** Wave 30: the ring before the person was archived (Ring.None); Restore puts them back. Local only. */
   prevRing?: Ring
+  /** Wave 44 (rings_layout.ts isBeyond): the id of the friend through whom I see this person; they sit outside the rings. Local only. */
+  via?: string
+  /** Wave 44: either side asked to keep this second-hand person anonymous: drawn without a name. Local only. */
+  anonymous?: boolean
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
   /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
   cadenceDays?: number
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]
+  /** Wave 44 steer-event-visibility: how this person told me they show at an event (event id -> mode); absent = I tagged them myself, so they are listed. Local only. */
+  eventShow?: Record<string, 'open' | 'discoverable' | 'off'>
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
   did?: string
   /** Wave 32 (feed_nostr.ts): their Nostr public key (hex), so their group posts show by my trust ring. Local only. Absent: unknown. */
@@ -641,6 +686,12 @@ export interface Peer {
   synced?: true
   /** Wave 43c: the set of my other devices this device last told this connection (device_alias.ts toldKey). This device only. */
   toldDevices?: string
+  /** Wave 44 (handshake_crypto.ts): the connect handshake with them was sealed (v2): 'qr' with the QR key, 'did' without a QR. Absent: before v2. */
+  handshake?: HandshakeMode
+  /** Wave 44: the QR secret of their link, kept so a re-sent connect-ack is sealed with it again. This device only. */
+  qk?: string
+  /** Wave 44 steer-invite-link (invite_policy.ts): the invite token this phone accepted from their link; every (re-sent) connect-ack carries it. This device only. */
+  inv?: string
 }
 
 export interface Offer { id: string; title: string }
@@ -699,7 +750,16 @@ export interface InventoryItem {
   link?: string
   /** The "Recommended by X?" suggestion was dismissed. */
   recommenderDismissed?: boolean
+  /** Wave 44: a physical thing (something to pick up). It needs `place` unless the person confirmed they have none (physical_place.ts). This phone only. */
+  physical?: true
+  /** Wave 44: where the physical thing is. This phone only; never sent by itself. */
+  place?: string
+  /** Wave 44b resources-outliner (resource_blocks.ts): the outline under this resource, a tree of blocks. Absent = none. */
+  blocks?: ResBlock[]
 }
+
+/** One bullet of a resource's outline; shared as a whole subtree or as its line alone. */
+export interface ResBlock { id: string; text: string; children: ResBlock[]; collapsed?: true }
 
 export type ResourceKind = 'book' | 'publication' | 'reference' | 'recording' | 'link' | 'other'
 
@@ -813,6 +873,11 @@ export interface HeldAsk {
   yesAt?: number
   /** Wave 33: an intro ask's target (net.ts IncomingAsk.intro). */
   intro?: string
+  /** Wave 44: the second round "Do you know someone who has this?" (QueryEnvelope kind 'know'); `note` is the tip the person typed with their yes. */
+  know?: true
+  note?: string
+  /** Wave 44: who the asker asked, when the asker placed this phone as Closest few or Close and left it on. */
+  askedNames?: string[]
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring: when it was first asked. */
   earlierAt?: number
   /** Wave 6i: the qid of that first ask (so the same earlier ask is not shown twice). */
@@ -877,6 +942,8 @@ export interface Me {
   primaryEmail?: { provider: string; address: string }
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
   otherEmails?: string[]
+  /** Wave 44b profile-page (profile_fields.ts): phone-book name parts, bio, pronouns, languages, place, up to four links, a visibility per field. Local; only discoverable fields leave in the directory record. */
+  profile?: Profile
 }
 
 /**
@@ -1110,6 +1177,8 @@ export interface AppState {
   /** Wave 43 (feed_social.ts): my own Feed posts, kept on this phone; stars are post ids (`social:<id>`, `group:<id>`, ...). */
   feedPosts?: SocialPost[]
   feedStars?: string[]
+  /** Wave 44 (feed_embed.ts): posts embedded from a pasted link, newest first, at most 200. Absent: none. */
+  feedEmbeds?: EmbedRecord[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
@@ -1126,6 +1195,10 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 42 (notify_inbox.ts): "Popup for missed notifications" is on unless this is true. Only "off" is stored. */
   missedPopupOff?: true
+  /** Wave 44 steer-strike-mode (bw_mode.ts): Black and white mode; switched-off options get a line through them only then. Only "on" is stored. */
+  bwMode?: boolean
+  /** Old wave44 steer-event-visibility name of bwMode; migrateBwMode folds it in. */
+  strikeSwitchedOff?: boolean
   /** Wave 43c sync-devices: Auto sync with my linked devices is on unless this is true (Settings > My devices). This device only. */
   syncAutoOff?: true
   /** Wave 43c: what Settings shows and MCP sync_status reads: linked devices and the last sync with any of them. This device only. */
@@ -1134,6 +1207,8 @@ export interface AppState {
   notifInbox?: InboxItem[]
   /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
   notifReadAt?: number
+  /** Wave 44 (notify_center.ts): rows dismissed by acting on them, id -> the row's time (a newer arrival shows again). This phone only. */
+  notifDismissed?: Record<string, number>
   /** Wave 43c social-hosting: "Discoverable by name" is on (my signed name record is published to my friends and the directory). Absent: off. */
   discoverable?: true
   /** Wave 43c: the "open to connect" flag of that record. Absent: true. Only false is stored. */
@@ -1182,6 +1257,10 @@ export interface AppState {
   invitations?: Invitation[]
   /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
   atEvent?: { eventId: string; since: number; bell?: boolean }
+  /** Wave 44 event-editor: events not saved yet (event_draft.ts). THIS DEVICE ONLY, never in an ask or a link. */
+  eventDrafts?: EventDraft[]
+  /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
+  calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
   availability?: Availability
   /** Other people's availability snapshots I keep (their own book link, one tap). */
@@ -1200,6 +1279,10 @@ export interface AppState {
   extData?: Record<string, unknown>
   /** Wave 35 (web_default_view.ts): the view pinned as the default of the Web tab. Absent: the rings. Syncs with the record. */
   uiViews?: { webDefault?: string }
+  /** Wave 44 home-dashboard (home_layout.ts): the Home tile board's columns. Absent: the default (Web centre, others' requests left, mine right). Syncs with the record. */
+  homeLayout?: HomeLayout
+  /** Wave 44b filters-communities: saved filter states (in / out chips), some pinned above the filter row (saved_filters.ts; schema 4). */
+  savedFilters?: SavedFilter[]
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only', 'select'. Absent: the select tool only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
@@ -1213,7 +1296,7 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 39: radii (layout px) the user dragged the ring lines to; absent = the default spacing. */ radii?: Partial<Record<Ring, number>>; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; /** Wave 44b filters-communities: EVENT MODE, the id of the event whose people Web, Chat, Resources and Ask are narrowed to (event_filter_mode.ts). */ eventMode?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 39: radii (layout px) the user dragged the ring lines to; absent = the default spacing. */ radii?: Partial<Record<Ring, number>>; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** Absent: QueryStyle.Call. */
@@ -1264,8 +1347,22 @@ export interface AppState {
    * that is not served from one of the two app origins. Older builds ignore it.
    */
   connectCode?: ConnectRecord
+  /** Wave 44 steer-people-picker-2: the zone a person who scans MY code is placed in (the dropdown under the code); absent = the default zone (scan_rules.ts placementOf). */
+  connectPlacement?: Ring
   /** Connect nonces this phone accepted (connect_freshness.ts), pruned past the window: a link used once is refused the second time. */
   seenConnectNonces?: SeenNonce[]
+  /** Wave 44 (handshake_crypto.ts): nonces of the sealed connect-acks this phone opened (replay ledger, bounded). This device only. */
+  seenHandshakeNonces?: string[]
+  /** Wave 44: refused connect handshakes (tampered, replayed, an app before v2), newest first, bounded. This device only. */
+  handshakeLog?: HandshakeLogEntry[]
+  /** Wave 44 steer-invite-link (invite_policy.ts): the counter of this device's community invite links (uses, tries, revoked). This device only: acks reach its DID. */
+  invites?: InviteEntry[]
+  /** Wave 44 steer-invite-link: Advanced, the open link's max uses and days (defaults OPEN_INVITE_MAX_USES / INVITE_DAYS). */
+  inviteSettings?: InviteSettings
+  /** Wave 44 steer-invite-link: ids of invite links this phone accepted (a second accept here is refused). This device only. */
+  invitesTaken?: string[]
+  /** Wave 44b (hide_from_net.ts): verified reports that a device on the way changed or could not check an ask's "Hide from" list. This device only. */
+  hideReports?: HideReportEntry[]
   /**
    * Wave 15 (sync_code.ts): further connect codes of this account that linked devices brought (a different code from another device whose names did
    * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.
@@ -1275,6 +1372,10 @@ export interface AppState {
   pendingRenew?: string[]
   /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. Text only; also synced, sealed, between the owner's own devices. */
   chats?: ChatBook
+  /** Wave 44 (bubble_connect.ts): introductions I asked an acceptor for, an MCP-queued introduction, and requests asked of me. Optional. */
+  introPending?: IntroPending[]
+  introQueue?: IntroQueued[]
+  introInbox?: IntroInbox[]
   /**
    * Device sync (wave 13, same_person.ts): dropped person id -> kept person id, written when the owner declared two persons the same
    * person. Travels between the owner's devices so a dropped id never comes back. Optional; an older build ignores it.
@@ -1342,6 +1443,10 @@ export interface AppState {
   apkUpdates?: boolean
   /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
   showRingNames?: boolean
+  /** Wave 44 (colour_tags.ts COLOUR_MODES): 'full' = bubbles filled with their ring colour; absent = 'rings', the colour only on the ring around a bubble. */
+  colourMode?: 'rings' | 'full'
+  /** Wave 44 steer-event-visibility-2: Settings > Notifications "Alert me about new events in my communities"; absent = on, false = announces dropped silently. */
+  eventAlerts?: false
   /**
    * Settings > Advanced (wave 3): ask only my direct contacts. On: every ask
    * carries `direct: true` and nobody passes it on. Absent or anything but
@@ -1355,6 +1460,12 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /** Wave 44: the person picked Custom under "How far?" (so 1 to 3 stay a custom value). Absent: a fixed choice. */
+  askReachCustom?: true
+  /** Wave 44: false = an ask does not tell Closest few and Close who else was asked (Ask > Advanced). Absent: on. */
+  askShowAsked?: false
+  /** Wave 44: a second round an assistant queued (MCP ask_escalation_set): the Ask page shows it as a card; Send asks, Discard drops it. */
+  askEscalate?: { text: string; zone: 'closest' | 'close' | 'friend' }
   /** Wave 43b (audience_filter.ts): the ask audience the filter view keeps: zone (closest, close, friend; absent = every connected person) and the added / hidden `person:<id>` / `tag:<id>` chips. The degree is `askReach`. An older build ignores it. */
   askAudience?: { zone?: 'closest' | 'close' | 'friend'; add: string[]; exclude: string[] }
   /** Wave 25: "Your city" (Settings > Profile); the ask sheet's example names it. Absent: Vienna. An older build ignores it. */
@@ -1431,7 +1542,7 @@ export interface AppState {
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
   features?: { events?: false; inventory?: false }
   /** Settings > AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
-  advanced?: { ai?: AiEndpoint; /** Wave 42: the assistant's provider chain settings (ext/assistant/providers.ts). */ assistant?: AssistantCfg }
+  advanced?: { ai?: AiEndpoint; /** Wave 44: the other endpoint of "Which AI answers?" while this one is active (ai_choice.ts). */ aiAlt?: AiEndpoint; /** Wave 42: the assistant's provider chain settings (ext/assistant/providers.ts). */ assistant?: AssistantCfg }
   /** Wave 36: the pi agent on this device (ai_button.ts). Absent: none set up. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED): a loopback address means nothing on another phone. */
   agent?: AgentLink
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
@@ -1521,6 +1632,15 @@ export interface FeedSettings {
   relays?: string[]
   /** Wave 32 (feed_nostr.ts): per group (our id) its governance, channels and vouches. Absent: open, no channels. */
   groupMeta?: Record<string, { governance?: 'open' | 'invite' | 'vouch' | 'admin' | 'consensus'; channels?: { id: string; name: string }[]; vouchedBy?: string[] } | undefined>
+  /* wave44 feed-sources (feed_sources_page.ts): the Sources page. All optional, no schema bump. */
+  /** Per source id: on/off and filters (only what differs from the default). */
+  sources?: Record<string, SourceCfg>
+  /** The ranking weights (recency, trust, source, perSource); absent: 0.6 / 0.3 / 0.1. */
+  algo?: Partial<AlgoCfg>
+  /** "Never read public content": no public place is read. Absent: reading allowed. */
+  noPublicRead?: boolean
+  /** Where the composer posts by default (feed_sources_page.ts PUBLISH_TARGETS); absent: fediverse. */
+  publishTarget?: string
 }
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */

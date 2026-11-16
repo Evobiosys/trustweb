@@ -94,6 +94,8 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   // ---- advanced: everything else the record stores ----
   feature('features.events', 'events', 'Events'),
   feature('features.inventory', 'inventory', 'Resources'),
+  { id: 'web.colourMode', section: 'web', label: 'Full colours on the web', hint: 'Off: only the ring around a bubble carries its colour. On: bubbles are filled.', type: 'boolean', default: false, simple: false, get: (r) => r.colourMode === 'full', set: (r, v) => { if (v === true) r.colourMode = 'full'; else delete r.colourMode } },
+  sparse('events.alertCommunity', 'general', 'Alert me about new events in my communities', 'eventAlerts', true, false, 'Off: a new event a community member shares is dropped silently, with no row and no badge.'),
   flag('web.ringNames', 'web', 'Show ring names on the web', 'showRingNames', false, false, 'Trust zone under each name.'),
   choice('web.queryStyle', 'web', 'How asks read', 'queryStyle', ['call', 'search'], 'call', 'Asks read as a call for help or as a search.'),
   choice('web.pinnedOrder', 'web', 'Pinned order', 'pinnedOrder', ['pinned', 'contact'], 'pinned', 'Newest pin first, or whoever you were last in touch with first.'),
@@ -114,6 +116,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   flag('general.notificationsOn', 'general', 'Notifications', 'notificationsOn', false, false, 'The app asks the system for permission when you switch it on; here the record only keeps the choice.'),
   sparse('mcp.applyDirectly', 'general', 'MCP applies directly', 'mcpApplyDirectly', false, true, 'Personal preview: what an agent changes through MCP is taken at once, without a card to approve.'),
   /* wave43c sync-devices: this device's switch (never synced); Settings > My devices shows it struck through when off */
+  sparse('variations.bw', 'general', 'Black and white mode', 'bwMode', false, true, 'Switched-off options get a line through them, for greyscale screens.'),
   sparse('general.syncAuto', 'general', 'Auto sync between my devices', 'syncAutoOff', true, true, 'Off: changes go to your other devices only with Sync now.'),
   // Wave 43c social-hosting: the global profile, hosting for friends, trusted-only mode and the directory servers (UI: social_hosting_view.ts; MCP: apps/mcp/src/social_tools.ts).
   sparse('profile.discoverable', 'general', 'Discoverable by name', 'discoverable', false, true, 'Publish your first and last name and public key so people can find you by name. Off by default.'),
@@ -127,6 +130,17 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
       const bad = urls.find((u) => !/^https:\/\/[^/\s]+$/.test(u) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(u))
       if (bad) throw new Error(`a directory server must be an https address, not "${bad}"`)
       if (urls.length) r.directoryServers = urls; else delete r.directoryServers
+    } },
+  { id: 'home.start', section: 'web', label: 'Open Home first', hint: 'The Web tab opens the Home tile board instead of the rings (Settings > Home).', type: 'boolean', default: false, simple: false,
+    get: (r) => obj(r.uiViews).webDefault === 'home',
+    set: (r, v) => { const views = { ...obj(r.uiViews) }; if (v) views.webDefault = 'home'; else delete views.webDefault; if (Object.keys(views).length) r.uiViews = views; else delete r.uiViews } },
+  // answers-44a (Q7): the public address a profile link must point back to (rel="me"); MCP profile_link_check reads it, the app uses its own address.
+  { id: 'profile.origin', section: 'general', label: 'Public address of this app', hint: 'For profile_link_check over MCP: the https address your linked pages point back to with rel="me". Empty = not set.', type: 'text', default: '', simple: false,
+    get: (r) => (typeof r.profileOrigin === 'string' ? r.profileOrigin : ''),
+    set: (r, v) => {
+      const u = String(v).trim().replace(/\/+$/, '')
+      if (u && !/^https:\/\/[^/\s]+$/.test(u)) throw new Error(`the public address must be an https origin without a path, not "${u}"`)
+      if (u) r.profileOrigin = u; else delete r.profileOrigin
     } },
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),

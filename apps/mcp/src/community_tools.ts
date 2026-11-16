@@ -5,15 +5,18 @@
  * The record has no network: support_ask writes the ask marked `queued`, and the app shows a card; the person's tap on Send sends it (support_flush.ts, I9);
  * support_cancel marks `cancelled`, and the app tells the people it went to. Counts come back, never names of recipients.
  */
-import { NAV, TILES, addMember, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
+import { NAV, SUBCOMMUNITY_FREE_LIMIT, TILES, addMember, canAddSub, subCommunityCount, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { CommunityData, CommunityKind } from '../../trustweb/src/ext/community-mighty/community_data.ts'
+import { foreignCode, personQrLink } from '../../trustweb/src/person_qr_link.ts'
+import type { Ring } from '../../trustweb/src/model.ts'
+import { SCAN_RINGS, connectedPerson, placementOf } from '../../trustweb/src/scan_rules.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; fields?: Record<string, unknown>; deleted_at?: string }
 interface Ask extends Obj { id: string; chips: string[]; note: string; until: number; to: string[]; here: string[]; queued?: true; agent?: true; cancelled?: true }
 interface In extends Obj { id: string; peerId: string; chips: string[]; note: string; until: number }
-interface Rec extends Obj { people: Person[]; extData?: Record<string, unknown>; supportAsks?: Ask[]; supportIn?: In[] }
+interface Rec extends Obj { people: Person[]; peers?: { id: string; did?: string }[]; identity?: { did?: string }; connectPlacement?: string; extData?: Record<string, unknown>; supportAsks?: Ask[]; supportIn?: In[] }
 
 export interface CommunityToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean; write: boolean; now: () => Date }
 
@@ -62,10 +65,40 @@ function resolve(r: Rec, tokens: readonly unknown[]): string[] {
 
 export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Tool[] } {
   const read: Tool[] = [
+    /* wave44 steer-people-picker */
     {
-      name: 'community_list', description: 'The communities I have: id, name, kind (managed = has organizers; informal = my own representation of a group) and member count.',
+      name: 'person_qr_target', description: 'What the QR code on ONE person\'s card is bound to: the person\'s DID (their local id until a DID is known) and the fragment the connect link gets (`to=...`). Append `fragment` to the own connect link; the app does this on the card.',
+      inputSchema: schema({ person: S('id or exact name') }, ['person']),
+      run: (a) => {
+        const r = e.load()
+        const p = person(r, a.person)
+        const did = (r.peers ?? []).find((x) => x.id === p.peerId)?.did ?? (typeof p.did === 'string' ? p.did : undefined)
+        const target = did ?? p.id
+        return { id: p.id, name: p.name, target, title: `Connect with ${p.name}`, fragment: personQrLink('', { id: p.id, ...(did ? { did } : {}) }).slice(1) }
+      },
+    },
+    /* wave44 steer-people-picker-2 */
+    {
+      name: 'connect_placement', description: `The zone a person who scans my code is placed in (the dropdown "They will be placed in" under my QR code). Zones: ${SCAN_RINGS.join(', ')}.`,
       inputSchema: schema({}),
-      run: () => { const r = e.load(); return Object.entries(dataOf(r).meta ?? {}).map(([id, m]) => ({ id, name: m.name ?? id, kind: m.kind, members: alive(r).filter((p) => holds(p, id)).length })) },
+      run: () => ({ zone: placementOf({ connectPlacement: e.load().connectPlacement as Ring | undefined }, 'acquaintance' as unknown as Ring), zones: [...SCAN_RINGS] }),
+    },
+    {
+      name: 'connect_link_check', description: 'What the app does with a connect link someone scanned: refused (made for another person), already connected (the card; nothing is added twice), or new. Changes nothing.',
+      inputSchema: schema({ link: S('the scanned link; a code made for one person carries to=<DID> in its fragment'), did: S('the DID in the link (who made it), to see whether I already hold them') }, ['link']),
+      run: (a) => {
+        const r = e.load()
+        const link = str(a.link)
+        if (foreignCode(link, r.identity?.did)) return { result: 'refused' }
+        const did = str(a.did).trim()
+        const held = did ? connectedPerson({ people: r.people as never, peers: (r.peers ?? []) as never }, did) : undefined
+        return held ? { result: 'already-connected', person: held.id, name: held.name } : { result: 'new' }
+      },
+    },
+    {
+      name: 'community_list', description: 'The communities I have: id, name, kind (managed = has organizers; informal = my own representation of a group), member count and parent (the community it is a sub-community of, absent for a root).',
+      inputSchema: schema({}),
+      run: () => { const r = e.load(); return Object.entries(dataOf(r).meta ?? {}).map(([id, m]) => ({ id, name: m.name ?? id, kind: m.kind, members: alive(r).filter((p) => holds(p, id)).length, ...(m.parent ? { parent: m.parent } : {}) })) },
     },
     {
       name: 'community_settings_get', description: 'Settings of one community: kind, organizers, left-column sections (nav), the Ask for support button (ask) and the last audiences used.',
@@ -92,7 +125,7 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
   const write: Tool[] = [
     {
       name: 'community_create', description: 'Make a community of that name (managed or informal, default informal); the app defines its tag on its next start. A name that exists changes nothing.',
-      inputSchema: schema({ name: S('community name'), kind: S('managed | informal') }, ['name']),
+      inputSchema: schema({ name: S('community name'), kind: S('managed | informal'), parent: S('community id this one is a sub-community of (holarchy); more than ' + SUBCOMMUNITY_FREE_LIMIT + ' under one root needs a request to the hosting contact') }, ['name']),
       run: (a) => {
         const name = str(a.name).trim()
         const id = slug(name)
@@ -102,8 +135,10 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
         e.commit((r) => {
           const d = dataOf(r)
           if (d.meta?.[id]) return
+          const parent = a.parent === undefined ? undefined : need(r, a.parent)
+          if (parent && !canAddSub(d, parent)) throw new Error(`${subCommunityCount(d, parent)} sub-communities already sit under this root: the free limit is ${SUBCOMMUNITY_FREE_LIMIT}; ask the hosting contact for more`)
           created = true
-          put(r, { ...d, meta: { ...d.meta, [id]: { kind, organizers: kind === 'managed' ? ['me'] : [], name } } })
+          put(r, { ...d, meta: { ...d.meta, [id]: { kind, organizers: kind === 'managed' ? ['me'] : [], name, ...(parent ? { parent } : {}) } } })
         })
         return { id, kind: created ? kind : metaOf(dataOf(e.load()), id).kind, created }
       },
@@ -121,6 +156,16 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
           put(r, setKind(d, id, kind))
         })
         return { id, kind }
+      },
+    },
+    {
+      name: 'connect_placement_set', description: `Choose the zone a person who scans my code is placed in. One of: ${SCAN_RINGS.join(', ')} (never "intending").`,
+      inputSchema: schema({ zone: S(SCAN_RINGS.join(' | ')) }, ['zone']),
+      run: (a) => {
+        const zone = str(a.zone).trim()
+        if (!(SCAN_RINGS as readonly string[]).includes(zone)) throw new Error(`zone must be one of ${SCAN_RINGS.join(', ')}`)
+        e.commit((r) => { r.connectPlacement = zone })
+        return { zone }
       },
     },
     {

@@ -227,6 +227,8 @@ export interface ConnectAckEnvelope {
   did: string
   /** Wave 8: the sender reached out through the receiver's public link (no relationship before). Additive; absent otherwise. */
   reachOut?: true
+  /** Wave 44 steer-invite-link (TrustWeb invite_policy.ts): the signed community invite token, only ever inside the sealed connect-ack2. */
+  inv?: string
 }
 
 /**
@@ -313,8 +315,14 @@ export interface QueryEnvelope {
    * organisation or topic the asker wants an introduction to). Both optional and always together; `freeText` still carries the readable
    * request, so an older build (which ignores both fields) shows it as an ordinary ask. No schema bump.
    */
-  kind?: 'intro'
+  kind?: 'intro' | 'know'
   target?: string
+  /**
+   * Wave 44 steer-ask-escalation: `kind: 'know'` = the second round "Do you know someone who has this?" (no target; freeText is the original
+   * question). `askedNames`: who this ask went to, sent ONLY to a recipient the asker placed as Closest few or Close and only when the asker
+   * left it on (1..50 display names). Both optional; older builds ignore them (the ask then reads as an ordinary one).
+   */
+  askedNames?: string[]
   // ----- BEGIN TrustWeb wave 6 (U1): how far an ask travels (hops) -----
   // All optional; an older build's parseQuery copies known fields only, so it
   // ignores every one of them (the ask then behaves as one hop, as before).
@@ -364,6 +372,11 @@ export interface QueryEnvelope {
    */
   reask?: ReaskRef
   // ----- END TrustWeb wave 6i -----
+  /* wave44b hide-from-crypto */
+  /** The asker's signed exclusion list as keyed tags (apps/trustweb/src/hide_from_crypto.ts ExclusionBlob); passed on unchanged, checked there. */
+  hx?: Record<string, unknown>
+  /** The level secret for this receiver (base64url, 32 bytes): sealed by the pair key like the whole envelope; lets it test candidates, never read the list. */
+  hk?: string
 }
 
 // ----- BEGIN TrustWeb wave 6i -----
@@ -442,6 +455,11 @@ export interface EventEnvelope {
   t: 'event'
   want?: string
   link?: string
+  /** Wave 44 steer-event-visibility: how the sender shows at this event, and "the host shares this with the whole community" (a link envelope only). */
+  show?: 'open' | 'discoverable' | 'off'
+  announce?: true
+  /** Wave 44 steer-open-space: the schedule of an online open space (instead of `want` / `link`): `open` = the sender, a host, says the event is an open space; `acts` are checked by the receiver (open_space.ts). */
+  os?: { id: string; open?: true; acts: unknown[] }
 }
 // ----- END TrustWeb wave 43c -----
 
@@ -691,4 +709,23 @@ export interface QueryLogEntry {
    *  doc comment on why it is safe to keep this granular locally even though
    *  the wire may never distinguish it. */
   outcome: LocalOutcome
+}
+
+/* wave44b hide-from-crypto */
+/** The largest QueryEnvelope.hx as JSON (HIDE_TAGS_MAX tags at the furthest reach fit): a larger one rejects the envelope. */
+export const HIDE_BLOB_MAX_JSON = 8192
+/** The largest HideReportEnvelope.rep as JSON. */
+export const HIDE_REPORT_MAX_JSON = 2048
+/** QueryEnvelope.hk: 32 bytes, base64url. */
+export const HIDE_KEY_RE = /^[A-Za-z0-9_-]{43}$/
+/**
+ * A tamper report on its way back to the asker (apps/trustweb/src/hide_from_crypto.ts TamperReport): sealed with the pair key, sent by the
+ * device that found the exclusion list changed to the one that sent it the ask, and passed up hop by hop (qid = the ask that hop received).
+ * The wire guards only the outer shape and size; the asker checks the report (signature, MAC). An older build drops the unknown `t`.
+ */
+export interface HideReportEnvelope {
+  v: 1
+  t: 'hide-report'
+  qid: string
+  rep: Record<string, unknown>
 }

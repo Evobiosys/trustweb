@@ -21,6 +21,8 @@ export interface SmallCardDeps {
   /** The defined tags this person lacks; a "+ tag" button offers them (empty: it says none are defined). */
   addableTags?: readonly ColourTag[]
   onAddTag?: (id: string) => void
+  /** Wave 44 steer-people-picker-4: a name typed in the picker (Enter); a name no tag has yet defines one. */
+  onNewTag?: (name: string) => void
   /** What the person sees of my resources, by granting category (zone_visibility.ts visibleVia). */
   visible: { count: number; categories: readonly VisibleCategory[] }
   /** Kind label of one resource for the inline list ("typed", "recorded"). */
@@ -29,6 +31,8 @@ export interface SmallCardDeps {
   onRenameResource?: (id: string, next: string) => void
   /** Wave 30: a title typed in a category's "+ add" line (the caller adds it with that category's audience and redraws). */
   onAddResource?: (category: VisibleCategory, title: string) => void
+  /** Wave 44: marks a resource as something to pick up, with its place (the caller asks "Are you sure?" when the place is empty). */
+  onPhysical?: (id: string, physical: boolean, place: string) => void
   /** "Open in My Resources" under an expanded category. */
   onOpenResources: (category: VisibleCategory) => void
   /** Extended: expands this card in place (aria-expanded), a second press collapses it. */
@@ -98,9 +102,18 @@ function sharesLine(d: SmallCardDeps): HTMLElement {
   const itemRow = (i: VisibleCategory['items'][number]): HTMLElement => {
     const row = el('div', { class: 'meta card-res-row', 'data-card-shares-item': i.id })
     const show = (): void => row.replaceChildren(
-      el('span', {}, [i.text, ' · ', d.kindOf(i)]),
+      el('span', {}, [i.text, ' · ', d.kindOf(i), i.physical && i.place ? ' · ' + S.askPlace.place(i.place) : '']),
+      ...(d.onPhysical ? [el('button', { class: 'card-res-btn', 'data-card-shares-physical': i.id, 'aria-pressed': String(i.physical === true), 'aria-label': S.askPlace.physical, title: S.askPlace.physical, onclick: physical }, ['📦'])] : []),
       ...(d.onRenameResource ? [el('button', { class: 'card-res-btn', 'data-card-shares-edit': i.id, 'aria-label': S.cardResourceEdit, title: S.cardResourceEdit, onclick: edit }, ['✎'])] : []),
     )
+    // Wave 44: a small greyed place box (P7) for a physical thing; saving it with nothing typed asks "Are you sure?" once (main.ts).
+    const physical = (): void => {
+      if (i.physical === true && (i.place ?? '').trim()) { d.onPhysical?.(i.id, false, ''); return }   // a placed thing: the press takes the mark off
+      row.replaceChildren(inlineEdit(S.askPlace.placeAria, i.place ?? '', 'data-card-shares-place-input', (typed) => {
+        if (typed !== null) d.onPhysical?.(i.id, true, typed)
+        else show()
+      }))
+    }
     const edit = (): void => row.replaceChildren(inlineEdit(S.cardResourceEdit, i.text, 'data-card-shares-input', (typed) => {
       if (typed !== null) d.onRenameResource?.(i.id, typed)
       else show()
@@ -171,15 +184,18 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
   const picker = el('div', { class: 'chips ring-pick', hidden: true, 'data-ring-pick': p.id, role: 'group', 'aria-label': S.cardRingPickTitle }, (d.rings ?? []).map((r) =>
     el('button', { class: 'chip', 'data-ring-choice': r.ring, 'aria-pressed': String(r.current), onclick: () => d.onRing?.(r.ring) }, [r.label])))
   const togglePicker = (): void => { picker.hidden = !picker.hidden }
-  const tagPicker = el('div', { class: 'chips', hidden: true, 'data-tag-pick': p.id }, d.addableTags?.length
-    ? d.addableTags.map((t) => tagPill(t, { class: 'chip', attrs: { 'data-tag-choice': t.id }, onclick: () => d.onAddTag?.(t.id) }))
-    : [el('span', { class: 'meta' }, [S.cardTagsUndefined])])
+  const newTag = el('input', { type: 'text', class: 'input', 'data-tag-new': p.id, placeholder: S.w44pp4.newTagPh, 'aria-label': S.w44pp4.newTagAria, autocomplete: 'off' }) as HTMLInputElement
+  newTag.addEventListener('keydown', (e) => { if (e.key === 'Enter' && newTag.value.trim()) { e.preventDefault(); d.onNewTag?.(newTag.value.trim()) } })
+  const tagPicker = el('div', { class: 'chips', hidden: true, 'data-tag-pick': p.id }, [
+    ...(d.addableTags ?? []).map((t) => tagPill(t, { class: 'chip', attrs: { 'data-tag-choice': t.id }, onclick: () => d.onAddTag?.(t.id) })),
+    newTag,
+  ])
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
+    el('div', { 'data-chat-row': '' }, [d.chat]),   // wave 44 steer-people-picker-2: Chat is the first thing on a card
     el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
       d.onQr ? el('button', { class: 'btn btn-ghost btn-sm', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, title: S.qrShowAria, onclick: d.onQr }, [S.qrPageTitle]) : null]),
     d.face?.menu,
     d.places ? connectedOnRow(d.places, d.onChat) : null,
-    el('div', { 'data-chat-row': '' }, [d.chat]),
     el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
     picker,
     sharesLine(d),
@@ -187,7 +203,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
       ...(d.tags.length
         ? d.tags.map((t) => tagPill(t, { class: 'chip', attrs: { 'data-card-tag': t.id }, onclick: () => d.onTag(t.id) }))
         : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
-      el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden } }, [S.cardTagAdd]),
+      el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden; if (!tagPicker.hidden) newTag.focus() } }, [S.cardTagAdd]),
     ]),
     tagPicker,
     d.inventory ? inventoryPanel(p.id, d.inventory) : null,

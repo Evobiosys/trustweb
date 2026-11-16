@@ -16,8 +16,8 @@ import { seenHash } from '../../../apps/trustweb/src/hops.ts'
 import { createIdentity, ecdhSharedSecret } from '../../../apps/demo/src/did.ts'
 import { createRelayChannel } from '../../../apps/demo/src/relay.ts'
 import { deriveEcdhPairKey, randomId } from '../../../apps/demo/src/crypto.ts'
-import { encodeForQr } from '../../../apps/demo/src/wire.ts'
 import { buildConnectAck } from '../../../apps/demo/src/connect_link.ts'
+import { sealConnectAck } from '../../../apps/trustweb/src/handshake_crypto.ts'
 import { interpret, truncateSharedJson } from '../../../apps/demo/src/gate.ts'
 import { sealRelayAnswer } from '../../../apps/demo/src/answer_key.ts'
 
@@ -68,7 +68,7 @@ async function phone(relayOrigin, name, decide) {
     did: identity.did,
     asks,
     /** The scanning side of the one-scan ceremony: tell the peer who we are. */
-    connectTo: (did) => channel.sendRaw(did, encodeForQr(buildConnectAck(me, identity))),
+    connectTo: async (did) => channel.sendRaw(did, await sealConnectAck(buildConnectAck(me, identity), identity, did)), // wave 44: sealed
     /** Ask one peer; resolves with the decoded answer or null on timeout. */
     ask: async (did, text, timeoutMs = 4000, extra = {}) => {
       const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: text, ...extra }

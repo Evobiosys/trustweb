@@ -4,6 +4,7 @@ import type { AppState, Person } from './model'
 import { memberIds, tagsOf, type ColourTag } from './colour_tags'
 import { zoneTagIds, tagNamed } from './zone_tags'
 import { filterByChips } from './tag_filter'
+import { eventModeShow } from './event_filter_mode'
 import { ringShown } from './rings_filter'
 import { WEB_RINGS, webSlot } from './rings_layout'
 import { lastContact } from './people_list'
@@ -61,7 +62,7 @@ export function groupsOf(s: Pick<AppState, 'shareProfiles'>, p: Pick<Person, 'id
 export function completeRows(c: RowCtx, o: RowOpts): CompleteRow[] {
   const { s, tags, now } = c
   const ui = s.uiRings
-  const shown = filterByChips(s.people.filter((p) => !isDeleted(p) && !isArchived(p) && ringShown({ uiRings: ui }, webSlot(p))), tags, ui?.show ?? [], ui?.hide ?? [], s.events)
+  const shown = filterByChips(s.people.filter((p) => !isDeleted(p) && !isArchived(p) && ringShown({ uiRings: ui }, webSlot(p))), tags, eventModeShow(s), ui?.hide ?? [], s.events)
   const q = fold(o.query.trim())
   // Wave 40: the groups (tags with children) a person resolves into, worked out once per list, shown as inherited tags.
   const groups = tags.filter((g) => tags.some((t) => t.parents?.includes(g.id))).map((g) => ({ g, ids: new Set(memberIds(s.people, tags, g.id)) }))

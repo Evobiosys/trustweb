@@ -6,11 +6,15 @@
  */
 export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'list_people', write: false }, { name: 'get_person', write: false }, { name: 'list_tags', write: false }, { name: 'list_notes', write: false },
-  { name: 'search', write: false }, { name: 'notifications_inbox_list', write: false }, { name: 'add_note', write: true }, { name: 'add_tag', write: true },
+  { name: 'search', write: false }, { name: 'notifications_inbox_list', write: false }, { name: 'add_note', write: true }, { name: 'add_tag', write: true }, { name: 'person_hide', write: true },
   { name: 'notifications_inbox_mark_seen', write: true }, { name: 'notifications_popup_set', write: true },
   { name: 'bar_list', write: false }, { name: 'bar_set', write: true }, { name: 'bar_hide', write: true }, { name: 'bar_show', write: true },
   { name: 'web_filter_get', write: false }, { name: 'web_filter_set', write: true },
+  /* wave44b filters-communities */
+  { name: 'filter_state_list', write: false }, { name: 'event_mode_get', write: false }, { name: 'filter_state_save', write: true }, { name: 'filter_state_apply', write: true }, { name: 'filter_state_pin', write: true }, { name: 'event_mode_set', write: true },
   { name: 'remove_person', write: true }, { name: 'restore_person', write: true },
+  { name: 'introduce_people', write: true }, // wave 44 steer-bubble-connect
+  { name: 'introduce_link_create', write: true }, // wave 44 steer-bubble-connect-3
   { name: 'assistant_providers', write: false }, { name: 'assistant_ask', write: false }, { name: 'assistant_set_model', write: true },
   // Wave 42 mcp-parity: every registry action reachable
   { name: 'set_ring', write: true }, { name: 'remove_tag', write: true }, { name: 'set_field', write: true }, { name: 'create_group_tag', write: true }, { name: 'app_action', write: true },
@@ -22,15 +26,18 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   // Wave 43b event-qr-join
   { name: 'event_link_open', write: false },
   // Wave 43 event-press-share
-  { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
+  { name: 'event_settings_set', write: true }, { name: 'event_visibility_default', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
   // Wave 43c chat-notices
   { name: 'notices_list', write: false }, { name: 'web_default_view_get', write: false }, { name: 'web_default_view_set', write: true },
   // Wave 43b notify-center
   { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
+  /* wave44 steer-notify-dismiss */ { name: 'notification_dismiss', write: true },
   // Wave 43b resources-views
   { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_set_suggester', write: true },
   // Wave 43 event-feed
   { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
+  // Wave 44 feed-embed
+  { name: 'feed_embed_link', write: true },
   // Wave 42 settings-llm-first
   { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_sync_capabilities', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai
@@ -41,6 +48,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'billing_plans', write: false }, { name: 'billing_status', write: false }, { name: 'billing_checkout_link', write: true },
   // Wave 43b ask-page-filter
   { name: 'ask_audience_get', write: false }, { name: 'ask_audience_set', write: true },
+  /* wave44 steer-ask-escalation */
+  { name: 'ask_escalation_get', write: false }, { name: 'ask_escalation_set', write: true }, { name: 'resource_set_physical', write: true },
   /* wave43b community-shell */
   { name: 'community_menu_get', write: false }, { name: 'community_home_tiles_set', write: true }, { name: 'community_chat_scope_set', write: true }, { name: 'event_link_mode_set', write: true },
   /* wave43c sync-devices */
@@ -49,6 +58,37 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'directory_search', write: false }, { name: 'profile_discoverable_set', write: true }, { name: 'hosting_set', write: true }, { name: 'trusted_only_set', write: true }, { name: 'trust_override_set', write: true },
   /* wave43c connect-extras */
   { name: 'feed_sources_get', write: false }, { name: 'feed_sources_set', write: true }, { name: 'community_dashboard_share_set', write: true }, { name: 'event_envelope_send', write: true },
+  /* wave44 home-dashboard */
+  { name: 'home_layout_get', write: false }, { name: 'home_layout_set', write: true }, { name: 'dashboard_open', write: true },
+  /* wave44 steer-ask-placement-2 */
+  { name: 'ai_provider_get', write: false }, { name: 'ai_provider_set', write: true },
+  /* wave44 steer-settings-sync */
+  { name: 'settings_keep_copy', write: true },
+  /* wave44 feed-sources */
+  { name: 'feed_source_toggle', write: true }, { name: 'feed_algorithm_set', write: true }, { name: 'feed_no_public_read_set', write: true }, { name: 'feed_publish_target_set', write: true },
+  /* wave44 event-editor */
+  { name: 'event_drafts_list', write: false }, { name: 'event_draft_save', write: true }, { name: 'event_invite', write: true }, { name: 'event_details_set', write: true }, { name: 'calendar_add', write: true }, { name: 'calendar_tag_toggle', write: true },
+  /* wave44 handshake-crypto */
+  { name: 'handshake_status', write: false },
+  /* wave44 steer-people-picker */
+  { name: 'person_qr_target', write: false },
+  /* wave44 steer-people-picker-2 */
+  { name: 'connect_placement', write: false }, { name: 'connect_link_check', write: false }, { name: 'connect_placement_set', write: true },
+  /* wave44 steer-invite-link */
+  { name: 'invite_link_create', write: true }, { name: 'invite_link_revoke', write: true }, { name: 'invite_link_status', write: false },
+  /* wave44 steer-open-space */
+  { name: 'open_space_propose', write: true }, { name: 'open_space_join', write: true },
+
+  /* wave44b profile-page */
+  { name: 'profile_get', write: false }, { name: 'profile_set', write: true }, { name: 'profile_link_add', write: true }, { name: 'profile_link_remove', write: true },
+  /* wave44b resources-outliner */
+  { name: 'resource_share', write: false }, { name: 'resource_block_add', write: true }, { name: 'resource_block_edit', write: true }, { name: 'resource_block_move', write: true }, { name: 'resource_block_remove', write: true }, { name: 'resource_block_collapse', write: true }, { name: 'resource_blocks_import', write: true },
+  /* wave44b hide-from-crypto */
+  { name: 'ask_tamper_reports_list', write: false },
+  /* answers-44a */
+  { name: 'profile_link_check', write: true },
+  /* wave44 steer-circles-view */
+  { name: 'circles_layout', write: false },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

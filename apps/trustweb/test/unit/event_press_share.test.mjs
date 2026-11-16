@@ -72,12 +72,14 @@ describe('nickname reveal', () => {
 })
 
 describe('mayInvite', () => {
-  it('policy hosts (answers-43: no longer the default): host, organizer and tech support only', () => {
+  it('policy hosts (answers-43: no longer the default): host and organizer; tech support once it may take over (wave 44)', () => {
     const s = state()
     const only = { invitePolicy: 'hosts' }
     expect(mayInvite(ev({ hosts: ['Mia Probe'], ...only }), s)).toBe(true)
     expect(mayInvite(ev({ hosts: ['Other'], organizer: 'mia probe', ...only }), s)).toBe(true)
-    expect(mayInvite(ev({ hosts: ['Other'], techSupport: ['Mia Probe'], ...only }), s)).toBe(true)
+    // wave 44 (43-D7 flip): technical support sees but invites only once a host lets it take over
+    expect(mayInvite(ev({ hosts: ['Other'], techSupport: ['Mia Probe'], ...only }), s)).toBe(false)
+    expect(mayInvite(ev({ hosts: ['Other'], techSupport: ['Mia Probe'], techTakeover: true, ...only }), s)).toBe(true)
     expect(mayInvite(ev({ hosts: ['Other'], ...only }), s)).toBe(false)
     expect(mayInvite(ev({ hosts: ['Other'] }), s)).toBe(true)   // the default is everyone
   })

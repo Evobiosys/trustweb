@@ -65,8 +65,8 @@ try {
       return Boolean(put) && verifyRecord(put.body.rec, verifyDidSignature) && put.body.rec.first === 'Tester' && put.body.rec.last === 'Person' && put.body.rec.srv === true && put.body.rec.key === s1.identity.did
     })(), JSON.stringify(seen.slice(before)).slice(0, 200))
     check(`${w}: now the switch is on and the label no longer struck through`, (await page.locator('[data-social-switch=discoverable]').getAttribute('aria-checked')) === 'true' && (await prof.locator('[data-social=discoverable] b.tw-off').count()) === 0)
-    await page.locator('[data-social-expander]').click(); await page.waitForTimeout(200)
-    check(`${w}: the expander opens "Open to connect" (on)`, (await page.locator('[data-social-more]').isVisible()) && (await page.locator('[data-social-switch=open]').getAttribute('aria-checked')) === 'true')
+    // wave44b profile-page: switching Discoverable on opens the dependent toggle by itself (no expander press)
+    check(`${w}: Discoverable on opens "Open to connect" (on) by itself`, (await page.locator('[data-social-more]').isVisible()) && (await page.locator('[data-social-switch=open]').getAttribute('aria-checked')) === 'true')
     await page.locator('[data-social-switch=open]').click(); await page.waitForTimeout(500)
     check(`${w}: Open to connect off is stored as discoverOpen:false`, (await store()).discoverOpen === false)
     await page.screenshot({ path: `${SHOTS}/social-hosting-profile-on-${w}.png` })

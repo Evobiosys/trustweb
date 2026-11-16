@@ -29,8 +29,11 @@ try {
 
     await page.locator('[data-ai-button]').click()
     // Wave 40: the sparkle opens the assistant; with no AI it explains and its link leads to the plan choice.
-    c.ok(`${w}: no endpoint -> the assistant explains and links to the plans`, await page.locator('[data-assistant-plans]').isVisible())
-    await page.locator('[data-assistant-plans]').click()
+    // review-44: since wave 41 the sparkle with no AI set up opens the Your AI sheet (the plan choice) directly; either path is fine here.
+    await page.waitForTimeout(400)
+    const viaAssistant = await page.locator('[data-assistant-plans]').isVisible()
+    c.ok(`${w}: no endpoint -> the plans (straight, or through the assistant's link)`, viaAssistant || await page.locator('[data-ai-group="sub"]').isVisible())
+    if (viaAssistant) await page.locator('[data-assistant-plans]').click()
     await page.locator('[data-ai-group="sub"]').waitFor()
     c.ok(`${w}: no endpoint -> Your AI plan choice`, await page.locator('[data-ai-group="sub"]').isVisible())
     const plans = await page.locator('[data-ai-plan]').allInnerTexts()

@@ -3,7 +3,7 @@
  * Wave 42 settings-llm-first: Settings through MCP, over apps/trustweb/src/settings_registry.ts, the same table that draws the Settings page.
  * Reads and writes the record file (atomic replace, like bar_tools.ts); the edit stream follows people only, so a settings change is unlogged.
  */
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { copyFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { SETTINGS_REGISTRY, describeSetting, readSetting, searchSettings, writeSetting, type Rec } from '../../trustweb/src/settings_registry.ts'
 import { syncCapabilities } from '../../trustweb/src/sync_capability.ts'
 import type { Tool } from './protocol.ts'
@@ -46,6 +46,14 @@ export function settingsTools(o: { file: string; write: boolean }): Tool[] {
       const tmp = o.file + '.tmp'
       writeFileSync(tmp, JSON.stringify(r)); renameSync(tmp, o.file)
       return { id, value }
+    },
+  }, {
+    name: 'settings_keep_copy', description: 'Keep a copy of the record: writes a dated copy file next to the record file and returns its path (the app\'s "Keep a copy on this device").',
+    inputSchema: schema({}),
+    run: () => {
+      const copy = o.file.replace(/(\.json)?$/, `.copy-${new Date().toISOString().replace(/[:.]/g, '-')}.json`)
+      copyFileSync(o.file, copy)
+      return { path: copy }
     },
   }]
   return [...read, ...(o.write ? write : [])]

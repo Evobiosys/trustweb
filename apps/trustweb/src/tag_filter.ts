@@ -3,6 +3,7 @@
 import type { Person, TwEvent } from './model'
 import { eventOrganizers } from './event_roles'
 import { type ColourTag, memberIds } from './colour_tags'
+import { COMMUNITY_CHIP } from './community_tag'
 
 export function filterByChips<P extends Pick<Person, 'id' | 'ring' | 'fields' | 'events'>>(people: readonly P[], tags: readonly ColourTag[], show: readonly string[], hide: readonly string[], events: readonly Pick<TwEvent, 'id' | 'roles' | 'organizers' | 'organizer' | 'hosts' | 'techSupport'>[] = []): P[] {
   // Wave 40: a tag chip means the tag's resolved members (a group holds its children's people).
@@ -12,6 +13,7 @@ export function filterByChips<P extends Pick<Person, 'id' | 'ring' | 'fields' | 
     return members.get(id)?.has(p.id) === true
   }
   const inEvent = (p: P, id: string): boolean => p.events?.includes(id) === true || events.some((e) => e.id === id && (e.roles?.some((r) => r.who === p.id) === true || [...eventOrganizers(e), ...(e.hosts ?? []), ...(e.techSupport ?? [])].includes(p.id)))
-  const hit = (p: P, chips: readonly string[]): boolean => chips.some((c) => (c.startsWith('person:') ? c === 'person:' + p.id : c.startsWith('event:') ? inEvent(p, c.slice(6)) : c.startsWith('tag:') && inTag(p, c.slice(4))))
+  const inCommunity = (p: P): boolean => tags.some((t) => t.community === true && inTag(p, t.id))   // wave 44b: the bare community chip
+  const hit = (p: P, chips: readonly string[]): boolean => chips.some((c) => (c === COMMUNITY_CHIP ? inCommunity(p) : c.startsWith('person:') ? c === 'person:' + p.id : c.startsWith('event:') ? inEvent(p, c.slice(6)) : c.startsWith('tag:') && inTag(p, c.slice(4))))
   return people.filter((p) => (!show.length || hit(p, show)) && !hit(p, hide))
 }

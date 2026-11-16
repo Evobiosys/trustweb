@@ -15,9 +15,17 @@ function fixture(write) {
 }
 
 describe('settings MCP tools', () => {
+  it('settings_keep_copy writes a dated copy next to the record and leaves the record alone', () => {
+    const f = fixture(true)
+    const before = readFileSync(f.file, 'utf8')
+    const { path: copy } = f.by.settings_keep_copy.run({})
+    expect(copy).toMatch(/record\.copy-.+\.json$/)
+    expect(readFileSync(copy, 'utf8')).toBe(before)
+    expect(readFileSync(f.file, 'utf8')).toBe(before)
+  })
   it('read-only offers list/get/search; write adds set', () => {
     expect(fixture(false).tools.map((t) => t.name).sort()).toEqual(['settings_get', 'settings_list', 'settings_search', 'settings_sync_capabilities'])
-    expect(fixture(true).tools.map((t) => t.name).sort()).toEqual(['settings_get', 'settings_list', 'settings_search', 'settings_set', 'settings_sync_capabilities'])
+    expect(fixture(true).tools.map((t) => t.name).sort()).toEqual(['settings_get', 'settings_keep_copy', 'settings_list', 'settings_search', 'settings_set', 'settings_sync_capabilities'])
   })
   it('settings_list equals the registry, with values', () => {
     const { by } = fixture(false)

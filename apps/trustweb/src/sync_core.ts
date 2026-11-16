@@ -60,7 +60,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // carried by their own bundle parts, or the record's identity
   'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'invitations', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview', 'channelReaders',
   // relay identity, keys, peers, hosting secret, connect codes
-  'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
+  'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'seenHandshakeNonces', 'handshakeLog', 'invites', 'invitesTaken', 'hideReports', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
   'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'birthdayNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
   'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
@@ -71,7 +71,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
   'groups',
   // wave 42 push-popup: the notification inbox mirror stays on this phone
-  'notifInbox', 'notifReadAt',
+  'notifInbox', 'notifReadAt', 'notifDismissed',
   // wave 40 hover-sources: what I said about how two contacts relate stays on this phone
   'relations',
   // wave 37 co-notes-link: invites, guest shell, note chats and this device's secret belong to this phone only
