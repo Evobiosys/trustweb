@@ -37,23 +37,48 @@ export function introduceBlock(a: Who, b: Who, peers: readonly PeerRef[]): Intro
   return null
 }
 
-interface IntroRecord { people?: Who[]; peers?: PeerRef[]; introQueue?: { a: string; b: string; at: number }[] }
+/** One introduction asked of an acceptor and not yet answered (the introducer's phone). requester = the person dragged, acceptor = the one dropped onto. */
+export interface IntroPending { id: string; requester: string; acceptor: string; at: number }
+/** One introduction asked of me (the acceptor's phone): who introduced (peer id), the requester's name and connect link. */
+export interface IntroInbox { id: string; from: string; name: string; link: string; at: number }
+export interface IntroQueued { requester: string; acceptor: string; at: number }
+
+interface IntroRecord { people?: Who[]; peers?: PeerRef[]; introQueue?: IntroQueued[]; introPending?: IntroPending[]; introInbox?: IntroInbox[] }
 
 /** MCP introduce_people: the tool has no chat channel, so it queues; the app sends when it next runs (takeIntroQueue). */
-export function queueIntro(rec: IntroRecord, aId: string, bId: string, now: number): { ok: true; already?: true } | { ok: false; reason: IntroBlock } {
-  const a = rec.people?.find((p) => p.id === aId)
-  const b = rec.people?.find((p) => p.id === bId)
+export function queueIntro(rec: IntroRecord, requesterId: string, acceptorId: string, now: number): { ok: true; already?: true } | { ok: false; reason: IntroBlock } {
+  const a = rec.people?.find((p) => p.id === requesterId)
+  const b = rec.people?.find((p) => p.id === acceptorId)
   if (!a || !b) return { ok: false, reason: 'unknown' }
   const block = introduceBlock(a, b, rec.peers ?? [])
   if (block) return { ok: false, reason: block }
   const q = rec.introQueue ?? []
-  if (q.some((i) => (i.a === aId && i.b === bId) || (i.a === bId && i.b === aId))) return { ok: true, already: true }
-  rec.introQueue = [...q, { a: aId, b: bId, at: now }]
+  if (q.some((i) => i.requester === requesterId && i.acceptor === acceptorId)) return { ok: true, already: true }
+  rec.introQueue = [...q, { requester: requesterId, acceptor: acceptorId, at: now }]
   return { ok: true }
 }
 
-export function takeIntroQueue(rec: IntroRecord): { a: string; b: string; at: number }[] {
+export function takeIntroQueue(rec: IntroRecord): IntroQueued[] {
   const q = rec.introQueue ?? []
   delete rec.introQueue
   return q
+}
+
+/** Removes and returns the item with this id from rec[key]; undefined when there is none. */
+export function takeById<K extends 'introPending' | 'introInbox'>(rec: IntroRecord, key: K, id: string): NonNullable<IntroRecord[K]>[number] | undefined {
+  const list = (rec[key] ?? []) as { id: string }[]
+  const hit = list.find((i) => i.id === id)
+  if (!hit) return undefined
+  const rest = list.filter((i) => i !== hit)
+  if (rest.length) (rec as Record<string, unknown>)[key] = rest
+  else delete rec[key]
+  return hit as NonNullable<IntroRecord[K]>[number]
+}
+
+/** Adds an item once per id (a repeated request or send keeps the first). */
+export function addOnce<K extends 'introPending' | 'introInbox'>(rec: IntroRecord, key: K, item: NonNullable<IntroRecord[K]>[number]): boolean {
+  const list = (rec[key] ?? []) as { id: string }[]
+  if (list.some((i) => i.id === item.id)) return false
+  ;(rec as Record<string, unknown>)[key] = [...list, item].slice(-50)
+  return true
 }

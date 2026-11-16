@@ -4696,6 +4696,7 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?:
     case TextKind.Agreement: onAgreementText(peer, text); return
     case TextKind.Forget: onForgetText(peer, text); return
     case TextKind.Support: onSupportText(peer, text); return
+    case TextKind.Intro: bubble.receive(peer.id, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }
@@ -5253,7 +5254,9 @@ const curator = createCurator({
   showPhoneVersion,
 })
 /** Wave 44 steer-bubble-connect: a short hold of one bubble on another introduces them (bubble_connect.ts). */
-const bubble = createBubbleConnect({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), appUrl: APP_URL, send: (peerId, text) => submitText(chatIo(), peerId, text) })
+const bubble = createBubbleConnect({ st, save, render, openSheet, closeSheet, toast: (m) => toast(m), appUrl: APP_URL, send: (peerId, text) => submitText(chatIo(), peerId, text),
+  sendProtocol: async (peerId, text) => { const peer = st().peers.find((x) => x.id === peerId); if (!peer) throw new Error('no peer'); await net.sendText(peer, text) },
+  connectVia: (link) => { pendingConnect = { ...connectLinkOf(new URL(link).search)!, exempt: true }; void completePendingConnect() } })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
   curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), introduce: solo ? null : bubble.introduce, dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,

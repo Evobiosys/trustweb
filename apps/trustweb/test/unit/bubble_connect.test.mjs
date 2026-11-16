@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44 steer-bubble-connect: a short hold of one bubble on another introduces them, a long hold merges (bubble_connect.ts). */
 import { HOLD_MS, holdStart, holdStep } from '../../src/dot_merge.ts'
-import { INTRODUCE_MIN_MS, MERGE_HOLD_MS, holdProgress, introduceBlock, queueIntro, takeIntroQueue, releaseOutcome } from '../../src/bubble_connect.ts'
-import { INTRODUCED_RING, introduceTexts, introducedRing } from '../../src/bubble_links.ts'
+import { INTRODUCE_MIN_MS, MERGE_HOLD_MS, addOnce, holdProgress, introduceBlock, queueIntro, releaseOutcome, takeById, takeIntroQueue } from '../../src/bubble_connect.ts'
+import { INTRODUCED_RING, codeText, introducedRing, requestText } from '../../src/bubble_links.ts'
+import { gateText, parseGateText } from '../../src/bubble_gate.ts'
+import { TextKind, routeText } from '../../src/chat.ts'
 
 const over = (at) => holdStep(holdStart(), { type: 'move', over: 'b', at })
 
@@ -47,19 +49,32 @@ describe('who can be introduced', () => {
   })
 })
 
-describe('the texts each side gets', () => {
-  const t = introduceTexts('https://app.test/', P('a'), P('b'), peers, 'Jakob')
-  it('says so when a text would not fit a chat message', () => expect(introduceTexts('https://app.test/', P('a'), P('b'), peers, 'J'.repeat(600))).toBeNull())
-  it('A gets the code of B and B the code of A, marked as an introduction', () => {
-    expect(t.toA.peerId).toBe('peer-a')
-    expect(t.toB.peerId).toBe('peer-b')
-    expect(t.toA.text).toContain(encodeURIComponent('did:peer:2.b'))
-    expect(t.toB.text).toContain(encodeURIComponent('did:peer:2.a'))
-    expect(t.toA.text).toContain('acq=1')
-    expect(t.toA.text).toContain('Jakob')
+describe('the acceptance gate texts (requester = dragged, acceptor = dropped onto)', () => {
+  const app = 'https://app.test/'
+  const req = requestText(app, 'i1', P('a'), peers)
+  it('the request to the acceptor carries the REQUESTER\'s name and code, marked as an introduction', () => {
+    expect(parseGateText(app, req)).toMatchObject({ k: 'req', id: 'i1', name: 'Ada' })
+    expect(parseGateText(app, req).link).toContain(encodeURIComponent('did:peer:2.a'))
+    expect(parseGateText(app, req).link).toContain('acq=1')
+    expect(req).not.toContain(encodeURIComponent('did:peer:2.b'))
+    expect(routeText(app, req)).toBe(TextKind.Intro)
   })
-  it('each text fits a chat message', () => {
-    expect(t.toA.text.length).toBeLessThanOrEqual(500)
+  it('ok / no round-trip; garbage is ignored', () => {
+    for (const k of ['ok', 'no']) expect(parseGateText(app, gateText(app, { k, id: 'i1' }))).toEqual({ k, id: 'i1' })
+    expect(parseGateText(app, `${app}?introduce=1#k=ok&i=${'x'.repeat(40)}`)).toBeNull()
+    expect(parseGateText(app, `${app}?introduce=1#k=req&i=i1&n=Ada&c=https%3A%2F%2Fevil.test%2F%3Fconnect%3Dx`)).toBeNull()
+    expect(routeText(app, `${app}?introduce=1#k=zz`)).toBe(TextKind.Ignore)
+  })
+  it('says so when a request would not fit a chat message', () => {
+    expect(requestText(app, 'i1', P('a'), [{ id: 'peer-a', did: 'did:peer:2.' + 'a'.repeat(600), displayName: 'Ada' }])).toBeNull()
+  })
+  it('the requester gets the ACCEPTOR\'s code after the yes, naming the introducer', () => {
+    const t = codeText(app, P('b'), peers, 'Jakob')
+    expect(t).toContain(encodeURIComponent('did:peer:2.b'))
+    expect(t).toContain('acq=1')
+    expect(t).toContain('Jakob')
+    expect(t.length).toBeLessThanOrEqual(500)
+    expect(codeText(app, P('b'), peers, 'J'.repeat(600))).toBeNull()
   })
   it('an introduced link is read as acquainted community member (Friends zone), a plain one is not', () => {
     expect(INTRODUCED_RING).toBe('friend')
@@ -68,13 +83,24 @@ describe('the texts each side gets', () => {
   })
 })
 
-describe('MCP queue', () => {
-  it('queues one introduction (order-free) and the app takes it once', () => {
+describe('pending and inbox', () => {
+  it('addOnce keeps the first of an id, takeById removes exactly it', () => {
+    const rec = {}
+    expect(addOnce(rec, 'introPending', { id: 'x', requester: 'a', acceptor: 'b', at: 1 })).toBe(true)
+    expect(addOnce(rec, 'introPending', { id: 'x', requester: 'a', acceptor: 'c', at: 2 })).toBe(false)
+    expect(takeById(rec, 'introPending', 'zz')).toBeUndefined()
+    expect(takeById(rec, 'introPending', 'x')).toMatchObject({ acceptor: 'b' })
+    expect(rec.introPending).toBeUndefined()
+  })
+})
+
+describe('MCP queue (direction matters)', () => {
+  it('queues requester -> acceptor once; the reverse direction is another introduction', () => {
     const rec = { people: [P('a'), P('b')], peers }
     expect(queueIntro(rec, 'a', 'b', 10)).toEqual({ ok: true })
-    expect(queueIntro(rec, 'b', 'a', 11)).toEqual({ ok: true, already: true })
-    expect(rec.introQueue).toHaveLength(1)
-    expect(takeIntroQueue(rec)).toEqual([{ a: 'a', b: 'b', at: 10 }])
+    expect(queueIntro(rec, 'a', 'b', 11)).toEqual({ ok: true, already: true })
+    expect(queueIntro(rec, 'b', 'a', 12)).toEqual({ ok: true })
+    expect(takeIntroQueue(rec)).toEqual([{ requester: 'a', acceptor: 'b', at: 10 }, { requester: 'b', acceptor: 'a', at: 12 }])
     expect(rec.introQueue).toBeUndefined()
   })
   it('refuses what introduceBlock refuses', () => {
@@ -100,10 +126,10 @@ describe('MCP introduce_people', () => {
     const file = setup()
     const [tool] = bubbleTools({ file, write: true, now: () => new Date(5) })
     expect(tool.name).toBe('introduce_people')
-    expect(tool.run({ a: 'a', b: 'b' })).toEqual({ queued: true })
-    expect(JSON.parse(readFileSync(file, 'utf8')).introQueue).toEqual([{ a: 'a', b: 'b', at: 5 }])
-    expect(() => tool.run({ a: 'a', b: 'c' })).toThrow('not-connected')
-    expect(() => tool.run({ a: 'a' })).toThrow('required')
+    expect(tool.run({ requester: 'a', acceptor: 'b' })).toEqual({ queued: true })
+    expect(JSON.parse(readFileSync(file, 'utf8')).introQueue).toEqual([{ requester: 'a', acceptor: 'b', at: 5 }])
+    expect(() => tool.run({ requester: 'a', acceptor: 'c' })).toThrow('not-connected')
+    expect(() => tool.run({ requester: 'a' })).toThrow('required')
   })
 })
 
