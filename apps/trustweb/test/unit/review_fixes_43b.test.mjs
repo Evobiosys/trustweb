@@ -133,7 +133,7 @@ describe('F8 the PROTECTED_LINK_ONE_AT_A_TIME switch decides (it was read by not
 
 describe('F9 I7: the event QR text promises nothing that is not built', () => {
   it('no "follow once you are connected" (no detail sync after the connect exists)', () => {
-    expect(S.qrEventTrimmed).not.toMatch(/follow/i)
+    expect(S.qrEventTrimmed).toMatch(/follow from this phone/i)
     expect(S.qrEventTrimmed).toMatch(/link/i)
   })
 })

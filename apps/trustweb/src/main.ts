@@ -308,6 +308,7 @@ import { chatView } from './messenger_combined_view'
 import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
+import { createEventEnvelopes } from './event_envelope'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import { eventModeOn, rememberEventMode } from './event_mode'
@@ -810,6 +811,7 @@ const net = new Net({
     linkGlobal(person, peer)   // wave 43c: a person found by name becomes an ordinary card
     save()
     sendHelloTo(peer)
+    void eventEnv.connected(peer)   // wave 43c: the event whose QR was just shown goes to the person who scanned it
     void autoShareProfile(peer, 'public')
     applyHeldContact(peer, person)
     closeSheet()
@@ -857,6 +859,7 @@ const net = new Net({
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
+  onEvent: (peer, env) => { void eventEnv.onEnvelope(peer, env) },
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -1770,6 +1773,7 @@ function screenQr(plain = false): void {
 }
 
 function eventQr(ev: TwEvent, plain = false, host = false): void {
+  eventEnv.shown(ev.id)
   // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy). Wave 43: the host link when the page's host toggle is on (the QR follows the link).
   void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : revealedBy(eventsBy(), ev)) }), plain)
 }
@@ -2488,6 +2492,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
   const peer = await net.completeConnect(link, ring, reachOut)
+  void eventEnv.afterConnect(peer)   // wave 43c: the scanned event's place, conditions and themes come from the shower's device
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
   if (!person) {
@@ -5212,6 +5217,11 @@ const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
   curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
+/** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
+const eventEnv = createEventEnvelopes<Peer>({
+  state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
+  link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+})
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
@@ -5390,7 +5400,10 @@ defineAppActions(appActions, {
   newId: () => randomId(8),
   now: () => Date.now(),
 })
-defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName })
+defineEventActions(appActions, {
+  state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName,
+  sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
+})
 defineSyncActions(appActions, devices) // wave43c sync-devices
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({

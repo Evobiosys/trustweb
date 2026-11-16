@@ -23,6 +23,7 @@ import { loadColourTags } from './colour_tags'
 import { fetchFeedText, FetchProblem, handleText, safeRemoteUrl, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
 import type { RemoteStatus } from './fediverse'
 import { fetchMastodonTag } from './mastodon_tag'
+import { MASTODON_DEFAULT_INSTANCE, MASTODON_POST_ENABLED, eventMastodonHost } from './mastodon_default'
 import type { ImageStore } from './image_store'
 import { shrink } from './image_store'
 import { ageLabel, FediverseReach, feedOn } from './model'
@@ -141,7 +142,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
 
   /** The event's tag on its Mastodon instance (only when the host named one and this event's Feed is open); a failed read keeps its reason for the line above the posts. */
   function mastodonFor(ev: TwEvent | undefined): Post[] {
-    const host = ev?.mastodonInstance
+    const host = ev && eventMastodonHost(ev)
     if (!ev || !host) return []
     const slug = tagOfEvent(ev)
     const key = `${host}|${slug}`
@@ -153,8 +154,9 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     return got && Array.isArray(got.posts) ? got.posts : []
   }
   const mastodonProblem = (ev: TwEvent | undefined): HTMLElement[] => {
-    const got = ev?.mastodonInstance ? mastodon.get(`${ev.mastodonInstance}|${tagOfEvent(ev)}`) : undefined
-    return got && !Array.isArray(got.posts) ? [el('p', { class: 'meta', 'data-mastodon-problem': got.posts }, [S.fedProblem(ev!.mastodonInstance!, S.fedProblemText[got.posts])])] : []
+    const host = ev && eventMastodonHost(ev)
+    const got = ev && host ? mastodon.get(`${host}|${tagOfEvent(ev)}`) : undefined
+    return got && !Array.isArray(got.posts) ? [el('p', { class: 'meta', 'data-mastodon-problem': got.posts }, [S.fedProblem(host!, S.fedProblemText[got.posts])])] : []
   }
 
   /** Followed accounts / hashtags and the news feed: one public RSS or JSON read each, kept in memory for REMOTE_TTL_MS. Nothing is read before the person added the address. */
@@ -498,6 +500,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       el('h4', { class: 'eyebrow' }, [S.feedTitle]),
       toggle(S.feedToggle, S.feedToggleHint, on, 'data-feed-toggle', () => { settings().on = !on; h.save(); h.tabsChanged(); h.settings() }),
       on ? toggle(S.fedRemote, S.fedRemoteHint, remoteOn(), 'data-feed-remote', () => { settings().remote = !remoteOn(); h.save(); h.settings() }) : null,
+      // Wave 43c (zeta): the instance an event Feed reads when the event names none; posting stays off until the TrustWeb account.
+      on ? el('p', { class: 'meta', 'data-feed-default-instance': MASTODON_DEFAULT_INSTANCE, ...(MASTODON_POST_ENABLED ? {} : { 'data-feed-post': 'off' }) }, [S.w43connect.mastodonDefault(MASTODON_DEFAULT_INSTANCE), MASTODON_POST_ENABLED ? '.' : `; ${S.w43connect.mastodonPostOff}.`]) : null,
       on ? el('div', { class: 'feed-follows' }, [
         el('h4', { class: 'eyebrow' }, [S.feedFollowTitle]),
         ...follows.map((f) => el('div', { class: 'ch-row', 'data-follow': f }, [el('span', { class: 'ch-name' }, [f]), el('button', { class: 'mini', 'data-follow-remove': f, onclick: () => { settings().follows = follows.filter((x) => x !== f); h.save(); h.settings() } }, [S.imgRemove])])),

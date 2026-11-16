@@ -1409,7 +1409,7 @@ export const S = {
   qrConnects: 'This code connects to you',
   qrAnd: ' and shares ',
   qrWhat: { username: (name: string): string => `${name}'s public username`, profile: (name: string): string => `${name}'s acquaintance-level profile` },
-  qrEventHint: 'This code adds the event and connects to you.',
+  qrEventHint: 'This code adds the event and connects to you. The rest of the event comes from this device.',
   qrTagHint: (tag: string): string => `This code connects to you and shares the group ${tag}.`,
   qrItemHint: 'This code connects to you and shares the text of this resource.',
   qrOnlyNote: 'Works only for people who have TrustWeb.',
@@ -4459,7 +4459,7 @@ export const S = {
   syncPhoneHint: 'Vault sync runs on a computer; your phone receives the result.',
   /* wave43b event-qr-join */
   /** Under the event code: what the short code leaves out (it follows once you are connected). */
-  qrEventTrimmed: 'The code carries the name, dates and hosts. Place, conditions and themes are not in it: send the event link for them.',
+  qrEventTrimmed: 'The code carries the name, dates and hosts. Place, conditions and themes follow from this phone as soon as the scan connects (keep the app open). Anyone who does not scan: send the event link.',
   /** Event code still too long for one code even trimmed (a very long name or host list). */
   qrEventTooLong: 'Too long for one code even without conditions, themes and place. Shorten the name or the host list.',
   /** Person page: asks from this person that are still open, answerable late. */
@@ -4624,5 +4624,17 @@ export const S = {
     arrived: (n: string) => `${n} wants to connect.`,
     connect: 'Connect',
     connectDone: (n: string) => `Connected with ${n}.`,
+  },
+  /* wave43c connect-extras */
+  w43connect: {
+    mastodonPostOff: 'posting comes with the TrustWeb account',
+    mastodonDefault: (host: string) => `Events with a Feed read the public posts under their tag on ${host}, read-only`,
+    shareLayout: 'Share my tile layout anonymously',
+    shareLayoutHint: 'Sends only which tiles you show, with no name or key, so others can see how members set up their Home.',
+    shareLayoutOff: 'Off: nothing about your layout leaves this phone.',
+    others: (parts: string[]) => `Other members show: ${parts.join(', ')}`,
+    follow: 'Follow them?',
+    followYes: 'Follow',
+    followNo: 'No thanks',
   },
 } as const

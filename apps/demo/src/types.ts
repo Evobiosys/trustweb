@@ -429,6 +429,22 @@ export interface HostEnvelope {
 }
 // ----- END TrustWeb wave 43c -----
 
+// ----- BEGIN TrustWeb wave 43c (connect-extras): the event envelope -----
+/** The longest EventEnvelope.link: far above a chat text (500), room for place, conditions and themes of one event. */
+export const EVENT_LINK_MAX = 8192
+/**
+ * Sealed with the pair key like every envelope. Exactly one of two things: `want` (the id of an event the sender asks the receiver's device for) or
+ * `link` (the event as an ordinary event link, event_link.ts; the receiver's decoder checks it). No server holds the event: the person who shows the
+ * event QR answers from their own device. An older build's decodeFromQr does not know `t` and drops it.
+ */
+export interface EventEnvelope {
+  v: 1
+  t: 'event'
+  want?: string
+  link?: string
+}
+// ----- END TrustWeb wave 43c -----
+
 // ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----
 /** The furthest any ask travels (also what "no limit" means). Each step adds one answer window (gate.ts RELAY_DEADLINE_MS). */
 export const HOP_CAP = 6

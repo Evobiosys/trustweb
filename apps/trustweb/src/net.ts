@@ -52,7 +52,7 @@ import { sealRelayAnswer } from '../../demo/src/answer_key'
 import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
-import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ChatThread, DecodedAnswer, HostEnvelope, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ChatThread, DecodedAnswer, EventEnvelope, HostEnvelope, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
 import { ackDue, attemptAllowed, nextAttempts, noteAckSent, noteHeard } from './ack_retry'
 import { addAlsoDids, devicesToTell, peerForDid, toldKey } from './device_alias'
 import type { AckAttempts } from './ack_retry'
@@ -224,6 +224,8 @@ export interface NetHooks {
    * never (tests, the side-by-side demo, demo accounts and their owners: their flows are their own).
    */
   mayReask?(peer: Peer): boolean
+  /** Wave 43c (event_envelope.ts): a connected peer sent a sealed event envelope (a want, or the event itself). */
+  onEvent?(peer: Peer, env: EventEnvelope): void
 }
 
 /** Never a URL or UI setting. A browser passes nothing; tests (test/unit/hops_net.test.mjs) and the iPhone app (native_app.ts) name the relay. */
@@ -566,6 +568,7 @@ export class Net {
     if (env.t === 'ask-again' && from) await this.onAskAgain(from)
     // Wave 43c: the connection names its other devices; only its own sealed channel can, and never a DID of another connection or of mine.
     if (env.t === 'devices' && from && addAlsoDids(this.hooks.state().peers, from, env.dids, [this.ensureIdentity().did])) this.hooks.save()
+    if (env.t === 'event' && from) this.hooks.onEvent?.(from, env)
     // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
   }
 
@@ -612,6 +615,15 @@ export class Net {
     const key = await this.pairKey(peer)
     if (!this.channel) throw new Error('relay not connected')
     await this.channel.send(peer.did, { v: 1, t: 'host', m }, key)
+  }
+
+  /** Wave 43c: a sealed event envelope (types.ts EventEnvelope) to one connected peer; the same choke point as sendText (a blocked person gets nothing). */
+  async sendEvent(peer: Peer, env: EventEnvelope): Promise<void> {
+    if (this.blockedPeer(peer)) throw new Error('blocked')
+    await this.start()
+    const key = await this.pairKey(peer)
+    if (!this.channel) throw new Error('relay not connected')
+    await this.channel.send(peer.did, env, key)
   }
 
   /** Logs an ask the moment it is decided (before its answer leaves, as apps/demo's answer_log.ts does). */

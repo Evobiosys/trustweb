@@ -27,8 +27,12 @@ export interface CommunityMeta {
   kind: CommunityKind; organizers: string[]; nav?: NavId[]; ask?: boolean; audiences?: string[]; name?: string
   /** Wave 43b: my own Home tiles here, the tiles a manager fixed for everyone, and whether this community's events show in my calendar in its colour. */
   tiles?: TileId[]; managedTiles?: TileId[]; connectEvents?: true
+  /** Wave 43c connect-extras (theta): my opt-in to share which tiles I show, anonymously (explicit false once switched off, so a device merge keeps it off), and my random anonymous slot at the community's server. */
+  shareLayout?: boolean; slot?: string
 }
 export const REMEMBER_MAX = 5
+/** Wave 43c: an anonymous slot is random lower-case hex, 16 to 64 characters (the server's check is the same). */
+export const SLOT_RE = /^[0-9a-f]{16,64}$/
 
 export interface CommunityData {
   tag?: string
@@ -79,7 +83,7 @@ function parseMeta(v: unknown): Record<string, CommunityMeta> | undefined {
     const managedTiles = tilesOf(o.managedTiles)
     out[id] = {
       kind: o.kind === 'managed' ? 'managed' : 'informal', organizers: strs(o.organizers),
-      ...(Array.isArray(o.tiles) ? { tiles } : {}), ...(managedTiles.length ? { managedTiles } : {}), ...(o.connectEvents === true ? { connectEvents: true as const } : {}),
+      ...(Array.isArray(o.tiles) ? { tiles } : {}), ...(managedTiles.length ? { managedTiles } : {}), ...(o.connectEvents === true ? { connectEvents: true as const } : {}), ...(typeof o.shareLayout === 'boolean' ? { shareLayout: o.shareLayout } : {}), ...(isStr(o.slot) && SLOT_RE.test(o.slot) ? { slot: o.slot } : {}),
       ...(nav.length ? { nav } : {}), ...(o.ask === false ? { ask: false } : {}), ...(audiences.length ? { audiences } : {}), ...(isStr(o.name) && o.name ? { name: o.name } : {}),
     }
   }
@@ -333,3 +337,34 @@ export function renameCommunity<T extends { id: string; label?: string }>(d: Com
   if (!n || !canEditSettings(d, id)) return null
   return { data: d.meta?.[id]?.name !== undefined ? withMeta(d, id, { name: n }) : d, tags: tags.map((t) => (t.id === id ? { ...t, label: n } : t)) }
 }
+
+/* wave43c connect-extras (theta): opt-in dashboard aggregates. The client for the community's server is community_server.ts. */
+
+export const shareLayoutOn = (d: CommunityData, tag: string): boolean => d.meta?.[tag]?.shareLayout === true
+
+/** DASHBOARD_SOCIAL_DEFAULTS is the global master (off); a community's own opt-in switches the social defaults on for that community. */
+export const dashboardSocial = (d: CommunityData, tag: string): boolean => DASHBOARD_SOCIAL_DEFAULTS || shareLayoutOn(d, tag)
+
+/** "Share my tile layout anonymously": on mints my random slot once (`newSlot`, 16-64 hex characters); off keeps it so a later on counts me once. */
+export function setShareLayout(d: CommunityData, tag: string, on: boolean, newSlot: () => string): CommunityData {
+  const slot = d.meta?.[tag]?.slot ?? newSlot()
+  return withMeta(d, tag, { shareLayout: on, slot })
+}
+
+/** The tiles I show in this community (managed and own), in tile order: what the opt-in sends. */
+export function tileSetOf(d: CommunityData, tag: string): TileId[] {
+  const { managed, own } = homeTiles(d, tag)
+  return inOrder(new Set([...managed, ...own]))
+}
+
+/** What the server answers: how many members shared, and per tile how many of them show it. */
+export interface TileAggregate { n: number; tiles: Record<string, number> }
+
+/** The share of members showing each tile, whole percent, biggest first; unknown tiles and tiles nobody shows are left out. */
+export function tilePercents(a: TileAggregate): { tile: TileId; pct: number }[] {
+  if (a.n <= 0) return []
+  return TILES.map((tile) => ({ tile, pct: Math.round(((a.tiles[tile] ?? 0) / a.n) * 100) })).filter((r) => r.pct > 0).sort((x, y) => y.pct - x.pct)
+}
+
+/** "Follow them": the tiles at least `minPct` percent of the members show. */
+export const followTiles = (a: TileAggregate, minPct = 50): TileId[] => tilePercents(a).filter((r) => r.pct >= minPct).map((r) => r.tile)
