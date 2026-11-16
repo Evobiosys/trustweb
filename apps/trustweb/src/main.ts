@@ -147,6 +147,7 @@ import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
 import { groupsView } from './groups_view'
+import { circlesView } from './circles_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
@@ -399,6 +400,8 @@ enum Screen {
   Notes = 'notes',
   /** Wave 36: Groups I could join or help (eye menu > Other views), a page like People. */
   Groups = 'groups',
+  /** Wave 44 steer-circles-view: Circles (eye menu > Other views), a page like People. */
+  Circles = 'circles',
   /** Wave 39: an extension module's view (ext/tw_registry.ts views()), `extViewId` names which. */
   Ext = 'ext',
   /** Wave 43b ask-page-filter: Ask your web is its own page (class askpage: .ask is the consent prompt's), Back returns to where it was opened. */
@@ -1236,7 +1239,7 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'stones', complete: 'table', map: 'map', dex: 'curator', compact: 'list', groups: 'users', circles: 'circles' }
 const TAB_ICON: Record<string, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', timeline: 'list', network: 'web', people: 'web', map: 'web' }
 
 /** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
@@ -1517,6 +1520,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.People:
     case Screen.Notes:
     case Screen.Groups:
+    case Screen.Circles:
     case Screen.Ask:
       return RecordOrigin.Web
     case Screen.Inventory:
@@ -1602,6 +1606,12 @@ function openNotes(): void {
   go(Screen.Notes)
 }
 /** Wave 36: Groups I could join or help opens as a page like People, Back returns to the Web. */
+function openCircles(): void {
+  peoplePage = true
+  pageBack = Screen.Web
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Circles)
+}
 function openGroups(): void {
   peoplePage = true
   pageBack = Screen.Web
@@ -1623,6 +1633,12 @@ function screenAsk(): Node[] {
   return [
     header(S.askPage.title, { back: closeAsk }),
     el('div', { class: 'scroll pad ask-page', 'data-ask-page': '' }, [queryDock(st())]),
+  ]
+}
+function screenCircles(): Node[] {
+  return [
+    header(S.viewNames.circles, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [circlesView({ people: () => st().people, save, tags: loadColourTags, saveTags: (t) => saveColourTags([...t]), face: personFace, open: openCardPage, toast: (msg, undo) => toast(msg, { onClick: undo }) }, render)]),
   ]
 }
 function screenGroups(): Node[] {
@@ -1700,7 +1716,7 @@ function shownScreen(target: Screen): Screen {
 
 function go(to: Screen): void {
   const s = shownScreen(to)
-  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Ask
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes || x === Screen.Groups || x === Screen.Circles || x === Screen.Ask
   if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
   if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
@@ -2041,7 +2057,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Groups || screen === Screen.Circles))
       || (target === Screen.Inventory && screen === Screen.Notes)
       || (screen === Screen.Ext && target === `mod:${extViewId}`)
     b.classList.toggle('on', on)
@@ -2078,6 +2094,7 @@ function render(): void {
       case Screen.People: return screenPeople()
       case Screen.Notes: return screenNotes()
       case Screen.Groups: return screenGroups()
+      case Screen.Circles: return screenCircles()
       case Screen.Ask: return screenAsk()
       case Screen.Ext: return screenExt()
     }
@@ -3216,6 +3233,7 @@ function chooseView(view: ViewKey): void {
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   if (view === 'groups') { if (screen === Screen.Groups) render(); else openGroups(); return }
+  if (view === 'circles') { if (screen === Screen.Circles) render(); else openCircles(); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }

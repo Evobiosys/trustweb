@@ -9,13 +9,13 @@ describe('view_menu', () => {
   })
   it('lists Web, Network, Simple list, Table, then Other views: Dex, Contacts compact; the current one is on', () => {
     const m = viewMenuEntries({ current: 'rings', hasMap: true, pins: [] })
-    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups'])
-    expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact', 'groups'])
+    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups', 'circles'])
+    expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact', 'groups', 'circles'])
     expect(m.find((i) => i.on)?.view).toBe('rings')
     expect(viewMenuEntries({ current: 'dex', hasMap: true, pins: [] }).find((i) => i.on)?.view).toBe('dex')
   })
   it('hides only Map while no map exists', () => {
-    expect(viewMenuEntries({ current: 'rings', hasMap: false, pins: [] }).map((i) => i.view)).toEqual(['rings', 'network', 'people', 'complete', 'dex', 'compact', 'groups'])
+    expect(viewMenuEntries({ current: 'rings', hasMap: false, pins: [] }).map((i) => i.view)).toEqual(['rings', 'network', 'people', 'complete', 'dex', 'compact', 'groups', 'circles'])
   })
   it('never lists a desk', () => {
     expect(viewMenuEntries({ current: 'rings', hasMap: true, pins: [] }).map((i) => i.view)).not.toContain('desk')
@@ -50,8 +50,8 @@ describe('view_menu', () => {
   })
   it('groups Contacts compact under Other views and Dex under Alternative UI (beta)', () => {
     const m = viewMenuEntries({ current: 'rings', hasMap: true, pins: [] })
-    expect(m.map((i) => i.group)).toEqual(['main', 'main', 'main', 'main', 'main', 'alt', 'other', 'other'])
-    expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact', 'groups'])
+    expect(m.map((i) => i.group)).toEqual(['main', 'main', 'main', 'main', 'main', 'alt', 'other', 'other', 'other'])
+    expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact', 'groups', 'circles'])
   })
   it('lists the calendar and inventory views; Solar calendar is non-core and greyed until its module is there', () => {
     expect(screenViews('events', false)).toEqual([{ key: 'calendar', core: true, available: true }, { key: 'list', core: true, available: true }, { key: 'solar', core: false, available: false }])
@@ -61,7 +61,7 @@ describe('view_menu', () => {
   it('keeps the eye menu on the People page: People is the view that is on, the others stay to switch to', () => {
     const m = viewMenuEntries({ current: 'people', hasMap: true, pins: [] })
     expect(m.find((i) => i.on)?.view).toBe('people')
-    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups'])
+    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups', 'circles'])
   })
   it('wave 33: Notes lives under Resources; a stale stored notes pin is dropped without a throw', () => {
     expect(viewMenuEntries({ current: 'rings', hasMap: true, pins: ['notes'] }).some((i) => i.view === 'notes')).toBe(false)

@@ -8,7 +8,7 @@ import { NOTICE_CAP, NOTICE_KINDS } from '../../trustweb/src/notice_layer.ts'
 import type { Tool } from './protocol.ts'
 
 /** The view_menu ViewKeys a person can pin. */
-const VIEWS = ['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups']
+const VIEWS = ['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups', 'circles']
 /** web_default_view.ts, inlined: that module imports without file endings, which plain node cannot load. */
 type Rec = Record<string, unknown> & { uiViews?: { webDefault?: string }; wantsToConnect?: unknown[] }
 const none = { type: 'object', properties: {}, required: [], additionalProperties: false }
