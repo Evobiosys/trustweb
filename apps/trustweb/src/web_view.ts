@@ -36,6 +36,7 @@ import { connectionsShown } from './zone_connections'
 import { LINE_DASH, clearStated, setStated } from './relations_model'
 import { relationCard, relationsOf } from './relations_view'
 import { filterByChips } from './tag_filter'
+import { eventModeShow } from './event_filter_mode'
 import { dueMoves, releaseTies } from './engagement'
 import { ringCard } from './membranes_five_view'
 import { archivePerson, restorePerson } from './archived_people'
@@ -199,7 +200,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
     const community = communityOf(s)
     // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
-    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [], s.events))) if (!isBeyond(p)) (everyone[zoneFor(p, community)] ??= []).push(p)
+    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), eventModeShow(s), s.uiRings?.hide ?? [], s.events))) if (!isBeyond(p)) (everyone[zoneFor(p, community)] ??= []).push(p)
     // Wave 44: people seen only through a friend sit outside every ring (rings_layout.ts isBeyond), not as a further ring.
     const beyond = desk ? [] : visibleIn(s, s.people.filter((x) => isBeyond(x) && !isBlocked(x) && !x.deleted_at))
     // Wave 33: "closest 150" keeps the 150 closest across all rings (ring membership unchanged) and draws them all.

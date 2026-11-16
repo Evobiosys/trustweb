@@ -19,7 +19,7 @@ import {
   joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
   adoptMetaTags, canEditSettings, createCommunity, leftNav, listCommunities, metaOf, setKind, setSettings, type CommunityKind,
 } from './community_model'
-import { legacyLinksPatch, TILES, type TileId } from './community_data'
+import { SUBCOMMUNITY_FREE_LIMIT, canAddSub, communityTree, descendantsOf, legacyLinksPatch, rootOf, subCommunityCount, TILES, type TileId } from './community_data'
 import {
   WHATSAPP_BRIDGE_ENABLED, dashboardSocial, followTiles, setShareLayout, shareLayoutOn, tilePercents, tileSetOf, type TileAggregate, chatCommunities, chatOnlyCommunity, communityChatRows, connectEvents, homeTiles, isManager, menuItems, recordTileUse,
   renameCommunity, setChatOnly, setConnectEvents, setManagedTiles, setOwnTiles, startLayout, toggleTile,
@@ -53,7 +53,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const box = el('div', { class: 'community-host', 'data-community': '' })
   hostEl.append(box)
   const root = box.attachShadow({ mode: 'open' })
-  const ui: { nav: NavId; space: string | null; drawer: boolean; hiddenOpen: boolean; note: string; chatNote: string; switcher: boolean; settings: boolean; addEvent: boolean; rename: boolean; tilesOpen: boolean } = { nav: 'home', space: null, drawer: false, hiddenOpen: false, note: '', chatNote: '', switcher: false, settings: false, addEvent: false, rename: false, tilesOpen: false }
+  const ui: { nav: NavId; space: string | null; drawer: boolean; hiddenOpen: boolean; note: string; chatNote: string; switcher: boolean; settings: boolean; addEvent: boolean; rename: boolean; tilesOpen: boolean; folded: string[]; more: string | null } = { nav: 'home', space: null, drawer: false, hiddenOpen: false, note: '', chatNote: '', switcher: false, settings: false, addEvent: false, rename: false, tilesOpen: false, folded: [], more: null }
   const w43 = ctx.strings.w43shell
 
   try { if (localStorage.getItem(OPEN_CHAT_KEY)) { localStorage.removeItem(OPEN_CHAT_KEY); ui.nav = 'chat' } } catch { /* storage blocked: the pane stays closed */ }
@@ -351,6 +351,24 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     ]
   }
 
+  /** Wave 44b: a sub-community is hidden while any community above it is folded. */
+  function hiddenByFold(id: string): boolean {
+    for (let p = data().meta?.[id]?.parent, n = 0; p && n < 50; p = data().meta?.[p]?.parent, n++) if (ui.folded.includes(p)) return true
+    return false
+  }
+
+  /** Wave 44b: above SUBCOMMUNITY_FREE_LIMIT sub-communities under one root, "Request more" asks for room (the support ask, scoped to the root community; Q in the report: a message to the hosting contact). */
+  function moreDialog(root: string): HTMLElement {
+    const w = ctx.strings.w44fc
+    const name = listCommunities(data(), loadColourTags(), st().people).find((r) => r.id === root)?.name ?? root
+    return el('div', { class: 'card sub-more', role: 'dialog', 'aria-label': w.subMoreTitle, 'data-community-sub-more': '' }, [
+      el('h3', {}, [w.subMoreTitle]),
+      el('p', { class: 'meta' }, [w.subMoreText(name, subCommunityCount(data(), root)), ' ', w.subCount(subCommunityCount(data(), root), SUBCOMMUNITY_FREE_LIMIT)]),
+      btn(w.subMoreAsk, () => { ui.more = null; ctx.bus.emit('support-ask', { tag: root }); draw() }, { 'data-community-sub-more-ask': '' }, 'lnk strong'),
+      btn(w.subMoreClose, () => { ui.more = null; draw() }, { 'data-community-sub-more-close': '' }, 'lnk'),
+    ])
+  }
+
   // ---- Wave 42: the community switcher and the per-community settings -----------------------------------------------------
   function switcher(): HTMLElement {
     const w = ctx.strings.w42
@@ -359,19 +377,36 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const kind = el('select', { 'aria-label': w.kindLabel, 'data-community-new-kind': '' }, [el('option', { value: 'informal' }, [w.kindInformal]), el('option', { value: 'managed' }, [w.kindManaged])])
     // Wave 44 home-dashboard: what it is (a community or another group, e.g. family); managed or unmanaged is asked only here, later it lives in Settings.
     const group = el('select', { 'aria-label': ctx.strings.dashboard.newKind, 'data-community-new-group': '' }, [el('option', { value: '' }, [ctx.strings.dashboard.kinds.community]), el('option', { value: 'otherGroup' }, [ctx.strings.dashboard.kinds.otherGroup])])
+    // Wave 44b (item 5): a community made inside another is its sub-community; the select names the parent (default: the community I am in, or the top level).
+    const parent = el('select', { 'aria-label': ctx.strings.w44fc.subOf, 'data-community-new-parent': '' }, [
+      el('option', { value: '' }, [ctx.strings.w44fc.subTop]),
+      ...rows.map((r) => el('option', { value: r.id, ...(r.current ? { selected: '' } : {}) }, [ctx.strings.w44fc.subOf + ' ' + r.name])),
+    ]) as HTMLSelectElement
     const make = (): void => {
-      const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind, (group as HTMLSelectElement).value === 'otherGroup' ? 'otherGroup' : undefined)
+      const under = parent.value || undefined
+      if (under && !canAddSub(data(), under)) { ui.more = rootOf(data(), under); draw(); return }   // above SUBCOMMUNITY_FREE_LIMIT: the request dialog
+      const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind, (group as HTMLSelectElement).value === 'otherGroup' ? 'otherGroup' : undefined, under)
       if (!out) { name.focus(); return }
       saveColourTags(out.tags as never)
       ui.switcher = false
       save(out.data)
     }
     return el('div', { class: 'switcher', 'data-community-switcher': '', role: 'menu' }, [
-      ...rows.map((r) => el('button', {
-        class: 'lnk switch-row' + (r.current ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': String(r.current), 'data-community-pick': r.id,
-        onclick: () => { ui.switcher = false; ui.space = null; save({ ...data(), tag: r.id }) },
-      }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${w.memberCount(r.members)}`])])),
-      el('div', { class: 'row wrap switch-new' }, [name, group, kind, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
+      ...communityTree(data(), rows).filter((n) => !hiddenByFold(n.row.id)).map((n) => {
+        const r = n.row
+        const kids = descendantsOf(data(), r.id).length > 0
+        const folded = ui.folded.includes(r.id)
+        return el('div', { class: 'switch-line', style: `padding-left:${n.depth * 14}px`, 'data-community-depth': String(n.depth) }, [
+          kids ? el('button', { class: 'lnk fold', type: 'button', 'aria-expanded': String(!folded), 'aria-label': folded ? ctx.strings.w44fc.subExpand(r.name) : ctx.strings.w44fc.subCollapse(r.name), 'data-community-fold': r.id,
+            onclick: () => { ui.folded = folded ? ui.folded.filter((x) => x !== r.id) : [...ui.folded, r.id]; draw() } }, [folded ? '▸' : '▾']) : el('span', { class: 'fold-gap', 'aria-hidden': 'true' }, ['']),
+          el('button', {
+            class: 'lnk switch-row' + (r.current ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': String(r.current), 'data-community-pick': r.id,
+            onclick: () => { ui.switcher = false; ui.space = null; save({ ...data(), tag: r.id }) },
+          }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${w.memberCount(r.members)}`])]),
+        ])
+      }),
+      el('div', { class: 'row wrap switch-new' }, [name, group, kind, parent, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
+      ui.more ? moreDialog(ui.more) : null,
     ])
   }
 

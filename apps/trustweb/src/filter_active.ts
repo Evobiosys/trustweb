@@ -5,6 +5,7 @@ import type { AppState, Person, TwEvent } from './model'
 import { eventTagLabel, tagLabel } from './events'
 import { closestLimit, LIMIT_DEFAULT } from './membranes_five'
 import { S } from './strings'
+import { COMMUNITY_CHIP, communityLabel } from './community_tag'
 
 export interface ActiveFilter { chip: string; label: string }
 
@@ -12,6 +13,9 @@ export function activeFilters(ui: { show?: string[]; hide?: string[]; closest150
   const name = (chip: string): string => {
     if (chip.startsWith('person:')) return '@' + (people.find((p) => p.id === chip.slice(7))?.name ?? chip.slice(7))
     if (chip.startsWith('event:')) { const ev = events.find((e) => e.id === chip.slice(6)); return eventTagLabel(ev ? tagLabel(ev) : chip.slice(6)) }   // wave 43
+    if (chip === COMMUNITY_CHIP) return '#community'   // wave 44b
+    const tag = tags.find((t) => t.id === chip.slice(4))
+    if (tag?.community === true) return communityLabel(tag.label ?? tag.id)
     return '#' + (tags.find((t) => t.id === chip.slice(4))?.label ?? chip.slice(4))
   }
   return [
@@ -31,4 +35,12 @@ export function dropFilters(s: Pick<AppState, 'uiRings' | 'membraneLimit'>, keep
   s.uiRings = { ...s.uiRings, show: (s.uiRings?.show ?? []).filter(keep), hide: (s.uiRings?.hide ?? []).filter(keep) }
   if (!keep('closest150')) s.uiRings.closest150 = false
   if (!keep('perRing')) { delete s.membraneLimit; s.uiRings.rankBy = undefined }
+}
+
+/** Wave 44b (item 1): Eye > Community switches the community filter on silently: the bare chip joins `show` (no toggle appears; the chips list shows it). True when it changed. */
+export function showCommunity(s: Pick<AppState, 'uiRings'>): boolean {
+  const show = s.uiRings?.show ?? []
+  if (show.includes(COMMUNITY_CHIP)) return false
+  s.uiRings = { ...s.uiRings, show: [...show, COMMUNITY_CHIP], hide: (s.uiRings?.hide ?? []).filter((c) => c !== COMMUNITY_CHIP) }
+  return true
 }

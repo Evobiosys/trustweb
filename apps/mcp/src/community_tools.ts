@@ -5,7 +5,7 @@
  * The record has no network: support_ask writes the ask marked `queued`, and the app shows a card; the person's tap on Send sends it (support_flush.ts, I9);
  * support_cancel marks `cancelled`, and the app tells the people it went to. Counts come back, never names of recipients.
  */
-import { NAV, TILES, addMember, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
+import { NAV, SUBCOMMUNITY_FREE_LIMIT, TILES, addMember, canAddSub, subCommunityCount, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { CommunityData, CommunityKind } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { Tool } from './protocol.ts'
 
@@ -63,9 +63,9 @@ function resolve(r: Rec, tokens: readonly unknown[]): string[] {
 export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Tool[] } {
   const read: Tool[] = [
     {
-      name: 'community_list', description: 'The communities I have: id, name, kind (managed = has organizers; informal = my own representation of a group) and member count.',
+      name: 'community_list', description: 'The communities I have: id, name, kind (managed = has organizers; informal = my own representation of a group), member count and parent (the community it is a sub-community of, absent for a root).',
       inputSchema: schema({}),
-      run: () => { const r = e.load(); return Object.entries(dataOf(r).meta ?? {}).map(([id, m]) => ({ id, name: m.name ?? id, kind: m.kind, members: alive(r).filter((p) => holds(p, id)).length })) },
+      run: () => { const r = e.load(); return Object.entries(dataOf(r).meta ?? {}).map(([id, m]) => ({ id, name: m.name ?? id, kind: m.kind, members: alive(r).filter((p) => holds(p, id)).length, ...(m.parent ? { parent: m.parent } : {}) })) },
     },
     {
       name: 'community_settings_get', description: 'Settings of one community: kind, organizers, left-column sections (nav), the Ask for support button (ask) and the last audiences used.',
@@ -92,7 +92,7 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
   const write: Tool[] = [
     {
       name: 'community_create', description: 'Make a community of that name (managed or informal, default informal); the app defines its tag on its next start. A name that exists changes nothing.',
-      inputSchema: schema({ name: S('community name'), kind: S('managed | informal') }, ['name']),
+      inputSchema: schema({ name: S('community name'), kind: S('managed | informal'), parent: S('community id this one is a sub-community of (holarchy); more than ' + SUBCOMMUNITY_FREE_LIMIT + ' under one root needs a request to the hosting contact') }, ['name']),
       run: (a) => {
         const name = str(a.name).trim()
         const id = slug(name)
@@ -102,8 +102,10 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
         e.commit((r) => {
           const d = dataOf(r)
           if (d.meta?.[id]) return
+          const parent = a.parent === undefined ? undefined : need(r, a.parent)
+          if (parent && !canAddSub(d, parent)) throw new Error(`${subCommunityCount(d, parent)} sub-communities already sit under this root: the free limit is ${SUBCOMMUNITY_FREE_LIMIT}; ask the hosting contact for more`)
           created = true
-          put(r, { ...d, meta: { ...d.meta, [id]: { kind, organizers: kind === 'managed' ? ['me'] : [], name } } })
+          put(r, { ...d, meta: { ...d.meta, [id]: { kind, organizers: kind === 'managed' ? ['me'] : [], name, ...(parent ? { parent } : {}) } } })
         })
         return { id, kind: created ? kind : metaOf(dataOf(e.load()), id).kind, created }
       },

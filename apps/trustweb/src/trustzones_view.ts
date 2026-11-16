@@ -7,6 +7,7 @@ import { IMAGE_MODES, imageMode, setImageMode } from './image_mode'
 import { chipInput } from './chip_input'
 import { tagPill } from './components/tag_pill'
 import { candidates, initial, withChip, withoutChip } from './share_page'
+import { savedFiltersSection } from './filter_bar_view'
 import { createPerson, createTag, suggestOrCreate, tagPerson, untagPerson } from './tag_create'
 import type { CreateRow } from './tag_create'
 import type { ChipRow } from './share_page'
@@ -180,7 +181,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange' 
     ])
   }
   // Wave 39: the Filters button (zoneSidebar) owns the head and the folding; this is only the body.
-  return el('section', { class: 'zone-filter', 'data-zone-tag-filters': '' }, [...activeRows(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null))
+  return el('section', { class: 'zone-filter', 'data-zone-tag-filters': '' }, [...activeRows(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow(), savedFiltersSection({ state: () => d.s, save: () => undefined, redraw: d.onChange }, label)].filter((x): x is HTMLElement => x !== null))
 }
 
 /** Wave 29: which tag the filter's "Add people" row serves and who it added this go; survives the redraw after each Enter. */

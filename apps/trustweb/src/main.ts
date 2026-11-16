@@ -297,6 +297,9 @@ import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaselin
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { createWebFocus } from './web_focus'
+import { showCommunity } from './filter_active'
+import { mountFilterBar } from './filter_bar_view'
+import { narrowById } from './event_filter_mode'
 import { createModeShell } from './ext/community_mode/shell'
 import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
@@ -2137,6 +2140,7 @@ function render(): void {
   if (kept && kept.parentNode === host) { for (const n of [...host.childNodes]) if (n !== kept) n.remove(); kept.before(...(frame ? [frame] : []), ...body.slice(0, -1)) }
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
+  if (screen === Screen.Web || screen === Screen.Chat || screen === Screen.Inventory || screen === Screen.Ask) mountFilterBar(host, { state: st, save, redraw: render })   // wave 44b: event-mode pill + pinned filters
   mountSettingsGear()
   mountAskButton()
   mountAiButton()
@@ -3217,7 +3221,7 @@ function viewDrop(current: ViewKey): HTMLElement | null {
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
     ...items.filter((i) => !i.other).map(btn),
     ...twRegistry.views().map((v) => { // wave 39: the views of the extension modules that are on
-      const b = el('button', { class: 'view-opt', role: 'menuitemradio', 'aria-checked': 'false', 'data-mod-view': v.id, onclick: () => openExtView(v.id) })
+      const b = el('button', { class: 'view-opt', role: 'menuitemradio', 'aria-checked': 'false', 'data-mod-view': v.id, onclick: () => { if (v.id === 'community' && showCommunity(st())) save(); openExtView(v.id) } })   // wave 44b: Eye > Community sets the community filter silently
       b.innerHTML = icon(v.icon)
       b.append(el('b', {}, [v.title]))
       return b
@@ -3318,7 +3322,7 @@ function communityChatRow(): HTMLElement | null {
 function chatListBody(): Node[] {
   const s = st()
   const now = Date.now()
-  const people = chatPeople()
+  const people = narrowById(st(), chatPeople())   // wave 44b: event mode lists only the event's people
   const all = chatListRows(s.chats, people, { query: chatQuery, since: dndSince() })
   const tags = loadColourTags()
   const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
