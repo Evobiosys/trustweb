@@ -32,6 +32,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_set_suggester', write: true },
   // Wave 43 event-feed
   { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
+  // Wave 44 feed-embed
+  { name: 'feed_embed_link', write: true },
   // Wave 42 settings-llm-first
   { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_sync_capabilities', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai
@@ -56,6 +58,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'ai_provider_get', write: false }, { name: 'ai_provider_set', write: true },
   /* wave44 steer-settings-sync */
   { name: 'settings_keep_copy', write: true },
+  /* wave44 feed-sources */
+  { name: 'feed_source_toggle', write: true }, { name: 'feed_algorithm_set', write: true }, { name: 'feed_no_public_read_set', write: true }, { name: 'feed_publish_target_set', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

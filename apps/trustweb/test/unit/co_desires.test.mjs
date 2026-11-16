@@ -23,7 +23,7 @@ describe('desires doc', () => {
   it('is deterministic per event and kind, with me and the others as people', () => {
     const d = doc()
     expect(d.id).toBe('desires-ev1')
-    expect(d).toMatchObject({ kind: 'desires', eventId: 'ev1', title: 'Desires: Retreat' })
+    expect(d).toMatchObject({ kind: 'desires', eventId: 'ev1', title: 'Hopes and wishes: Retreat' })
     expect(d.people.map((p) => p.did)).toEqual([A.did, B.did])
     expect(desiresDoc({ kind: 'memories', ev: EV, me: A, others: [], at: T })).toMatchObject({ id: 'memories-ev1', title: 'Memories: Retreat' })
   })
