@@ -17,7 +17,7 @@ import { rolesSection } from './event_roles_view'
 import { dragEvent, dragPerson } from './drag_payload'
 import { PERSON_GREEN, loadColourTags } from './colour_tags'
 import { listCommunities, parseCommunity } from './ext/community-mighty/community_data'
-import { nicknamesOf, setNicknames } from './event_press'
+import { answerHostDefault, hostDefaultPending, nicknamesOf, setNicknames } from './event_press'
 import { ringColor } from './model'
 import type { AppState, Invitation, Person, TwEvent } from './model'
 import { invitationEventRows } from './invitations'
@@ -345,6 +345,29 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       host ? el('div', { class: 'chips', 'data-event-share-community-row': '' }, [toggle(ev.shareCommunity === true, V.share, 'data-event-share-community', () => { applyEventSettings(ev, { shareCommunity: ev.shareCommunity !== true }); h.save(); h.redraw() })]) : null,
       host && ev.shareCommunity && !communityOfEvent(ev) ? el('p', { class: 'warn', 'data-event-share-needs-community': '' }, [V.shareNeedsCommunity]) : null,
       host ? el('p', { class: 'meta' }, [V.shareHint]) : null,
+      host ? el('div', { 'data-event-host-default': ev.hostDefault ?? '' }, [
+        el('label', { class: 'meta' }, [V.hostDefault]),
+        el('div', { class: 'seg', role: 'group', 'aria-label': V.hostDefault }, EVENT_VISIBILITIES.map((m) => el('button', {
+          type: 'button', class: m === ev.hostDefault ? 'on' : '', 'aria-pressed': String(m === ev.hostDefault), 'data-event-host-default-opt': m,
+          onclick: () => { applyEventSettings(ev, { hostDefault: m }); h.save(); h.redraw() },
+        }, [V.hostDefaultModes[m]]))),
+        el('p', { class: 'meta' }, [V.hostDefaultHint]),
+      ]) : null,
+    ])
+  }
+
+  /** Wave 44 steer-event-visibility-3: the host's suggestion, asked once when a participant opens the event (a card at the top, not an overlay). Keep adopts it; Change leaves my mode and opens Advanced. */
+  function hostDefaultCard(ev: TwEvent): HTMLElement | null {
+    const st = h.state()
+    const mode = hostDefaultPending(ev, mayEdit(ev, st.me.displayName, st.people))
+    if (!mode) return null
+    const V = S.w44vis
+    return el('div', { class: 'card', role: 'group', 'data-event-host-default-ask': mode }, [
+      el('p', {}, [V.hostSuggests(V.hostDefaultModes[mode])]),
+      el('div', { class: 'chips' }, [
+        el('button', { type: 'button', class: 'btn', 'data-event-host-default-keep': '', onclick: () => { answerHostDefault(ev, 'keep'); h.save(); h.redraw() } }, [V.keep]),
+        el('button', { type: 'button', class: 'btn btn-ghost', 'data-event-host-default-change': '', onclick: () => { answerHostDefault(ev, 'change'); advancedOpen = true; h.save(); h.redraw() } }, [V.change]),
+      ]),
     ])
   }
 
@@ -487,6 +510,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const tagChip = el('button', { class: 'chip event-tag-chip', type: 'button', 'data-event-tag-chip': tag, 'aria-label': S.eventsTagChipAria(eventTagLabel(tag)), onclick: () => h.copyLink(eventTagSlug(tag), S.eventsTagCopied) }, [eventTagLabel(tag)])
     contextPress(tagChip, () => show({ kind: 'form', id: ev.id }))
     return [title, el('div', { class: 'scroll events-page' }, [
+      hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),
       ev.where ? editable(el('p', { 'data-event-where': '' }, [ev.where]), ev, 'where') : null,

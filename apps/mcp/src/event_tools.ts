@@ -5,9 +5,9 @@
  * network: a resource ask is written as one queued support ask and the app shows a card and sends it on a tap (support_flush.ts). On this side the
  * person is always "me".
  */
-import { DEFAULT_EVENT_VISIBILITY, DEFAULT_INVITE_POLICY, applyEventSettings, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
+import { DEFAULT_EVENT_VISIBILITY, DEFAULT_INVITE_POLICY, answerHostDefault, applyEventSettings, hostDefaultPending, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
-import { eventLinkView, identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
+import { eventLinkView, identifyPerson, isEventHost, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { SupportAsk } from '../../trustweb/src/support_ask.ts'
 import type { AppState, TwEvent } from '../../trustweb/src/model.ts'
@@ -184,6 +184,28 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
           const here = (r as { atEvent?: { eventId?: string; bell?: boolean } }).atEvent
           if (a.notify === true && here?.eventId === ev.id) delete here.bell
           out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}), ...(ev.techTakeover ? { techTakeover: true } : {}), showMe: ev.showMe ?? DEFAULT_EVENT_VISIBILITY, shareCommunity: ev.shareCommunity === true, ...(ev.announcedAt !== undefined ? { announcedAt: ev.announcedAt } : {}) }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_visibility_default', description: 'The host\'s suggested "How I show at this event" for participants (wave 44): `default` open|discoverable|off sets it (organizers, hosts and technical support only; travels in the event link). `answer` keep|change answers a host\'s suggestion on this device, once: keep adopts it as my mode, change leaves my mode as it is; my own choice (event_settings_set showMe) always wins afterwards. With neither, reads the state.',
+      inputSchema: schema({ event: S('event id or exact name'), default: S('open | discoverable | off'), answer: S('keep | change') }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const host = isEventHost(ev, r.me?.displayName ?? '', r.people)
+          if (a.default !== undefined) {
+            if (!host) throw new Error('only an organizer, host or technical support sets the default for participants')
+            applyEventSettings(ev, { hostDefault: str(a.default) })
+          }
+          if (a.answer !== undefined) {
+            if (a.answer !== 'keep' && a.answer !== 'change') throw new Error('answer must be keep or change')
+            if (!hostDefaultPending(ev, host)) throw new Error('no suggestion waits for an answer on this event')
+            answerHostDefault(ev, a.answer)
+          }
+          out = { id: ev.id, hostDefault: ev.hostDefault ?? null, answered: ev.hostDefaultAnswered === true, waiting: hostDefaultPending(ev, host) ?? null, showMe: ev.showMe ?? DEFAULT_EVENT_VISIBILITY }
         })
         return out
       },

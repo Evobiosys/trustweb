@@ -593,6 +593,9 @@ let redrawWaiting = false
 let superseded = false
 /** Set once the backup card exists (far below); declared here, above the boot-time saves (migration, carry, repair, dev events), so save() can read it from the first call on. */
 let autoBackup: BackupView | null = null
+/** Also read by save(): declared here so a boot-time save never meets them uninitialised (wave 44 steer-event-visibility-3). announceDue is set once eventEnv exists; mirrorTimer is the push-bundle write timer. */
+let announceDue: () => void = () => undefined
+let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
 if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
@@ -658,7 +661,6 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
-let announceDue: () => void = () => undefined   // wave 44 steer-event-visibility: set once eventEnv exists
 function save(): void {
   if (state && !superseded) {
     announceDue()
@@ -672,7 +674,6 @@ function save(): void {
 
 // Wave 11: the service worker's copy of what it needs to read a waiting wire (push_bundle.ts), refreshed after a save while
 // notifications are on; one write per tick however many saves.
-let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 function mirrorPushBundle(s: AppState): void {
   if (!s.notificationsOn || !(pushSupported() || nativeApp) || mirrorTimer) return
   mirrorTimer = setTimeout(() => { mirrorTimer = null; void writePushBundleNow() }, 250)

@@ -80,8 +80,18 @@ export function setShowMe(ev: TwEvent, v: string): void {
   if (v === DEFAULT_EVENT_VISIBILITY) delete ev.showMe; else ev.showMe = v
 }
 
+/** The host's suggestion a participant has not answered yet (one popup, once); undefined for the host, for no suggestion, and after the answer. */
+export const hostDefaultPending = (ev: Pick<TwEvent, 'hostDefault' | 'hostDefaultAnswered'>, iAmHost: boolean): EventVisibility | undefined =>
+  !iAmHost && !ev.hostDefaultAnswered && isVisibility(ev.hostDefault) ? ev.hostDefault : undefined
+
+/** Keep = my mode becomes the host's suggestion; Change = my mode stays as it is (the person picks in Advanced). Either way it is asked once, and my own choice wins from then on. */
+export function answerHostDefault(ev: TwEvent, answer: 'keep' | 'change'): void {
+  if (answer === 'keep' && isVisibility(ev.hostDefault)) setShowMe(ev, ev.hostDefault)
+  ev.hostDefaultAnswered = true
+}
+
 /** What the app and MCP change on an event on this device; a default value is not stored. Throws on a value outside the choices. */
-export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string; /** Wave 44 (43-D7): the host lets technical support take over. */ techTakeover?: boolean; /** Wave 44 steer-event-visibility: how I show at this event (open | discoverable | off). */ showMe?: string; /** Wave 44: the host shares the event with the whole community. */ shareCommunity?: boolean }
+export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string; /** Wave 44 (43-D7): the host lets technical support take over. */ techTakeover?: boolean; /** Wave 44 steer-event-visibility: how I show at this event (open | discoverable | off). */ showMe?: string; /** Wave 44: the host shares the event with the whole community. */ shareCommunity?: boolean; /** Wave 44 steer-event-visibility-3: the host's suggested mode for participants. */ hostDefault?: string }
 
 export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
   if (p.invitePolicy !== undefined) {
@@ -104,6 +114,10 @@ export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
   }
   if (p.notify !== undefined) { if (p.notify) delete ev.notify; else ev.notify = false }
   if (p.showMe !== undefined) setShowMe(ev, p.showMe)
+  if (p.hostDefault !== undefined) {
+    if (!isVisibility(p.hostDefault)) throw new Error(`hostDefault must be one of ${EVENT_VISIBILITIES.join(', ')}`)
+    ev.hostDefault = p.hostDefault
+  }
   if (p.shareCommunity !== undefined) { if (p.shareCommunity) ev.shareCommunity = true; else delete ev.shareCommunity }
   if (p.techTakeover !== undefined) { if (p.techTakeover) ev.techTakeover = true; else delete ev.techTakeover }
   if (p.offers) {

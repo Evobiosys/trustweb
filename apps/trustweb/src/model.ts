@@ -395,6 +395,10 @@ export interface TwEvent {
   offers?: Partial<EventOffers>
   /** Wave 44 steer-event-visibility: how I show at this event; absent = 'discoverable' (event_visibility.ts). Local only. */
   showMe?: 'open' | 'discoverable' | 'off'
+  /** Wave 44 steer-event-visibility-3: the host's suggested mode for participants; absent = no suggestion. Travels in the event link (event_link.ts); a participant keeps it as the host's word, never as their own choice. */
+  hostDefault?: 'open' | 'discoverable' | 'off'
+  /** Wave 44: the participant answered the host's suggestion once (Keep or Change); their own choice wins from then on. Local only. */
+  hostDefaultAnswered?: true
   /** Wave 44: the host shares this event with the whole community (communityId, else community); absent = off. Local only. */
   shareCommunity?: true
   /** Wave 44: when the community was told about it (once). Local only. */
