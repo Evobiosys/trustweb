@@ -148,7 +148,7 @@ import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings
 import { dismissOnOutside } from './key_press'
 import { groupsView } from './groups_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
-import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
+import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, headerRight, headerTools, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel, webViewAfterDefault } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
@@ -360,7 +360,7 @@ import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { createMissedPopup } from './notify_popup_view'
-import { createNotifyCenter, hasBell } from './notify_center_view'
+import { createNotifyCenter } from './notify_center_view'
 import { createSocial } from './social_hosting_view'
 import { linkGlobal } from './social_hosting'
 import { newlyAdded } from './notify_center'
@@ -1749,6 +1749,8 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
+      inboxButton(),
+      notifyCenter.bell(),
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : appTitleMark(),
       el('h2', {}, [title]),
       opts.glyph ?? null,
@@ -1767,22 +1769,18 @@ function mountSettingsGear(): void {
   right.insertBefore(gear, right.querySelector('[data-chat-dots]'))
 }
 
-/** Wave 43b: Ask your web as a plain header button on the screens that had the floating pill (Web, Chat, Resources); the bar's own Ask item replaces it. */
+/** Wave 44 header-layout: Ask your web is back where it was before wave 43b, the floating pill bottom right on Web, Chat and Resources (the bar's own Ask item hides it by CSS). */
 function mountAskButton(): void {
   if (screen !== Screen.Web && screen !== Screen.Chat && screen !== Screen.Inventory) return
-  const right = host.querySelector('.hdr .hdr-right')
-  if (!right || right.querySelector('[data-open-query]')) return
-  right.insertBefore(queryFab(), right.querySelector('[data-chat-dots]'))
+  if (host.querySelector('[data-open-query]')) return
+  host.append(queryFab())
 }
 
-/** Wave 43c shell-fix-2 (43b-D6): "Review requests" on Resources as a plain header button beside Ask your web (it floated bottom left and covered rows). */
-function mountRequestsButton(): void {
-  if (screen !== Screen.Inventory) return
-  const right = host.querySelector('.hdr .hdr-right')
-  if (!right || right.querySelector('[data-open-requests]')) return
+/** Wave 44 header-layout: the inbox ("Review requests") is the first icon at the top left of every header; wave 43c had it top right. */
+function inboxButton(): HTMLElement {
   const b = iconButton('inbox', S.reqAria, requestsSheet, 'requests-btn')
   b.setAttribute('data-open-requests', '1')
-  right.insertBefore(b, right.querySelector('[data-open-query]'))
+  return b
 }
 
 /** Wave 39: the AI button, a sparkle, at the far right of every header (after the settings gear). Same behaviour as in wave 37 (openAiButton). */
@@ -1914,7 +1912,11 @@ function mountHeaderControls(): void {
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
-  right.replaceChildren(...(hasBell(screen) ? [notifyCenter.bell()] : []), ...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
+  const nodes = (ids: readonly string[]): Node[] => ids.flatMap((c) => parts[c] ?? []).filter((n): n is Node => n !== null)
+  // Wave 44: the right cluster is the same everywhere (QR, settings; the AI sparkle follows in mountAiButton); the screen's own tools get their row.
+  right.replaceChildren(...nodes(headerRight(false)))
+  const tools = nodes(headerTools(screen))
+  if (tools.length) host.querySelector('.hdr')?.append(el('div', { class: 'hdr-tools' }, tools))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
@@ -2089,7 +2091,6 @@ function render(): void {
   mountHeaderControls()
   mountSettingsGear()
   mountAskButton()
-  mountRequestsButton()
   mountAiButton()
   modeShell.mount(host)
   modeShell.mark(screen === Screen.Web, screen === Screen.Ext && extViewId === 'community')
@@ -3605,17 +3606,23 @@ window.addEventListener(COLOUR_TAGS_EVENT, () => { if (screen === Screen.Web) re
 /** Opens Ask your web (its own page, wave 43b) from anywhere: querying is the one thing (Jakob, wave 2, P6/P9). */
 function openQuery(): void { openAskPage() }
 
-/** Wave 43b: the plain entry, a header button, where the bottom bar has no Ask item (CSS hides it when it has; the IYG support variation asks for support). */
+/** Wave 44: the floating pill as before wave 43b (bottom right); the IYG support variation's pill asks for support. */
 function queryFab(): HTMLElement {
   const support = profileDef(profileOf(state?.twSettings)).webPrimary === 'support' && isEnabled('support-ask')
+  if (support) {
+    const b = el('button', { class: 'query-fab', 'aria-label': S.supportTitle, 'data-open-query': '1', 'data-support-primary': '', onclick: () => { askMode = AskMode.Support; openQuery() } })
+    b.innerHTML = icon('query')
+    b.append(el('span', {}, [S.supportTitle]))
+    return b
+  }
   const call = !support && queryStyle() === QueryStyle.Call
-  // Review 43b: the call style is "Ask your web" (S.webCall, as the floating pill was), the search style "Query".
-  const label = support ? S.supportTitle : call ? S.webCall : S.webQuery
-  const b = iconButton('query', label, () => { if (support) askMode = AskMode.Support; openQuery() }, 'ask-entry')
+  const b = el('button', { class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1', onclick: openQuery })
   b.innerHTML = call ? askWebIcon(askIconVariant) : icon('query')
-  b.setAttribute('data-open-query', '1')
-  if (support) b.setAttribute('data-support-primary', '')
-  return b
+  b.append(call ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]) : el('span', {}, [S.webQuery]))
+  if (!call) return b
+  const wrapped = withHint(b, HintId.CallWeb)
+  if (wrapped !== b) wrapped.classList.add('fab-hint')
+  return wrapped
 }
 
 function tagChip(tag: Tag, custom?: string): HTMLElement {
