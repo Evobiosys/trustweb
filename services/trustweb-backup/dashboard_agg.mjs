@@ -7,8 +7,8 @@
 // PRIVACY: a slot is random hex the member's phone made for that community; it is not a name, key, device or account, and the answer never lists slots.
 // Nothing is logged (no logger is passed in) and the store sits in memory: after a restart members' phones post again on their next open. Slots older than
 // AGG_TTL_DAYS leave the count; a community keeps at most cfg.aggMaxSlots slots (the oldest go first) and the server at most AGG_MAX_COMMUNITIES.
-// NOT MOUNTED YET: server.mjs is a shared file. To mount: `const dashAgg = createDashboardAgg({ cfg, clientOf, now: cfg.now })` and
-// `if (isAggPath(pathname)) return dashAgg.handle(req, res)` beside the /org routes; config: aggPerMinute (default 60), aggMaxSlots (default 2000).
+// MOUNTED in server.mjs (chain-43c): `createDashboardAgg({ cfg, clientOf, now: cfg.now })` and `isAggPath(pathname)` beside the /org routes; config aggPerMinute
+// (DASH_AGG_PER_MINUTE, default 60), aggMaxSlots (DASH_AGG_MAX_SLOTS, default 2000).
 // ABUSE: per network address in memory; bodies capped at 2 KB, JSON only, own-host Origin only.
 
 import { jsonError, refuse, sendJson, tooManyRequests } from './http_util.mjs'

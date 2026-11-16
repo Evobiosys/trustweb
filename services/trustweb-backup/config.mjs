@@ -314,6 +314,8 @@ export function loadConfig(options = {}) {
     directoryPerMinute: pick(options, 'directoryPerMinute', 'DIRECTORY_PER_MINUTE', 60),
     directoryPerHour: pick(options, 'directoryPerHour', 'DIRECTORY_PER_HOUR', 1000),
     directoryGetPerMinute: pick(options, 'directoryGetPerMinute', 'DIRECTORY_GET_PER_MINUTE', 20),
+    aggPerMinute: pick(options, 'aggPerMinute', 'DASH_AGG_PER_MINUTE', 60),
+    aggMaxSlots: pick(options, 'aggMaxSlots', 'DASH_AGG_MAX_SLOTS', 2000),
     nameCapAllowFile: pick(options, 'nameCapAllow', 'NAME_CAP_ALLOW', '', String),
     nameCapRequestsFile: pick(options, 'nameCapRequests', 'NAME_CAP_REQUESTS', '', String),
 
