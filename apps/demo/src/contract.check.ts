@@ -19,7 +19,7 @@ import type {
   MatchResult,
   QueryEnvelope,
   AnswerEnvelope,
-  ChatEnvelope, PingEnvelope, ConnectEnvelope, ConnectAckEnvelope, AskAgainEnvelope, DevicesEnvelope, EventEnvelope,
+  ChatEnvelope, PingEnvelope, ConnectEnvelope, ConnectAckEnvelope, AskAgainEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope,
   DecodedAnswer,
   LocalOutcome,
 } from './types'
@@ -78,7 +78,7 @@ const _encode: EncodeFn = encodeForQr
 // explicit union rather than importing wire.ts's `Envelope` alias, so that
 // adding a new envelope type still has to be acknowledged HERE, which is the
 // whole point of this file.
-type DecodeFn = (s: string) => ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope | EventEnvelope | null
+type DecodeFn = (s: string) => ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope | HostEnvelope | EventEnvelope | null
 const _decode: DecodeFn = decodeFromQr
 
 /** Referenced so `noUnusedLocals` does not hide a drift by complaining first. */
