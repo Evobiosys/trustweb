@@ -4861,4 +4861,16 @@ export const S = {
     publishHint: 'Posting there comes with the account link. Until then your post stays on this phone.',
     publishOffRamp: 'Discouraged: your people also read the fediverse. Move off: Mastodon; export your data (GDPR Art. 20).',
   },
+  /* wave44b resources-outliner */
+  resOutliner: {
+    title: (n: number) => `Outline${n ? ` (${n})` : ''}`,
+    empty: 'No lines yet. Add one, or paste an outline.',
+    add: '+ Line', indent: '→', outdent: '←', up: '↑', down: '↓',
+    lineAria: 'Line', bulletAria: 'Line; hold to share', collapse: 'Show or hide the lines under this one',
+    shareBlock: 'Share this block', shareLine: 'Share only this line', shareGo: 'Share',
+    oneLine: '1 line',
+    blockLines: (blocks: number, lines: number) => `${blocks} block, ${lines} line${lines === 1 ? '' : 's'}`,
+    pasteTitle: 'Paste an outline', pasteAria: 'Outline to paste', pastePh: '- one\n  - under it\n- two', pasteGo: 'Add as lines',
+    requests: (n: number) => `Review requests (${n} waiting)`,
+  },
 } as const

@@ -168,6 +168,8 @@ import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import { resourceViews } from './resource_views_view'
+import { outlineView } from './resource_outline_view'
+import { refToken } from './resource_blocks'
 import { canShareOn } from './resource_views'
 import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
@@ -1824,8 +1826,10 @@ function mountAskButton(): void {
 
 /** Wave 44 header-layout: the inbox ("Review requests") is the first icon at the top left of every header; wave 43c had it top right. */
 function inboxButton(): HTMLElement {
-  const b = iconButton('inbox', S.reqAria, requestsSheet, 'requests-btn')
+  const waiting = askQueue.length + (askShowing ? 1 : 0)
+  const b = iconButton('inbox', waiting ? S.resOutliner.requests(waiting) : S.reqAria, requestsSheet, 'requests-btn')
   b.setAttribute('data-open-requests', '1')
+  if (waiting) b.append(el('span', { class: 'req-count', 'data-req-count': String(waiting) }, [String(waiting)]))
   return b
 }
 
@@ -3715,6 +3719,10 @@ function itemSheet(itemId: string): void {
     sourceFor(item.source, item.text),
     itemContextView(item),
     ...provenanceStateView(item),
+    outlineView({
+      item, newId: () => randomId(8), save, canShare: canShareOn(item, loadColourTags()),
+      share: (p) => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(p.text)}&ref=${refToken(p.ref)}` })) },
+    }),
     feed.itemExtras(item),
     // Review 43b (B17): a protected resource offers no way to pass it on (canShareOn).
     canShareOn(item, loadColourTags()) ? el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]) : null,
