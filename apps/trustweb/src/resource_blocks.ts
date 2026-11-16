@@ -130,3 +130,11 @@ export function shareProjection(item: Pick<InventoryItem, 'id' | 'blocks'>, bloc
 
 /** The back-reference as one URL-safe token for a share link. */
 export const refToken = (r: BlockShare['ref']): string => `${r.resourceId}.${r.blockId}`
+
+/* wave44 answers-44b: Send to chat / Post to feed (Jakob item 3). The copy = exactly the projection, plus its back-reference. */
+export type ShareVia = 'link' | 'chat' | 'feed'
+export const SHARE_VIA: readonly ShareVia[] = ['link', 'chat', 'feed']
+/** The back-reference as a tag: a Feed post's tag, a chat message's last line. */
+export const shareRefTag = (r: BlockShare['ref']): string => `ref:${refToken(r)}`
+/** The chat message: the projection, a blank line, the ref tag. */
+export const shareMessage = (p: Pick<BlockShare, 'text' | 'ref'>): string => `${p.text}\n\n${shareRefTag(p.ref)}`

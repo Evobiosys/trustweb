@@ -30,7 +30,7 @@ export function eventFeedOn(ev: object): boolean {
   return typeof offers === 'object' && offers !== null && (offers as { feed?: unknown }).feed === true
 }
 
-export interface PostOpts { eventId?: string; replyTo?: string; replyText?: string }
+export interface PostOpts { eventId?: string; replyTo?: string; replyText?: string; /** answers-44b: a tag for a post on no event (a shared block's ref:<resource>.<block>); an event's tag wins. */ tag?: string }
 
 /** A post of mine, kept on this phone. replyTo = the Feed id of the post it answers, replyText a short snapshot of it. Null: empty text or an unknown event. */
 export function addSocialPost(s: AppState, text: string, now: number, o: PostOpts = {}): SocialPost | null {
@@ -39,7 +39,7 @@ export function addSocialPost(s: AppState, text: string, now: number, o: PostOpt
   if (!clean || (o.eventId && !ev)) return null
   const post: SocialPost = {
     id: `${now.toString(36)}${(s.feedPosts?.length ?? 0).toString(36)}`, text: clean, by: s.me.displayName, at: now,
-    ...(ev ? { tag: tagOfEvent(ev), eventId: ev.id } : {}), ...(o.replyTo ? { replyTo: o.replyTo, replyText: (o.replyText ?? '').slice(0, 120) } : {}),
+    ...(ev ? { tag: tagOfEvent(ev), eventId: ev.id } : o.tag ? { tag: o.tag } : {}), ...(o.replyTo ? { replyTo: o.replyTo, replyText: (o.replyText ?? '').slice(0, 120) } : {}),
   }
   s.feedPosts = [...(s.feedPosts ?? []), post]
   return post

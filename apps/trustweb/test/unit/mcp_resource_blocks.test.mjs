@@ -11,7 +11,7 @@ function fixture(write = true) {
   const file = path.join(dir, 'record.json')
   writeFileSync(file, JSON.stringify({ v: 1, people: [], sameAs: {}, meetings: [], inventory: [item('1'), item('2', { protected: true, blocks: [{ id: 'x', text: 'secret', children: [] }] })] }))
   const tools = recordTools({ file, write, now: () => new Date('2026-11-16T10:00:00Z') })
-  return { by: Object.fromEntries(tools.map((t) => [t.name, t])), rec: () => JSON.parse(readFileSync(file, 'utf8')) }
+  return { file, by: Object.fromEntries(tools.map((t) => [t.name, t])), rec: () => JSON.parse(readFileSync(file, 'utf8')) }
 }
 
 describe('resource block tools', () => {
@@ -57,5 +57,24 @@ describe('resource block tools', () => {
     f.by.resource_block_remove.run({ id: '1', blockId: b.id })
     blocks = f.rec().inventory[0].blocks
     expect(blocks.map((x) => x.text)).toEqual(['a'])
+  })
+  it('answers-44b: resource_share via link (default) sends nothing; via feed posts with the ref tag; via chat queues an approval card for a connected person', () => {
+    const f = fixture()
+    const a = f.by.resource_block_add.run({ id: '1', text: 'top' }).blockId
+    const r = f.rec(); r.me = { displayName: 'Me' }; r.people = [{ id: 'p1', name: 'Pat', peerId: 'k1' }, { id: 'p2', name: 'Off' }]; writeFileSync(f.file, JSON.stringify(r))
+    expect(f.by.resource_share.run({ id: '1', blockId: a, scope: 'line', via: 'link' })).toMatchObject({ text: 'top', via: 'link' })
+    expect(f.rec().feedPosts ?? []).toHaveLength(0)
+    expect(f.by.resource_share.run({ id: '1', blockId: a, scope: 'line', via: 'feed' })).toMatchObject({ via: 'feed', posted: true })
+    expect(f.rec().feedPosts[0]).toMatchObject({ text: 'top', tag: `ref:1.${a}` })
+    expect(f.by.resource_share.run({ id: '1', blockId: a, scope: 'line', via: 'chat', peer: 'Pat' })).toMatchObject({ via: 'chat', queued: true, person: 'p1' })
+    const ev = readFileSync(path.join(path.dirname(f.file), 'dev-mcp-events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1)
+    expect(ev.action).toEqual({ type: 'resource-share-chat', args: { id: '1', blockId: a, scope: 'line', person: 'p1' } })
+    expect(() => f.by.resource_share.run({ id: '1', blockId: a, scope: 'line', via: 'chat' })).toThrow(/peer/)
+    expect(() => f.by.resource_share.run({ id: '1', blockId: a, scope: 'line', via: 'chat', peer: 'Off' })).toThrow(/not connected/)
+    expect(() => f.by.resource_share.run({ id: '1', blockId: a, scope: 'line', via: 'fax' })).toThrow(/via/)
+  })
+  it('answers-44b: with writes off resource_share still answers via link, refuses chat and feed', () => {
+    const f = fixture(false)
+    expect(() => f.by.resource_share.run({ id: '2', blockId: 'x', scope: 'line', via: 'feed' })).toThrow(/write/)
   })
 })

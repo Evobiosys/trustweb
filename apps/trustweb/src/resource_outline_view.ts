@@ -7,7 +7,7 @@ import { el } from '../../demo/src/ui/dom'
 import { contextPress } from './context_press'
 import type { InventoryItem, ResBlock } from './model'
 import { addBlock, countBlocks, editBlock, locate, markdownToBlocks, moveBlock, removeBlock, shareProjection, toggleCollapsed } from './resource_blocks'
-import type { BlockShare, MoveHow, ShareScope } from './resource_blocks'
+import type { BlockShare, MoveHow, ShareScope, ShareVia } from './resource_blocks'
 import { S } from './strings'
 
 export interface OutlineCtx {
@@ -16,8 +16,8 @@ export interface OutlineCtx {
   save: () => void
   /** False for a protected resource: no share menu. */
   canShare: boolean
-  /** Hands the chosen projection to the app's share route (QR / link); the shared copy carries projection.ref. */
-  share: (p: BlockShare) => void
+  /** Hands the chosen projection to the app's share route: link (QR), chat or feed (answers-44b); the shared copy carries projection.ref. */
+  share: (p: BlockShare, via: ShareVia) => void
 }
 
 /** "1 line" / "1 block, 12 lines": what the share sheet says will travel. */
@@ -84,7 +84,9 @@ export function outlineView(c: OutlineCtx): HTMLElement {
   const shareBox = (p: BlockShare): HTMLElement => el('div', { class: 'ol-share', 'data-ol-share': p.scope }, [
     el('b', { 'data-ol-scope': '' }, [scopeLabel(p)]),
     el('pre', { class: 'ol-share-text' }, [p.text]),
-    el('button', { class: 'btn btn-electric btn-sm', 'data-ol-share-go': '', onclick: () => c.share(p) }, [S.resOutliner.shareGo]),
+    el('button', { class: 'btn btn-electric btn-sm', 'data-ol-share-go': '', onclick: () => c.share(p, 'link') }, [S.resOutliner.shareGo]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-ol-share-chat': '', onclick: () => c.share(p, 'chat') }, [S.resShare.chat]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-ol-share-feed': '', onclick: () => c.share(p, 'feed') }, [S.resShare.feed]),
     el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { sharing = null; draw() } }, [S.close]),
   ])
 

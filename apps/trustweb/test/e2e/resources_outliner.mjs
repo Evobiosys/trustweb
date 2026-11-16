@@ -8,7 +8,7 @@ let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const it = (id, text, over = {}) => ({ id, text, audience: 'friends', included: true, createdAt: 1, ...over })
 const blk = (id, text, children = []) => ({ id, text, children })
-const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], events: [], people: [],
+const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], events: [], people: [{ id: 'p1', name: 'Test Peer', ring: 'friend', peerId: 'k1', fields: {} }],
   inventory: [
     it('r1', 'Reading list', { blocks: [blk('a', 'Books', [blk('a1', 'Dune'), blk('a2', 'Cosmos')]), blk('b', 'Papers')] }),
     it('r2', 'Hidden talk', { kind: 'recording', protected: true, link: 'https://example.org/a' }),
@@ -49,6 +49,19 @@ try {
     await page.locator('[data-ol-share-line="a"]').click(); await page.waitForTimeout(200)
     check(`${name}: share sheet says "1 line" and carries only that line`, (await page.locator('[data-ol-scope]').innerText()) === '1 line' && (await page.locator('.ol-share-text').innerText()) === 'Books')
     await page.screenshot({ path: `${SHOTS}/resources-outliner-${name}.png` })
+    // answers-44b item 3: Send to chat / Post to feed beside Share, no overlap (D-P06)
+    const boxes = await page.evaluate(() => ['go', 'chat', 'feed'].map((k) => { const r = document.querySelector(`[data-ol-share-${k}]`)?.getBoundingClientRect(); return r ? [r.left, r.top, r.right, r.bottom] : null }))
+    const apart = (a, b) => a[2] <= b[0] + 0.5 || b[2] <= a[0] + 0.5 || a[3] <= b[1] + 0.5 || b[3] <= a[1] + 0.5
+    check(`${name}: Share, Send to chat, Post to feed shown and not overlapping`, boxes.every(Boolean) && apart(boxes[0], boxes[1]) && apart(boxes[1], boxes[2]) && apart(boxes[0], boxes[2]))
+    await page.locator('[data-ol-share-feed]').click(); await page.waitForTimeout(300)
+    rec = await stored(page)
+    check(`${name}: Post to feed = that line with its ref tag`, rec.feedPosts?.at(-1)?.text === 'Books' && rec.feedPosts.at(-1).tag === 'ref:r1.a')
+    await page.locator('[data-ol-share-chat]').click(); await page.waitForTimeout(300)
+    check(`${name}: Send to chat lists the connected person`, (await page.locator('[data-res-share-pick="p1"]').count()) === 1)
+    await page.screenshot({ path: `${SHOTS}/answers-44b-share-chat-${name}.png` })
+    await page.locator('[data-res-share-pick="p1"]').click(); await page.waitForTimeout(600)
+    rec = await stored(page)
+    check(`${name}: the chat carries the line and its ref`, (rec.chats?.k1?.messages ?? []).some((m) => m.text === 'Books\n\nref:r1.a'))
     // protected resource: no outline share
     await page.keyboard.press('Escape')
     check(`${name}: no page errors`, errors.length === 0)
