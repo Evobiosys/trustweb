@@ -553,7 +553,6 @@ body:has([data-mode-pill]) .demo-friends{top:124px}
 .rings-hint{top:6px; right:6px}
 .fab-hint{position:absolute; right:16px; bottom:16px; z-index:20}
 .fab-hint .query-fab{position:static}
-.requests-fab{padding:10px 20px; left:16px; right:auto}
 /* the two fabs on Inventory never cover the last line or the backup card */
 .screen.inventory .scroll{padding-bottom:84px}
 .hint-again{display:flex; gap:6px; align-items:center; font-size:12.5px; color:var(--ink-soft); white-space:nowrap}
@@ -2019,3 +2018,5 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 }
 /* The ⋮ sheet clears the raised centre tab too (86 px bar + 28 px raise + a gap). */
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
+/* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
+#notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}

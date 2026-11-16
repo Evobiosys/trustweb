@@ -45,6 +45,8 @@ try {
     const store = () => page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))
     const openSettings = async () => { await page.locator('[data-go="web"]').first().click(); await page.waitForTimeout(300); await page.locator('[data-settings-gear]').first().click(); await page.waitForTimeout(500) }
 
+    // review-fixes-43c: not discoverable (the default) = no directory request at all, not even the intents pull with my key
+    check(`${w}: not discoverable: start made no directory request`, seen.length === 0, JSON.stringify(seen.map((x) => x.method + x.path)))
     // ---- 1. Settings > Your Profile > Discoverable by name
     await openSettings()
     await page.locator('[data-setting="ui.profile"]').click(); await page.waitForTimeout(500)
@@ -148,7 +150,8 @@ try {
       if (url.pathname === '/directory/intents') { const out = pending; pending = []; return json(200, { intents: out }) }
       return json(200, { records: records.filter((r) => `${r.first} ${r.last}`.toLowerCase() === (url.searchParams.get('q') ?? '')) })
     })
-    const REC = { v: 1, me: { id: 'me1', displayName: 'Tester Person' }, people: [P('a1', 'Anna Huber', 'friend'), P('c1', 'Cleo Stone', 'friend'), P('d1', 'Dan Keller', 'acquaintance')], peers: [], log: [], inventory: [], events: [], missedPopupOff: true }
+    // review-fixes-43c: discoverable, so this device pulls intents (a non-discoverable one never calls the directory with its key)
+    const REC = { v: 1, me: { id: 'me1', displayName: 'Tester Person' }, discoverable: true, people: [P('a1', 'Anna Huber', 'friend'), P('c1', 'Cleo Stone', 'friend'), P('d1', 'Dan Keller', 'acquaintance')], peers: [], log: [], inventory: [], events: [], missedPopupOff: true }
     await page.goto(BASE); await page.waitForTimeout(1200)
     await page.evaluate((r) => { localStorage.setItem('trustweb.v1.me', JSON.stringify(r)); localStorage.removeItem('trustweb.ui.netPins') }, REC)
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(1200)

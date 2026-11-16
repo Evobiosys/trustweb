@@ -11,6 +11,7 @@
 // Signatures: ed25519 by the signing key inside the did:peer:2 "V" element; messages "tw-name-v1" / "tw-intent-v1" / "tw-del-v1" / "tw-pull-v1"
 // (identical bytes to apps/trustweb/src/name_record.ts, proven by test/unit/directory_server_cross.test.mjs). ts of del and pull must be within 5 minutes.
 // A record with srv=false is REFUSED: its owner did not allow any server (trusted-only), so a hosting friend cannot hand it over.
+// A withdrawal is remembered (key -> its ts): an older record PUT later (a host that missed the drop) is answered 204 and not listed.
 // hosts[] is never stored (the server is the fallback, not a host). Store: <BACKUP_DIR>/directory.json. Never logged (the module has no logger).
 // Honest labelling (I7): the server sees first name, last name, did, open flag and time of everyone who switched Discoverable on, and intents (from, to).
 import crypto from 'node:crypto'
@@ -99,10 +100,13 @@ export async function openDirectory({ cfg, clientOf, now = Date.now }) {
   const byName = new Map()
   /** to-key -> [intent + at] */
   const intents = new Map()
+  /** key -> ts of its signed withdrawal: a record signed before it (a host that missed the drop hands it over) stays unlisted (review-fixes-43c) */
+  const withdrawn = new Map()
   try {
     const saved = JSON.parse(await fs.readFile(file, 'utf8'))
     for (const r of saved.records ?? []) { const ok = checkRecord(r); if (ok) index(ok) }
     for (const [to, list] of Object.entries(saved.intents ?? {})) intents.set(to, list.filter((i) => checkIntent(i) !== null && now() - i.at < INTENT_MS))
+    for (const [key, ts] of Object.entries(saved.withdrawn ?? {})) if (typeof ts === 'number') withdrawn.set(key, ts)
   } catch { /* first start, or unreadable: the directory starts empty */ }
 
   function index(rec) {
@@ -128,7 +132,7 @@ export async function openDirectory({ cfg, clientOf, now = Date.now }) {
   let chain = Promise.resolve()
   const save = async () => {
     const tmp = `${file}.tmp`
-    await fs.writeFile(tmp, JSON.stringify({ v: 1, records: [...records.values()], intents: Object.fromEntries(intents) }), { mode: 0o600 })
+    await fs.writeFile(tmp, JSON.stringify({ v: 1, records: [...records.values()], intents: Object.fromEntries(intents), withdrawn: Object.fromEntries(withdrawn) }), { mode: 0o600 })
     await fs.rename(tmp, file)
   }
   const persist = () => (chain = chain.then(save, save))
@@ -157,9 +161,10 @@ export async function openDirectory({ cfg, clientOf, now = Date.now }) {
     if (b === null) return res.statusCode
     const rec = checkRecord(b.rec)
     if (rec === null) return bad(res)
+    if ((withdrawn.get(rec.key) ?? -Infinity) >= rec.ts) return done(res)
     const held = records.get(rec.key)
     if (held === undefined && records.size >= cfg.directoryMax) return bad(res)
-    if (held === undefined || rec.ts > held.ts) { index(rec); await persist() }
+    if (held === undefined || rec.ts > held.ts) { withdrawn.delete(rec.key); index(rec); await persist() }
     return done(res)
   }
 
@@ -176,7 +181,12 @@ export async function openDirectory({ cfg, clientOf, now = Date.now }) {
     const b = await body(req, res)
     if (b === null) return res.statusCode
     if (!text(b.key, MAX_DID) || !fresh(b.ts) || !verifyDid(b.key, `tw-del-v1\n${b.key}\n${b.ts}`, b.sig)) return bad(res)
-    if (records.has(b.key)) { unindex(b.key); await persist() }
+    const upTo = Math.max(b.ts, records.get(b.key)?.ts ?? 0)
+    unindex(b.key)
+    withdrawn.delete(b.key)
+    withdrawn.set(b.key, upTo)
+    while (withdrawn.size > cfg.directoryMax) withdrawn.delete(withdrawn.keys().next().value)
+    await persist()
     return done(res)
   }
 

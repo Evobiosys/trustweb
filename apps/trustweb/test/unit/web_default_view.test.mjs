@@ -51,3 +51,15 @@ describe('wave43c chat-notices: Contacts wording and the pin', () => {
     expect(S.barNames.web).toBe('Web')
   })
 })
+
+// review-fixes-43c (Jakob Ω): the Settings select "Default view of Contacts" shows the chosen view on the Web screen at once, like the eye-menu pin.
+import { webViewAfterDefault } from '../../src/web_default_view.ts'
+describe('webViewAfterDefault', () => {
+  it('rings, network and map become the remembered Web view at once; page views open on the next tap (null)', () => {
+    expect(webViewAfterDefault('network')).toBe('network')
+    expect(webViewAfterDefault('map')).toBe('map')
+    expect(webViewAfterDefault('rings')).toBe('rings')
+    expect(webViewAfterDefault('people')).toBe(null)
+    expect(webViewAfterDefault('groups')).toBe(null)
+  })
+})

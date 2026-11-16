@@ -143,10 +143,10 @@ export const S = {
   aiOk: 'OK: the model answered.',
   aiError: (msg: string) => `Error: ${msg}`,
   aiHint: 'Optional. With an endpoint set, the text of a request you type (for example "I want to play padel") is sent to that endpoint to be read, and only then; the key goes only there. Without one, nothing is sent and TrustWeb reads the text on this phone. Replies are range-checked; on any error TrustWeb reads the text itself.',
-  setGroup: { web: 'Web', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', general: 'General' } as Record<string, string>,
+  setGroup: { web: 'Contacts', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', general: 'General' } as Record<string, string>,
   setSecYou: 'You',
   setSecAi: 'AI',
-  setSecWeb: 'Your web',
+  setSecWeb: 'Your contacts',
   setSecSharing: 'Sharing',
   setShareZone: 'Default zone for new shares',
   setShareZoneHint: 'The Share page starts here. You can change it each time.',
@@ -1244,9 +1244,7 @@ export const S = {
   invOff: 'paused',
   invOn: 'on',
   logTitle: 'Asks that reached this phone',
-  // Inventory, where Web has "Ask your web": the asks people sent you (owner 2026-10-06; two lines for now).
-  reqTop: 'Review',
-  reqBottom: 'requests',
+  // Inventory header button (shell-fix-2; was a two-line floating pill): the asks people sent you (owner 2026-10-06).
   reqAria: 'Review requests',
   reqTitle: 'Requests to Resources',
   reqWaiting: (n: number) => `${n === 1 ? 'One ask is' : `${n} asks are`} waiting for your yes or no.`,
@@ -4633,6 +4631,8 @@ export const S = {
     shareLayout: 'Share my tile layout anonymously',
     shareLayoutHint: 'Sends only which tiles you show, with no name or key, so others can see how members set up their Home.',
     shareLayoutOff: 'Off: nothing about your layout leaves this phone.',
+    /** review-fixes-43c: trusted-only closes this server path too. */
+    shareLayoutNoServer: 'Not shared while "Only through people I trust (no servers)" is on.',
     others: (parts: string[]) => `Other members show: ${parts.join(', ')}`,
     follow: 'Follow them?',
     followYes: 'Follow',

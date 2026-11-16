@@ -142,7 +142,7 @@ try {
     const rows = ['k1', 'k2'].map((key) => ({ key, name: `Row ${key}`, source: 'vcf', file: 's.vcf', n365: 0, out: 0, in: 0, ids: [], sig: key, labels: [], emails: [`${key}@example.org`] }))
     const { ctx, page } = await open(1280, 800, record({ twSettings: { extensions: { assistant: false } }, serviceImports: [{ id: 'b1', at: Date.now(), counts: { vcf: 2 }, rows, done: {} }] }))
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(400)
-    if (!(await page.locator('[data-people-import]').first().isVisible())) { await page.locator('summary', { hasText: 'Your web' }).first().click(); await page.waitForTimeout(300) }
+    if (!(await page.locator('[data-people-import]').first().isVisible())) { await page.locator('summary', { hasText: 'Your contacts' }).first().click(); await page.waitForTimeout(300) }
     await page.locator('[data-people-import]').first().click(); await page.waitForTimeout(500)
     await page.locator('[data-svc-curate]').first().click(); await page.waitForTimeout(500)
     const adv = page.locator('[data-cur-advanced="k1"] > summary')

@@ -24,7 +24,7 @@ import {
   WHATSAPP_BRIDGE_ENABLED, dashboardSocial, followTiles, setShareLayout, shareLayoutOn, tilePercents, tileSetOf, type TileAggregate, chatCommunities, chatOnlyCommunity, communityChatRows, connectEvents, homeTiles, isManager, menuItems, recordTileUse,
   renameCommunity, setChatOnly, setConnectEvents, setManagedTiles, setOwnTiles, startLayout, toggleTile,
 } from './community_data'
-import { fetchAggregate, sendTileSet } from './community_server'
+import { fetchAggregate, layoutShareAllowed, sendTileSet } from './community_server'
 import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
 import { chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
@@ -143,7 +143,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   function syncAggregate(tag: string): void {
     const d = data()
     const slot = d.meta?.[tag]?.slot
-    if (!shareLayoutOn(d, tag) || !slot) return
+    if (!layoutShareAllowed(st(), shareLayoutOn(d, tag)) || !slot) return
     const tiles = tileSetOf(d, tag)
     const key = tiles.join(',')
     if (social.sent[tag] === key) return
@@ -156,7 +156,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const on = shareLayoutOn(d, tag)
     const agg = social.agg[tag]
     const toggle = pick(w.shareLayout, { 'data-community-share-layout': '' }, on, (v) => { if (!v) delete social.sent[tag]; save(setShareLayout(data(), tag, v, newSlot)) })
-    if (!dashboardSocial(d, tag) || !agg || social.no.has(tag)) return el('div', { class: 'card', 'data-community-social': on ? 'on' : 'off' }, [toggle, el('p', { class: 'meta' }, [on ? w.shareLayoutHint : w.shareLayoutOff])])
+    if (!dashboardSocial(d, tag) || !agg || social.no.has(tag)) return el('div', { class: 'card', 'data-community-social': on ? 'on' : 'off' }, [toggle, el('p', { class: 'meta' }, [!layoutShareAllowed(st(), true) ? w.shareLayoutNoServer : on ? w.shareLayoutHint : w.shareLayoutOff])])
     const parts = tilePercents(agg).map((r) => `${w43.tileNames[r.tile]} ${r.pct} %`)
     const follow = followTiles(agg)
     return el('div', { class: 'card', 'data-community-social': 'on' }, [

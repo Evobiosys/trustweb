@@ -14,10 +14,13 @@
 import path from 'node:path'
 import { checker, launch, newPhone, record, startPhone, startRelay, startVite } from './swiss_harness.mjs'
 import { acceptAdd } from '../helpers/connect_add.mjs'
+import { plainHits, wireKind } from '../helpers/relay_plain.mjs'
 
 const PORT = Number(process.env.TW_PORT || 5451)
 const SHOTS = process.env.TW_SHOTS
 const TICK_MS = 15_000
+/** review-fixes-43c: a new connection kicks a round (sync_view.ts KICK_MS 0.8 s), so the other device has it within seconds, not a tick. */
+const KICK_BUDGET_MS = 6_000
 const c = checker()
 const ok = c.ok
 const errors = []
@@ -55,7 +58,8 @@ async function scan(host, joiner, base) {
 const peopleNamed = async (page, name) => (await record(page)).people.filter((p) => !p.deleted_at && p.name === name)
 
 async function main() {
-  const relay = await startRelay({ port: PORT })
+  const tap = []
+  const relay = await startRelay({ port: PORT, tap })
   const vite = await startVite(PORT, { relayPort: relay.port })
   console.log('sync-devices against ' + vite.base)
   const browser = await launch()
@@ -111,6 +115,7 @@ async function main() {
     const took = Date.now() - t0
     console.log(`  measured: Other reached the phone ${took} ms after the laptop had the card`)
     ok(`2. the phone shows Other with the connection, within one tick (+ delivery): ${took} ms`, !!onPhone && took <= TICK_MS + 10_000, String(took))
+    ok(`2. ... and without waiting for the tick (kick on connect, <= ${KICK_BUDGET_MS} ms): ${took} ms`, !!onPhone && took <= KICK_BUDGET_MS, String(took))
 
     // 3. the phone chats with Other; Other answers to the phone
     await until(async () => (await record(other)).peers.some((p) => (p.alsoDids ?? []).length), 2 * TICK_MS + 10_000)
@@ -140,8 +145,12 @@ async function main() {
     await scan(phone, other2, vite.base)
     const o2 = await until(async () => (await record(phone)).people.find((p) => p.name === 'Otto' && p.peerId), 20_000)
     ok('4. the showing phone has Otto at once (card + connection)', !!o2 && (await record(phone)).peers.some((x) => x.id === o2.peerId))
-    const o2Laptop = await until(async () => (await record(laptop)).people.find((p) => p.peerId === o2?.peerId), 2 * TICK_MS + 15_000)
-    ok('4. the laptop has Otto within a tick', !!o2Laptop)
+    const t4 = Date.now()
+    const o2Laptop = await until(async () => { const r = await record(laptop); return r.people.find((p) => p.peerId === o2?.peerId) && r.peers.some((x) => x.id === o2?.peerId) }, 2 * TICK_MS + 15_000)
+    const took4 = Date.now() - t4
+    console.log(`  measured: Otto reached the laptop ${took4} ms after the phone had the card`)
+    ok(`4. the laptop has Otto (card + connection) within one tick (+ delivery): ${took4} ms`, !!o2Laptop && took4 <= TICK_MS + 10_000, String(took4))
+    ok(`4. ... and without waiting for the tick (kick on connect, <= ${KICK_BUDGET_MS} ms): ${took4} ms`, !!o2Laptop && took4 <= KICK_BUDGET_MS, String(took4))
 
     // 5. no duplicates
     await new Promise((r) => setTimeout(r, TICK_MS + 2000))
@@ -154,6 +163,14 @@ async function main() {
     await shot(phone, 'chat-list-360')
     await shot(laptop, 'chat-list-1280')
     ok('5. the relay carried sealed text only', bodies.length > 0 && bodies.every((b) => !/Other|Otto|from the phone/.test(b)), `${bodies.length} bodies`)
+    // review-fixes-43c: what the relay STORED (every wire, any transport), raw and base64-decoded
+    const NAMES = ['Jakob', 'Other', 'Otto', 'Laptop', 'Phone', 'from the phone', 'answer from Other']
+    const sealed = tap.filter((w) => wireKind(w.wire) !== 'connect-ack')
+    const leaks = sealed.map((w) => plainHits(w.wire, NAMES)).filter((h) => h.length)
+    ok(`5. relay store: ${sealed.length} sync/chat/devices wires, no name, device name or chat text readable`, sealed.length > 5 && leaks.length === 0, JSON.stringify(leaks.slice(0, 3)))
+    const acks = tap.filter((w) => wireKind(w.wire) === 'connect-ack').map((w) => plainHits(w.wire, NAMES))
+    console.log(`  relay store: ${tap.length} wires, ${acks.length} cleartext connect-acks carrying ${JSON.stringify([...new Set(acks.flat())])} (the scanner's own name, connect_link.ts bootstrap)`)
+    ok('5. a cleartext connect-ack carries only the scanner\'s own name, never chat text or the device names', acks.every((h) => h.every((n) => n === 'Other' || n === 'Otto' || n === 'Jakob')))
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } finally {
     await browser.close()

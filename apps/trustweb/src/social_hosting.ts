@@ -34,6 +34,8 @@ const MAX_RESULTS = 10
 interface PersonLite { id: string; ring: string; trust?: TrustOverride; peerId?: string; blocked?: number; name?: string; globalKey?: string }
 interface PeerLite { id: string; did: string }
 export interface HostState {
+  /** The owner's "Discoverable by name" (opt-in): without it this device never calls the directory with its key (review-fixes-43c). */
+  discoverable?: boolean
   trustedOnly?: boolean
   hostFriends?: string
   people: PersonLite[]
@@ -137,9 +139,9 @@ export class SocialHost {
     return { server: false, friends: to.length }
   }
 
-  /** Verified intents the server holds for me (a pull clears them); they land in state.intentsIn like the friends' ones. */
+  /** Verified intents the server holds for me (a pull clears them; only while I am discoverable: nobody can find me otherwise); they land in state.intentsIn like the friends' ones. */
   async pullIntents(): Promise<number> {
-    const dir = this.servers()
+    const dir = this.d.state().discoverable === true ? this.servers() : null
     if (!dir) return 0
     let n = 0
     for (const i of await pullIntents(dir, this.d.self.did, this.d.sign)) n += this.keepIntent(i) ? 1 : 0

@@ -9,10 +9,13 @@
 export const NOTICE_KINDS = ['cards', 'wants', 'update', 'notice', 'message', 'toast'] as const
 export type NoticeKind = (typeof NOTICE_KINDS)[number]
 export const NOTICE_CAP = 3
+/** review-fixes-43c: the persistent ones (ask-result / message cards, "Wants to connect") belong to the Web screen, as before 43c; floating over other
+ * screens they covered page controls until dismissed (P06). The transient kinds (update, notice, message, toast) follow everywhere. */
+export const WEB_ONLY_KINDS: readonly NoticeKind[] = ['cards', 'wants']
 
-/** The active kinds that show: stack order, and when more than `cap` are active the ones nearest the bottom bar stay. */
-export function visibleKinds(active: ReadonlySet<string>, cap: number = NOTICE_CAP): NoticeKind[] {
-  return NOTICE_KINDS.filter((k) => active.has(k)).slice(-cap)
+/** The active kinds that show: stack order, and when more than `cap` are active the ones nearest the bottom bar stay. Off the Web screen the Web-only kinds sit out. */
+export function visibleKinds(active: ReadonlySet<string>, cap: number = NOTICE_CAP, onWeb = true): NoticeKind[] {
+  return NOTICE_KINDS.filter((k) => active.has(k) && (onWeb || !WEB_ONLY_KINDS.includes(k))).slice(-cap)
 }
 
 export interface NoticeLine { kind: NoticeKind; text: string; visible: boolean }
@@ -33,6 +36,8 @@ export interface NoticeLayer {
   slot(kind: NoticeKind, node: HTMLElement | null): void
   list(): NoticeLine[]
   refresh(): void
+  /** review-fixes-43c: the app's screen changed; off the Web screen the Web-only kinds hide (WEB_ONLY_KINDS). */
+  setOnWeb(on: boolean): void
 }
 
 const isOn = (el: HTMLElement): boolean => !el.hidden && el.childNodes.length > 0
@@ -44,14 +49,16 @@ export function createNoticeLayer(doc: Document): NoticeLayer {
   const members: Member[] = []
   const watch = new MutationObserver(() => refresh())
   const watchOpts = { attributes: true, attributeFilter: ['class', 'hidden'], childList: true }
+  let onWeb = true
   function refresh(): void {
-    const on = members.filter((m) => m.active())
-    const shown = new Set(visibleKinds(new Set(on.map((m) => m.kind))))
+    const on = members.filter((m) => m.active() && (onWeb || !WEB_ONLY_KINDS.includes(m.kind)))
+    const shown = new Set(visibleKinds(new Set(on.map((m) => m.kind)), NOTICE_CAP, onWeb))
     for (const m of members) {
       const cut = m.active() && !shown.has(m.kind)
       if (cut !== m.el.hasAttribute('data-notice-cut')) m.el.toggleAttribute('data-notice-cut', cut)
     }
     layer.toggleAttribute('data-notice-empty', on.length === 0)
+    layer.toggleAttribute('data-notice-off-web', !onWeb)
   }
   function place(m: Member): void {
     m.el.setAttribute('data-notice-kind', m.kind)
@@ -73,7 +80,8 @@ export function createNoticeLayer(doc: Document): NoticeLayer {
       if (node) { const m = { kind, el: node, active: () => true }; members.push(m); place(m) }
       refresh()
     },
-    list: () => describeNotices(members.filter((m) => m.active()).map((m) => ({ kind: m.kind, text: (m.el.textContent ?? '').replace(/\s+/g, ' ').trim() }))),
+    list: () => describeNotices(members.filter((m) => m.active() && (onWeb || !WEB_ONLY_KINDS.includes(m.kind))).map((m) => ({ kind: m.kind, text: (m.el.textContent ?? '').replace(/\s+/g, ' ').trim() }))),
     refresh,
+    setOnWeb(on) { if (on !== onWeb) { onWeb = on; refresh() } },
   }
 }

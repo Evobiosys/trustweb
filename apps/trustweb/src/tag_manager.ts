@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 40 (group-tags): the edits of Settings > Your web > Tags, on the stored colour tags. Each returns a new list (the caller saves it); a refused edit throws (tags_model.ts addParent: "cycle"). Pure. */
+/** Wave 40 (group-tags): the edits of Settings > Your contacts > Tags, on the stored colour tags. Each returns a new list (the caller saves it); a refused edit throws (tags_model.ts addParent: "cycle"). Pure. */
 import type { ColourTag } from './colour_tags'
 import { createTag } from './tag_create'
 import { addParent, childrenOf, forkInto, removeParent, setKind, toTag, type Tag } from './tags_model'

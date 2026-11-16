@@ -7,6 +7,7 @@
  * Nothing is sent unless the member switched "Share my tile layout anonymously" on for that community (community_data.ts shareLayoutOn).
  */
 import { TILES, type TileAggregate } from './community_data'
+import { serversAllowed } from '../../trust_mode'
 
 export const COMMUNITY_AGG_PATH = '/community/agg'
 /** The server answers a summary only from this many members on, and the app shows nothing below it: a layout of one or two people is identifiable. */
@@ -27,6 +28,9 @@ export function parseAggregate(v: unknown): TileAggregate | null {
   }
   return { n: o.n, tiles }
 }
+
+/** review-fixes-43c: the layout goes to the server only with the community's opt-in AND while "Only through people I trust (no servers)" is off. */
+export const layoutShareAllowed = (s: { trustedOnly?: boolean }, optedIn: boolean): boolean => optedIn && serversAllowed(s)
 
 /** Sends my tile set; true when the server took it. A failure is silent (nothing leaves the phone beyond this one message). */
 export async function sendTileSet(f: FetchLike, communityId: string, slot: string, tiles: readonly string[]): Promise<boolean> {

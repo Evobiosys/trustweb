@@ -22,6 +22,9 @@ export function webTabLabel(s: ViewsState, names: Record<string, string>, contac
 /** Wave 43c: pinning these views changes what the Web screen shows right now (they are remembered, WEB_VIEW_KEY); the others open as pages on the next tap. */
 export const shownAtOnce = (view: string): boolean => view === 'rings' || view === 'network' || view === 'map'
 
+/** review-fixes-43c: the Web view to remember after a new default (eye-menu pin AND the Settings select), or null when it opens as a page on the next tap. */
+export const webViewAfterDefault = (view: string): string | null => (shownAtOnce(view) ? view : null)
+
 /** The next `uiViews`: pinning the rings drops the pin. */
 export function setWebDefault(views: UiViews | undefined, id: string): UiViews | undefined {
   if (id === 'rings') return undefined
