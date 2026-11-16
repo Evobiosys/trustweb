@@ -4867,4 +4867,10 @@ export const S = {
     title: 'Black and white mode',
     hint: 'Switched-off options get a line through them, and pictures turn grey, for greyscale screens.',
   },
+  /* wave44 steer-panel-fold */
+  w44fold: {
+    fixStarting: 'pi session starting now...',
+    fixToast: 'pi session starting now',
+    fixStatus: (key: string, text: string, at: string) => `pi fix ${key}: ${text}${at ? ` (${at})` : ''}`,
+  },
 } as const
