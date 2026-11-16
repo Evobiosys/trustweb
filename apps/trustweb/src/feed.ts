@@ -87,6 +87,12 @@ export interface Post {
   unsent?: boolean
   /** Wave 43: the event tag (`event_<slug>`) of a post made on, or in the group of, an event. */
   tag?: string
+  /** Wave 44: "@user@host" of a fediverse author, when the reader knows it (feed_row.ts handleOf falls back to the context). */
+  handle?: string
+  /** Wave 44: who boosted it, when the post is a reblog. */
+  boostedBy?: string
+  /** Wave 44 feed-embed: the domain of the link an embedded post came from. */
+  linkHost?: string
 }
 
 /** At most this many posts. */

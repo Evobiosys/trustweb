@@ -5,6 +5,7 @@ import type { TwEvent } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
 import { isPast } from '../../events'
+import { bottomLine } from './co_lines'
 import { desiresDoc, ensureMine, type EventKind } from './co_desires'
 import { newDoc, type CoDoc, type CoPerson } from './co_doc'
 import { openCoNote, type CoCtx } from './co_editor'
@@ -111,8 +112,10 @@ export const coNotesScreen: ExtModule['screen'] = (h: ExtHooks) => {
     const others = (ev.people ?? []).flatMap((pid) => { const did = h.didOf(pid); const p = st().people.find((x) => x.id === pid); return did && p ? [{ did, name: p.name }] : [] })
     const doc = docs().find((d) => d.id === `${kind}-${ev.id}`.slice(0, 40)) ?? desiresDoc({ kind, ev, me: me(), others, at: Date.now() })
     const mine = ensureMine(doc, me(), Date.now())
-    if (mine.doc !== doc || !docs().includes(doc)) put(mine.doc, mine.doc === doc)
-    openCoNote(ctx, mine.doc.id)
+    // Hopes and wishes: the caret already sits in a new empty line at the bottom of my block.
+    const line = bottomLine(mine.doc, me(), Date.now())
+    if (line.doc !== doc || !docs().includes(doc)) put(line.doc, line.doc === doc)
+    openCoNote(ctx, line.doc.id, line.id)
   }
 
   const eventSection = (ev: TwEvent): Node[] => {

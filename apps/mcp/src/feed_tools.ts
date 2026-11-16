@@ -4,11 +4,13 @@
  * reply), star, list. The record has no network: an event post stays on this phone until the app, which holds the relay, sends it (feed_view.ts).
  */
 import { addSocialPost, editSocialPost, feedList, toggleStar } from '../../trustweb/src/feed_social.ts'
+import { addEmbed, fetchEmbed, parsePostLink } from '../../trustweb/src/feed_embed.ts'
+import type { FetchFn } from '../../trustweb/src/fediverse.ts'
 import type { AppState } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
-export interface FeedToolsEnv { load: () => Obj; commit: (change: (r: Obj) => void) => boolean; now: () => Date }
+export interface FeedToolsEnv { load: () => Obj; commit: (change: (r: Obj) => void) => boolean; now: () => Date; embedFetch?: FetchFn }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const schema = (properties: Obj, required: string[] = []): Obj => ({ type: 'object', properties, required, additionalProperties: false })
@@ -39,6 +41,18 @@ export function feedTools(e: FeedToolsEnv): { read: Tool[]; write: Tool[] } {
           out = { ...addSocialPost(s, str(a.text), e.now().getTime(), { eventId, replyTo, replyText: answered?.text })! }
         })
         return out
+      },
+    },
+    {
+      name: 'feed_embed_link', description: 'Embed one post in the Feed from its link (Mastodon, Bluesky, PeerTube, Vimeo: author, text, thumbnail; other links, X and LinkedIn: a link card with the domain). One GET to the post\'s own host, only now. Returns the embed and whether it was new.',
+      inputSchema: schema({ url: S('https link of one post') }, ['url']),
+      run: async (a) => {
+        const link = parsePostLink(str(a.url))
+        if (!link) throw new Error('url must be one public https link')
+        const embed = await fetchEmbed(link, e.embedFetch ?? (globalThis.fetch as unknown as FetchFn))
+        let added = false
+        e.commit((r) => { added = addEmbed(r as unknown as AppState, embed) })
+        return { ...embed, added }
       },
     },
     {

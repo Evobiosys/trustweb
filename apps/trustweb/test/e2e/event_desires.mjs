@@ -58,14 +58,15 @@ try {
     await tap('[data-event-save]'); await page.waitForTimeout(300)
 
     await tap('[data-co-desires]'); await page.waitForTimeout(500)
-    check(`${name}: Desires opens as a note titled for the event`, (await page.locator('[data-co-title]').inputValue()) === "Desires: New Year's retreat")
+    check(`${name}: Hopes and wishes opens as a note titled for the event`, (await page.locator('[data-co-title]').inputValue()) === "Hopes and wishes: New Year's retreat")
     const heads = await page.locator('.co-head').allInnerTexts()
     check(`${name}: one block per person (me and Ben), my chip first-created`, heads.length === 2 && heads.includes('@Anna') && heads.includes('@Ben'))
-    check(`${name}: Ben's line is read-only (no input, no share button)`, (await page.locator('[data-co-text]:has-text("long hikes")').getAttribute('tabindex')) === null && (await page.locator('[data-co-share-plain="event"]').count()) === 1 && (await page.locator('[data-co-share]').count()) === 0)
+    check(`${name}: Ben's line is read-only (no input, no share button)`, (await page.locator('[data-co-text]:has-text("long hikes")').getAttribute('tabindex')) === null && (await page.locator('[data-co-share-plain="event"]').count()) === 1 && (await page.locator('[data-co-share]').count()) === 1)  // wave 44: the one chip is my own empty first line
     await page.locator('[data-co-text]:has-text("long hikes")').click(); await page.waitForTimeout(150)
-    check(`${name}: tapping Ben's line opens no editor`, (await page.locator('[data-co-input]').count()) === 0)
+    check(`${name}: tapping Ben's line opens no editor of his (only my own line input)`, (await page.locator('[data-co-input]').count()) <= 1)
 
-    await tap('[data-co-add-wish]'); await page.waitForTimeout(200)
+    // wave 44: the caret already sat in a new empty line; the tap on Ben's line moved it away, so go back to my last line
+    await page.locator('[data-co-block]:has([data-co-share]) [data-co-input], [data-co-block]:has([data-co-share]) [data-co-text]').last().click(); await page.waitForTimeout(200)
     await page.keyboard.type('sauna every day'); await page.keyboard.press('Enter')
     await page.keyboard.type('quiet mornings'); await page.keyboard.press('Enter')
     await page.keyboard.type('a private thing'); await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab'); await page.locator('[data-co-title]').click(); await page.waitForTimeout(300)
