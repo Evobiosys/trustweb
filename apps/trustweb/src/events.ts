@@ -85,12 +85,12 @@ export function eventMatches(ev: Pick<TwEvent, 'name' | 'tagName' | 'where'>, qu
 }
 
 /** The device-local settings an edit of the form must not drop. */
-export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal' | 'notify' | 'invitePolicy' | 'offers' | 'communityId' | 'myNickname' | 'mastodonInstance'> {
-  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal, notify, invitePolicy, offers, communityId, myNickname, mastodonInstance } = ev
+export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal' | 'notify' | 'invitePolicy' | 'offers' | 'communityId' | 'myNickname' | 'mastodonInstance' | 'linkMode'> {
+  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal, notify, invitePolicy, offers, communityId, myNickname, mastodonInstance, linkMode } = ev
   return {
     ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}), ...(nameReveal ? { nameReveal } : {}),
     ...(notify !== undefined ? { notify } : {}), ...(invitePolicy ? { invitePolicy } : {}), ...(offers ? { offers } : {}),
-    ...(communityId ? { communityId } : {}), ...(myNickname ? { myNickname } : {}), ...(mastodonInstance ? { mastodonInstance } : {}),
+    ...(communityId ? { communityId } : {}), ...(myNickname ? { myNickname } : {}), ...(mastodonInstance ? { mastodonInstance } : {}), ...(linkMode ? { linkMode } : {}),
   }
 }
 

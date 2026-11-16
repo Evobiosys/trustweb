@@ -395,6 +395,8 @@ export interface TwEvent {
   community?: string
   /** Wave 43 answers (epsilon): "Part of a community": the community (colour tag id) whose members this event's people join. Absent = an isolated event. Local only. */
   communityId?: string
+  /** Wave 43b (B5): what people see when they open this event's link: the full app (default, absent) or only the event variant. Travels in the link as mode=event. */
+  linkMode?: 'event'
   /** Wave 43 answers (iota): my own nickname at this event, used by the Nickname reveal. Local only. */
   myNickname?: string
   /** Wave 43 answers (zeta): a Mastodon instance (host) whose public hashtag timeline of this event's tag the event Feed merges, read-only. Local only. */

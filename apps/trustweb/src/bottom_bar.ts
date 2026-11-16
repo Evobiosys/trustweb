@@ -37,7 +37,15 @@ export interface BarFlags {
   advanced?: boolean
   /** Wave 39: the view ids of the extension modules that are on (ext/tw_registry.ts views()); each joins the row as `mod:<id>` at the end unless taken out. */
   mods?: readonly string[]
+  /** Wave 43b (B5): the app was opened from an event link with mode=event: only EVENT_ONLY_BAR shows. */
+  eventOnly?: boolean
 }
+
+/** Wave 43b (B5): what the event-only variant of the app shows in the bar: Web, Ask your web, Chat; no Recorder. */
+export const EVENT_ONLY_BAR: readonly BarId[] = ['web', 'ask', 'chat']
+
+/** Wave 43b (B5): Ask your web floats over Web and Resources only while it is not a button in the bar (either-or). */
+export const askFloating = (ids: readonly string[]): boolean => !ids.includes('ask')
 
 /** Wave 43: the default order with the Feed in; Record stays in it and removable (wave 42). The old row lives on as the Note taker preset. */
 export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory', 'record']
@@ -95,7 +103,7 @@ function fullOrder(bar: UiBar | undefined, f: BarFlags): BarId[] {
 export function resolveBar(bar: UiBar | undefined, f: BarFlags, max?: number): { ids: BarId[]; primary: BarId | null; pair: BarId[] } {
   const ok = new Set<string>(offered(f, bar))
   const hidden = new Set<unknown>(Array.isArray(bar?.hidden) ? bar.hidden : [])
-  const ids = fullOrder(bar, f).filter((id) => ok.has(id) && !hidden.has(id))
+  const ids = f.eventOnly ? EVENT_ONLY_BAR.filter((id) => ok.has(id)) : fullOrder(bar, f).filter((id) => ok.has(id) && !hidden.has(id))
   // Wave 42 B04: the default raise follows the buttons that show (module buttons count, the phone's ⋮ overflow does not).
   const basis = max === undefined ? ids : ids.slice(0, max)
   const primary = bar?.primary === 'none' ? null : ids.includes(bar?.primary as BarId) ? (bar?.primary as BarId) : defaultPrimary(basis)

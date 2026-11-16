@@ -5,7 +5,7 @@
  * The record has no network: support_ask writes the ask marked `queued`, and the app shows a card; the person's tap on Send sends it (support_flush.ts, I9);
  * support_cancel marks `cancelled`, and the app tells the people it went to. Counts come back, never names of recipients.
  */
-import { NAV, addMember, canEditSettings, metaOf, parseCommunity, setKind, setSettings } from '../../trustweb/src/ext/community-mighty/community_data.ts'
+import { NAV, TILES, addMember, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { CommunityData, CommunityKind } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { Tool } from './protocol.ts'
 
@@ -73,6 +73,11 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
       run: (a) => { const r = e.load(); const id = need(r, a.community); const d = dataOf(r); const m = metaOf(d, id); return { id, kind: m.kind, organizers: m.organizers.length, nav: m.nav ?? NAV.filter((n) => !d.navOff?.includes(n)), ask: m.ask, audiences: m.audiences ?? [], canEdit: canEditSettings(d, id) } },
     },
     {
+      name: 'community_menu_get', description: 'The Community menu as the app shows it: its entries in order (home, spaces, events, docs, chat, ask, timeline, members), the Home tiles (managed = set by a manager, own = mine), whether the chat page shows only this community\'s people, whether its events show in my calendar, and whether I am a manager.',
+      inputSchema: schema({ community: S('community id') }, ['community']),
+      run: (a) => { const r = e.load(); const id = need(r, a.community); const d = dataOf(r); return { id, items: menuItems(d, id), tiles: homeTiles(d, id), chatOnly: chatOnlyCommunity(d), connectEvents: connectEvents(d, id), manager: isManager(d, id) } },
+    },
+    {
       name: 'support_inbox', description: 'Every open ask for support in one list: mine (with how many I asked and how many said they are here) and the ones sent to me.',
       inputSchema: schema({}),
       run: () => {
@@ -129,7 +134,7 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
     },
     {
       name: 'community_settings_set', description: 'Change a community\'s left-column sections (nav: home, spaces, events, members, docs, chat) and/or the Ask for support button (ask). Informal: its owner; managed: its organizers.',
-      inputSchema: schema({ community: S('community id'), nav: { type: 'array', items: { type: 'string' }, description: 'sections to show' }, ask: { type: 'boolean', description: 'show the Ask for support button' } }, ['community']),
+      inputSchema: schema({ community: S('community id'), nav: { type: 'array', items: { type: 'string' }, description: 'sections to show' }, ask: { type: 'boolean', description: 'show the Ask for support button' }, name: S('new community name'), connect_events: { type: 'boolean', description: 'show this community\'s events in my calendar in its colour' } }, ['community']),
       run: (a) => {
         let out: Obj = {}
         e.commit((r) => {
@@ -137,11 +142,44 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
           const d = dataOf(r)
           if (!canEditSettings(d, id)) throw new Error('only an organizer may change this community')
           const next = setSettings(d, id, { ...(Array.isArray(a.nav) ? { nav: a.nav as never } : {}), ...(typeof a.ask === 'boolean' ? { ask: a.ask } : {}) })
-          put(r, next)
-          const m = metaOf(next, id)
-          out = { id, ask: m.ask, ...(m.nav ? { nav: m.nav } : {}) }
+          let final = next
+          const name = str(a.name).trim().slice(0, 40)
+          if (name) final = withMeta(final, id, { name })
+          if (typeof a.connect_events === 'boolean') final = setConnectEvents(final, id, a.connect_events)
+          put(r, final)
+          const m = metaOf(final, id)
+          out = { id, ask: m.ask, ...(m.nav ? { nav: m.nav } : {}), ...(name ? { name } : {}), ...(typeof a.connect_events === 'boolean' ? { connectEvents: a.connect_events } : {}) }
         })
         return out
+      },
+    },
+    {
+      name: 'community_home_tiles_set', description: `Set the Home dashboard tiles of a community: tiles = my own (${TILES.join(', ')}), managed = the tiles a manager fixes for everyone (managers only). Give at least one.`,
+      inputSchema: schema({ community: S('community id'), tiles: { type: 'array', items: { type: 'string' }, description: 'my tiles' }, managed: { type: 'array', items: { type: 'string' }, description: 'tiles for everyone (managers)' } }, ['community']),
+      run: (a) => {
+        if (!Array.isArray(a.tiles) && !Array.isArray(a.managed)) throw new Error('give tiles and/or managed')
+        let out: Obj = {}
+        e.commit((r) => {
+          const id = need(r, a.community)
+          let d = dataOf(r)
+          if (Array.isArray(a.managed)) {
+            if (!isManager(d, id)) throw new Error('only a manager may set the tiles for everyone')
+            d = setManagedTiles(d, id, a.managed.map(str) as never)
+          }
+          if (Array.isArray(a.tiles)) d = setOwnTiles(d, id, a.tiles.map(str))
+          put(r, d)
+          out = { id, ...homeTiles(d, id) }
+        })
+        return out
+      },
+    },
+    {
+      name: 'community_chat_scope_set', description: 'The community chat page: only = true shows only the chats of people of the picked community (the default), false shows all chats.',
+      inputSchema: schema({ only: { type: 'boolean', description: 'only people of this community' } }, ['only']),
+      run: (a) => {
+        if (typeof a.only !== 'boolean') throw new Error('only must be true or false')
+        e.commit((r) => put(r, setChatOnly(dataOf(r), a.only as boolean)))
+        return { only: a.only }
       },
     },
     {

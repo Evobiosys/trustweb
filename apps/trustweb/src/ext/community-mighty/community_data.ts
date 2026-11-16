@@ -5,8 +5,12 @@
  * The consent to load Google Docs or Telegram is NOT here: a consent belongs to the device it was given on (community_view.ts).
  */
 export const MODULE_ID = 'community-mighty'
-export const NAV = ['home', 'spaces', 'events', 'members', 'docs', 'chat'] as const
+export const NAV = ['home', 'spaces', 'events', 'members', 'docs', 'chat', 'timeline'] as const
 export type NavId = (typeof NAV)[number]
+/** Wave 43b community-shell: the Home dashboard's tiles (the rules sit at the end of this file). */
+export const TILES = ['events', 'spaces', 'docs', 'members', 'resources', 'timeline'] as const
+export type TileId = (typeof TILES)[number]
+const tilesOf = (v: unknown): TileId[] => (Array.isArray(v) ? [...new Set(v.filter((t): t is TileId => (TILES as readonly unknown[]).includes(t)))] : [])
 
 export interface Resource { id: string; title: string; url: string; by: string; at: number }
 /** One member's own ordering and visibility of the shared resource list. `from` = whose view it was forked from. */
@@ -19,7 +23,11 @@ export interface ResourceView { owner: string; order: string[]; hidden: string[]
  * name: a community made by MCP before this device knew its tag (adoptMetaTags).
  */
 export type CommunityKind = 'managed' | 'informal'
-export interface CommunityMeta { kind: CommunityKind; organizers: string[]; nav?: NavId[]; ask?: boolean; audiences?: string[]; name?: string }
+export interface CommunityMeta {
+  kind: CommunityKind; organizers: string[]; nav?: NavId[]; ask?: boolean; audiences?: string[]; name?: string
+  /** Wave 43b: my own Home tiles here, the tiles a manager fixed for everyone, and whether this community's events show in my calendar in its colour. */
+  tiles?: TileId[]; managedTiles?: TileId[]; connectEvents?: true
+}
 export const REMEMBER_MAX = 5
 
 export interface CommunityData {
@@ -34,6 +42,9 @@ export interface CommunityData {
   telegramUrl?: string
   /** Wave 42 community-support: per community (colour tag id) kind, organizers and left-column settings. */
   meta?: Record<string, CommunityMeta>
+  /** Wave 43b: the Community chat page's "Only people of this community" (absent = on) and how often each Home tile was used (local counts only). */
+  chatOnly?: false
+  tileUse?: Record<string, number>
   /** Wave 40 review: docsUrl / telegramUrl were moved into the embeds record once; they are kept, never adopted again. */
   linksMoved?: true
 }
@@ -64,8 +75,11 @@ function parseMeta(v: unknown): Record<string, CommunityMeta> | undefined {
     const o = raw as Record<string, unknown>
     const nav = Array.isArray(o.nav) ? o.nav.filter((n): n is NavId => (NAV as readonly unknown[]).includes(n)) : []
     const audiences = strs(o.audiences).slice(0, REMEMBER_MAX)
+    const tiles = tilesOf(o.tiles)
+    const managedTiles = tilesOf(o.managedTiles)
     out[id] = {
       kind: o.kind === 'managed' ? 'managed' : 'informal', organizers: strs(o.organizers),
+      ...(Array.isArray(o.tiles) ? { tiles } : {}), ...(managedTiles.length ? { managedTiles } : {}), ...(o.connectEvents === true ? { connectEvents: true as const } : {}),
       ...(nav.length ? { nav } : {}), ...(o.ask === false ? { ask: false } : {}), ...(audiences.length ? { audiences } : {}), ...(isStr(o.name) && o.name ? { name: o.name } : {}),
     }
   }
@@ -87,6 +101,11 @@ export function parseCommunity(raw: unknown): CommunityData {
   if (Array.isArray(o.views)) d.views = o.views.map(parseView).filter((v): v is ResourceView => v !== undefined)
   const meta = parseMeta(o.meta)
   if (meta) d.meta = meta
+  if (o.chatOnly === false) d.chatOnly = false
+  if (o.tileUse && typeof o.tileUse === 'object' && !Array.isArray(o.tileUse)) {
+    const use = Object.fromEntries(Object.entries(o.tileUse).filter(([k, n]) => (TILES as readonly unknown[]).includes(k) && typeof n === 'number' && Number.isFinite(n) && n > 0))
+    if (Object.keys(use).length) d.tileUse = use as Record<string, number>
+  }
   if (isStr(o.docsUrl)) d.docsUrl = o.docsUrl
   if (isStr(o.telegramUrl)) d.telegramUrl = o.telegramUrl
   if (o.linksMoved === true) d.linksMoved = true
@@ -129,6 +148,7 @@ export function mergeCommunity(mineRaw: unknown, theirsRaw: unknown): CommunityD
       out.meta[id] = { ...both, organizers: union(x?.organizers ?? [], y?.organizers ?? []), ...(x?.audiences || y?.audiences ? { audiences: union(y?.audiences ?? [], x?.audiences ?? []).slice(0, REMEMBER_MAX) } : {}) }
     }
   }
+  if (a.tileUse || b.tileUse) out.tileUse = Object.fromEntries(TILES.filter((t) => a.tileUse?.[t] || b.tileUse?.[t]).map((t) => [t, Math.max(a.tileUse?.[t] ?? 0, b.tileUse?.[t] ?? 0)]))
   if (a.views || b.views) out.views = [...new Map([...(a.views ?? []), ...(b.views ?? [])].map((v) => [v.owner, v])).values()]
   return out
 }
@@ -148,7 +168,7 @@ export function metaOf(d: CommunityData, tag: string): CommunityMeta & { ask: bo
   return { kind: 'informal', organizers: [], ...m, ask: m?.ask !== false }
 }
 
-const withMeta = (d: CommunityData, tag: string, patch: Partial<CommunityMeta>): CommunityData => ({ ...d, meta: { ...d.meta, [tag]: { ...metaOf(d, tag), ...patch } } })
+export const withMeta = (d: CommunityData, tag: string, patch: Partial<CommunityMeta>): CommunityData => ({ ...d, meta: { ...d.meta, [tag]: { ...metaOf(d, tag), ...patch } } })
 
 /** Informal: its owner (me) edits. Managed: only an organizer. */
 export function canEditSettings(d: CommunityData, tag: string): boolean {
@@ -217,3 +237,99 @@ export function addMember(people: { id: string; fields?: Record<string, unknown>
 
 /** The default audience of an ask made inside this community: its members (zone tag), plus any extra people. */
 export const communityAudience = (tag: string, include: readonly string[] = []): { zone: string; include: readonly string[] } => ({ zone: `tag:${tag}`, include })
+
+// ---- Wave 43b community-shell: menu, Home tiles, chat page scope, events colour (pure; no imports: the MCP server reads this file too) ----
+
+/** Jakob (B35/B36): "other users set up their dashboard this way, follow them?" needs usage data shared between people; built disabled, only the local counts run. */
+export const DASHBOARD_SOCIAL_DEFAULTS = false
+/** Jakob (B8): the WhatsApp bridge is not built (pc24 job 37 has the context); its Advanced row shows disabled. */
+export const WHATSAPP_BRIDGE_ENABLED = false
+
+export type MenuId = NavId | 'ask'
+/** B33: the menu below the community name. Ask for Support left the top; Timeline and Members (no longer on Home by default) follow. */
+export const MENU_ORDER: readonly MenuId[] = ['home', 'spaces', 'events', 'docs', 'chat', 'ask', 'timeline', 'members']
+
+/** The menu entries of a community in menu order: its left-column choice, plus Ask for Support unless switched off. */
+export function menuItems(d: CommunityData, tag: string | null): MenuId[] {
+  const shown = new Set<MenuId>(leftNav(d, tag))
+  if (tag && metaOf(d, tag).ask) shown.add('ask')
+  return MENU_ORDER.filter((i) => shown.has(i) && (i === 'ask' || (NAV as readonly string[]).includes(i)))
+}
+
+// ---- Home dashboard (B35/B36) ------------------------------------------------------------------------------------------------
+export const DEFAULT_TILES: readonly TileId[] = ['events', 'spaces', 'docs', 'members']
+const inOrder = (want: ReadonlySet<TileId>): TileId[] => TILES.filter((t) => want.has(t))
+
+/** A manager: this community is managed and I am one of its organizers. */
+export const isManager = (d: CommunityData, tag: string): boolean => { const m = metaOf(d, tag); return m.kind === 'managed' && m.organizers.includes('me') }
+
+/** managed = tiles a manager fixed (a bordered section above mine); own = my choice, without the managed ones. */
+export function homeTiles(d: CommunityData, tag: string): { managed: TileId[]; own: TileId[] } {
+  const m = d.meta?.[tag]
+  const managed = inOrder(new Set(m?.managedTiles ?? []))
+  return { managed, own: (m?.tiles ?? DEFAULT_TILES).filter((t) => !managed.includes(t)) }
+}
+
+/** Shows or hides one of my tiles in this community; a managed tile stays. */
+export function toggleTile(d: CommunityData, tag: string, tile: TileId): CommunityData {
+  const { managed, own } = homeTiles(d, tag)
+  if (managed.includes(tile)) return d
+  return withMeta(d, tag, { tiles: inOrder(new Set(own.includes(tile) ? own.filter((t) => t !== tile) : [...own, tile])) })
+}
+
+/** Sets my tiles here at once (the known ones, in tile order); a layout offered from another community, or an MCP call. */
+export const setOwnTiles = (d: CommunityData, tag: string, tiles: readonly string[]): CommunityData => withMeta(d, tag, { tiles: inOrder(new Set(TILES.filter((t) => tiles.includes(t)))) })
+
+/** Only a manager sets the managed tiles (an empty list clears them); anyone else changes nothing. */
+export function setManagedTiles(d: CommunityData, tag: string, tiles: readonly TileId[]): CommunityData {
+  if (!isManager(d, tag) || !canEditSettings(d, tag)) return d
+  return withMeta(d, tag, { managedTiles: inOrder(new Set(tiles)) })
+}
+
+/** While this community has no tile choice of its own, the layout of another community I use (the first one that has one); else null. */
+export function startLayout(d: CommunityData, tag: string): TileId[] | null {
+  if (d.meta?.[tag]?.tiles) return null
+  const other = Object.entries(d.meta ?? {}).find(([id, m]) => id !== tag && m.tiles)
+  return other ? homeTiles(d, other[0]).own : null
+}
+
+/** The local analytics hook: how often each tile was opened on this device. Nothing leaves the device (DASHBOARD_SOCIAL_DEFAULTS is off). */
+export function recordTileUse(d: CommunityData, tile: string): CommunityData {
+  if (!(TILES as readonly string[]).includes(tile)) return d
+  return { ...d, tileUse: { ...d.tileUse, [tile]: (d.tileUse?.[tile] ?? 0) + 1 } }
+}
+
+// ---- Chat page (B8) ----------------------------------------------------------------------------------------------------------
+export const chatOnlyCommunity = (d: CommunityData): boolean => d.chatOnly !== false
+
+export function setChatOnly(d: CommunityData, only: boolean): CommunityData {
+  const { chatOnly: _c, ...rest } = d
+  return only ? rest : { ...rest, chatOnly: false }
+}
+
+/** The regular chats on the Community chat page: only people of the picked community (default), or all of them. */
+export function communityChatRows<T extends { personId: string }>(rows: readonly T[], people: readonly { id: string; tags?: readonly string[] }[], tag: string | null, only: boolean): T[] {
+  if (!only || !tag) return [...rows]
+  const inCommunity = new Set(people.filter((p) => p.tags?.includes(tag)).map((p) => p.id))
+  return rows.filter((r) => inCommunity.has(r.personId))
+}
+
+/** The communities the chat page's switcher offers. */
+export const chatCommunities = (d: CommunityData, tags: readonly TagLike[]): { id: string; name: string }[] => listCommunities(d, tags, []).map((r) => ({ id: r.id, name: r.name }))
+
+// ---- Events in my calendar (B33) ---------------------------------------------------------------------------------------------
+export const connectEvents = (d: CommunityData, tag: string): boolean => d.meta?.[tag]?.connectEvents === true
+export const setConnectEvents = (d: CommunityData, tag: string, on: boolean): CommunityData => withMeta(d, tag, { connectEvents: on ? true : undefined })
+
+/** The colour a community's event wears in my personal calendar: its community colour, when that community is connected; else null. */
+export function communityEventColour(d: CommunityData, tags: readonly { id: string; colour: string }[], ev: { communityId?: string }): string | null {
+  return ev.communityId && connectEvents(d, ev.communityId) ? tags.find((t) => t.id === ev.communityId)?.colour ?? null : null
+}
+
+// ---- Community name (B33) ----------------------------------------------------------------------------------------------------
+/** Long press on the community name: the new name goes on the tag label (and the settings name an MCP-made community carries). Null for an empty name or when I may not edit. */
+export function renameCommunity<T extends { id: string; label?: string }>(d: CommunityData, tags: readonly T[], id: string, name: string): { data: CommunityData; tags: T[] } | null {
+  const n = name.trim().slice(0, 40)
+  if (!n || !canEditSettings(d, id)) return null
+  return { data: d.meta?.[id]?.name !== undefined ? withMeta(d, id, { name: n }) : d, tags: tags.map((t) => (t.id === id ? { ...t, label: n } : t)) }
+}

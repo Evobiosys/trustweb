@@ -10,17 +10,23 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { addGroupPost } from '../../feed_sources'
 import type { AppState } from '../../model'
-import { loadColourTags, saveColourTags } from '../../colour_tags'
+import { hasColourTag, loadColourTags, saveColourTags } from '../../colour_tags'
+import { contextPress } from '../../context_press'
+import { ICONS } from '../../icons'
 import type { TwCtx } from '../tw_registry'
 import {
   MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
   joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
   adoptMetaTags, canEditSettings, createCommunity, leftNav, listCommunities, metaOf, setKind, setSettings, type CommunityKind,
 } from './community_model'
-import { legacyLinksPatch } from './community_data'
+import { legacyLinksPatch, TILES, type TileId } from './community_data'
+import {
+  DASHBOARD_SOCIAL_DEFAULTS, WHATSAPP_BRIDGE_ENABLED, chatCommunities, chatOnlyCommunity, communityChatRows, connectEvents, homeTiles, isManager, menuItems, recordTileUse,
+  renameCommunity, setChatOnly, setConnectEvents, setManagedTiles, setOwnTiles, startLayout, toggleTile,
+} from './community_data'
 import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
-import { chatKey as embedChatKey, chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
+import { chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
 import css from './community.css?inline'
 
 export const readData = (s: AppState): CommunityData => parseCommunity(s.extData?.[MODULE_ID])
@@ -46,9 +52,10 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   const box = el('div', { class: 'community-host', 'data-community': '' })
   hostEl.append(box)
   const root = box.attachShadow({ mode: 'open' })
-  const ui: { nav: NavId; space: string | null; drawer: boolean; chat: boolean; hiddenOpen: boolean; note: string; chatNote: string; switcher: boolean; settings: boolean } = { nav: 'home', space: null, drawer: false, chat: false, hiddenOpen: false, note: '', chatNote: '', switcher: false, settings: false }
+  const ui: { nav: NavId; space: string | null; drawer: boolean; hiddenOpen: boolean; note: string; chatNote: string; switcher: boolean; settings: boolean; addEvent: boolean; rename: boolean; tilesOpen: boolean } = { nav: 'home', space: null, drawer: false, hiddenOpen: false, note: '', chatNote: '', switcher: false, settings: false, addEvent: false, rename: false, tilesOpen: false }
+  const w43 = ctx.strings.w43shell
 
-  try { if (localStorage.getItem(OPEN_CHAT_KEY)) { localStorage.removeItem(OPEN_CHAT_KEY); ui.chat = true } } catch { /* storage blocked: the pane stays closed */ }
+  try { if (localStorage.getItem(OPEN_CHAT_KEY)) { localStorage.removeItem(OPEN_CHAT_KEY); ui.nav = 'chat' } } catch { /* storage blocked: the pane stays closed */ }
   const st = (): AppState => ctx.store()
   const me = (): string => st().me.displayName || t.you
   const data = (): CommunityData => readData(st())
@@ -61,10 +68,12 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     ui.drawer = false
     ui.settings = false
     ui.switcher = false
+    ui.rename = false
+    ui.addEvent = false
     ui.note = ''
     ui.chatNote = ''
-    if (n === 'chat') ui.chat = !ui.chat
-    else { ui.nav = n; ui.space = null }
+    ui.nav = n
+    ui.space = null
     draw()
   }
 
@@ -99,9 +108,55 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     ])
   }
 
-  function home(): Kids {
+  /** Wave 43b (B35): the timeline left Home; it is its own menu item now. */
+  function timeline(): Kids {
     const posts = buildPosts(st(), loadColourTags())
     return [composer(), ...(posts.length ? posts.map(postCard) : [el('p', { class: 'empty' }, [t.homeEmpty])])]
+  }
+
+  // ---- Home: the dashboard of tiles (wave 43b, B35/B36) ----------------------------------------------------------------
+  const TILE_GO: Record<TileId, NavId> = { events: 'events', spaces: 'spaces', docs: 'docs', members: 'members', resources: 'docs', timeline: 'timeline' }
+  function tileCount(tile: TileId, tag: string | null): number {
+    const s = st()
+    const tags = loadColourTags()
+    if (tile === 'events') return buildEvents(s.events, Date.now(), s.people).filter((c) => !c.past).length
+    if (tile === 'spaces') return buildSpaces(s, tags).length
+    if (tile === 'members') return buildMembers(s.people, tag).length
+    if (tile === 'timeline') return buildPosts(s, tags).length
+    return (data().resources ?? []).length
+  }
+  function tileCard(tile: TileId, tag: string | null, managed: boolean): HTMLElement {
+    return el('button', {
+      class: 'card tile' + (managed ? ' managed' : ''), type: 'button', 'data-community-tile': tile,
+      onclick: () => { writeData(ctx, recordTileUse(data(), tile)); go(TILE_GO[tile]) },
+    }, [el('b', {}, [w43.tileNames[tile]]), el('span', { class: 'meta' }, [w43.tileCount(tile, tileCount(tile, tag))])])
+  }
+  /** One on/off row: the checkbox keeps its width, the label takes the rest of the line (B34: it must never wrap per letter). */
+  const pick = (label: string, attrs: Record<string, string>, on: boolean, onchange: (v: boolean) => void, off = false): HTMLElement =>
+    el('label', { class: 'pick' + (on ? '' : ' tw-off') }, [el('input', { type: 'checkbox', ...SWITCH(on), ...attrs, ...(on ? { checked: '' } : {}), ...(off ? { disabled: '' } : {}), onchange: (e: Event) => onchange((e.target as HTMLInputElement).checked) }), el('span', {}, [label])])
+
+  function home(): Kids {
+    const tag = tagNow()
+    const d = data()
+    const { managed, own } = homeTiles(d, tag ?? '')
+    const from = tag ? startLayout(d, tag) : null
+    const fromId = tag ? Object.entries(d.meta ?? {}).find(([id, m]) => id !== tag && m.tiles)?.[0] : undefined
+    const fromName = listCommunities(d, loadColourTags(), st().people).find((r) => r.id === fromId)?.name ?? fromId ?? ''
+    const choose = tag ? el('details', { class: 'tiles-edit', 'data-community-tiles-edit': '', ...(ui.tilesOpen ? { open: '' } : {}), ontoggle: (e: Event) => { ui.tilesOpen = (e.target as HTMLDetailsElement).open } }, [
+      el('summary', {}, [w43.tilesChoose]),
+      ...TILES.map((x) => pick(w43.tileNames[x], { 'data-community-tile-toggle': x }, managed.includes(x) || own.includes(x), () => save(toggleTile(data(), tag, x)), managed.includes(x))),
+      managed.length ? el('p', { class: 'meta' }, [w43.tilesManagedOnly]) : null,
+      isManager(d, tag) ? el('p', { class: 'chips-lbl' }, [w43.tilesManagedChoose]) : null,
+      ...(isManager(d, tag) ? TILES.map((x) => pick(w43.tileNames[x], { 'data-community-managed-tile': x }, managed.includes(x), (on) => save(setManagedTiles(data(), tag, on ? [...managed, x] : managed.filter((y) => y !== x))))) : []),
+    ]) : null
+    return [
+      from && fromId ? el('div', { class: 'card', 'data-community-start-layout': '' }, [el('p', { class: 'meta' }, [w43.startFrom(fromName)]), btn(w43.startUse, () => save(setOwnTiles(data(), tag!, from)), { 'data-community-start-use': '' }, 'lnk strong')]) : null,
+      // Wave 43b (B36): "other users set up their dashboard this way, follow them?" needs usage shared between people: built, switched off.
+      DASHBOARD_SOCIAL_DEFAULTS ? el('div', { class: 'card', 'data-community-social': '' }, [el('p', { class: 'meta' }, [w43.socialPrompt]), el('div', { class: 'row wrap' }, [el('button', { class: 'lnk', type: 'button', disabled: '' }, [w43.socialYes]), el('button', { class: 'lnk', type: 'button', disabled: '' }, [w43.socialNo])])]) : null,
+      managed.length ? el('section', { class: 'tiles-managed', 'data-community-tiles-managed': '' }, [el('h4', { class: 'eyebrow' }, [w43.homeManaged]), el('div', { class: 'grid' }, managed.map((x) => tileCard(x, tag, true)))]) : null,
+      own.length ? el('div', { class: 'grid', 'data-community-tiles': '' }, own.map((x) => tileCard(x, tag, false))) : el('p', { class: 'empty' }, [w43.homeNoTiles]),
+      choose,
+    ]
   }
 
   // ---- Spaces --------------------------------------------------------------
@@ -230,29 +285,36 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     if (next) writeData(ctx, next)
   }
 
-  // ---- Chat (right pane on wide views, bottom sheet on phones) --------------
-  /** What the chat pane shows; the pane is rebuilt only when this changes, so a loaded Telegram frame is not reloaded by other taps. */
-  function chatKey(): string {
-    return ui.chat ? embedChatKey(embedEnv('chat')) + ui.chatNote : ''
-  }
-
-  /** Wave 40: the app's regular chats under the group chat; a tap opens that chat in the app. Refilled on every draw, so the pane (and its frame) stays. */
-  let chatsBox: HTMLElement | null = null
-  function fillChats(): void {
-    const rows = ctx.chats?.() ?? []
-    chatsBox?.replaceChildren(
-      el('h4', {}, [t.chatsTitle]),
-      ...(rows.length
-        ? rows.map((r) => el('button', { class: 'lnk chat-row', type: 'button', 'data-community-chat-row': r.id, onclick: () => ctx.bus.emit('open-chat', r.id) }, [r.title + (r.unread > 0 ? ` (${r.unread})` : ''), el('span', { class: 'meta' }, [' ' + r.last])]))
-        : [el('p', { class: 'meta' }, [t.chatsNone])]),
-    )
-  }
-
-  function chatPane(): HTMLElement {
-    chatsBox = el('div', { class: 'chats', 'data-community-chats': '' })
-    const head = el('div', { class: 'row' }, [el('h3', {}, [t.chatTitle]), btn('×', () => { ui.chat = false; draw() }, { 'aria-label': t.chatClose, 'data-community-chat-close': '' })])
-    const body = embedChatPane(embedEnv('chat'))
-    return el('aside', { class: 'chat', 'data-community-chat': '' }, [head, body, ...(ui.chatNote ? [el('p', { class: 'note' }, [ui.chatNote])] : []), chatsBox])
+  // ---- Chat: a page inside the community (wave 43b, B8), no overlay -----------------------------------------------------
+  function chatPage(): Kids {
+    const d = data()
+    const tag = tagNow()
+    const only = chatOnlyCommunity(d)
+    const people = st().people.map((p) => ({ id: p.id, tags: tag && hasColourTag(p, tag) ? [tag] : [] }))
+    const rows = communityChatRows((ctx.chats?.() ?? []).map((r) => ({ ...r, personId: r.id })), people, tag, only)
+    const communities = chatCommunities(d, loadColourTags())
+    const which = el('select', { 'aria-label': w43.chatPick, 'data-community-chat-pick': '', onchange: (e: Event) => save({ ...data(), tag: (e.target as HTMLSelectElement).value }) },
+      communities.map((c) => el('option', { value: c.id, ...(c.id === tag ? { selected: '' } : {}) }, [c.name])))
+    return [
+      el('div', { class: 'card chat-head', 'data-community-chat': '' }, [
+        pick(w43.chatOnly, { 'data-community-chat-only': '' }, only, (on) => save(setChatOnly(data(), on))),
+        communities.length ? el('label', { class: 'meta' }, [w43.chatPick, ' ', which]) : null,
+      ]),
+      embedChatPane(embedEnv('chat')),
+      ui.chatNote ? el('p', { class: 'note' }, [ui.chatNote]) : null,
+      el('div', { class: 'chats', 'data-community-chats': '' }, [
+        el('h4', {}, [t.chatsTitle]),
+        ...(rows.length
+          ? rows.map((r) => el('button', { class: 'lnk chat-row', type: 'button', 'data-community-chat-row': r.id, onclick: () => ctx.bus.emit('open-chat', r.id) }, [r.title + (r.unread > 0 ? ` (${r.unread})` : ''), el('span', { class: 'meta' }, [' ' + r.last])]))
+          : [el('p', { class: 'meta' }, [t.chatsNone])]),
+      ]),
+      el('details', { class: 'chat-advanced', 'data-community-chat-advanced': '' }, [
+        el('summary', {}, [w43.chatAdvanced]),
+        // Wave 43b (B8): the WhatsApp bridge is not built (WHATSAPP_BRIDGE_ENABLED); the row stays, disabled.
+        pick(w43.chatBridge, { 'data-community-chat-bridge': '' }, false, () => undefined, !WHATSAPP_BRIDGE_ENABLED),
+        WHATSAPP_BRIDGE_ENABLED ? null : el('p', { class: 'meta' }, [w43.chatBridgeOff]),
+      ]),
+    ]
   }
 
   // ---- Wave 42: the community switcher and the per-community settings -----------------------------------------------------
@@ -294,18 +356,18 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
         el('option', { value: 'managed', ...(m.kind === 'managed' ? { selected: '' } : {}) }, [w.kindManaged]),
       ])]),
       el('p', { class: 'meta' }, [m.kind === 'managed' ? w.kindHintManaged : w.kindHintInformal]),
-      el('label', { class: 'meta' }, [el('input', { type: 'checkbox', ...SWITCH(m.ask === true), 'data-community-ask-toggle': '', ...(m.ask ? { checked: '' } : {}), ...dis, onchange: (e: Event) => save(setSettings(data(), tag, { ask: (e.target as HTMLInputElement).checked })) }), ' ', w.askToggle]),
+      pick(w.askToggle, { 'data-community-ask-toggle': '' }, m.ask === true, (on) => save(setSettings(data(), tag, { ask: on })), !can),
       el('p', { class: 'chips-lbl' }, [w.leftColumn]),
-      ...NAV.map((n) => el('label', { class: 'meta' }, [el('input', { type: 'checkbox', ...SWITCH(shown.includes(n)), 'data-community-nav-toggle': n, ...(shown.includes(n) ? { checked: '' } : {}), ...dis, onchange: () => {
+      ...NAV.map((n) => pick(t.nav[n], { 'data-community-nav-toggle': n }, shown.includes(n), () => {
         const now = leftNav(data(), tag)
         save(setSettings(data(), tag, { nav: now.includes(n) ? now.filter((x) => x !== n) : NAV.filter((x) => x === n || now.includes(x)) }))
-      } }), ' ', t.nav[n]])),
+      }, !can)),
       btn(w.save, () => { ui.settings = false; draw() }, { 'data-community-settings-done': '' }, 'lnk strong'),
     ])
   }
 
   // ---- Shell ---------------------------------------------------------------
-  // Kept elements: only the bar, the menu and the section are rebuilt on each draw; the chat pane only when chatKey() changes.
+  // Kept elements: only the bar, the menu and the section are rebuilt on each draw.
   const style = el('style', {}, [css])
   const cm = el('div', { class: 'cm' })
   const bar = el('div', { class: 'bar' })
@@ -313,52 +375,73 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   let navEl: HTMLElement = el('nav', { class: 'nav' })
   let mainEl: HTMLElement = el('main', { class: 'main' })
   let veil: HTMLElement | null = null
-  let chatEl: HTMLElement | null = null
-  let shownChat = ''
   shell.append(navEl, mainEl)
   cm.append(bar, shell)
   root.append(style, cm)
 
+  /** B33: the very top of the menu is the community's name as a dropdown: press = switch community, long press or right click = edit the name. */
+  function nameDropdown(tag: string): HTMLElement {
+    const w = ctx.strings.w42
+    const name = listCommunities(data(), loadColourTags(), st().people).find((r) => r.id === tag)?.name ?? t.title
+    if (ui.rename) {
+      const input = el('input', { type: 'text', maxlength: '40', value: name, 'aria-label': w43.editName, 'data-community-rename': '' }) as HTMLInputElement
+      const done = (): void => {
+        const out = renameCommunity(data(), loadColourTags(), tag, input.value)
+        ui.rename = false
+        if (!out) { ui.note = canEditSettings(data(), tag) ? '' : w.settingsOnlyOrganizers; draw(); return }
+        saveColourTags(out.tags as never)
+        save(out.data)
+      }
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') done() })
+      return el('div', { class: 'cm-name row' }, [input, btn(w43.editNameSave, done, { 'data-community-rename-save': '' }, 'lnk strong')])
+    }
+    const b = btn(name, () => { ui.switcher = !ui.switcher; draw() }, { 'aria-haspopup': 'menu', 'aria-expanded': String(ui.switcher), 'aria-label': w.switchAria, 'data-community-switch': '' }, 'navlnk switch')
+    contextPress(b, () => { ui.rename = true; ui.switcher = false; draw() })
+    return el('div', { class: 'cm-name' }, [b, ...(ui.switcher ? [switcher()] : [])])
+  }
+
+  /** B33: "Add event" with the informal or hosted choice, and "connect events with this community" (its events wear its colour in my calendar). */
+  function eventBlock(tag: string): Node[] {
+    const start = (hosted: boolean): void => { ui.addEvent = false; ui.drawer = false; ctx.bus.emit('new-event', { tag, hosted }); draw() }
+    return [
+      btn(w43.addEvent, () => { ui.addEvent = !ui.addEvent; draw() }, { 'aria-expanded': String(ui.addEvent), 'data-community-add-event': '' }, 'navlnk strong'),
+      ...(ui.addEvent ? [el('div', { class: 'row wrap add-event-kind' }, [btn(w43.addEventInformal, () => start(false), { 'data-community-add-event-kind': 'informal' }), btn(w43.addEventHosted, () => start(true), { 'data-community-add-event-kind': 'hosted' })])] : []),
+      pick(w43.connectEvents, { 'data-community-connect-events': '' }, connectEvents(data(), tag), (on) => save(setConnectEvents(data(), tag, on))),
+    ]
+  }
+
   function draw(): void {
     const tag = tagNow()
     const items = leftNav(data(), tag)
-    if (!items.includes(ui.nav)) ui.nav = items.find((n) => n !== 'chat') ?? 'home'
-    if (!items.includes('chat')) ui.chat = false
-    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '') + (ui.chat ? ' chat-open' : '')
+    if (!items.includes(ui.nav)) ui.nav = items[0] ?? 'home'
+    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '')
     cm.dataset.nav = ui.nav
     bar.replaceChildren(
       btn('☰ ' + t.menu, () => { ui.drawer = !ui.drawer; draw() }, { 'aria-expanded': String(ui.drawer), 'data-community-menu': '' }, 'lnk menu'),
       el('h3', { class: 'section' }, [t.nav[ui.nav], ' ', el('sub', { class: 'alpha', 'data-community-alpha': '' }, [ctx.strings.alphaLabel])]),
-      // Wave 42: the word "Community" (the current community's name) with its caret opens the list of my communities.
-      btn((tag ? listCommunities(data(), loadColourTags(), st().people).find((r) => r.id === tag)?.name : null) ?? t.title, () => { ui.switcher = !ui.switcher; draw() }, { 'aria-haspopup': 'menu', 'aria-expanded': String(ui.switcher), 'aria-label': ctx.strings.w42.switchAria, 'data-community-switch': '' }, 'lnk switch'),
-      ...(ui.switcher ? [switcher()] : []),
     )
     veil?.remove()
     veil = ui.drawer ? el('div', { class: 'veil', 'data-community-veil': '', onclick: () => { ui.drawer = false; draw() } }) : null
     if (veil) cm.insertBefore(veil, shell)
     const nav = el('nav', { class: 'nav', 'aria-label': t.title }, [
-      // Wave 42: the default left column starts with the ask for support (asking this community), unless its settings switch it off.
-      tag && metaOf(data(), tag).ask ? btn(ctx.strings.w42.askButton, () => { ui.drawer = false; ctx.bus.emit('support-ask', { tag }); draw() }, { 'data-community-ask': '' }, 'navlnk strong') : null,
-      ...items.map((n) => btn(t.nav[n], () => go(n), {
-        'data-community-nav': n, ...((n === 'chat' ? ui.chat : n === ui.nav) ? { 'aria-current': 'page' } : {}),
-      }, 'navlnk')),
-      tag ? btn(ctx.strings.w42.settings, () => { ui.drawer = false; ui.settings = true; draw() }, { 'data-community-settings': '' }, 'navlnk') : null,
+      tag ? nameDropdown(tag) : null,
+      ...(tag ? eventBlock(tag) : []),
+      tag ? el('div', { class: 'nav-sep', 'aria-hidden': 'true' }) : null,
+      ...menuItems(data(), tag).map((n) => n === 'ask'
+        ? btn(ctx.strings.w42.askButton, () => { ui.drawer = false; ctx.bus.emit('support-ask', { tag }); draw() }, { 'data-community-ask': '' }, 'navlnk')
+        : btn(t.nav[n], () => go(n), { 'data-community-nav': n, ...(n === ui.nav ? { 'aria-current': 'page' } : {}) }, 'navlnk')),
+      // B33: at the bottom only the gear, no words.
+      tag ? el('button', { class: 'navlnk gear', type: 'button', 'aria-label': w43.settingsGear, title: w43.settingsGear, 'data-community-settings': '', onclick: () => { ui.drawer = false; ui.settings = true; draw() } }) : null,
     ])
+    const gear = nav.querySelector('.gear')
+    if (gear) gear.innerHTML = ICONS.settings
     navEl.replaceWith(nav)
     navEl = nav
-    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : home()
+    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : ui.nav === 'chat' ? chatPage() : ui.nav === 'timeline' ? timeline() : home()
     const main = el('main', { class: 'main' }, [...section, ui.note ? el('p', { class: 'note' }, [ui.note]) : null])
     mainEl.replaceWith(main)
     mainEl = main
-    const key = chatKey()
-    if (key !== shownChat) {
-      const next = ui.chat ? chatPane() : null
-      if (chatEl && next) chatEl.replaceWith(next); else if (chatEl) chatEl.remove(); else if (next) shell.append(next)
-      chatEl = next
-      shownChat = key
-    }
-    if (ui.chat) fillChats()
-    ctx.bus.emit('community-section', { nav: ui.nav, chat: ui.chat })
+    ctx.bus.emit('community-section', { nav: ui.nav, chat: ui.nav === 'chat' })
   }
 
   adoptLegacyLinks()

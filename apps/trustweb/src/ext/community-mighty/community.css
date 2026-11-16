@@ -94,7 +94,7 @@ select { width: auto; max-width: 100%; }
 .bar { position: relative; flex-wrap: wrap; }
 .switch { font-weight: 600; }
 .switch::after { content: ' \25BE'; text-decoration: none; display: inline-block; }
-.switcher { position: absolute; top: 100%; left: var(--s-4); z-index: 70; min-width: min(280px, calc(100% - 2 * var(--s-4))); max-width: calc(100% - 2 * var(--s-4)); background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-float); padding: var(--s-2); display: flex; flex-direction: column; gap: var(--s-1); }
+.switcher { position: static; width: 100%; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-float); padding: var(--s-2); display: flex; flex-direction: column; gap: var(--s-1); }
 .switch-row { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
 .switch-row.on { background: var(--trust-tint); }
 .switch-new { border-top: 1px solid var(--line); padding-top: var(--s-2); }
@@ -103,3 +103,32 @@ select { width: auto; max-width: 100%; }
 .members .member .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .add-tile { font-size: var(--fs-6, 2rem); font-weight: 300; color: var(--trust-strong); border-style: dashed; text-decoration: none; }
 .settings label { display: flex; align-items: center; gap: var(--s-2); }
+
+/* wave43b community-shell */
+/* B34: the generic input rule (width: 100%) made every checkbox as wide as its row and squeezed the label to one letter per line. */
+input[type="checkbox"] { width: auto; flex: none; margin: 0; padding: 0; }
+.pick { display: flex; align-items: center; gap: var(--s-2); min-width: 0; font-size: var(--fs-1); color: var(--ink-2); }
+.pick > span { flex: 1 1 auto; min-width: 0; overflow-wrap: normal; word-break: normal; }
+.settings .pick { font-size: var(--fs-2); }
+/* P2 greyscale: an OFF switch is struck through, never colour alone. */
+.tw-off > span { text-decoration: line-through; }
+.cm-name { display: flex; flex-direction: column; gap: var(--s-1); }
+.cm-name.row { flex-direction: row; }
+.cm-name .switch { font-size: var(--fs-3); }
+.nav-sep { border-top: 1px solid var(--line); margin: var(--s-2) 0; }
+.nav .pick { padding: var(--s-1) var(--s-3); }
+.add-event-kind { padding-left: var(--s-3); }
+.nav .gear { margin-top: auto; align-self: flex-start; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
+.gear svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tile { text-align: left; align-items: flex-start; cursor: pointer; }
+.tiles-managed { border: 2px solid var(--trust-strong); border-radius: var(--r-card); padding: var(--s-3); }
+.tiles-managed .eyebrow { margin-top: 0; }
+details > summary { cursor: pointer; color: var(--trust-strong); text-decoration: underline; list-style: none; padding: var(--s-2) 0; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::after { content: ' \25BE'; text-decoration: none; display: inline-block; }
+details[open] > summary::after { content: ' \25B4'; }
+.chat-head { gap: var(--s-3); }
+.chats { display: flex; flex-direction: column; gap: var(--s-1); }
+.chats h4 { margin: var(--s-2) 0 0; }
+.chat-row { text-align: left; text-decoration: underline; }
+.embed.chat-frame { height: 50vh; }
