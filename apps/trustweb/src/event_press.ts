@@ -67,7 +67,7 @@ export function instanceHost(input: string): string | undefined {
 }
 
 /** What the app and MCP change on an event on this device; a default value is not stored. Throws on a value outside the choices. */
-export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string }
+export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string; /** Wave 44 (43-D7): the host lets technical support take over. */ techTakeover?: boolean }
 
 export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
   if (p.invitePolicy !== undefined) {
@@ -89,6 +89,7 @@ export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
     if (host) ev.mastodonInstance = host; else delete ev.mastodonInstance
   }
   if (p.notify !== undefined) { if (p.notify) delete ev.notify; else ev.notify = false }
+  if (p.techTakeover !== undefined) { if (p.techTakeover) ev.techTakeover = true; else delete ev.techTakeover }
   if (p.offers) {
     const next = { ...offersOf(ev), ...Object.fromEntries(Object.entries(p.offers).filter(([k, v]) => k in EVENT_OFFERS_DEFAULT && typeof v === 'boolean')) }
     if (Object.values(next).some(Boolean)) ev.offers = next; else delete ev.offers

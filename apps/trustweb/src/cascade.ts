@@ -114,6 +114,8 @@ export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchSc
     events: undefined,
     tasks: undefined,
     invitations: undefined,
+    eventDrafts: undefined,   // wave 44: drafts and calendars stay on this device
+    calendars: undefined,
     // My own profile, links and conversations never ride along into an ask's matching.
     profile: undefined,
     myChannels: undefined,
