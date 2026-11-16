@@ -338,3 +338,26 @@ describe('undelivered fallback', () => {
     expect(stuck().root.find((n) => n.attrs['data-chat-stuck'])).toEqual([])
   })
 })
+
+describe('wave43c chat-notices: the Signal hint', () => {
+  it('shows only when the 500-character cap is near (400 or more typed)', async () => {
+    const { root } = harness()
+    const hint = root.byTag('p').find((n) => n.attrs['data-chat'] === 'long-hint')
+    const area = root.byTag('textarea')[0]
+    expect(hint.textContent).toBe('')
+    area.value = 'x'.repeat(399); await area.fire('input')
+    expect(hint.textContent).toBe('')
+    area.value = 'x'.repeat(400); await area.fire('input')
+    expect(hint.textContent).toBe('Signal')
+  })
+})
+
+describe('wave43c chat-notices: bubble widths', async () => {
+  const { CHAT_CSS } = await import('../../src/chat_view.ts')
+  it('72 % on desktop, 86 % on a phone; the composer stays at the bottom (safe area)', () => {
+    expect(CHAT_CSS).toMatch(/\.chat-msg\{[^}]*max-width:72%/)
+    expect(CHAT_CSS).toMatch(/@media \(max-width:480px\)\{[^}]*\.chat-msg\{max-width:86%/)
+    expect(CHAT_CSS).toMatch(/\.chat-composer\{[^}]*position:sticky[^}]*bottom:0/)
+    expect(CHAT_CSS).toContain('env(safe-area-inset-bottom')
+  })
+})

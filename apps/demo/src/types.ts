@@ -404,6 +404,17 @@ export interface AskAgainEnvelope {
 }
 // ----- END TrustWeb wave 6i -----
 
+/**
+ * TrustWeb wave 43c (sync-devices): "my other devices": sent, sealed with the pair key, by the device that made a connection, so the
+ * connection also accepts (and sends chat text to) my other linked devices (apps/trustweb/src/device_alias.ts). Only DIDs, at most DEVICES_MAX.
+ */
+export interface DevicesEnvelope {
+  v: 1
+  t: 'devices'
+  dids: string[]
+}
+export const DEVICES_MAX = 8
+
 // ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----
 /** The furthest any ask travels (also what "no limit" means). Each step adds one answer window (gate.ts RELAY_DEADLINE_MS). */
 export const HOP_CAP = 6

@@ -11,13 +11,13 @@
  * fields).
  */
 
-import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
-import { ANSWER_WINDOW_MS_MAX, FREE_TEXT_MAX_LEN, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
+import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
+import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, FREE_TEXT_MAX_LEN, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
 
-export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope
+export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope | DevicesEnvelope
 
 /** JSON-serialise an envelope for a QR code. */
 export function encodeForQr(env: Envelope): string {
@@ -223,6 +223,14 @@ function parseChat(o: Record<string, unknown>): ChatEnvelope | null {
   return { v: WIRE_VERSION, t: 'chat', from: o.from, text: o.text, ts: o.ts, ...(re ? { re } : {}), ...('pic' in o ? { pic: o.pic as string } : {}) }
 }
 
+/** TrustWeb wave 43c: 1..DEVICES_MAX did:peer:2 strings of sane size; anything else is null. */
+function parseDevices(o: Record<string, unknown>): DevicesEnvelope | null {
+  const d = o.dids
+  if (!Array.isArray(d) || d.length < 1 || d.length > DEVICES_MAX) return null
+  if (!d.every((x) => typeof x === 'string' && /^did:peer:2\.[A-Za-z0-9.:_-]{20,1500}$/.test(x))) return null
+  return { v: WIRE_VERSION, t: 'devices', dids: d as string[] }
+}
+
 function parsePing(o: Record<string, unknown>): PingEnvelope | null {
   if (!isNonEmptyString(o.id)) return null
   if (typeof o.back !== 'boolean') return null
@@ -270,6 +278,8 @@ export function decodeFromQr(s: string): Envelope | null {
       return parseConnectAck(o)
     case 'ask-again':
       return parseAskAgain()
+    case 'devices':
+      return parseDevices(o)
     default:
       return null
   }

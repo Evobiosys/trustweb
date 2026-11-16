@@ -1978,3 +1978,14 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* wave43b review-fixes-b */
 /* P06 (360 px): the audience and degrees pills of a Resources row wrap instead of running under the Shared switch (older than 43b, on a 43b screen). */
 .inv-actions{flex-wrap:wrap}
+
+/* wave43 chat-notices: the ONE notice layer (notice_layer.ts). Fixed in the phone frame, never inside the zoomed rings; stacked above the bottom bar (P06); never wider than the frame. */
+#notice-layer{position:absolute; left:0; right:0; bottom:calc(92px + env(safe-area-inset-bottom,0px)); z-index:62; display:flex; flex-direction:column; justify-content:flex-end; gap:8px; padding:0 12px; box-sizing:border-box; max-width:520px; max-height:calc(100% - 150px); margin-inline:auto; overflow-y:auto; overscroll-behavior:contain; pointer-events:none}
+#notice-layer[data-notice-empty]{display:none}
+#notice-layer>*{position:static; left:auto; right:auto; top:auto; bottom:auto; transform:none; margin:0; width:auto; max-width:100%; box-sizing:border-box; z-index:auto; flex:none; overflow-wrap:anywhere}
+#notice-layer>.card-stack,#notice-layer>.wants,#notice-layer>.update-banner{pointer-events:auto}
+#notice-layer>.toast:not(.on),#notice-layer>.msg-notice:not(.on),#notice-layer>[hidden],#notice-layer>[data-notice-cut]{display:none}
+#notice-layer>.wants{background:var(--surface-1,#fff); box-shadow:0 2px 10px rgba(0,0,0,.18)}
+@media (min-width:900px){
+  body:has(.sheet.desk-wide.on[data-kind=curator]) #notice-layer{position:fixed; z-index:100002; left:auto; right:24px; bottom:24px; width:min(420px, calc(100vw - 48px)); padding:0}
+}

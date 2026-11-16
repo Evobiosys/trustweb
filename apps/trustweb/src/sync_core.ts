@@ -28,7 +28,7 @@
  * it in, set once; the bundle's optional `from` carries it, v stays 2: parseBundle ignores unknown fields). Stored beside the record, never in it. CAVEAT: "newer" is a wall-clock comparison between two devices; a device with a
  * wrong clock can win edits it should lose. That is why the loser always stays readable in Review merge and a snapshot is taken before every merge.
  */
-import type { AppState, InventoryItem, Invitation, PastMeeting, Person, TwEvent, TwTask } from './model'
+import type { AppState, InventoryItem, Invitation, PastMeeting, Peer, Person, TwEvent, TwTask } from './model'
 import { CHANNELS } from './model'
 import { CHAT_MAX_THREADS, MessageState, byStamp, lastAt, sanitizeChatBook, trimThread } from './chat'
 import type { ChatBook } from './chat'
@@ -41,6 +41,7 @@ import type { ConnectRecord } from './connect_code'
 import { pinnedFrom } from './membranes_five'
 import { SCHEMA_VERSION } from './schema_version'
 import { alive } from './deleted_people'
+import { ALSO_DIDS_MAX } from './device_alias'
 
 /** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const SYNC_VERSION = 3
@@ -61,7 +62,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
-  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'birthdayNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
+  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'birthdayNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
   'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
@@ -75,6 +76,8 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'relations',
   // wave 37 co-notes-link: invites, guest shell, note chats and this device's secret belong to this phone only
   'coInvites', 'coGuest', 'coChats', 'coDevice',
+  // wave 43c sync-devices: the Auto sync switch and the status line are this device's; wantsToConnect travels now (peer ids match on both devices)
+  'syncAutoOff', 'syncStatus',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */
@@ -85,7 +88,7 @@ export function settingsOf(s: object): Record<string, unknown> {
   return Object.fromEntries(Object.entries(s).filter(([k, v]) => v !== undefined && !SYNC_EXCLUDED.has(k)))
 }
 
-export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'invitation' | 'channel' | 'sameAs' | 'chat' | 'name'
+export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'invitation' | 'channel' | 'sameAs' | 'chat' | 'name' | 'peer'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
 export type Stamps = Record<string, { h: string; at: number; by: string; from?: string }>
 
@@ -117,6 +120,8 @@ export interface SyncBundle {
   otherCodes?: ConnectRecord[]
   /** Wave 15: the name shown on the public link (me.displayName), so it stays the same on every device; peer ids differ per device by design. */
   displayName?: string
+  /** Wave 43c: my connections (syncPeer: without what only one device knows), so a person connected on one device can be messaged on the other. */
+  peers?: Peer[]
 }
 
 export interface Conflict {
@@ -145,6 +150,21 @@ export interface Counts { people: number; lines: number; resources: number; meet
 
 const SETTING_PREFIX = 'g:'
 const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:', task: 't:', invitation: 'v:' } as const
+/** Wave 43c: a connection (by DID) and a chat thread (by peer id) are stamped entities too, so a delta can carry just them. */
+const PEER_PREFIX = 'r:'
+const CHAT_PREFIX = 'h:'
+/** A connection's stamp key: its DID's key part (unique per identity), never the whole DID: a bundle refuses keys over 120 characters (strMap). */
+const peerKey = (did: string): string => PEER_PREFIX + (did.split('.')[1] ?? did).slice(0, 100)
+
+/** The connections that can travel: a record of an older build may hold one without a DID (it names nobody on the wire). */
+const travelling = (peers: Peer[] | undefined): Peer[] => (peers ?? []).filter((p) => typeof p?.did === 'string' && typeof p.id === 'string')
+
+/** A connection as it travels: what is true of the person, never this device's handshake bookkeeping (acks, ask-again, told, synced). */
+export function syncPeer(p: Peer): Peer {
+  const { heardAt: _h, ackTries: _t, ackSentAt: _s, askAgainDue: _d, askAgainSentAt: _a, synced: _y, toldDevices: _o, ...rest } = p
+  void _h; void _t; void _s; void _d; void _a; void _y; void _o
+  return rest
+}
 
 /** djb2 over the JSON text: change detection (a stored stamp), and the "identical on both sides" skip in stampsAfterMerge. The merge itself compares the JSON text, so a collision cannot keep an older version. */
 function hashOf(v: unknown): string {
@@ -176,12 +196,13 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
   return { ...rest, transcript: [] }
 }
 
-type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare'> & { me?: { displayName: string } }
+type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare'> & { me?: { displayName: string }; peers?: Peer[]; chats?: ChatBook }
 
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
     ...Object.entries(settings).map(([k, x]): [string, unknown] => [SETTING_PREFIX + k, x]),
-    ...alive(s.people).map((x): [string, unknown] => [KEY_PREFIX.person + x.id, withoutPersonImage(x)]),
+    // Wave 43c: a deleted person (30-day tombstone, deleted_people.ts) travels too, so a delete on one device deletes on the other.
+    ...s.people.map((x): [string, unknown] => [KEY_PREFIX.person + x.id, withoutPersonImage(x)]),
     ...s.inventory.map((x): [string, unknown] => [KEY_PREFIX.resource + x.id, withoutImage(x)]),
     ...(s.meetings ?? []).map((x): [string, unknown] => [KEY_PREFIX.meeting + x.id, x]),
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
@@ -190,10 +211,13 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
     ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
+    ...travelling(s.peers).map((x): [string, unknown] => [peerKey(x.did), syncPeer(x)]),
+    // a thread key over the bundle's key limit stays out of the stamps (it still travels whole with Sync now)
+    ...Object.entries(s.chats ?? {}).filter(([id]) => id.length <= 100).map(([id, t]): [string, unknown] => [CHAT_PREFIX + id, t]),
   ]
 }
 
-const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, invitations: b.invitations, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined })
+const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, invitations: b.invitations, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined, peers: b.peers, chats: b.chats })
 
 /** The stamps after looking at the record now: unchanged entities keep theirs, new or edited ones get `now` and this device's name. Gone ones drop out. */
 export function refreshStamps(s: AppState, prev: Stamps, now: number, device: string): Stamps {
@@ -210,7 +234,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
   return {
     v: SYNC_VERSION,
     schemaVersion: SCHEMA_VERSION,
-    people: alive(s.people).map(withoutPersonImage),
+    people: s.people.map(withoutPersonImage),
     inventory: s.inventory.map(withoutImage),
     meetings: s.meetings ?? [],
     at: Object.fromEntries(entries.map(([k, x]) => [k, x.at])),
@@ -225,13 +249,44 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     settings: settingsOf(s),
     ...codesForBundle(s, shareCode),
     ...(shareCode && s.me?.displayName ? { displayName: s.me.displayName } : {}),
+    peers: travelling(s.peers).map(syncPeer),
+  }
+}
+
+/**
+ * Wave 43c: the automatic sync's delta: only the entities whose stamp THIS device set after `since` (what arrived from another device keeps that
+ * device's name in `by`, so it is never echoed back). `since` 0 = the full bundle. Null when nothing changed. Codes travel with the full bundle only.
+ */
+export function deltaOf(s: AppState, stamps: Stamps, since: number, device: string): SyncBundle | null {
+  if (!since) return bundleOf(s, stamps)
+  const keys = new Set(Object.entries(stamps).filter(([, x]) => x.by === device && x.at > since).map(([k]) => k))
+  if (!keys.size) return null
+  const full = bundleOf(s, stamps, false)
+  const pick = <T>(prefix: string, list: T[], id: (x: T) => string): T[] => list.filter((x) => keys.has(prefix + id(x)))
+  const sub = <V>(m: Record<string, V> | undefined): Record<string, V> => Object.fromEntries(Object.entries(m ?? {}).filter(([k]) => keys.has(k)))
+  const channels = [...keys].some((k) => k.startsWith('c:') || k === 's:share')
+  return {
+    v: full.v, schemaVersion: full.schemaVersion,
+    people: pick(KEY_PREFIX.person, full.people, (x) => x.id),
+    inventory: pick(KEY_PREFIX.resource, full.inventory, (x) => x.id),
+    meetings: pick(KEY_PREFIX.meeting, full.meetings, (x) => x.id),
+    events: pick(KEY_PREFIX.event, full.events ?? [], (x) => x.id),
+    ...(full.tasks ? { tasks: pick(KEY_PREFIX.task, full.tasks, (x) => x.id) } : {}),
+    ...(full.invitations ? { invitations: pick(KEY_PREFIX.invitation, full.invitations, (x) => x.id) } : {}),
+    peers: (full.peers ?? []).filter((x) => keys.has(peerKey(x.did))),
+    chats: Object.fromEntries(Object.entries(full.chats ?? {}).filter(([id]) => keys.has(CHAT_PREFIX + id))),
+    settings: Object.fromEntries(Object.entries(full.settings ?? {}).filter(([k]) => keys.has(SETTING_PREFIX + k))),
+    channels: channels ? full.channels : { mine: {}, share: {} },
+    ...(full.sameAs ? { sameAs: full.sameAs } : {}),
+    ...(keys.has('n:me') && s.me?.displayName ? { displayName: s.me.displayName } : {}),
+    at: sub(full.at), by: sub(full.by), ...(full.from ? { from: sub(full.from) } : {}),
   }
 }
 
 export function countsOf(b: Pick<SyncBundle, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'chats'>): Counts {
   return {
-    people: b.people.length,
-    lines: b.people.reduce((n, p) => n + p.lines.length, 0),
+    people: alive(b.people).length,
+    lines: alive(b.people).reduce((n, p) => n + p.lines.length, 0),
     resources: b.inventory.length,
     meetings: b.meetings.length,
     events: b.events?.length ?? 0,
@@ -332,7 +387,20 @@ export function parseBundle(v: unknown): SyncBundle | null {
     if (others.length) out.otherCodes = others
   }
   if (typeof v.displayName === 'string' && v.displayName.trim() && v.displayName.length <= 60) out.displayName = v.displayName
+  if (Array.isArray(v.peers)) out.peers = v.peers.flatMap((p) => { const x = parsePeer(p); return x ? [x] : [] })
   return out
+}
+
+const PEER_DID = /^did:peer:2\.[A-Za-z0-9.:_-]{20,1500}$/
+/** Wave 43c: one travelling connection, or null (dropped alone): known fields only, DIDs well formed. */
+function parsePeer(v: unknown): Peer | null {
+  if (!isObj(v)) return null
+  const { id, displayName, did, ring, connectedAt, reachOut, alsoDids } = v
+  if (typeof id !== 'string' || !id || id.length > 120 || id === '__proto__') return null
+  if (typeof displayName !== 'string' || displayName.length > 120 || typeof did !== 'string' || !PEER_DID.test(did)) return null
+  if (typeof ring !== 'string' || ring.length > 20 || typeof connectedAt !== 'number' || !Number.isFinite(connectedAt)) return null
+  const also = Array.isArray(alsoDids) ? alsoDids.filter((d): d is string => typeof d === 'string' && PEER_DID.test(d) && d !== did).slice(0, ALSO_DIDS_MAX) : []
+  return { id, displayName, did, ring: ring as Peer['ring'], connectedAt, ...(reachOut === true ? { reachOut: true as const } : {}), ...(also.length ? { alsoDids: also } : {}) }
 }
 
 interface Ctx { myAt: Stamps; theirs: SyncBundle; since: number; res: MergeResult }
@@ -496,7 +564,7 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (sameAs) mine.sameAs = sameAs
   const theirs = remapBundle(incoming, sameAs)
   const c: Ctx = { myAt: myStamps, theirs, since, res }
-  mine.people = mergeList('person', mine.people, theirs.people.map(withoutPersonImage), c, (p) => p.name, unitePerson)
+  mine.people = mergeList('person', mine.people, theirs.people.map(withoutPersonImage), c, (p) => p.name, uniteKeepingDelete)
   mine.inventory = mergeList('resource', mine.inventory, theirs.inventory.map(withoutImage), c, (x) => x.text, fillMissing)
   mine.meetings = mergeList('meeting', mine.meetings ?? [], theirs.meetings, c, (x) => x.about, fillMissing)
   if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)
@@ -505,10 +573,76 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (theirs.invitations?.length) mine.invitations = mergeList('invitation', mine.invitations ?? [], theirs.invitations, c, (x) => x.event ?? x.place ?? x.id, (winner) => winner)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
+  if (theirs.peers?.length) mergePeers(mine, theirs.peers, c)
   mergeSettings(mine, theirs, c)
   mergeDisplayName(mine, myStamps, theirs, res)
   collapseSamePersons(mine)
+  dedupeByPeerId(mine)
+  dropAnsweredWants(mine)
   return res
+}
+
+/** Wave 43c: a "Wants to connect" row whose connection has a card by now (Add was pressed on the other device) is answered: it goes. */
+function dropAnsweredWants(s: AppState): void {
+  if (!s.wantsToConnect?.length) return
+  const carded = new Set(alive(s.people).flatMap((p) => (p.peerId ? [p.peerId] : [])))
+  const rest = s.wantsToConnect.filter((w) => !carded.has(w.peerId))
+  if (rest.length === s.wantsToConnect.length) return
+  if (rest.length) s.wantsToConnect = rest
+  else delete s.wantsToConnect
+}
+
+/** A person's two versions united, the winner's delete state kept as it is: an older delete never fills in over a newer edit, and an undelete travels. */
+function uniteKeepingDelete(winner: Person, loser: Person): Person {
+  const out = unitePerson(winner, loser)
+  if (winner.deleted_at === undefined) delete out.deleted_at
+  return out
+}
+
+/**
+ * Wave 43c: connections by DID. An unknown one is added as `synced` and heard (this device never sends it a connect-ack: the other side would
+ * make a second card for me). A known one: name and ring go to the newer stamp; the other devices (alsoDids) are united; this device's
+ * bookkeeping (acks, told, id) stays.
+ */
+function mergePeers(mine: AppState, theirs: Peer[], c: Ctx): void {
+  const peers = [...(mine.peers ?? [])]
+  for (const t of theirs) {
+    const i = peers.findIndex((p) => p.did === t.did)
+    if (i < 0) { peers.push({ ...t, synced: true, heardAt: t.connectedAt }); c.res.added++; continue }
+    const m = peers[i]
+    const key = peerKey(t.did)
+    const theirsWins = (c.theirs.at[key] ?? 0) > (c.myAt[key]?.at ?? 0)
+    const also = [...new Set([...(m.alsoDids ?? []), ...(t.alsoDids ?? [])])].filter((d) => d !== m.did).slice(0, ALSO_DIDS_MAX)
+    const next: Peer = { ...m, ...(theirsWins ? { displayName: t.displayName, ring: t.ring } : {}), ...(also.length ? { alsoDids: also } : {}) }
+    if (JSON.stringify(next) !== JSON.stringify(m)) { peers[i] = next; c.res.updated++ }
+  }
+  mine.peers = peers
+}
+
+/** How much a card holds: note lines, then fields, then the older meeting, then the id (so both devices pick the same keeper). */
+function richer(a: Person, b: Person): Person {
+  const score = (p: Person): number[] => [p.lines.length, Object.keys(p.fields ?? {}).length, -p.metAt]
+  const [x, y] = [score(a), score(b)]
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] > y[i] ? a : b
+  return a.id < b.id ? a : b
+}
+
+/**
+ * Wave 43c: cards of one connection (same peerId, not deleted) become one: the richer card is kept, the other merged into it (same_person.ts
+ * mergePersons writes sameAs, so the other device collapses them too). Chats are keyed by peerId, so the chat list shows the person once. True when any merged.
+ */
+export function dedupeByPeerId(s: AppState): boolean {
+  let any = false
+  const seen = new Map<string, Person>()
+  for (const p of [...s.people]) {
+    if (!p.peerId || p.deleted_at !== undefined) continue
+    const have = seen.get(p.peerId)
+    if (!have) { seen.set(p.peerId, p); continue }
+    const keep = richer(have, p)
+    const drop = keep === have ? p : have
+    if (mergePersons(s, keep.id, drop.id)) { any = true; seen.set(p.peerId, s.people.find((x) => x.id === keep.id) ?? keep) }
+  }
+  return any
 }
 
 /** Every local person whose id the sameAs map sends to another local person is merged into that one. True when anything was. */

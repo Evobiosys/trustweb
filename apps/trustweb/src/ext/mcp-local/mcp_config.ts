@@ -23,6 +23,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'event_link_open', write: false },
   // Wave 43 event-press-share
   { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
+  // Wave 43c chat-notices
+  { name: 'notices_list', write: false }, { name: 'web_default_view_get', write: false }, { name: 'web_default_view_set', write: true },
   // Wave 43b notify-center
   { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
   // Wave 43b resources-views
@@ -41,6 +43,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'ask_audience_get', write: false }, { name: 'ask_audience_set', write: true },
   /* wave43b community-shell */
   { name: 'community_menu_get', write: false }, { name: 'community_home_tiles_set', write: true }, { name: 'community_chat_scope_set', write: true }, { name: 'event_link_mode_set', write: true },
+  /* wave43c sync-devices */
+  { name: 'sync_status', write: false }, { name: 'sync_now', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

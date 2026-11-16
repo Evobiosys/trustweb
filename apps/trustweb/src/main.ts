@@ -149,7 +149,7 @@ import { groupsView } from './groups_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
-import { isAdvanced, setWebDefault, webDefaultOf, webTabLabel } from './web_default_view'
+import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
@@ -316,6 +316,7 @@ import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
 import { eventPlanSection } from './event_plan_view'
 import { defineEventActions } from './event_actions'
+import { defineSyncActions } from './sync_actions' // wave43c sync-devices
 import { templatePrompt } from './event_plan'
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
@@ -362,6 +363,7 @@ import { newlyAdded } from './notify_center'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
 import { createToast, fadeHost, type ToastOpts } from './toast'
+import { createNoticeLayer } from './notice_layer'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 // Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
@@ -1151,7 +1153,14 @@ const updateBanner = el('div', { class: 'update-banner', role: 'status', 'aria-l
   el('span', {}, [S.updBanner]),
   el('button', { class: 'btn btn-electric btn-sm', 'data-update-reload': '1', onclick: () => void reloadNow() }, [S.updReload]),
 ])
-phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl, updateBanner)
+// Wave 43c: every toast, notice, Undo and result card lives in ONE layer fixed in the phone frame (notice_layer.ts), never inside the zoomed rings.
+const noticeLayer = createNoticeLayer(document)
+noticeLayer.adopt('cards', cardStackEl)
+noticeLayer.adopt('update', updateBanner)
+noticeLayer.adopt('notice', friendsEl)
+noticeLayer.adopt('message', msgNoticeEl, () => msgNoticeEl.classList.contains('on'))
+noticeLayer.adopt('toast', toastEl, () => toastEl.classList.contains('on'))
+phone.append(host, tabs, veil, sheet, overlay, noticeLayer.el)
 root.replaceChildren(phone)
 // On a wide screen, outside the phone: open the side-by-side demo (not inside
 // the demo's own iframes, and not on a real phone, where the app is full screen).
@@ -1247,7 +1256,7 @@ function barOpen(id: BarId): void {
 function barButton(id: BarId, primary: boolean, halo = false): HTMLElement {
   if (id === 'record' && primary) return recordButton()
   const view = viewOfBar(id)
-  const name = id === 'web' && state ? webTabLabel(state, S.viewNames) : barName(id) // wave 35: the Web tab carries the pinned default view's name
+  const name = id === 'web' && state ? webTabLabel(state, S.viewNames, CONTACTS_TAB_LABEL ? S.tabLabel.desk : undefined) : barName(id) // wave 35: the Web tab carries the pinned default view's name
   const mod = modOfBar(id)
   const b = tabButton(id, id === 'web' ? name : view || mod ? barName(id) : S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : view ? viewGlyph[view] ?? 'web' : mod ? twRegistry.views().find((v) => v.id === mod)?.icon ?? 'users' : TAB_ICON[id], () => tapBar(id))
   b.setAttribute('aria-label', name)
@@ -1975,6 +1984,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 
 function render(): void {
   screen = shownScreen(screen)
+  if (screen !== Screen.Web) noticeLayer.slot('wants', null)
   const showTabs = screen !== Screen.Start
   tabs.style.display = showTabs ? 'flex' : 'none'
   tabs.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => {
@@ -3077,7 +3087,8 @@ function viewRowMore(view: ViewKey, row: HTMLElement): HTMLElement {
     el('button', { class: 'linkbtn', role: 'menuitem', 'data-view-pin': view, ...(pinned ? { disabled: '' } : {}), onclick: () => {
       const v = setWebDefault(s.uiViews, view)
       if (v) s.uiViews = v; else delete s.uiViews
-      viewMoreOpen = null; eyeOpen = false; save(); renderTabs(); render()
+      viewMoreOpen = null; eyeOpen = false; save(); renderTabs()
+      if (shownAtOnce(view)) chooseView(view as ViewKey); else render()   // wave 43c: the Web screen follows the pin at once
     } }, [pinned ? S.viewPinned : S.viewPinDefault]),
     isAdvanced(s) && view !== 'rings' ? el('label', { class: 'view-in-bar', 'data-view-in-bar': view }, [
       el('input', { type: 'checkbox', ...(resolveBar(s.uiBar, barFlags()).ids.includes(`view:${view}` as BarId) ? { checked: '' } : {}), onchange: (e: Event) => {
@@ -3211,7 +3222,8 @@ function chatListBody(): Node[] {
   const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
   const find = chatFindRows(s.chats, people, chatQuery)
   const community = communityChatRow()
-  const fresh = newlyAdded(people, s.peers, now)
+  // wave43c sync-devices: a person shows once in the chat list: "Newly added" leaves out who already has a thread row below
+  const fresh = newlyAdded(people, s.peers, now).filter((r) => !rows.some((x) => x.personId === r.personId))
   return [
     ...(community ? [community] : []),
     ...(fresh.length && !chatQuery.trim() && !s.chatsHidden ? [el('section', { class: 'chat-newly', 'data-chat-newly': '' }, [
@@ -3324,7 +3336,7 @@ function browserOnlyNotice(): HTMLElement | null {
 }
 
 function screenWeb(): Node[] {
-  if (webPage) return webPageScreen(webPage)
+  if (webPage) { noticeLayer.slot('wants', null); return webPageScreen(webPage) }
   const full = shown(st(), curatorHiddenIds())
   const s = full
   let stored: string | null = null
@@ -3337,7 +3349,6 @@ function screenWeb(): Node[] {
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
-    queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
     ...supportCards(supportIo),
     passOnNotice(),
@@ -3354,6 +3365,7 @@ function screenWeb(): Node[] {
     ? el('div', { class: 'scroll' }, [createMapView({ people: s.people.filter((p) => ringShown(st(), webSlot(p))), openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
     : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
+  noticeLayer.slot('wants', wantsToConnectSection())   // wave 43c: the notice layer, not the screen flow (it stays put and full size while the Web zooms)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
     header(S.webTitle),
@@ -3366,7 +3378,6 @@ function screenWeb(): Node[] {
       : clip,
     // Wave 39: the browser-only notice sits under the web, outside the zoomed layer (inside it the zoom scaled the line off the screen).
     ...[browserOnlyNotice()].filter((n): n is HTMLElement => n !== null),
-    ...[wantsToConnectSection()].filter((d): d is HTMLElement => d !== null),   // wave 39: below the zoom clip, so it stays put and full size while the Web zooms
   ]
 }
 
@@ -5102,6 +5113,7 @@ const devices = createSyncView({
   connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
   editLink: () => openLinkChange(linkHooks),
   afterSyncNow: () => void pollNotesRelay(),
+  tellDevices: (dids) => { if (state) void net.tellDevices(dids) }, // wave43c sync-devices
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -5368,6 +5380,7 @@ defineAppActions(appActions, {
   now: () => Date.now(),
 })
 defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName })
+defineSyncActions(appActions, devices) // wave43c sync-devices
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
   fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,

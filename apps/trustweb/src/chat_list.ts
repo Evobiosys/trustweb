@@ -36,10 +36,16 @@ const matches = (query: string | undefined, ...texts: string[]): boolean => {
   return !q || texts.some((x) => x.toLowerCase().includes(q))
 }
 
+/** Wave 43c: two cards of one person (same peerId, e.g. after a sync of both devices) are one chat: the first card stands for them. */
+function oncePerPeer<T extends ChatListPerson>(people: readonly T[]): T[] {
+  const seen = new Set<string>()
+  return people.filter((p) => { if (!p.peerId) return true; if (seen.has(p.peerId)) return false; seen.add(p.peerId); return true })
+}
+
 export function chatListRows(book: ChatBook | undefined, people: readonly ChatListPerson[], { query, hidden, since }: ChatListOptions = {}): ChatListRow[] {
   const rows: ChatListRow[] = []
   if (hidden) return rows
-  for (const p of people) {
+  for (const p of oncePerPeer(people)) {
     // Chat is for people already connected (a peer); the others are found in Web.
     const t = p.peerId ? book?.[p.peerId] : undefined
     const msgs = since === undefined ? t?.messages : t?.messages.filter((x) => x.at <= since)
@@ -59,7 +65,7 @@ export interface ChatPickerRow {
 /** The "New message" picker: people who can be chatted with (connected), by name; a typed name also finds the others, flagged. */
 export function chatPickerRows(people: readonly ChatListPerson[], query?: string): ChatPickerRow[] {
   const typed = !!query?.trim()
-  return people
+  return oncePerPeer(people)
     .filter((p) => matches(query, p.name) && (typed || p.peerId))
     .map((p) => ({ personId: p.id, name: p.name, connected: !!p.peerId }))
     .sort((a, b) => Number(b.connected) - Number(a.connected) || a.name.localeCompare(b.name))
@@ -67,7 +73,7 @@ export function chatPickerRows(people: readonly ChatListPerson[], query?: string
 
 /** "Find people to chat with": connected people with no conversation yet, by name. */
 export function chatFindRows(book: ChatBook | undefined, people: readonly ChatListPerson[], query?: string): ChatPickerRow[] {
-  return people
+  return oncePerPeer(people)
     .filter((p) => p.peerId && !book?.[p.peerId]?.messages.length && matches(query, p.name))
     .map((p) => ({ personId: p.id, name: p.name, connected: true }))
     .sort((a, b) => a.name.localeCompare(b.name))

@@ -631,6 +631,12 @@ export interface Peer {
   askAgainSentAt?: number
   /** Wave 8: this connection began as a reach-out through a public link (sent in the connect-ack; kept so a resend carries it). */
   reachOut?: true
+  /** Wave 43c (device_alias.ts): the DIDs of this person's other devices, told by them in a sealed 'devices' envelope; travels with sync. */
+  alsoDids?: string[]
+  /** Wave 43c: this connection arrived by device sync (another of my devices made it). This device never sends it a connect-ack. This device only. */
+  synced?: true
+  /** Wave 43c: the set of my other devices this device last told this connection (device_alias.ts toldKey). This device only. */
+  toldDevices?: string
 }
 
 export interface Offer { id: string; title: string }
@@ -1116,6 +1122,10 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 42 (notify_inbox.ts): "Popup for missed notifications" is on unless this is true. Only "off" is stored. */
   missedPopupOff?: true
+  /** Wave 43c sync-devices: Auto sync with my linked devices is on unless this is true (Settings > My devices). This device only. */
+  syncAutoOff?: true
+  /** Wave 43c: what Settings shows and MCP sync_status reads: linked devices and the last sync with any of them. This device only. */
+  syncStatus?: { devices: number; lastAt: number }
   /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
   notifInbox?: InboxItem[]
   /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
