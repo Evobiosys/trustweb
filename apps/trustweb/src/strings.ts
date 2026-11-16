@@ -4861,4 +4861,23 @@ export const S = {
     publishHint: 'Posting there comes with the account link. Until then your post stays on this phone.',
     publishOffRamp: 'Discouraged: your people also read the fediverse. Move off: Mastodon; export your data (GDPR Art. 20).',
   },
+  /* wave44b filters-communities */
+  w44fc: {
+    eventMode: 'Event mode',
+    leaveEventMode: 'Leave event mode',
+    savedTitle: 'Saved filters',
+    saveName: 'Name this filter',
+    save: 'Save',
+    apply: 'Apply',
+    pin: 'Pin',
+    subOf: 'Inside',
+    subTop: 'Top level',
+    subCollapse: (name: string) => `Fold ${name}`,
+    subExpand: (name: string) => `Unfold ${name}`,
+    subMoreTitle: 'More sub-communities',
+    subMoreText: (root: string, n: number) => `${root} holds ${n} sub-communities, the free limit on our servers. Ask for more and your hosting contact decides.`,
+    subMoreAsk: 'Request more',
+    subMoreClose: 'Not now',
+    subCount: (n: number, max: number) => `${n} of ${max} sub-communities`,
+  },
 } as const

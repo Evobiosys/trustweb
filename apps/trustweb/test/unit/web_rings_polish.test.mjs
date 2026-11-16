@@ -36,7 +36,7 @@ describe('colour mode', () => {
     expect(r.colourMode).toBeUndefined()
   })
   it('migration bumps the schema and drops an unreadable colourMode', () => {
-    expect(SCHEMA_VERSION).toBe(3)
+    expect(SCHEMA_VERSION).toBe(4)
     const s = { v: 1, me: { id: 'me', displayName: 'J' }, peers: [], log: [], people: [], inventory: [], meetings: [], colourMode: 'neon' }
     expect(migrate(s)).toBe(true)
     expect(s.colourMode).toBeUndefined()

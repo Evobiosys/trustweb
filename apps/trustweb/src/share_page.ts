@@ -8,6 +8,7 @@ import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { ColourTag } from './colour_tags'
 import { tagsOf } from './colour_tags'
 import { tagLabel } from './events'
+import { COMMUNITY_CHIP } from './community_tag'
 import type { Person, TwEvent } from './model'
 import { canAccess } from './share_sink/check'
 import { appendShare, previewShare, scopeTuples, type Scope, type ShareLine } from './share_sink/share_lines'
@@ -46,7 +47,9 @@ export const withoutChip = (s: PageState, row: ChipRow, id: string): PageState =
 
 export const candidates = (b: Basis): Candidate[] => [
   ...b.people.map((p) => ({ id: `person:${p.id}`, label: p.name })),
-  ...b.tags.map((t) => ({ id: `tag:${t.id}`, label: t.label ?? t.id })),
+  // Wave 44b: a community tag reads community:<name> (so #community lists them and #<name> still finds them); the bare `community` chip sits beside them.
+  ...(b.tags.some((t) => t.community === true) ? [{ id: COMMUNITY_CHIP, label: 'community' }] : []),
+  ...b.tags.map((t) => ({ id: `tag:${t.id}`, label: t.community === true ? `community:${t.label ?? t.id}` : t.label ?? t.id })),
   ...(b.events ?? []).map((ev) => ({ id: `event:${ev.id}`, label: tagLabel(ev) })),
 ]
 
@@ -62,7 +65,7 @@ export function suggest(query: string, all: readonly Candidate[], taken: readonl
     const l = c.label.toLowerCase()
     return !q || l.startsWith(q) ? 1 : l.includes(q) ? 0.9 : termSimilarity(q, l)
   }
-  return all.filter((c) => (!kinds.length || kinds.some((k) => c.id.startsWith(k))) && !taken.includes(c.id)).map((c) => ({ c, s: score(c) })).filter((x) => x.s >= MATCH_THRESHOLD)
+  return all.filter((c) => (!kinds.length || kinds.some((k) => c.id.startsWith(k)) || (kinds.includes('tag:') && c.id === COMMUNITY_CHIP)) && !taken.includes(c.id)).map((c) => ({ c, s: score(c) })).filter((x) => x.s >= MATCH_THRESHOLD)
     .sort((a, b) => b.s - a.s).slice(0, max).map((x) => x.c)
 }
 
