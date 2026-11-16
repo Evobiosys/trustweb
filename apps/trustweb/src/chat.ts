@@ -27,6 +27,7 @@ import { isKeepText, parseKeepText } from './account_keep'
 import { sanitizeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
 import { parseContactText, isContactText, isRequestText, parseRequestText } from './contact_share'
+import { isGateText, parseGateText } from './bubble_gate'
 import { isHelloText, parseHelloText } from './hello'
 import { isProfileText, parseProfileText } from './profile'
 import { stripUnsafe, fingerprint } from './safe_text'
@@ -232,6 +233,8 @@ export enum TextKind {
   Forget = 'forget',
   /** Wave 32 (support_ask.ts): an ask for support, or the "I'm here" to mine. */
   Support = 'support',
+  /** Wave 44 (bubble_gate.ts): the acceptance gate of an introduction. */
+  Intro = 'intro',
   Chat = 'chat',
   Ignore = 'ignore',
 }
@@ -247,6 +250,7 @@ export function routeText(appUrl: string, text: string): TextKind {
   if (isProfileText(appUrl, text)) return parseProfileText(appUrl, text, Date.now()) ? TextKind.Profile : TextKind.Ignore
   if (isForgetText(appUrl, text)) return parseForgetText(appUrl, text) ? TextKind.Forget : TextKind.Ignore
   if (isSupportText(appUrl, text)) return parseSupportText(appUrl, text) || parseHereText(appUrl, text) || parseCloseText(appUrl, text) ? TextKind.Support : TextKind.Ignore
+  if (isGateText(appUrl, text)) return parseGateText(appUrl, text) ? TextKind.Intro : TextKind.Ignore
   return text.startsWith(`${appUrl}?${SHARE_PARAM}=1#`) ? TextKind.Ignore : TextKind.Chat
 }
 

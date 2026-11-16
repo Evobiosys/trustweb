@@ -8,6 +8,7 @@ import { announce } from './events.ts'
 import { aiChoiceTools } from './ai_choice_tools.ts'
 import { assistantTools } from './assistant_tools.ts'
 import { billingTools } from './billing_tools.ts'
+import { bubbleTools } from './bubble_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
 import { homeTools } from './home_tools.ts'
 import { feedSourcesTools } from './feed_sources_tools.ts' // wave44 feed-sources
@@ -35,6 +36,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave43c sync-devices */ ...syncTools({ ...o, write }),
     /* wave44 steer-ask-placement-2 */ ...aiChoiceTools({ ...o, write }),
     /* wave44 feed-sources */ ...feedSourcesTools({ ...o, write }),
+    /* wave44 steer-bubble-connect */ ...bubbleTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

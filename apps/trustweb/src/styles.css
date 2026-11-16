@@ -2116,3 +2116,12 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .feed-target{font-size:12px; color:var(--ink-soft)}
 .feed-target summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
 .feed-target .meta{margin:4px 0}
+/* wave44 steer-bubble-connect: the ring that fills while one bubble is held on another (full = merge); drawn as a stroke, so greyscale reads it too */
+.hold-ring{position:absolute; inset:-6px; width:calc(100% + 12px); height:calc(100% + 12px); pointer-events:none; transform:rotate(-90deg); z-index:7}
+.hold-ring circle{fill:none; stroke:var(--electric,#12a8e3); stroke-width:3; stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:100; animation:hold-ring-fill var(--hold-ms,1500ms) linear forwards}
+@keyframes hold-ring-fill{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.hold-ring circle{animation-duration:.01ms}}
+/* wave44 steer-bubble-connect-3: the introduction link sheet (link + QR + Copy / Share) */
+[data-introduce-link-sheet] .qrwrap{display:flex; justify-content:center; margin:8px 0}
+[data-introduce-link-sheet] canvas{width:min(100%,180px) !important; height:auto !important}
+[data-introduce-link-sheet] .field{width:100%; box-sizing:border-box; margin:6px 0}

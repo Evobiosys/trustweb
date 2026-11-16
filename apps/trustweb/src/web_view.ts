@@ -55,6 +55,8 @@ import { clearDots, labelSize, type DotDisc } from './dot_clear'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, floorZoom, panBy, reclamp, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
 import { createCountdown } from './merge_countdown'
+import { releaseOutcome } from './bubble_connect'
+import { holdRing } from './bubble_connect_view'
 import { HOLD_MS, type HoldEvent, hitDot, holdEnabled, holdStart, holdStep } from './dot_merge'
 import { onRingLine, ringStrokeOpacity, ringStrokeWidth } from './ring_hit'
 import { makeResizable } from './overlay_resize'
@@ -138,6 +140,8 @@ export interface WebViewDeps {
   mergeSheet: ((aId: string, bId: string) => void) | null
   /** Wave 36: merges `dropId` into `keepId` (snapshot first); null where mergeSheet is. */
   mergeNow: ((keepId: string, dropId: string) => void) | null
+  /** Wave 44 (bubble_connect.ts): a short hold of one bubble on another introduces the two (confirmation sheet); null where there is nobody to introduce (solo). */
+  introduce: ((aId: string, bId: string) => void) | null
   dummyChip(): HTMLElement
   avatar(name: string, id: string, cls?: string): HTMLElement
   pictured(face: HTMLElement, url: string | undefined): HTMLElement
@@ -899,10 +903,14 @@ export function createWebView(deps: WebViewDeps): WebView {
       const countdown = createCountdown()
       let countTimer: number | undefined
       let cancelled = false
+      let dropRing: (() => void) | undefined
       const stopCount = (): void => { clearInterval(countTimer); countTimer = undefined; countdown.cancel() }
       const holdApply = (ev: HoldEvent): void => {
         const was = hold.phase
+        const wasOver = hold.phase === 'none' ? null : hold.over
         hold = holdStep(hold, ev)
+        const nowOver = hold.phase === 'none' ? null : hold.over
+        if (nowOver !== wasOver) { dropRing?.(); dropRing = nowOver ? holdRing(wrap.querySelector<HTMLElement>(`.node[data-pid="${CSS.escape(nowOver)}"]`) ?? wrap) : undefined } // wave 44: the ring fills over MERGE_HOLD_MS
         if (hold.phase === 'offer' && was !== 'offer') {
           const over = hold.over
           let shown = 0
@@ -927,7 +935,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       const onEscape = (e: KeyboardEvent): void => { if (e.key === 'Escape' && hold.phase !== 'none') { cancelled = true; holdApply({ type: 'leave' }) } }
       window.addEventListener('keydown', onEscape)
       const holdMove = (e: PointerEvent): void => {
-        if (!holdEnabled({ canMerge: Boolean(mergeSheet), groupSize: selectMode && chosen.has(p.id) ? chosen.size : 1 })) return
+        if (!holdEnabled({ canMerge: Boolean(mergeSheet) || Boolean(deps.introduce), groupSize: selectMode && chosen.has(p.id) ? chosen.size : 1 })) return
         const dots = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')].map((n) => { const r = n.getBoundingClientRect(); return { id: n.dataset.pid ?? '', left: r.left, top: r.top, right: r.right, bottom: r.bottom } })
         const now = performance.now()
         clearTimeout(holdTimer)
@@ -961,6 +969,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         clearTimeout(timer)
         clearTimeout(holdTimer)
         stopCount()
+        dropRing?.(); dropRing = undefined
         window.removeEventListener('keydown', onEscape)
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
@@ -979,6 +988,7 @@ export function createWebView(deps: WebViewDeps): WebView {
       const up = (): void => {
         const was = lifted
         const offered = hold.phase === 'offer'
+        const intro = deps.introduce && hold.phase === 'pending' && releaseOutcome(hold, performance.now()) === 'introduce' ? hold.over : null
         end(); lifted = false
         setTimeout(() => setDragged(false), 0)
         if (!was) return
@@ -1007,6 +1017,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         if (intoExpanse) { hideInExpanse(s, p.id); save(); render(); done(); return }
         // Released while the merge offer shows: the dot goes back, nothing moves or merges.
         if (offered) { render(); done(); return }
+        if (intro) { render(); done(); deps.introduce?.(p.id, intro); return } // wave 44: a short hold = introduce, after the sheet
         const outcome = dropOutcome(p, ring, out)
         angle = avoidSector(angle, keepOutColumn(ringsGeo.radius[ring] * ringsK, (ringsGeo.dot[ring] * ringsK) / 2))
         if (outcome === 'hide') { void hideOnRings(p).then(done); return }

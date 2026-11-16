@@ -9,6 +9,7 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
+import type { IntroInbox, IntroPending, IntroQueued } from './bubble_connect'
 import type { AssistantCfg } from './ext/assistant/providers'
 import type { AlgoCfg, SourceCfg } from './feed_sources_page'
 import type { InboxItem } from './notify_inbox'
@@ -1288,6 +1289,10 @@ export interface AppState {
   pendingRenew?: string[]
   /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. Text only; also synced, sealed, between the owner's own devices. */
   chats?: ChatBook
+  /** Wave 44 (bubble_connect.ts): introductions I asked an acceptor for, an MCP-queued introduction, and requests asked of me. Optional. */
+  introPending?: IntroPending[]
+  introQueue?: IntroQueued[]
+  introInbox?: IntroInbox[]
   /**
    * Device sync (wave 13, same_person.ts): dropped person id -> kept person id, written when the owner declared two persons the same
    * person. Travels between the owner's devices so a dropped id never comes back. Optional; an older build ignores it.

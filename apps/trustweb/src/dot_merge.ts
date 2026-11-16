@@ -4,9 +4,10 @@
  * state machine and the hit test. The offer only asks; the merge itself needs a tap on Merge in the bubble and then the existing
  * "Same person" sheet (same_person.ts).
  */
+import { MERGE_HOLD_MS } from './bubble_connect'
 
-/** How long the pointer stays inside the other dot before the offer shows. */
-export const HOLD_MS = 600
+/** How long the pointer stays inside the other dot before the merge offer shows (wave 44: a shorter hold introduces instead, bubble_connect.ts). */
+export const HOLD_MS = MERGE_HOLD_MS
 
 export type HoldState = { phase: 'none' } | { phase: 'pending' | 'offer'; over: string; since: number }
 
