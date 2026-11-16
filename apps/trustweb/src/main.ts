@@ -2034,6 +2034,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 function render(): void {
   screen = shownScreen(screen)
   if (screen !== Screen.Web) noticeLayer.slot('wants', null)
+  noticeLayer.setOnWeb(screen === Screen.Web)   // review-fixes-43c: ask-result / message cards stay on the Web screen (P06)
   const showTabs = screen !== Screen.Start
   tabs.style.display = showTabs ? 'flex' : 'none'
   tabs.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => {

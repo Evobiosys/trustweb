@@ -1244,9 +1244,7 @@ export const S = {
   invOff: 'paused',
   invOn: 'on',
   logTitle: 'Asks that reached this phone',
-  // Inventory, where Web has "Ask your web": the asks people sent you (owner 2026-10-06; two lines for now).
-  reqTop: 'Review',
-  reqBottom: 'requests',
+  // Inventory header button (shell-fix-2; was a two-line floating pill): the asks people sent you (owner 2026-10-06).
   reqAria: 'Review requests',
   reqTitle: 'Requests to Resources',
   reqWaiting: (n: number) => `${n === 1 ? 'One ask is' : `${n} asks are`} waiting for your yes or no.`,

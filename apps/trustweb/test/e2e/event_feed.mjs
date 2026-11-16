@@ -75,6 +75,7 @@ try {
     check(`${w}: the expanded Feed row does not overlay the bottom bar`, !hit(await page.locator('.event-feed-row').boundingBox(), eb) && !hit(await page.locator('[data-event-feed-open]').boundingBox(), eb))
     await shot('event-row')
     await page.locator('[data-event-feed-open]').click(); await page.waitForTimeout(500)
+    await page.locator('[data-feed-tag="event_Winter_IYG"]').waitFor({ timeout: 5000 }).catch(() => {}) // review-fixes-43c: under load the Feed draws later than 500 ms
     check(`${w}: opens the Feed filtered to the event tag`, (await page.locator('[data-feed-tag="event_Winter_IYG"]').count()) === 1)
     await page.locator('[data-feed-compose]').fill('Arrived at the venue')
     await page.locator('[data-feed-compose-send]').click(); await page.waitForTimeout(400)
