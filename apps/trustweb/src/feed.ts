@@ -87,6 +87,9 @@ export interface Post {
   unsent?: boolean
   /** Wave 43: the event tag (`event_<slug>`) of a post made on, or in the group of, an event. */
   tag?: string
+  /** Wave 44 feed-embed: the author's handle (`@user@host`) and the domain of the link an embedded post came from. */
+  handle?: string
+  linkHost?: string
 }
 
 /** At most this many posts. */

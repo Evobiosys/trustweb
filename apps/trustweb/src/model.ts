@@ -1110,6 +1110,8 @@ export interface AppState {
   /** Wave 43 (feed_social.ts): my own Feed posts, kept on this phone; stars are post ids (`social:<id>`, `group:<id>`, ...). */
   feedPosts?: SocialPost[]
   feedStars?: string[]
+  /** Wave 44 (feed_embed.ts): posts embedded from a pasted link, newest first, at most 200. Absent: none. */
+  feedEmbeds?: import('./feed_embed').EmbedRecord[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
