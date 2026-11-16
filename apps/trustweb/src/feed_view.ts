@@ -26,8 +26,10 @@ import { fetchMastodonTag } from './mastodon_tag'
 import { MASTODON_DEFAULT_INSTANCE, MASTODON_POST_ENABLED, eventMastodonHost } from './mastodon_default'
 import type { ImageStore } from './image_store'
 import { shrink } from './image_store'
-import { ageLabel, FediverseReach, feedOn } from './model'
+import { FediverseReach, feedOn } from './model'
 import type { AppState, FediverseLink, FeedSettings, InventoryItem, Person, TwEvent } from './model'
+import { ageCompact, firstLink, handleOf } from './feed_row'
+import { ICONS } from './icons'
 import { provenanceChip } from './provenance_view'
 import { askPersist } from './storage_persist'
 import { S } from './strings'
@@ -293,18 +295,34 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     return true
   }
 
-  function postEl(post: Post, social: boolean): HTMLElement {
+  /** One icon button of the action row: the label is aria-label + title; `struck` = OFF toggle (struck through, still pressable); `off` = struck through and disabled, never colour alone (P2). */
+  function act(icon: string, label: string, attrs: Record<string, string>, onclick: (() => void) | null, o: { on?: boolean; off?: boolean; struck?: boolean } = {}): HTMLElement {
+    const b = el('button', { class: 'act' + (o.on ? ' on' : '') + (o.off || o.struck ? ' tw-off' : ''), type: 'button', 'aria-label': label, title: label, ...attrs, ...(o.off ? { disabled: '', 'aria-disabled': 'true' } : {}), ...(onclick && !o.off ? { onclick } : {}) })
+    b.innerHTML = ICONS[icon]
+    return b
+  }
+
+  /** Mastodon-style status row (pattern only): avatar left; name, @handle and a compact age on the head line; text; link card; chips; icon action row. `compact` (an event's Feed row) drops picture, link card and actions. */
+  function postEl(post: Post, social: boolean, compact = false): HTMLElement {
     const who = post.who ?? S.feedYou
     const canShare = post.kind === PostKind.Mine || post.kind === PostKind.Remote
     const mineText = post.kind === PostKind.Social
     const starred = (h.state().feedStars ?? []).includes(post.id)
+    const handle = handleOf(post)
+    const link = compact ? null : firstLink(post.text)
+    const originalUrl = post.open.kind === 'url' ? post.open.url : null
     const main = el('button', { class: 'post-main', onclick: () => (mineText ? editSheet(post) : open(post)) }, [
       h.avatar(who, post.personId ?? 'me'),
       el('div', { class: 'post-body' }, [
-        el('div', { class: 'post-head' }, [el('b', {}, [who]), el('span', { class: 'meta' }, [S.feedKind[post.kind] + ' · ' + ageLabel(post.at, Date.now())])]),
+        post.boostedBy ? el('div', { class: 'meta post-boost', 'data-post-boosted': '1' }, [S.feedLook.boostedBy(post.boostedBy)]) : null,
+        el('div', { class: 'post-head' }, [
+          el('b', { class: 'post-name' }, [who]),
+          handle ? el('span', { class: 'meta post-handle', 'data-post-handle': handle }, [handle]) : null,
+          el('span', { class: 'meta post-age' }, [ageCompact(post.at, Date.now())])]),
         el('p', { class: 'post-text' }, [post.text]),
-        post.context ? el('p', { class: 'meta post-ctx' }, [post.kind === PostKind.Answer ? S.feedAsked(post.context) : post.kind === PostKind.Social ? S.feedReplying(post.context) : post.context]) : null,
+        post.context && !(handle && post.kind === PostKind.Remote) ? el('p', { class: 'meta post-ctx' }, [post.kind === PostKind.Answer ? S.feedAsked(post.context) : post.kind === PostKind.Social ? S.feedReplying(post.context) : post.context]) : null,
         el('div', { class: 'post-tags' }, [
+          el('span', { class: 'meta' }, [S.feedKind[post.kind]]),
           post.tag ? el('span', { class: 'chip', 'data-post-tag': post.tag }, [tagText(post.tag)]) : null,
           post.type ? el('span', { class: 'chip', 'data-post-type': post.type }, [S.feedType[post.type] ?? post.type]) : null,
           post.unsent ? el('span', { class: 'meta', 'data-post-unsent': '1' }, [(h.state().feed?.relays ?? []).length ? S.feedNotSent : S.feedNotSentNoRelay]) : null,
@@ -312,14 +330,18 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       ]),
     ])
     if (mineText) contextPress(main, () => editSheet(post))   // wave 43 P1: a long press or right click always edits
-    return el('article', { class: 'post post-' + post.kind, 'data-post': post.id, 'data-post-kind': post.kind }, [
+    const row = (children: (Node | null)[]): HTMLElement => el('div', { class: 'post-indent' }, children)
+    return el('article', { class: 'post post-' + post.kind + (compact ? ' post-compact' : ''), 'data-post': post.id, 'data-post-kind': post.kind }, [
       main,
-      imageEl(post),
-      social ? el('div', { class: 'post-actions' }, [
-        el('button', { class: 'btn btn-ghost btn-sm', 'data-post-reply': post.id, onclick: () => replySheet(post) }, [S.feedReply]),
-        el('button', { class: 'btn btn-ghost btn-sm' + (starred ? ' on' : ' tw-off'), 'aria-pressed': String(starred), 'data-post-star': post.id, onclick: () => { toggleStar(h.state(), post.id); h.save(); h.redrawFeed() } }, [starred ? S.feedStarred : S.feedStar]),
-      ]) : null,
-      canShare ? el('button', { class: 'btn btn-ghost btn-sm', 'data-share-post': post.id, onclick: () => shareSheet(post.text, Boolean(post.imageId || post.imageUrl)) }, [S.shareTo]) : null,
+      compact ? null : row([imageEl(post)]),
+      link ? row([el('a', { class: 'post-card', href: link.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': S.feedLook.linkCard(link.domain), 'data-post-link': link.domain }, [link.domain])]) : null,
+      compact ? null : row([el('div', { class: 'post-actions' }, [
+        social ? act('reply', S.feedReply, { 'data-post-reply': post.id }, () => replySheet(post)) : null,
+        act('boost', originalUrl ? S.feedLook.boost : S.feedLook.boostNo, { 'data-post-boost': post.id }, originalUrl ? () => window.open(originalUrl, '_blank', 'noopener,noreferrer') : null, { off: !originalUrl }),
+        social ? act('star', starred ? S.feedStarred : S.feedStar, { 'aria-pressed': String(starred), 'data-post-star': post.id }, () => { toggleStar(h.state(), post.id); h.save(); h.redrawFeed() }, { on: starred, struck: !starred }) : null,
+        act('share', canShare ? S.shareTo : S.feedLook.shareNo, { 'data-share-post': post.id }, () => shareSheet(post.text, Boolean(post.imageId || post.imageUrl)), { off: !canShare }),
+        act('more', S.feedLook.more, { 'data-post-more': post.id }, () => (mineText ? editSheet(post) : open(post))),
+      ])]),
     ])
   }
 
@@ -392,7 +414,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     ])
   }
 
-  /** An event page's Feed row: a V expander (P3) with the latest posts on the event and a way into the Feed; a long press or right click opens the Feed itself (P1). */
+  /** An event page's Feed row: a V expander (P3) with the latest posts on the event (the same row, compact) and a way into the Feed; a long press or right click opens the Feed settings (43-D5 FLIP, P1). */
   function eventRow(ev: TwEvent): HTMLElement | null {
     if (!feedOn(h.state()) || !eventFeedOn(ev)) return null
     const tag = tagOfEvent(ev)
@@ -407,11 +429,11 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       const latest = filterFeed(buildFeed(h.state(), groupPosts(h.state(), [])), { tag }).filter((p) => !isTimelinePost(p)).slice(0, 3)
       panel.replaceChildren(
         el('p', { class: 'meta' }, [eventTagLabel(ev.tagName ?? ev.name)]),
-        ...(latest.length ? latest.map((p) => el('p', { class: 'meta', 'data-event-feed-post': p.id }, [`${p.who ?? S.feedYou}: ${p.text}`])) : [el('p', { class: 'meta' }, [S.feedEventRowEmpty])]),
+        ...(latest.length ? latest.map((p) => el('div', { class: 'post-compact-wrap', 'data-event-feed-post': p.id }, [postEl(p, false, true)])) : [el('p', { class: 'meta' }, [S.feedEventRowEmpty])]),
         el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-event-feed-open': '1', onclick: () => showEvent(ev.id) }, [S.feedEventRowOpen]),
       )
     })
-    contextPress(toggle, () => showEvent(ev.id))
+    contextPress(toggle, () => h.settings())   // 43-D5 FLIP: a long press or right click opens the Feed settings, a tap on "Open the Feed" the Feed
     return el('div', { class: 'event-feed-row', 'data-event-feed': ev.id }, [toggle, panel])
   }
 
