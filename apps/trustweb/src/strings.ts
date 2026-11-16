@@ -4671,4 +4671,9 @@ export const S = {
     unsupportedBody: 'This code comes from an older TrustWeb. Update the app on both phones, then scan again.',
     settingsLine: 'Handshake: encrypted with the QR key (v2)',
   },
+
+  /* wave44 web-rings-polish */
+  beyondVia: (name: string) => `via ${name}`,
+  personMenu: { tag: 'Tag…', hide: 'Hide', open: 'Open', aria: (name: string) => `${name}: quick menu`, tagAsk: 'Tag name', hidden: (name: string) => `${name} is hidden.`, tagged: (name: string, tag: string) => `${name} tagged ${tag}.` },
+  tapEventHint: 'Tap the event',
 } as const

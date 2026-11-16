@@ -7,10 +7,14 @@
  * DOM part is createWebView, which gets every main.ts closure it needs through WebViewDeps. Everything local (I1).
  */
 import { el } from '../../demo/src/ui/dom'
-import { arcsGradient, loadColourTags, tagColours } from './colour_tags'
+import { arcsGradient, colourLook, colourModeOf, loadColourTags, saveColourTags, tagColours } from './colour_tags'
+import { addTagToPeople } from './complete_view_model'
+import { beyondLabel, personMenuRows } from './person_menu'
+import { eventTagLabel } from './event_tag'
+import { focusedEventId } from './web_focus'
 import { clusterAngles, eventColours } from './event_cluster'
 import { isBlocked, isNonResponsive } from './non_responsive'
-import { type Column, YOU_EDGE, DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, avoidSector, beyondRings, columnSector, lapRadius, CONTROL_GAP, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
+import { type Column, YOU_EDGE, DESIRE_DEFAULT, RINGS_LABEL_CAP, BEYOND_DOT, angleFromCentre, angleOf, beyondSlots, isBeyond, avoidSector, beyondRings, columnSector, lapRadius, CONTROL_GAP, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry, Spot } from './rings_layout'
 import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, visiblePeople } from './rings_hide'
 import { EXPAND_DX, HANDLE, ringPoints } from './ring_handles'
@@ -128,6 +132,8 @@ export interface WebViewDeps {
   hintHidden(id: HintId): boolean
   touchUi(): boolean
   curatorPerson(personId: string): void
+  /** Wave 44: opens an event's page (the Web's "Tap the event"). */
+  openEvent?(eventId: string): void
   /** Opens the "Same person" sheet for two persons (the first is kept first, so Enter keeps it); null on a demo phone, where merging is off. */
   mergeSheet: ((aId: string, bId: string) => void) | null
   /** Wave 36: merges `dropId` into `keepId` (snapshot first); null where mergeSheet is. */
@@ -171,7 +177,7 @@ export interface WebView {
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
-  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo } = deps
+  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, addPersonSheet, openHint, hintHidden, touchUi, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo } = deps
   /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
   let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
   let ringsK = 1
@@ -193,7 +199,9 @@ export function createWebView(deps: WebViewDeps): WebView {
     // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
     const community = communityOf(s)
     // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
-    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [], s.events))) (everyone[zoneFor(p, community)] ??= []).push(p)
+    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [], s.events))) if (!isBeyond(p)) (everyone[zoneFor(p, community)] ??= []).push(p)
+    // Wave 44: people seen only through a friend sit outside every ring (rings_layout.ts isBeyond), not as a further ring.
+    const beyond = desk ? [] : visibleIn(s, s.people.filter((x) => isBeyond(x) && !isBlocked(x) && !x.deleted_at))
     // Wave 33: "closest 150" keeps the 150 closest across all rings (ring membership unchanged) and draws them all.
     const only150 = !desk && s.uiRings?.closest150 === true
     if (only150) {
@@ -244,7 +252,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     // The close ring depends on the scale (the "you" avatar does not shrink), the scale on the extent: settle on the first scale whose layout still fits.
     let k = 1
     const custom = desk ? undefined : s.uiRings?.radii   // wave 39: ring lines the user dragged
-    for (ringsGeo = ringsGeometry(counts, angles, k, custom); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k, custom)) k = C / ringsGeo.extent
+    for (ringsGeo = ringsGeometry(counts, angles, k, custom, beyond.length); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k, custom, beyond.length)) k = C / ringsGeo.extent
     ringsK = k
     const colourTags = loadColourTags()
     const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', 'data-rings-extent': String(ringsGeo.extent * k), ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
@@ -325,10 +333,14 @@ export function createWebView(deps: WebViewDeps): WebView {
         const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
         const arcs = arcsGradient([...tagColours(p, colourTags), ...eventColours(p, s.events ?? [])])
         const face = avatar(p.name, p.id)
-        face.style.background = wantsConnect(p) ? ringColor(p) : toneVar(ring)   // wave 43b: the yellow face now sits on the unsorted ring, ringed (.wants)
+        const toneFill = wantsConnect(p) ? ringColor(p) : toneVar(ring)   // wave 43b: the yellow face now sits on the unsorted ring, ringed (.wants)
+        const look = colourLook(colourModeOf(s), toneFill)   // wave 44: 'rings' (default) keeps the bubble neutral, the colour only on the ring around it
+        face.style.background = look.fill
         if (wantsConnect(p)) face.style.color = REACH_OUT_INK
-        if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
-          face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = initialColor('outlined')
+        else if (look.ink) face.style.color = look.ink
+        if (look.stroke) face.style.boxShadow = `0 0 0 2px ${look.stroke}`
+        if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the ring colour, ink text
+          face.classList.add('unconnected'); face.style.borderColor = look.stroke ?? toneFill; face.style.background = ''; face.style.color = initialColor('outlined')
         }
         pictured(face, p.theirProfile?.picture)
         const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
@@ -341,7 +353,7 @@ export function createWebView(deps: WebViewDeps): WebView {
           isDemoPerson(s, p.id) ? dummyChip() : null,
           st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
         ])
-        if (!desk) contextPress(b, () => curatorPerson(p.id))
+        if (!desk) contextPress(b, () => personMenu(wrap, p, x, y))   // wave 44: a SMALL menu; the single press keeps the big overlay
         at.set(p.id, { x, y })
         b.style.left = x + 'px'
         b.style.top = y + 'px'
@@ -360,6 +372,35 @@ export function createWebView(deps: WebViewDeps): WebView {
         }
       })
     }
+    // Wave 44: second-hand people (seen through a friend) sit in the band outside every ring; a dashed line runs to the friend; no name when either side keeps it anonymous.
+    if (beyond.length && ringsGeo.beyondRadius) {
+      const R = ringsGeo.beyondRadius * k
+      for (const slot of beyondSlots(beyond)) {
+        const a = ((slot.angle - 90) * Math.PI) / 180
+        const x = C + R * Math.cos(a), y = C + R * Math.sin(a)
+        const friend = s.people.find((q) => q.id === slot.via)
+        const label = beyondLabel(slot, friend ? displayName(friend.name).text : '')
+        const from = friend ? at.get(friend.id) : undefined
+        if (from) {
+          const line = document.createElementNS(NS, 'line')
+          line.setAttribute('x1', String(from.x)); line.setAttribute('y1', String(from.y)); line.setAttribute('x2', String(x)); line.setAttribute('y2', String(y))
+          line.setAttribute('stroke', 'currentColor'); line.setAttribute('stroke-width', '0.7'); line.setAttribute('stroke-dasharray', '3 3'); line.setAttribute('opacity', '0.45')
+          svg.appendChild(line)
+        }
+        const face = avatar(label.text || '?', slot.id)
+        face.classList.add('unconnected')
+        const b = el('button', { class: 'node beyond', 'data-beyond': slot.id, title: label.title, 'aria-label': label.text ? `${label.text}, ${label.title}` : label.title,
+          onclick: () => { if (!dragged && !slot.anonymous) openWebPage({ kind: 'card', id: slot.id }) } }, [face, label.text ? el('span', {}, [shortLabel(displayName(label.text).text)]) : null])
+        b.style.left = x + 'px'; b.style.top = y + 'px'
+        const diameter = BEYOND_DOT * k
+        b.style.setProperty('--d', diameter + 'px'); b.style.setProperty('--lbl', labelSize(diameter) + 'px')
+        wrap.appendChild(b)
+      }
+    }
+    // Wave 44: the Web is focused on one event (web_focus.ts): "Tap the event" opens its page; it pulses once.
+    const focusId = desk ? null : focusedEventId(s)
+    const focusEv = focusId ? (s.events ?? []).find((e) => e.id === focusId) : undefined
+    if (focusEv && deps.openEvent) wrap.appendChild(el('button', { class: 'tap-event-hint', 'data-tap-event': focusEv.id, onclick: (e: Event) => { e.stopPropagation(); deps.openEvent?.(focusEv.id) }, onpointerdown: (e: Event) => { e.stopPropagation() } }, [S.tapEventHint, ' · ', eventTagLabel(focusEv.tagName ?? focusEv.name)]))
     // Wave 29: thin dashed lines between contacts who know each other (never to me); dragOnRings moves them with the dot.
     // Wave 40: the stroke follows how they relate (close friends = short dashes, fainter when less sure); a wider invisible line on top opens the "why" card.
     if (!desk && connectionsShown(s)) {
@@ -1087,6 +1128,37 @@ export function createWebView(deps: WebViewDeps): WebView {
       e.preventDefault()
       if (!(e.target as HTMLElement).closest('.node')) open(e)
     })
+  }
+
+  /** Wave 44 (Jakob item 20): right click / long press on a bubble: a SMALL menu at the bubble, three rows: Tag…, Hide, Open. The single press keeps the big overlay. */
+  function personMenu(wrap: HTMLElement, p: Person, x: number, y: number): void {
+    wrap.querySelector('.ctx-menu')?.remove()
+    const menu = el('div', { class: 'ctx-menu person-menu', role: 'menu', 'data-person-menu': p.id, 'aria-label': S.personMenu.aria(p.name) })
+    const close = (): void => { menu.remove(); document.removeEventListener('pointerdown', away, true) }
+    const away = (e: Event): void => { if (!menu.contains(e.target as Node)) close() }
+    const tagRow = (): void => {
+      const input = el('input', { type: 'text', 'data-person-menu-tag': '', placeholder: S.personMenu.tagAsk, 'aria-label': S.personMenu.tagAsk }) as HTMLInputElement
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { close(); return }
+        if (e.key !== 'Enter' || !input.value.trim()) return
+        const name = input.value.trim()
+        const out = addTagToPeople([p], new Set([p.id]), loadColourTags(), name)
+        saveColourTags(out.tags); save(); close(); render(); toast(S.personMenu.tagged(p.name, name))
+      })
+      menu.replaceChildren(input)
+      input.focus()
+    }
+    const run: Record<'tag' | 'hide' | 'open', () => void> = {
+      tag: tagRow,
+      hide: () => { close(); void hideOnRings(p) },
+      open: () => { close(); openWebPage({ kind: 'card', id: p.id }) },
+    }
+    menu.replaceChildren(...personMenuRows(p).map((r) => el('button', { class: 'btn btn-ghost btn-sm', role: 'menuitem', 'data-person-menu-row': r.id, onclick: (e: Event) => { e.stopPropagation(); run[r.id]() } }, [r.label])))
+    const place = menuPlace({ x: x + 14, y: y + 14 })
+    menu.style.left = place.left + 'px'
+    menu.style.top = place.top + 'px'
+    wrap.appendChild(menu)
+    document.addEventListener('pointerdown', away, true)
   }
 
   /** Spaces the dots out equally (one ring, or all); Undo for 30 s restores every angle. */

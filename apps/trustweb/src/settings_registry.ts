@@ -94,6 +94,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   // ---- advanced: everything else the record stores ----
   feature('features.events', 'events', 'Events'),
   feature('features.inventory', 'inventory', 'Resources'),
+  { id: 'web.colourMode', section: 'web', label: 'Full colours on the web', hint: 'Off: only the ring around a bubble carries its colour. On: bubbles are filled.', type: 'boolean', default: false, simple: false, get: (r) => r.colourMode === 'full', set: (r, v) => { if (v === true) r.colourMode = 'full'; else delete r.colourMode } },
   flag('web.ringNames', 'web', 'Show ring names on the web', 'showRingNames', false, false, 'Trust zone under each name.'),
   choice('web.queryStyle', 'web', 'How asks read', 'queryStyle', ['call', 'search'], 'call', 'Asks read as a call for help or as a search.'),
   choice('web.pinnedOrder', 'web', 'Pinned order', 'pinnedOrder', ['pinned', 'contact'], 'pinned', 'Newest pin first, or whoever you were last in touch with first.'),

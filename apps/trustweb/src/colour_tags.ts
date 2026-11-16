@@ -79,3 +79,11 @@ export function memberIds(people: readonly Pick<Person, 'id' | 'ring' | 'fields'
 export function memberTagsOf(p: Pick<Person, 'id' | 'ring' | 'fields'>, people: readonly Pick<Person, 'id' | 'ring' | 'fields'>[], tags: readonly ColourTag[]): ColourTag[] {
   return tags.filter((t) => memberIds(people, tags, t.id).includes(p.id))
 }
+
+/** Wave 44 web-rings-polish: how much colour the Web shows. 'rings' (default, Tana-like): neutral bubbles, the colour only on the ring around each; 'full': filled with the ring colour. Settings > Web. */
+export const COLOUR_MODES = ['rings', 'full'] as const
+export type ColourMode = (typeof COLOUR_MODES)[number]
+export const colourModeOf = (s: { colourMode?: unknown }): ColourMode => (s.colourMode === 'full' ? 'full' : 'rings')
+/** The fill, ink and stroke of a bubble whose zone colour is `tone`; null = leave the stylesheet's value. */
+export const colourLook = (mode: ColourMode, tone: string): { fill: string; ink: string | null; stroke: string | null } =>
+  mode === 'rings' ? { fill: 'var(--person-neutral)', ink: 'var(--ink)', stroke: tone } : { fill: tone, ink: null, stroke: null }
