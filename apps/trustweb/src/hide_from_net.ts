@@ -10,12 +10,19 @@ import type { Identity } from '../../demo/src/did'
 import { fromB64u, toB64u } from '../../demo/src/crypto'
 import type { HideReportEnvelope, QueryEnvelope } from '../../demo/src/types'
 import {
-  blobHash, deriveHopSecret, HIDE_TAGS_MAX, isExcluded, makeTamperReport, newAskSecret, signAskExclusion, verifyAskExclusion, verifyTamperReport,
+  blobHash, deriveHopSecret, HIDE_TAGS_MAX, isExcluded, verifyLevelKey, makeTamperReport, newAskSecret, signAskExclusion, verifyAskExclusion, verifyTamperReport,
 } from './hide_from_crypto'
 import type { ExclusionBlob, HideReason } from './hide_from_crypto'
 import { addHideReport } from './hide_reports'
 import type { HideReportEntry } from './hide_reports'
 import type { AppState } from './model'
+
+/**
+ * Review-44 switch: an ask past the asker's direct contacts that arrives WITHOUT a blob. false = honoured (an asker or a forwarder on a build
+ * before wave 44 drops the field; until every phone runs wave 44 a missing blob cannot tell an old build from a forwarder that stripped it).
+ * true = dropped like a changed list (fail closed; asks through older phones then stop at them).
+ */
+export const HIDE_BLOB_REQUIRED = false
 
 /** Asks in flight (asker side) and report routes (forwarder side) kept at most. */
 const MEMORY_MAX = 500
@@ -66,7 +73,7 @@ export class HideFromNet {
    * that is missing: dropped and reported to `senderDid` (qid of the ask it sent). A receiver that is itself hidden at its level: dropped quietly.
    */
   async gate(q: QueryEnvelope, c: { root: string | null; maxHops: number; hop: number; senderDid: string; now: number }): Promise<HideGate> {
-    if (q.hx === undefined) return NO_GATE
+    if (q.hx === undefined) return HIDE_BLOB_REQUIRED && c.hop > 0 ? { drop: true } : NO_GATE
     let sk: Uint8Array | null = null
     try { sk = q.hk ? fromB64u(q.hk) : null } catch { sk = null }
     const check = verifyAskExclusion(q.hx, c)
@@ -75,6 +82,9 @@ export class HideFromNet {
       return { drop: true }
     }
     const blob = q.hx as unknown as ExclusionBlob
+    // Review-44: a level key the asker did not commit to (a forwarder handed on another one): fail closed. No report: the asker could not
+    // check its MAC (made with the wrong key), and the device that swapped the key is the one that would carry it back.
+    if (!(await verifyLevelKey(blob, c.hop, sk))) return { drop: true }
     const me = this.d.identity().did
     if (c.hop > 0 && await isExcluded(blob, c.hop, sk, [me])) return { drop: true }
     return { drop: false, blob, sk }

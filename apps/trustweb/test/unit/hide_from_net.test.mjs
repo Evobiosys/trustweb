@@ -98,6 +98,23 @@ describe('the "Hide from" list travels sealed with the ask', () => {
     expect(A.state.hideReports).toHaveLength(1)
   })
 
+  it('review-44: a forwarder that hands on another level key (so hidden people further out would test as not hidden) is caught: the ask is dropped', async () => {
+    const A = await phone('Asker Four')
+    const B = await phone('Bridge Four')
+    const C = await phone('Cleo Four', [{ text: 'Tent for four, to lend' }])
+    await connect(A, B); await connect(B, C)
+    const send = B.net.channel.send.bind(B.net.channel)
+    B.net.channel.send = (did, env, key) => {
+      if (env.t === 'query' && env.hk) env = { ...env, hk: 'B'.repeat(43) }
+      return send(did, env, key)
+    }
+    A.state.askReach = 2
+    const results = await A.net.ask('Who has a tent?', undefined, null, [])
+    expect(results.flatMap((r) => (r.decoded?.outcome === 'shared' ? r.decoded.shared.items : []))).toEqual([])
+    expect(C.queries).toHaveLength(1)
+    expect(C.asks).toHaveLength(0)
+  })
+
   it('a report nobody can verify (made up by the friend) is ignored', async () => {
     const A = await phone('Asker Three')
     const B = await phone('Bridge Three')

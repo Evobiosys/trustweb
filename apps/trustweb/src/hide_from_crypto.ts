@@ -7,8 +7,9 @@
  *              sL = HKDF-SHA256(s(L-1), salt = root, "tw-hide-next-v1"): one-way, so a device further out cannot compute an earlier level.
  *   tags       per level the set { HMAC-SHA256(sL, did)[0..16) } of every DID hidden from, padded with random tags to a bucket of HIDE_BUCKET
  *              and sorted: no DID, no count below the bucket, different tags per level and per ask.
- *   blob       ExclusionBlob {v, r: root, d: asker DID, m: reach, x: expiry, t: tags per level, g: Ed25519 signature of the asker's identity
- *              key over all of it}. Forwarders pass it on unchanged; the reach is signed too, so it cannot be raised.
+ *   blob       ExclusionBlob {v, r: root, d: asker DID, m: reach, x: expiry, t: tags per level, k: a commitment SHA-256(sL) per level
+ *              0..m-1 (review-44: binds each level secret to the signed blob, so a forwarder cannot hand on another key that would make
+ *              hidden DIDs further out test as not hidden), g: Ed25519 signature of the asker's identity key over all of it}. Forwarders pass it on unchanged; the reach is signed too, so it cannot be raised.
  *   level key  each receiver gets the secret of its own level in `hk`, inside the envelope sealed with the pair key (the sealed box): a
  *              forwarder at hop k tests its candidates for level k+1 with s(k+1) and hands s(k+1) on. It learns whether a DID it already
  *              holds is hidden, never the list (residual leak, see the report).
@@ -43,7 +44,7 @@ const TAG_RE = /^[A-Za-z0-9_-]{22}$/
 const NONCE_RE = /^[A-Za-z0-9_-]{22}$/
 const te = new TextEncoder()
 
-export interface ExclusionBlob { v: number; r: string; d: string; m: number; x: number; t: string[][]; g: string }
+export interface ExclusionBlob { v: number; r: string; d: string; m: number; x: number; t: string[][]; k: string[]; g: string }
 export type ExclusionCheck = 'ok' | 'tampered' | 'unsupported'
 export interface TamperReport { v: 1; r: string; hop: number; h: string; why: HideReason; d: string; n: string; at: number; mac: string; g: string }
 export type ReportCheck =
@@ -77,13 +78,30 @@ export async function tagSet(sk: Uint8Array, dids: readonly string[]): Promise<s
   return tags.sort()
 }
 
-const signedBytes = (b: Omit<ExclusionBlob, 'g'>): Uint8Array => te.encode('tw-hide-v1|' + JSON.stringify([b.v, b.r, b.d, b.m, b.x, b.t]))
+const signedBytes = (b: Omit<ExclusionBlob, 'g'>): Uint8Array => te.encode('tw-hide-v1|' + JSON.stringify([b.v, b.r, b.d, b.m, b.x, b.t, b.k]))
+
+/** The commitment to a level secret (16 bytes of SHA-256, base64url): one-way, so it shows nothing of the secret. */
+async function commitOf(sk: Uint8Array): Promise<string> {
+  const msg = new Uint8Array([...te.encode('tw-hide-commit-v1|'), ...sk])
+  return toB64u(new Uint8Array(await crypto.subtle.digest('SHA-256', msg as BufferSource)).slice(0, TAG_BYTES))
+}
+
+/** Review-44: is `sk` the level secret the asker committed to for `level` (0 = its direct contacts)? Only for a blob that verified. */
+export async function verifyLevelKey(blob: ExclusionBlob, level: number, sk: Uint8Array): Promise<boolean> {
+  const want = blob.k[level]
+  return typeof want === 'string' && sk.length === 32 && (await commitOf(sk)) === want
+}
 
 /** The asker's signed blob for an ask of reach `maxHops` (effective, 2..HOP_CAP): tag sets for levels 1..maxHops-1. */
 export async function signAskExclusion(identity: Identity, a: { root: string; maxHops: number; issuedAt: number; s0: Uint8Array; dids: readonly string[] }): Promise<ExclusionBlob> {
   const t: string[][] = []
-  for (let level = 1; level < a.maxHops; level++) t.push(await tagSet(deriveHopSecret(a.s0, a.root, level), a.dids))
-  const body = { v: ASK_EXCLUSION_V, r: a.root, d: identity.did, m: a.maxHops, x: a.issuedAt + HIDE_BLOB_TTL_MS, t }
+  const k: string[] = [await commitOf(a.s0)]
+  for (let level = 1; level < a.maxHops; level++) {
+    const sk = deriveHopSecret(a.s0, a.root, level)
+    t.push(await tagSet(sk, a.dids))
+    k.push(await commitOf(sk))
+  }
+  const body = { v: ASK_EXCLUSION_V, r: a.root, d: identity.did, m: a.maxHops, x: a.issuedAt + HIDE_BLOB_TTL_MS, t, k }
   return { ...body, g: signBytes(identity, signedBytes(body)) }
 }
 
@@ -102,10 +120,11 @@ export function verifyAskExclusion(blob: unknown, c: { root: string | null; maxH
   if (!Array.isArray(b.t) || b.t.length !== m - 1 || m < 2 || m > HOP_CAP) return 'tampered'
   const t = b.t as unknown[]
   if (!t.every((l) => Array.isArray(l) && l.length > 0 && l.length % HIDE_BUCKET === 0 && l.every((x) => typeof x === 'string' && TAG_RE.test(x)))) return 'tampered'
+  if (!Array.isArray(b.k) || b.k.length !== m || !b.k.every((x) => typeof x === 'string' && TAG_RE.test(x))) return 'tampered'
   if (b.r !== c.root || m !== c.maxHops) return 'tampered'
   if (c.now > b.x || b.x > c.now + HIDE_BLOB_TTL_MS + CLOCK_SLACK_MS) return 'tampered'
   if (c.hop === 0 ? b.d !== c.senderDid : b.d === c.senderDid) return 'tampered'
-  const body = { v: ASK_EXCLUSION_V, r: b.r, d: b.d, m, x: b.x, t: t as string[][] }
+  const body = { v: ASK_EXCLUSION_V, r: b.r, d: b.d, m, x: b.x, t: t as string[][], k: b.k as string[] }
   return verifyDidSignature(b.d, signedBytes(body), b.g) ? 'ok' : 'tampered'
 }
 
