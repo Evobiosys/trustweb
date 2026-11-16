@@ -91,6 +91,7 @@ async function main() {
     ok('Record is still the raised middle tab', await page.locator('nav.tabs .tab-record').isVisible())
     // your own name: tap yourself in the web
     await page.locator('.node.you').click()
+    await page.locator('[data-profile-expander]').click() // wave44b: the section list sits behind the V expander
     await page.locator('[data-own-profile-name]').click() // wave 36b: the centre dot opens the own profile page; the name change sits on it
     await page.getByRole('heading', { name: 'Your name' }).waitFor({ timeout: 5_000 })
     await page.getByLabel('Your name', { exact: true }).fill('Jakob')

@@ -3,6 +3,7 @@
  * Views are screens of their own (Screen.Events); the module keeps which one is showing.
  */
 import { contextPress } from './context_press'
+import { eventModeToggle } from './filter_bar_view'
 import { el } from '../../demo/src/ui/dom'
 import type { EventOffers } from './events'
 import { EVENT_VISIBILITIES, communityOfEvent, listedAttendees, searchableAttendees, visibilityOf } from './event_visibility'
@@ -524,7 +525,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ...(h.plan?.(ev) ?? []),
       h.feedRow?.(ev) ?? null,
       offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.() }, [S.w43press.askSupport]) : null,
-      el('div', { class: 'chips' }, [attended, notify]),
+      el('div', { class: 'chips' }, [attended, notify, eventModeToggle({ state: h.state, save: h.save, redraw: h.redraw }, ev.id)]),
       notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,
       shareRow(ev),
       hostToggle(ev),

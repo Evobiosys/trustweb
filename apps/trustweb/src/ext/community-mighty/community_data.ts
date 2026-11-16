@@ -31,6 +31,8 @@ export interface CommunityMeta {
   shareLayout?: boolean; slot?: string
   /** Wave 44 home-dashboard: 'otherGroup' = an affiliation that is not a community (family, a circle of friends); absent = a community. */
   group?: 'otherGroup'
+  /** Wave 44b filters-communities: the community this one is a sub-community of (holarchy); absent = a root. */
+  parent?: string
 }
 export const REMEMBER_MAX = 5
 /** Wave 43c: an anonymous slot is random lower-case hex, 16 to 64 characters (the server's check is the same). */
@@ -86,7 +88,7 @@ function parseMeta(v: unknown): Record<string, CommunityMeta> | undefined {
     out[id] = {
       kind: o.kind === 'managed' ? 'managed' : 'informal', organizers: strs(o.organizers),
       ...(Array.isArray(o.tiles) ? { tiles } : {}), ...(managedTiles.length ? { managedTiles } : {}), ...(o.connectEvents === true ? { connectEvents: true as const } : {}), ...(typeof o.shareLayout === 'boolean' ? { shareLayout: o.shareLayout } : {}), ...(isStr(o.slot) && SLOT_RE.test(o.slot) ? { slot: o.slot } : {}),
-      ...(o.group === 'otherGroup' ? { group: 'otherGroup' as const } : {}),
+      ...(o.group === 'otherGroup' ? { group: 'otherGroup' as const } : {}), ...(isStr(o.parent) && o.parent ? { parent: o.parent } : {}),
       ...(nav.length ? { nav } : {}), ...(o.ask === false ? { ask: false } : {}), ...(audiences.length ? { audiences } : {}), ...(isStr(o.name) && o.name ? { name: o.name } : {}),
     }
   }
@@ -214,7 +216,7 @@ export function listCommunities(d: CommunityData, tags: readonly TagLike[], peop
 }
 
 /** A new community (or the one of that name): its tag, an entry in the settings, and it becomes the chosen one. Null for an empty name. */
-export function createCommunity(d: CommunityData, tags: readonly TagLike[], name: string, kind: CommunityKind, group?: 'otherGroup'): { data: CommunityData; tags: TagLike[]; id: string } | null {
+export function createCommunity(d: CommunityData, tags: readonly TagLike[], name: string, kind: CommunityKind, group?: 'otherGroup', parent?: string): { data: CommunityData; tags: TagLike[]; id: string } | null {
   const n = norm(name)
   if (!n) return null
   const known = tags.find((t) => norm(t.label ?? t.id) === n || norm(t.id) === n)
@@ -222,7 +224,7 @@ export function createCommunity(d: CommunityData, tags: readonly TagLike[], name
   let id = known?.id ?? slug
   for (let i = 2; !known && tags.some((t) => t.id === id); i++) id = `${slug}-${i}`
   const added: TagLike[] = known ? [] : [{ id, colour: PALETTE[tags.length % PALETTE.length], label: name.trim(), ...(tags.some((t) => t.community) ? { community: true } : {}) }]
-  const data = d.meta?.[id] ? { ...d, tag: id } : withMeta({ ...d, tag: id }, id, { kind, organizers: kind === 'managed' ? [ME] : [], ...(group ? { group } : {}), ...(known ? {} : { name: name.trim() }) })
+  const data = d.meta?.[id] ? { ...d, tag: id } : withMeta({ ...d, tag: id }, id, { kind, organizers: kind === 'managed' ? [ME] : [], ...(group ? { group } : {}), ...(parent && parent !== id ? { parent } : {}), ...(known ? {} : { name: name.trim() }) })
   return { data, tags: [...tags, ...added], id }
 }
 
@@ -371,3 +373,56 @@ export function tilePercents(a: TileAggregate): { tile: TileId; pct: number }[] 
 
 /** "Follow them": the tiles at least `minPct` percent of the members show. */
 export const followTiles = (a: TileAggregate, minPct = 50): TileId[] => tilePercents(a).filter((r) => r.pct >= minPct).map((r) => r.tile)
+
+/* wave44b filters-communities: holarchic communities (item 5). A community can hold sub-communities, several under another, shown as a tree. */
+
+/** Sub-communities per root that run free on our servers; above it the owner asks the hosting contact for more (social_hosting path). Jakob: "a request is needed above 20". */
+export const SUBCOMMUNITY_FREE_LIMIT = 20
+
+/** The community above `id`, if its entry exists. */
+const parentOf = (d: CommunityData, id: string): string | undefined => d.meta?.[id]?.parent
+
+/** The root of `id`: follows parents (a cycle in the data stops where it closes). */
+export function rootOf(d: CommunityData, id: string): string {
+  const seen = new Set<string>([id])
+  let cur = id
+  for (let p = parentOf(d, cur); p && !seen.has(p); p = parentOf(d, cur)) { seen.add(p); cur = p }
+  return cur
+}
+
+/** Everything below `id`, at any depth, nearest first. */
+export function descendantsOf(d: CommunityData, id: string): string[] {
+  const out: string[] = []
+  const seen = new Set<string>([id])
+  const kids = (x: string): string[] => Object.keys(d.meta ?? {}).filter((k) => d.meta?.[k]?.parent === x)
+  for (let queue = kids(id); queue.length;) {
+    const next = queue.shift()!
+    if (seen.has(next)) continue
+    seen.add(next); out.push(next); queue.push(...kids(next))
+  }
+  return out
+}
+
+/** Sub-communities under the root of `id` (the counter is per root). */
+export const subCommunityCount = (d: CommunityData, id: string): number => descendantsOf(d, rootOf(d, id)).length
+
+/** False once the root already holds `limit` sub-communities: the "request more" dialog opens instead. */
+export const canAddSub = (d: CommunityData, parent: string, limit: number = SUBCOMMUNITY_FREE_LIMIT): boolean => subCommunityCount(d, parent) < limit
+
+export interface CommunityNode { row: CommunityRow; depth: number }
+
+/** The community list as a tree: roots in list order, each followed by its sub-communities (indent = depth). A parent that does not exist makes a root. */
+export function communityTree(d: CommunityData, rows: readonly CommunityRow[]): CommunityNode[] {
+  const ids = new Set(rows.map((r) => r.id))
+  const parent = (r: CommunityRow): string | undefined => { const p = parentOf(d, r.id); return p && p !== r.id && ids.has(p) ? p : undefined }
+  const out: CommunityNode[] = []
+  const seen = new Set<string>()
+  const walk = (r: CommunityRow, depth: number): void => {
+    if (seen.has(r.id)) return
+    seen.add(r.id); out.push({ row: r, depth })
+    for (const k of rows) if (parent(k) === r.id) walk(k, depth + 1)
+  }
+  for (const r of rows) if (!parent(r)) walk(r, 0)
+  for (const r of rows) walk(r, 0)   // a cycle has no root: show it flat rather than lose it
+  return out
+}

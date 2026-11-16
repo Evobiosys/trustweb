@@ -5,6 +5,7 @@
  */
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { eventTagSlug } from '../../trustweb/src/event_tag.ts'
+import { COMMUNITY_CHIP } from '../../trustweb/src/community_tag.ts'
 import type { Tool } from './protocol.ts'
 
 interface Ev { id: string; name: string; tagName?: string }
@@ -25,7 +26,7 @@ function shape(r: Rec): Record<string, unknown> {
 function chipOf(r: Rec, tag: unknown): string {
   if (typeof tag !== 'string') throw new Error('every tag must be text')
   const t = tag.trim()
-  if (/^(tag|person|event):.+/.test(t)) return t
+  if (/^(tag|person|event):.+/.test(t) || t === COMMUNITY_CHIP) return t
   if (t.startsWith('event_')) {
     const id = slugs(r).get(t.toLowerCase())
     if (!id) throw new Error(`unknown event tag: ${t}`)
@@ -41,7 +42,7 @@ export function webFilterTools(o: { file: string; write: boolean }): Tool[] {
     inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false }, run: () => shape(load()),
   }]
   const write: Tool[] = [{
-    name: 'web_filter_set', description: 'Set the Web\'s filter: only people with these tags show (event_<slug>, tag:<id>, person:<id>). An empty list clears every filter.',
+    name: 'web_filter_set', description: 'Set the Web\'s filter: only people with these tags show (event_<slug>, tag:<id>, person:<id>, or community = everyone I share any community with). An empty list clears every filter.',
     inputSchema: { type: 'object', properties: { tags: { type: 'array', items: { type: 'string' }, description: 'tags to show only; [] clears the filter' } }, required: ['tags'], additionalProperties: false },
     run: (a) => {
       if (!Array.isArray(a.tags)) throw new Error('tags must be a list')

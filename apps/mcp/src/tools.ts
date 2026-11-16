@@ -11,6 +11,7 @@ import { billingTools } from './billing_tools.ts'
 import { bubbleTools } from './bubble_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
 import { homeTools } from './home_tools.ts'
+import { profilePageTools } from './profile_page_tools.ts'
 import { feedSourcesTools } from './feed_sources_tools.ts' // wave44 feed-sources
 import { handshakeTools } from './handshake_tools.ts'
 import { importTools } from './import_tools.ts'
@@ -41,6 +42,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave44 steer-bubble-connect */ ...bubbleTools({ ...o, write }),
     /* wave44 handshake-crypto */ ...handshakeTools(o),
     /* wave44 steer-invite-link */ ...inviteTools({ ...o, write }),
+    /* wave44b profile-page */ ...profilePageTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

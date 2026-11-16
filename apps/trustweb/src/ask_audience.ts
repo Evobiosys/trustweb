@@ -5,6 +5,7 @@ import type { AudienceFilter } from './audience_filter'
 import { memberIds } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import type { AppState, Person } from './model'
+import { eventFilterOf, narrowToEvent } from './event_filter_mode'
 
 type Held = Pick<AppState, 'people' | 'askAudience' | 'askReach'>
 
@@ -29,8 +30,11 @@ export function tagTester(people: readonly Person[], tags: readonly ColourTag[])
 }
 
 /** The peer ids the hints and intro asks may reach; null = the filter is off, everybody connected is asked. */
-export function allowedPeerIds(s: Held, tags: readonly ColourTag[]): string[] | null {
+export function allowedPeerIds(s: Held & Partial<Pick<AppState, 'uiRings' | 'events'>>, tags: readonly ColourTag[]): string[] | null {
   const f = askFilterOf(s)
-  if (!f.zone && !f.add.length && !f.exclude.length) return null
-  return peopleFor(f, s.people, tagTester(s.people, tags)).map((p) => p.peerId as string)
+  const own = !f.zone && !f.add.length && !f.exclude.length ? null : peopleFor(f, s.people, tagTester(s.people, tags)).map((p) => p.peerId as string)
+  if (!eventFilterOf(s)) return own
+  // Wave 44b: event mode narrows an ask to the people connected with that event.
+  const inEvent = narrowToEvent(s, s.people).map((p) => p.peerId).filter((x): x is string => !!x)
+  return own ? own.filter((id) => inEvent.includes(id)) : inEvent
 }

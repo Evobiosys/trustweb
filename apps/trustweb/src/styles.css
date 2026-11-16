@@ -2204,3 +2204,42 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .os-slot{flex:0 0 auto;font-variant-numeric:tabular-nums}
 .os-title{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .os-form{display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem}
+
+/* wave44b filters-communities */
+.filter-bar{display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:4px 10px; min-width:0}
+.filter-bar .event-mode-pill{display:inline-flex; align-items:center; gap:4px}
+.saved-filters{font-size:13px; margin:6px 0}
+.saved-filters summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
+.saved-filter{display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:2px 0; min-width:0}
+.saved-filter .meta{flex:1 1 120px; min-width:0}
+.switch-line{display:flex; align-items:center; gap:2px; min-width:0}
+.switch-line .fold{min-width:28px; min-height:28px; padding:0}
+.switch-line .fold-gap{display:inline-block; width:28px; flex:none}
+.sub-more{margin:6px 0; padding:8px}
+/* wave44b profile-page */
+.profile-page{display:flex; flex-direction:column; gap:10px}
+.profile-head{display:flex; align-items:center; gap:10px}
+.profile-head input{flex:1 1 auto; min-width:0}
+.profile-field{display:flex; align-items:center; gap:6px; min-width:0}
+.profile-field label{flex:0 0 7.5em; font-size:12px; color:var(--ink-soft)}
+.profile-field input,.profile-field textarea{flex:1 1 auto; min-width:0}
+.profile-opt input,.profile-opt textarea{font-size:11px; color:var(--ink-soft); opacity:.75; padding:4px 8px; min-height:0}
+.profile-opt label{font-size:11px; opacity:.75}
+.profile-vis{flex:0 0 auto; font-size:11px; color:var(--ink-soft); background:none; border:1px solid var(--line); border-radius:999px; padding:2px 8px; min-height:28px; text-decoration:underline; cursor:pointer}
+.profile-vis[data-vis=discoverable]{border-color:var(--teal); color:var(--teal)}
+.profile-link{display:flex; align-items:center; gap:6px; font-size:12px; min-width:0; flex-wrap:wrap}
+.profile-link a{min-width:0; overflow-wrap:anywhere}
+.profile-more[hidden]{display:none}
+.profile-more{display:flex; flex-direction:column; gap:8px; margin-left:12px; padding-left:10px; border-left:2px solid var(--line)}
+/* wave44b resources-outliner */
+.ol{display:flex; flex-direction:column; gap:2px; min-width:0}
+.ol-row{display:flex; align-items:center; gap:4px; min-width:0}
+.ol-bullet{min-width:32px; min-height:32px; background:none; border:0; color:var(--ink-soft); font-size:16px; cursor:pointer}
+.ol-text{flex:1; min-width:0; min-height:32px; border:0; border-bottom:1px solid var(--line, #ddd); background:none; font:inherit; color:inherit}
+.ol-pick,.ol-tools{display:flex; flex-wrap:wrap; gap:4px; margin:2px 0}
+.ol-share{display:flex; flex-direction:column; gap:4px; margin-top:6px; padding:8px; border:1px solid var(--line, #ddd); border-radius:8px}
+.ol-share-text{margin:0; white-space:pre-wrap; font-size:12px; max-height:120px; overflow:auto}
+.ol-import summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center; font-size:12px; color:var(--ink-soft)}
+.ol-paste{width:100%; font-size:12px}
+.req-count{position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 3px; border-radius:8px; font-size:10px; line-height:16px; text-align:center; background:var(--ink, #222); color:var(--paper, #fff)}
+.requests-btn{position:relative}

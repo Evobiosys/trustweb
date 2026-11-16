@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 31: Resources > eye > Matches. Cards per offer, strongest first; the empty state explains the pc24 service and keeps the offers editable. */
 import { el } from '../../demo/src/ui/dom'
+import { narrowMatches } from './event_filter_mode'
 import { dismissMatch, groupMatches, matchKey } from './matches'
 import type { MatchStatus } from './dev_matches'
 import type { AppState, Match } from './model'
@@ -64,7 +65,7 @@ function offersSection(s: AppState, d: MatchesDeps): Node {
 }
 
 export function matchesView(s: AppState, d: MatchesDeps): Node[] {
-  const groups = groupMatches(s.matches ?? [], s.offers ?? [])
+  const groups = groupMatches(narrowMatches(s, s.matches ?? []), s.offers ?? [])   // wave 44b: event mode
   return [
     liveLine(s, d.status),
     ...(groups.length

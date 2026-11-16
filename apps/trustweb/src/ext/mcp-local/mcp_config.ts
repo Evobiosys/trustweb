@@ -10,6 +10,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'notifications_inbox_mark_seen', write: true }, { name: 'notifications_popup_set', write: true },
   { name: 'bar_list', write: false }, { name: 'bar_set', write: true }, { name: 'bar_hide', write: true }, { name: 'bar_show', write: true },
   { name: 'web_filter_get', write: false }, { name: 'web_filter_set', write: true },
+  /* wave44b filters-communities */
+  { name: 'filter_state_list', write: false }, { name: 'event_mode_get', write: false }, { name: 'filter_state_save', write: true }, { name: 'filter_state_apply', write: true }, { name: 'filter_state_pin', write: true }, { name: 'event_mode_set', write: true },
   { name: 'remove_person', write: true }, { name: 'restore_person', write: true },
   { name: 'introduce_people', write: true }, // wave 44 steer-bubble-connect
   { name: 'introduce_link_create', write: true }, // wave 44 steer-bubble-connect-3
@@ -76,6 +78,11 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'invite_link_create', write: true }, { name: 'invite_link_revoke', write: true }, { name: 'invite_link_status', write: false },
   /* wave44 steer-open-space */
   { name: 'open_space_propose', write: true }, { name: 'open_space_join', write: true },
+
+  /* wave44b profile-page */
+  { name: 'profile_get', write: false }, { name: 'profile_set', write: true }, { name: 'profile_link_add', write: true }, { name: 'profile_link_remove', write: true },
+  /* wave44b resources-outliner */
+  { name: 'resource_share', write: false }, { name: 'resource_block_add', write: true }, { name: 'resource_block_edit', write: true }, { name: 'resource_block_move', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

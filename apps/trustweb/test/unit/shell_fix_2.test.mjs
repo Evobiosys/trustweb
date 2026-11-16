@@ -35,9 +35,9 @@ describe('strings', () => {
 })
 
 describe('protected resource row (43b-D5)', () => {
-  it('renders Play and Show link, no Record button', () => {
+  it('renders Record, Play and Show link (flip 43b-D5, wave 44b: Record is back)', () => {
     const src = readFileSync(new URL('../../src/resource_views_view.ts', import.meta.url), 'utf8')
-    expect(src).not.toContain("'data-rv-record'")
+    expect(src).toContain("'data-rv-record'")
     expect(src).toContain("'data-rv-play'")
   })
 })

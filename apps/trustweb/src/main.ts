@@ -176,6 +176,8 @@ import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import { resourceViews } from './resource_views_view'
+import { outlineView } from './resource_outline_view'
+import { refToken } from './resource_blocks'
 import { canShareOn } from './resource_views'
 import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
@@ -304,11 +306,15 @@ import { purgeDue, recentlyDeleted } from './deleted_people'
 import { trustZonesGroup, zoneSidebar } from './trustzones_view'
 import { ringShown } from './rings_filter'
 import { ownProfilePage } from './own_profile_view'
+import { profilePage } from './profile_page_view'
 import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { createWebFocus } from './web_focus'
+import { showCommunity } from './filter_active'
+import { mountFilterBar } from './filter_bar_view'
+import { narrowById } from './event_filter_mode'
 import { createModeShell } from './ext/community_mode/shell'
 import { communityLead } from './ext/community_mode/mode'
 import { bindModeShell } from './ext/community_mode'
@@ -1865,8 +1871,10 @@ function mountAskButton(): void {
 
 /** Wave 44 header-layout: the inbox ("Review requests") sits after the logo and the title at the top left of every header (HEADER_LEFT); wave 43c had it top right. */
 function inboxButton(): HTMLElement {
-  const b = iconButton('inbox', S.reqAria, requestsSheet, 'requests-btn')
+  const waiting = askQueue.length + (askShowing ? 1 : 0)
+  const b = iconButton('inbox', waiting ? S.resOutliner.requests(waiting) : S.reqAria, requestsSheet, 'requests-btn')
   b.setAttribute('data-open-requests', '1')
+  if (waiting) b.append(el('span', { class: 'req-count', 'data-req-count': String(waiting) }, [String(waiting)]))
   return b
 }
 
@@ -2184,6 +2192,7 @@ function render(): void {
   if (kept && kept.parentNode === host) { for (const n of [...host.childNodes]) if (n !== kept) n.remove(); kept.before(...(frame ? [frame] : []), ...body.slice(0, -1)) }
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
+  if (screen === Screen.Web || screen === Screen.Chat || screen === Screen.Inventory || screen === Screen.Ask) mountFilterBar(host, { state: st, save, redraw: render })   // wave 44b: event-mode pill + pinned filters
   mountSettingsGear()
   mountAskButton()
   mountAiButton()
@@ -3058,9 +3067,13 @@ function webPageScreen(page: WebPage): Node[] {
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'me') {
-    return [header(S.ownProfileTitle, { back }), ownProfilePage({
-      profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl), name: () => st().me.displayName,
-      editProfile: profileSheet, editName: () => editNameSheet(true),
+    const face = (): HTMLElement => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl)
+    return [header(S.profile44.title, { back }), profilePage({   // wave44b profile-page
+      state: st, save, face, toast, discoverable: social.profileBlock, redraw: render, fetch: (u, i) => fetch(u, i), origin: location.origin,
+      zones: () => ownProfilePage({
+        profile: () => st().profile, basis: () => basisOf(st()), now: () => new Date(), face, name: () => st().me.displayName,
+        editProfile: profileSheet, editName: () => editNameSheet(true),
+      }),
     })]
   }
   if (page.kind === 'more') {
@@ -3300,7 +3313,7 @@ function viewDrop(current: ViewKey): HTMLElement | null {
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
     ...items.filter((i) => !i.other).map(btn),
     ...twRegistry.views().map((v) => { // wave 39: the views of the extension modules that are on
-      const b = el('button', { class: 'view-opt', role: 'menuitemradio', 'aria-checked': 'false', 'data-mod-view': v.id, onclick: () => openExtView(v.id) })
+      const b = el('button', { class: 'view-opt', role: 'menuitemradio', 'aria-checked': 'false', 'data-mod-view': v.id, onclick: () => { if (v.id === 'community' && showCommunity(st())) save(); openExtView(v.id) } })   // wave 44b: Eye > Community sets the community filter silently
       b.innerHTML = icon(v.icon)
       b.append(el('b', {}, [v.title]))
       return b
@@ -3401,7 +3414,7 @@ function communityChatRow(): HTMLElement | null {
 function chatListBody(): Node[] {
   const s = st()
   const now = Date.now()
-  const people = chatPeople()
+  const people = narrowById(st(), chatPeople())   // wave 44b: event mode lists only the event's people
   const all = chatListRows(s.chats, people, { query: chatQuery, since: dndSince() })
   const tags = loadColourTags()
   const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
@@ -3800,6 +3813,10 @@ function itemSheet(itemId: string): void {
     sourceFor(item.source, item.text),
     itemContextView(item),
     ...provenanceStateView(item),
+    outlineView({
+      item, newId: () => randomId(8), save, canShare: canShareOn(item, loadColourTags()),
+      share: (p) => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(p.text)}&ref=${refToken(p.ref)}` })) },
+    }),
     feed.itemExtras(item),
     // Review 43b (B17): a protected resource offers no way to pass it on (canShareOn).
     canShareOn(item, loadColourTags()) ? el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]) : null,
@@ -7840,7 +7857,7 @@ function settingsSheet(): void {
     ],
     general: [
     settingsSection('you', S.setSecYou, [
-      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
       ]),
       el('button', { class: 'conn-row', 'data-primary-email': '1', onclick: () => editEmailSheet() }, [
@@ -7980,7 +7997,7 @@ function settingsSheet(): void {
     simpleBlock({
       state: () => st() as unknown as Record<string, unknown>, save, render: () => { renderTabs(); render() }, redraw: settingsSheet,
       actions: {
-        'ui.profile': () => editNameSheet(), 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
+        'ui.profile': () => { closeSheet(); openWebPage({ kind: 'me' }) }, 'ui.bar': barSheet, 'ui.ai': () => openSettingsAt('[data-settings-group=ai]'), 'ui.appearance': () => openSettingsAt('[data-theme-row]'),
         'ui.import': () => openServicesImport(importHooks()), 'ui.help': () => openSheet([el('h3', {}, [S.setTitle]), ...aboutGroup()]),
       },
     }),
