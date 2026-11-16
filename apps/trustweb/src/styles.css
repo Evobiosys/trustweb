@@ -2020,3 +2020,17 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
 /* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
 #notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}
+/* wave44 feed-sources: the Sources page, the "Only <source>" chips, the publish target */
+.sources-page{display:flex; flex-direction:column; gap:6px; min-width:0}
+.sources-page .eyebrow{margin:14px 0 0}
+.src-row{display:flex; flex-direction:column; gap:4px; min-width:0}
+.src-main{display:flex; align-items:center; gap:4px}
+.src-main .radio{flex:1 1 auto; min-width:0; margin-top:6px; overflow-wrap:anywhere}
+.src-filters{display:flex; flex-direction:column; gap:6px; padding:4px 0 8px 10px; min-width:0}
+.src-filters[hidden]{display:none}
+.src-opt{font-size:11px; color:var(--ink-soft); opacity:.7; padding:4px 8px; min-height:0}
+.algo-row{display:flex; flex-direction:column; gap:2px; min-width:0}
+.algo-range{width:100%; min-height:32px}
+.feed-target{font-size:12px; color:var(--ink-soft)}
+.feed-target summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
+.feed-target .meta{margin:4px 0}
