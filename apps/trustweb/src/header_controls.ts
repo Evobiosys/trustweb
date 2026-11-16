@@ -13,6 +13,13 @@ export function headerControls(screen: string): HeaderControl[] | undefined {
   return SCREENS.includes(screen) ? ['search', 'views', 'pins', 'qr', 'settings'] : undefined
 }
 
+/** Wave 44: the top right is the same on every screen, left to right: QR, settings, the AI sparkle (when its extension is on). Search, views, the chat switch and the pins sit in the screen's own tools row. */
+export const HEADER_RIGHT = ['qr', 'settings', 'ai'] as const
+export const headerRight = (aiOn: boolean): readonly (typeof HEADER_RIGHT)[number][] => HEADER_RIGHT.filter((c) => c !== 'ai' || aiOn)
+
+/** The screen's own controls (the tools row): headerControls without the fixed right-hand set. */
+export const headerTools = (screen: string): HeaderControl[] => (headerControls(screen) ?? []).filter((c) => !(HEADER_RIGHT as readonly string[]).includes(c))
+
 /** Wave 33: the settings gear sits in the header of every screen but Start (Meet, Review, Place, hand-over included). */
 export const showsSettingsGear = (screen: string): boolean => screen !== 'start'
 

@@ -2020,3 +2020,11 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
 /* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
 #notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}
+
+/* wave44 header-layout */
+.hdr{flex-wrap:wrap; row-gap:4px}
+.hdr-left{flex:1 1 0}
+.hdr-right{flex:0 0 auto}
+.hdr-tools{flex:0 0 100%; display:flex; align-items:center; justify-content:flex-end; gap:8px; min-width:0}
+.hdr-tools > *{flex-shrink:0}
+@media (max-width:480px){ .hdr-tools{gap:4px} }
