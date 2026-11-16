@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Bottom bar (wave 31): configurable order, hidden views, one primary; pure. */
-import { DEFAULT_ORDER, STOCK_ORDER, PHONE_MAX, addBar, defaultPair, defaultPrimary, overflowChoices, moreViews, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
+import { FEED_IN_BAR, DEFAULT_ORDER, STOCK_ORDER, PHONE_MAX, addBar, defaultPair, defaultPrimary, overflowChoices, moreViews, barChoices, barLayout, moveBar, resolveBar, setPrimary, showViewInBar, toggleBar, viewOfBar } from '../../src/bottom_bar.ts'
 
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 /** The wave-31 row (Record in the centre) as a saved order: tests of the row rules use it, the unsaved stock row is D2 (bottom_bar_w42). */
@@ -8,12 +8,14 @@ const OLD_ROW = ['web', 'chat', 'record', 'events', 'inventory']
 const old = (extra = {}) => ({ order: [...OLD_ROW], ...extra })
 
 describe('bottom_bar', () => {
-  it('the unsaved stock row is Web, Chat, Feed, Events, Resources (wave 42 D2); the old row stays as the Note taker preset', () => {
+  it('the unsaved stock row is Web, Chat, Events, Resources (wave 44: the Feed waits until it is mature); the old row stays as the Note taker preset', () => {
     expect(OLD_ROW).toEqual(['web', 'chat', 'record', 'events', 'inventory'])
-    expect(DEFAULT_ORDER).toEqual(['web', 'chat', 'feed', 'events', 'inventory', 'record']) // wave 43: Feed joins the default order, Record stays removable
-    expect(STOCK_ORDER).toEqual(['web', 'chat', 'feed', 'events', 'inventory'])
+    expect(FEED_IN_BAR).toBe(false)
+    expect(DEFAULT_ORDER).toEqual(['web', 'chat', 'events', 'inventory', 'record']) // Record stays removable
+    expect(STOCK_ORDER).toEqual(['web', 'chat', 'events', 'inventory'])
     expect(resolveBar(undefined, all).ids).toEqual(STOCK_ORDER)
-    expect(resolveBar(undefined, all).primary).toBe('feed')
+    expect(resolveBar(undefined, all).primary).toBeNull()
+    expect(barChoices(undefined, all).find((x) => x.id === 'feed')).toEqual({ id: 'feed', on: false }) // still offered in the sheet
     expect(resolveBar(old(), all).primary).toBe('record')
   })
   it('Ask is optional: offered in the sheet, off by default, joins at the end', () => {
@@ -127,7 +129,7 @@ describe('bottom_bar profiles (wave 33)', () => {
   it('activeProfile: stored id, else the matching preset, else custom', async () => {
     const { activeProfile, applyProfile } = await import('../../src/bottom_bar.ts')
     expect(activeProfile(applyProfile(undefined, 'up_to_date'), all)).toBe('up_to_date')
-    expect(activeProfile(undefined, all)).toBe('up_to_date') // wave 42 D2: the stock row is the Up to date preset
+    expect(activeProfile(undefined, all)).toBe('custom') // wave 44: the stock row has no Feed, so it matches no preset
     expect(activeProfile(old(), all)).toBe('note_taker')
     expect(activeProfile({ order: ['chat', 'record', 'web'] }, all)).toBe('custom')
   })
@@ -168,7 +170,7 @@ describe('bottom_bar profiles (wave 33)', () => {
     expect(resolveBar(four, all).pair).toEqual(['chat', 'record'])
     expect(resolveBar({ ...four, primary: 'chat' }, all).pair).toEqual([])
     expect(resolveBar({ ...four, primary: 'none' }, all).pair).toEqual([])
-    expect(resolveBar(undefined, all).pair).toEqual([])
+    expect(resolveBar(undefined, all).pair).toEqual(['chat', 'events']) // wave 44: four stock buttons, the inner pair
     expect(resolveBar(four, { ...all, mods: ['community'] }).pair).toEqual([]) // wave 42: five buttons, odd
   })
   it('setPrimary accepts none', () => {
@@ -185,7 +187,7 @@ describe('bottom_bar profiles (wave 33)', () => {
   it('overflowChoices: every offered view that is not in the bar, People and Map included (wave 43)', () => {
     const ids = resolveBar(old(), all).ids
     expect(overflowChoices(ids, [], all)).toEqual(['feed', 'timeline', 'ask', 'network', 'people', 'map'])
-    expect(overflowChoices(resolveBar(undefined, all).ids, [], all)).toEqual(['timeline', 'record', 'ask', 'network', 'people', 'map'])
+    expect(overflowChoices(resolveBar(undefined, all).ids, [], all)).toEqual(['feed', 'timeline', 'record', 'ask', 'network', 'people', 'map'])
     expect(overflowChoices(ids, ['map'], all)).toEqual(['feed', 'timeline', 'ask', 'network', 'people', 'map'])
     expect(overflowChoices(ids, [], { ...all, feed: false, map: false })).toEqual(['ask', 'network', 'people'])
     expect(overflowChoices(['web', 'chat', 'record', 'events', 'inventory', 'feed', 'timeline', 'ask', 'network', 'people', 'map'], [], all)).toEqual([])
@@ -243,7 +245,7 @@ describe('bottom_bar wave 43: Feed and Timeline', () => {
   it('Timeline can be put in the row, and then leaves the ⋮ list; with the Feed switched off neither is offered', () => {
     const bar = toggleBar(undefined, 'timeline', all)
     expect(resolveBar(bar, all).ids).toContain('timeline')
-    expect(resolveBar(bar, all).ids).toContain('feed')
+    expect(resolveBar(bar, all).ids).not.toContain('feed') // wave 44: the stock row has no Feed
     expect(overflowChoices(resolveBar(bar, all).ids, [], all)).not.toContain('timeline')
     expect(barChoices(undefined, { ...all, feed: false }).map((c) => c.id)).not.toContain('timeline')
   })

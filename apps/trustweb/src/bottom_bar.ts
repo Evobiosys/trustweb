@@ -48,11 +48,14 @@ export const EVENT_ONLY_BAR: readonly BarId[] = ['web', 'ask', 'chat']
 export const askFloating = (ids: readonly string[]): boolean => !ids.includes('ask')
 
 /** Wave 43: the default order with the Feed in; Record stays in it and removable (wave 42). The old row lives on as the Note taker preset. */
-export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory', 'record']
+/** Wave 44: the Feed waits out of the stock bar until it is mature (Jakob); it stays offered in the ⋮ sheet and reachable from its view routes. */
+export const FEED_IN_BAR = false
+const stockRow = (ids: readonly BarId[]): readonly BarId[] => ids.filter((id) => FEED_IN_BAR || id !== 'feed')
+export const DEFAULT_ORDER: readonly BarId[] = stockRow(['web', 'chat', 'feed', 'events', 'inventory', 'record'])
 /** The wave-33 row, Record in the centre: the once-per-record order reset (resetBarOrder) and the Note taker preset. */
 const WAVE33_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
 /** Wave 42 D2: the stock row nobody has changed: Web, Chat, Feed, Events, Resources (the centre Feed raised). Record, Community and the module views wait in the ⋮ list; Community has the heading pill. */
-export const STOCK_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory']
+export const STOCK_ORDER: readonly BarId[] = stockRow(['web', 'chat', 'feed', 'events', 'inventory'])
 export const PHONE_MAX = 6
 
 /** The sheet's checklist, in its order. */

@@ -25,9 +25,9 @@ try {
 
     const n0 = await tabs()
     const want = (n) => (n % 2 ? 1 : 2)
-    const total = 5 // wave 42 D2: the stock row holds Web, Chat, Feed, Events, Resources at 360 and 1280; Record, Community and the module views wait in the ⋮ list
+    const total = 4 // wave 44: the stock row holds Web, Chat, Events, Resources (no Feed) at 360 and 1280; Record, Community and the module views wait in the ⋮ list
     const showing = (m) => Math.min(m, w < 600 ? 6 : m)
-    check(`${w}: stock row is exactly five and Community is not among them`, n0 === 5 && (await page.locator('.tabs [data-go="mod:community"]').count()) === 0)
+    check(`${w}: stock row is exactly four and Community is not among them`, n0 === 4 && (await page.locator('.tabs [data-go="mod:community"]').count()) === 0)
     // D2: the top-left heading pill switches Personal | Community: visible inside the viewport and not covered
     const pill = await page.locator('[data-mode-pill]').first().boundingBox()
     check(`${w}: the Personal | Community pill is visible in the viewport`, !!pill && pill.x >= 0 && pill.y >= 0 && pill.x + pill.width <= w && pill.y + pill.height <= h)
@@ -43,9 +43,9 @@ try {
     const boxes = await page.locator('.sheet.on [data-bar-row="record"] > *').evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } }))
     check(`${w}: Record row controls do not overlap`, boxes.every((a, i) => boxes.every((b, j) => i === j || !hit(a, b))))
     await page.locator('.sheet.on [data-bar-opt="record"]').first().click(); await page.waitForTimeout(300)
-    check(`${w}: Record on is stored and the bar gains a tab (six: the middle pair raised)`, !(await bar()).hidden.includes('record') && (await tabs()) === showing(total + 1) && (await raised()) === 2)
+    check(`${w}: Record on is stored and the bar gains a tab (five: the centre raised)`, !(await bar()).hidden.includes('record') && (await tabs()) === showing(total + 1) && (await raised()) === 1)
     await page.locator('.sheet.on [data-bar-opt="record"]').first().click(); await page.waitForTimeout(300)
-    check(`${w}: Record off is stored and the bar is the five again`, (await bar()).hidden.includes('record') && (await tabs()) === showing(total))
+    check(`${w}: Record off is stored and the bar is the four again`, (await bar()).hidden.includes('record') && (await tabs()) === showing(total))
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(600)
     check(`${w}: after reload ${showing(total)} tabs, raise re-centred`, (await tabs()) === showing(total) && (await raised()) === want(showing(total)))
     // bar vs picker: the tab bar stays below the sheet content area (no overlay of the bar on the list)
@@ -64,10 +64,10 @@ try {
     // D2: Community is reached from the pill (stock mode): the switch works and the Personal option brings the five back
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(800)
     await page.locator('[data-mode-pill] [data-mode="community"]').first().click(); await page.waitForTimeout(800)
-    check(`${w}: the pill switches to Community (its own row)`, await page.evaluate(() => document.body.hasAttribute('data-community-mode')))
+    check(`${w}: the pill switches to Community (the community Home leads the row)`, (await page.locator('.tabs [data-go="community:home"]').count()) === 1)
     await page.screenshot({ path: `${SHOTS}/review3-community-pill-${w}.png` })
     await page.locator('[data-mode-pill] [data-mode="personal"]').first().click(); await page.waitForTimeout(800)
-    check(`${w}: Personal brings the bar back`, !(await page.evaluate(() => document.body.hasAttribute('data-community-mode'))) && (await tabs()) > 0)
+    check(`${w}: Personal brings the bar back`, (await page.locator('.tabs [data-go^="community:"]').count()) === 0 && (await tabs()) > 0)
     check(`${w}: no page errors`, errors.length === 0)
     await ctx.close()
   }
