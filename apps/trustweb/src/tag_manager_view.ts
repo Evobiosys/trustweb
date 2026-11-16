@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 40 (group-tags): Settings > Your web > Tags. Create group tags, put tags under them, leave people out, mark a tag managed with stewards, fork. Redraws itself in place (the Settings sheet stays as it is). Edits are tag_manager.ts. */
+/** Wave 40 (group-tags): Settings > Your contacts > Tags. Create group tags, put tags under them, leave people out, mark a tag managed with stewards, fork. Redraws itself in place (the Settings sheet stays as it is). Edits are tag_manager.ts. */
 import { el } from '../../demo/src/ui/dom'
 import { alphaHeading } from './alpha_heading'
 import { memberIds, type ColourTag } from './colour_tags'

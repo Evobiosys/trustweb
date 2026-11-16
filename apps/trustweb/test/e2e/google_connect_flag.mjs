@@ -59,7 +59,7 @@ async function run(label, viewport, touch) {
 
   const openImport = async () => {
     await hit(page.locator('[data-settings-gear]')); await wait(500)
-    if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your web' }).first()); await wait(300) }
+    if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your contacts' }).first()); await wait(300) }
     await hit(page.locator('[data-people-import]').first()); await wait(500)
   }
 

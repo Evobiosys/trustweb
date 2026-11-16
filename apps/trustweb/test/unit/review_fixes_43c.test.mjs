@@ -41,3 +41,12 @@ describe('F: persistent cards (ask results, message cards) stay on the Web scree
     expect(visibleKinds(new Set(['cards', 'update', 'notice', 'toast']), 3, false)).toEqual(['update', 'notice', 'toast'])
   })
 })
+
+import { S } from '../../src/strings.ts'
+describe('F: Settings call the Web "Contacts" (Jakob Ω), the bottom tab keeps "Web" (CONTACTS_TAB_LABEL)', () => {
+  it('the Settings group and its section say Contacts', () => {
+    expect(S.setGroup.web).toBe('Contacts')
+    expect(S.setSecWeb).toBe('Your contacts')
+    expect(S.webDefaultLabel).toBe('Default view of Contacts')
+  })
+})

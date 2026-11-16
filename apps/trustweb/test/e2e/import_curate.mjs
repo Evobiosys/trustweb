@@ -39,7 +39,7 @@ async function run(label, viewport, touch) {
 
   // 1. one Import home, reached from Settings > Web
   await hit(page.locator('[data-settings-gear]')); await wait(500)
-  if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your web' }).first()); await wait(300) }
+  if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your contacts' }).first()); await wait(300) }
   await hit(page.locator('[data-people-import]').first()); await wait(500)
   ck('Import page opens', await page.locator('[data-page="import-services"]').count() === 1)
   ck('Contacts picker names vcf, csv, json and several', /vcf, csv, json\), several at once/.test(await page.locator('[data-svc-open]').innerText()))
@@ -154,7 +154,7 @@ async function run(label, viewport, touch) {
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); const p = s.people.find((x) => x.name === 'Alma Brandt'); p.name = 'Alma Brandt (mine)'; localStorage.setItem('trustweb.v1.me', JSON.stringify(s)) })
   await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await wait(800)
   await hit(page.locator('[data-settings-gear]')); await wait(500)
-  if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your web' }).first()); await wait(300) }
+  if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your contacts' }).first()); await wait(300) }
   await hit(page.locator('[data-people-import]').first()); await wait(500)
   ck('person edited since is highlighted in the list', await page.locator('[data-import-edited]').count() === 1 && /Alma Brandt \(mine\)/.test(await page.locator('[data-import-edited]').innerText()))
   await shot('09-edited-highlight')
