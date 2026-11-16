@@ -84,6 +84,7 @@ import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened
 import { acceptsReaskFrom, askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk, undoReasked } from './reask'
 import type { EarlierAsk, ReaskPlan } from './reask'
 import { HideFromNet, NO_GATE } from './hide_from_net' // wave44b hide-from-crypto
+import { parseHideReportWire } from './hide_from_crypto' // answers-44a
 import type { HideGate } from './hide_from_net'
 import type { HideReportEntry } from './hide_reports'
 
@@ -320,7 +321,7 @@ export class Net {
     this.relayOrigin = opts.relayOrigin
     this.hide = new HideFromNet({
       identity: () => this.ensureIdentity(), state: () => this.hooks.state(), save: () => this.hooks.save(), onReport: (e) => this.hooks.onHideReport?.(e),
-      send: async (did, env) => { if (this.channel) await this.channel.send(did, env, await this.keyFor(did)) },
+      sendRaw: async (did, wire) => { if (this.channel) await this.channel.sendRaw(did, wire) },
     })
   }
 
@@ -536,6 +537,8 @@ export class Net {
    * HANDSHAKE_PLAINTEXT_FALLBACK is off. Every other wire is ciphertext under the pair key and is not handled here.
    */
   private handleRaw(fromDid: string, payload: string): boolean | Promise<boolean> {
+    const report = parseHideReportWire(payload) // answers-44a: sealed to this DID, its sender not kept
+    if (report) return this.hide.onReport(report).then(() => true)
     const sealed = parseHandshakeWire(payload)
     if (sealed) return this.openAck(sealed, fromDid)
     if (!isCleartextAck(payload)) return false
@@ -636,7 +639,6 @@ export class Net {
     // Wave 43c: the connection names its other devices; only its own sealed channel can, and never a DID of another connection or of mine.
     if (env.t === 'devices' && from && addAlsoDids(this.hooks.state().peers, from, env.dids, [this.ensureIdentity().did])) this.hooks.save()
     if (env.t === 'event' && from) this.hooks.onEvent?.(from, env)
-    if (env.t === 'hide-report' && from) await this.hide.onReport(env, [from.did, ...(from.alsoDids ?? []), fromDid])
     // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
   }
 
@@ -1129,7 +1131,7 @@ export class Net {
     // Each target is bounded by waitMs on its own (sendAsk never waits on a send), so one stalled contact costs nothing but its line.
     const answers = await Promise.all(targets.map((p) => {
       const qid = randomId(12)
-      return this.sendAsk(p, q.freeText ?? '', { ...fields, ...this.hide.passOn(hide, { qid, upQid: q.qid, upDid: sender.did, toDid: p.did }) }, waitMs, qid)
+      return this.sendAsk(p, q.freeText ?? '', { ...fields, ...this.hide.passOn(hide) }, waitMs, qid)
     }))
     const items = answers.flatMap((d) => (d?.outcome === 'shared' && d.shared ? sanitizeHopItems(d.shared.items) : []))
     return { asked: targets.length, items }
@@ -1188,7 +1190,7 @@ export class Net {
     const now = Date.now()
     const outgoing = askPeers(s).filter((peer) => !only || only.includes(peer.id)).map((peer) => ({ peer, qid: randomId(12) }))
     if (extra.maxHops !== undefined && s.askDirectOnly !== true) {
-      Object.assign(extra, await this.hide.outgoing({ text: freeText, root, maxHops: hopInfo(extra).maxHops, issuedAt: now, hidden, qids: outgoing.map((o) => o.qid) }))
+      Object.assign(extra, await this.hide.outgoing({ text: freeText, root, maxHops: hopInfo(extra).maxHops, issuedAt: now, hidden }))
     }
     s.sentAsks = addSentAsk(s.sentAsks, { id: root, text: freeText, at: now, to: outgoing.map(({ peer, qid }) => ({ peerId: peer.id, qid })) }, now)
     this.hooks.save()

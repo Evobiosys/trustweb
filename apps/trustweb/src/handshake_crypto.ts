@@ -114,6 +114,8 @@ const pad = (json: string): Uint8Array => {
   out.set(raw)
   return out
 }
+/** answers-44a: hide_from_crypto.ts seals its tamper report padded the same way. */
+export { pad as padWire }
 
 /** The scanner's side: its connect-ack sealed by `from` to `toDid` (with that link's QR secret when there was one). Returns the wire text. */
 export async function sealConnectAck(ack: ConnectAckEnvelope, from: Identity, toDid: string, qk?: string): Promise<string> {
