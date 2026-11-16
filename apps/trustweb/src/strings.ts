@@ -3325,9 +3325,10 @@ export const S = {
   eventsCoreTo: 'Core time to',
   eventsErrCore: 'Give both core days, the first not after the second, inside the event dates.',
   coDesires: {
-    desires: 'Desires',
+    desires: 'Hopes and wishes',
     memories: 'Memories',
-    desiresTitle: (event: string) => `Desires: ${event}`,
+    desiresTitle: (event: string) => `Hopes and wishes: ${event}`,
+    explain: 'Write what you hope for or wish from this event, one per line. Enter adds the next line; choose who sees each line.',
     memoriesTitle: (event: string) => `Memories: ${event}`,
     share: { me: 'Only me', event: 'People at this event', zones: 'My trust zones' },
     shareTap: 'Change who sees this line',
