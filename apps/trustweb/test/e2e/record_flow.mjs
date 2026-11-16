@@ -52,7 +52,8 @@ async function main() {
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
   const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
   const { port: relayPort } = await relay.listen(0, '127.0.0.1')
-  const viteProc = spawn(process.execPath, [path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
+  // review-44: the vite of swiss_harness.mjs (TW_VITE_BIN, apps/crm's Vite 8 that the app config needs), else apps/demo's.
+  const viteProc = spawn(process.execPath, [process.env.TW_VITE_BIN || path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,
     env: { ...process.env, TW_PORT: String(PORT), TW_RELAY_PROXY: `http://127.0.0.1:${relayPort}` },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -67,7 +68,7 @@ async function main() {
   let n = 0
   const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_${name}.png`) }) }
   try {
-    browser = await engine.launch({ headless: true, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })
+    browser = await engine.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--use-mock-keychain', '--password-store=basic', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] }) // review-44: the local headless shell
     const ctx = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone', 'clipboard-read', 'clipboard-write'] })
     // No on-device speech in this run: headless Chromium crashes on the
     // SpeechRecognition.available() probe, so the browser behaves like one
@@ -79,6 +80,9 @@ async function main() {
     page.on('pageerror', (e) => { errors.push(e.message); console.log('  [pageerror]', e.message) })
     page.on('dialog', (d) => void d.accept())
     await page.goto(base)
+    // review-44: a fresh dev server reloads once after optimising dependencies; the dev overlays stay out of the way (as swiss_harness.mjs)
+    await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(1500)
+    await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' })
     await page.getByLabel('Your first name').fill('Jakob')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
     await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
