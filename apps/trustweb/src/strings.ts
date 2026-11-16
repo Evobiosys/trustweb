@@ -4467,7 +4467,7 @@ export const S = {
   syncPhoneHint: 'Vault sync runs on a computer; your phone receives the result.',
   /* wave43b event-qr-join */
   /** Under the event code: what the short code leaves out (it follows once you are connected). */
-  qrEventTrimmed: 'The code carries the name, dates and hosts. Place, conditions and themes follow once you are connected.',
+  qrEventTrimmed: 'The code carries the name, dates and hosts. Place, conditions and themes are not in it: send the event link for them.',
   /** Event code still too long for one code even trimmed (a very long name or host list). */
   qrEventTooLong: 'Too long for one code even without conditions, themes and place. Shorten the name or the host list.',
   /** Person page: asks from this person that are still open, answerable late. */
@@ -4518,6 +4518,7 @@ export const S = {
     diagramAlt: (n: number, add: number, exclude: number): string =>
       `Your ask travels ${n} ${n === 1 ? 'step' : 'steps'} through your web${add ? `, also to ${add} you added` : ''}${exclude ? `, not to ${exclude} you hid it from` : ''}`,
     back: 'Back to the Web',
+    hideTravels: 'Asks that travel further can still reach someone you hide here, through a friend who passes them on.',
   },
   /* wave43b community-shell */
   w43shell: {
@@ -4572,6 +4573,7 @@ export const S = {
     showLink: 'Show link',
     hideLink: 'Hide link',
     record: 'Record',
+    play: 'Play',
     kindAria: 'Kind of resource',
     accept: 'Yes',
     dismiss: 'No',

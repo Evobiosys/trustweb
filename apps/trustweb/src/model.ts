@@ -1814,6 +1814,7 @@ export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope, aske
     threads.push(lineThread(s.me.displayName, threadId, matchText, context, at))
   }
   for (const item of s.inventory) {
+    if (item.protected === true) continue   // review 43b (B17/B20): a protected resource is never matched to anyone's ask, so it cannot be shared on
     if (!item.included || !(audienceAdmits(item.audience, ring) || item.tagAudience?.some((t) => askerTags.includes(t)))) continue
     if (scope?.inventory && !scope.inventory.has(item.id)) continue
     push(`inv:${item.id}`, item.text, INVENTORY_CONTEXT, item.createdAt)
