@@ -32,6 +32,8 @@ async function startApp(port) {
 
 const until = async (fn, ms = 20_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await fn().catch(() => null); if (v) return v; await new Promise((r) => setTimeout(r, 200)) } return null }
 const rec = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))
+/** Wave 44: Members through the Community view's own menu (the bottom bar is the Personal one). */
+const cgoMembers = async (p) => { const n = p.locator('[data-community-nav="members"]'); if (!(await n.isVisible())) await p.locator('[data-community-menu]').click(); await n.click() }
 const box = (l) => l.boundingBox()
 const overlap = (a, b) => !!a && !!b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 const noHScroll = (p) => p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
@@ -84,7 +86,7 @@ async function main() {
     await a.locator('[data-community-switch]').click()
 
     // ---- 2 members tile + add B by code
-    await a.locator('.tabs [data-go="community:members"]').click(); await a.locator('[data-community-add-member]').waitFor()
+    await cgoMembers(a); await a.locator('[data-community-add-member]').waitFor()
     await a.locator('[data-community-add-member]').click(); await a.locator('.sheet.on [data-add-code]').waitFor()
     await a.locator('.sheet.on [data-add-code]').fill(bDid); await a.locator('.sheet.on [data-add-person]').click()
     t.ok('2: B is added through the community (membership tag set)', !!(await until(async () => (await rec(a)).people.some((p) => p.name === 'Ben' && p.fields?.session === 'true'))))
@@ -92,7 +94,7 @@ async function main() {
     await a.locator('.sheet.on .sheet-home').click().catch(() => {}); await a.locator('.sheet.on').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
     for (const [vw, vp] of [['360', { width: 360, height: 780 }], ['1280', { width: 1280, height: 900 }]]) {
       await a.setViewportSize(vp); await a.waitForTimeout(500)
-      await a.locator('.tabs [data-go="community:members"]').click().catch(() => {}); await a.locator('[data-community-member]').first().waitFor({ timeout: 10_000 })
+      await cgoMembers(a).catch(() => {}); await a.locator('[data-community-member]').first().waitFor({ timeout: 10_000 })
       const m = await box(a.locator('[data-community-member]').first()), add = await box(a.locator('[data-community-add-member]'))
       t.ok(`2 @${vw}: the add tile has the size of a member tile`, Math.abs(m.width - add.width) < 1 && Math.abs(m.height - add.height) < 1, JSON.stringify([m, add]))
       t.ok(`2 @${vw}: the add tile comes last and the tiles do not overlap`, add.y >= m.y && !overlap(m, add))

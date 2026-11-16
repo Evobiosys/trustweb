@@ -18,6 +18,8 @@ import {
 
 const PICK_KEY = 'trustweb.ui.interface'
 const COMMUNITY_MODULE = 'community-mighty'
+/** Wave 44: the Community interface draws its own bottom row only when this is true; Jakob asked for the Personal bar there. */
+const COMMUNITY_OWN_BAR = false
 
 export interface ModeHost {
   state: () => AppState | null
@@ -127,9 +129,12 @@ export function createModeShell(host: ModeHost) {
       const n = host.overview() ? notice() : null
       if (n) (screen.querySelector('.mode-pill-row') ?? screen.querySelector('.web-view-row') ?? hdr)?.after(n)
     },
-    /** The Community bottom row, or null in the Personal shell. */
+    /**
+     * Wave 44 steer-community-bar: always null. Community mode keeps the Personal bottom bar (Jakob: "the same as the normal bottom row of the
+     * personal view"); the sections live in the Community view's own menu. The 7-item row below stays for a later opt-in, unused.
+     */
     tabs(): HTMLElement[] | null {
-      if (!communityShown(now(), isEnabled(COMMUNITY_MODULE), viewReady())) return null
+      if (!COMMUNITY_OWN_BAR || !communityShown(now(), isEnabled(COMMUNITY_MODULE), viewReady())) return null
       return communityBar(data(), navOff()).map((i) => host.tabButton(`community:${i}`, label(i), ICONS[COMM_ICON[i]], () => host.openItem(i)))
     },
     mark,
