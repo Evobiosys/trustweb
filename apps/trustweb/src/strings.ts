@@ -4662,4 +4662,6 @@ export const S = {
     tanaPullCancel: 'Cancel',
     tanaPullSkipped: (n: number) => `${n} could not be read and were left as they are.`,
   },
+  /* wave44 steer-settings-sync */
+  setSecSync: 'Sync',
 } as const

@@ -219,6 +219,7 @@ import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { createUpdateCheck, reloadFresh, shouldReloadOnce } from './app_update'
 import { devicesSectionChildren } from './devices_section'
+import { syncSectionParts } from './settings_sync_section' // wave44 steer-settings-sync
 import { linkButton, openLinkChange } from './link_change_view'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
 import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
@@ -7436,6 +7437,16 @@ function tabRowSettings(): (Node | null)[] {
   return [el('button', { class: 'btn btn-ghost', 'data-settings-bar': '', onclick: barSheet }, [S.barOpenSettings])]
 }
 
+/** Wave 44 steer-settings-sync: the last section of Settings; on a phone the Obsidian and Tana entries sit in its own Advanced. */
+function syncSettings(): Node | null {
+  const entry = (id: string, label: string): HTMLElement => el('button', { class: 'radio', [`data-settings-sync-${id}`]: '', onclick: () => openServicesImport(importHooks()) }, [el('b', {}, [label])])
+  const parts = syncSectionParts<Node>({ eligible: connectEligible(), devices: () => devices.settingsGroup(), entries: () => [entry('obsidian', S.obsidian.title), entry('tana', S.imp39.tanaTitle)] })
+  return settingsSection('sync', S.setSecSync, [
+    ...parts.main,
+    parts.advanced.length ? el('details', { class: 'settings-adv', 'data-settings-sync-advanced': '' }, [el('summary', { class: 'adv-toggle' }, [S.setAdvanced]), el('p', { class: 'meta' }, [S.syncPhoneHint]), ...parts.advanced]) : null,
+  ], true)
+}
+
 function settingsSheet(): void {
   const s = st()
   if (sheet.dataset.kind !== 'settings') settingsQuery = ''
@@ -7620,7 +7631,7 @@ function settingsSheet(): void {
     ], true),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
-      eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
+      eligible: false, devices: () => [], backupCard: () => (backup.available() === false ? null : backup.card(true)),
     })),
     settingsSection('features', S.setSecFeatures, isEnabled('feed') ? feed.settingsGroup() : []),
     settingsSection('extensions', alphaHeading(S.ext.title), extensionRows()),
@@ -7758,6 +7769,8 @@ function settingsSheet(): void {
     ...settingsGroups({ ...groups, ...(isEnabled('events') ? {} : { events: [] }), ...(isEnabled('resources') ? {} : { inventory: [] }) }, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
     // Wave 40: Import also stands on its own at the very bottom of Settings.
     solo ? null : el('button', { class: 'btn btn-ghost settings-import-bottom', 'data-settings-import-bottom': '', onclick: () => openServicesImport(importHooks()) }, [S.svcEntry]),
+    // Wave 44 steer-settings-sync: Sync is the last section (device sync, then the Obsidian and Tana entries).
+    syncSettings(),
     ]),
   ])
   sheet.dataset.kind = 'settings'
