@@ -898,6 +898,8 @@ export interface Me {
   primaryEmail?: { provider: string; address: string }
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
   otherEmails?: string[]
+  /** Wave 44b profile-page (profile_fields.ts): phone-book name parts, bio, pronouns, languages, place, up to four links, a visibility per field. Local; only discoverable fields leave in the directory record. */
+  profile?: import('./profile_fields').Profile
 }
 
 /**

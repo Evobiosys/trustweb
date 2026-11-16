@@ -18,6 +18,7 @@ import type { DirDeps } from './directory_client'
 import type { AppState, Peer, Person } from './model'
 import { Ring } from './model'
 import { makeIntent, makeRecord } from './name_record'
+import { directoryExtra, moreOpenAfter } from './profile_fields'
 import type { NameRecord } from './name_record'
 import { SocialHost, applyIntent, markIntended } from './social_hosting'
 import type { HostMsg } from './social_hosting'
@@ -64,6 +65,7 @@ export interface Social {
 export function createSocial(h: SocialHooks): Social {
   let node: SocialHost | null = null
   let timer: ReturnType<typeof setInterval> | undefined
+  let moreOpen = false
 
   const identity = (): Identity | null => { try { return h.identity() } catch { return null } }
   const dirDeps = (): DirDeps => ({
@@ -89,7 +91,7 @@ export function createSocial(h: SocialHooks): Social {
   function ownRecord(): NameRecord | null {
     const s = h.state(); const id = identity(); const { first, last } = splitName(s.me.displayName)
     if (!s.discoverable || !id || !first || !last) return null
-    return makeRecord((b) => signBytes(id, b), { first, last, key: id.did, ts: h.now(), open: s.discoverOpen !== false, srv: serversAllowed(s) })
+    return makeRecord((b) => signBytes(id, b), { first, last, key: id.did, ts: h.now(), open: s.discoverOpen !== false, srv: serversAllowed(s), extra: directoryExtra(s.me) })
   }
 
   async function publish(): Promise<void> {
@@ -145,19 +147,20 @@ export function createSocial(h: SocialHooks): Social {
     const named = Boolean(splitName(s.me.displayName).last)
     const on = s.discoverable === true
     const hint = !named ? S.social.discNeedsName : trustedOnly(s) ? S.social.discNoServer : S.social.discHint
-    let open = false
-    const more = el('div', { class: 'social-more', 'data-social-more': '', hidden: '' }, [
+    let open = moreOpen
+    const more = el('div', { class: 'social-more', 'data-social-more': '', ...(moreOpen ? {} : { hidden: '' }) }, [
       switchRow('open', S.social.openTitle, S.social.openHint, s.discoverOpen !== false, () => {
         if (s.discoverOpen === false) delete s.discoverOpen; else s.discoverOpen = false
         h.save(); void settled(); redraw()
       }),
     ])
-    const expander = el('button', { class: 'tw-expander', type: 'button', 'data-social-expander': '', 'aria-expanded': 'false', 'aria-label': S.social.discMore, onclick: () => {
-      open = !open; more.hidden = !open; expander.setAttribute('aria-expanded', String(open)); expander.textContent = open ? '▴' : '▾'
-    } }, ['▾'])
+    const expander = el('button', { class: 'tw-expander', type: 'button', 'data-social-expander': '', 'aria-expanded': String(open), 'aria-label': S.social.discMore, onclick: () => {
+      open = !open; moreOpen = open; more.hidden = !open; expander.setAttribute('aria-expanded', String(open)); expander.textContent = open ? '▴' : '▾'
+    } }, [open ? '▴' : '▾'])
     const row = switchRow('discoverable', S.social.discTitle, hint, on, () => {
       if (!named && !on) return
       if (on) delete s.discoverable; else s.discoverable = true
+      moreOpen = moreOpenAfter(s.discoverable === true)   // wave 44b: the dependent toggles open with Discoverable and collapse with it
       h.save(); void settled(); redraw()
     }, !named && !on)
     return el('div', { class: 'social-profile', 'data-social-profile': '' }, [el('div', { class: 'social-row' }, [row, expander]), more])

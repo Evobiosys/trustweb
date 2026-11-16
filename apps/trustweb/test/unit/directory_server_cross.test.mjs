@@ -18,6 +18,12 @@ describe('app and server agree', () => {
     expect(checkRecord(makeRecord(sign, { first: 'A', last: 'B', key: id.did, ts: 1, open: true, srv: false }))).toBeNull()
     expect(checkRecord({ ...makeRecord(sign, { first: 'A', last: 'B', key: id.did, ts: 1, open: true, srv: true }), ts: 2 })).toBeNull()
   })
+  it('wave44b: the server accepts a record with signed extra, keeps it, and refuses a changed or unknown one', () => {
+    const r = makeRecord(sign, { first: 'A', last: 'B', key: id.did, ts: 1, open: true, srv: true, extra: { nickname: 'Ab' } })
+    expect(checkRecord(r)?.extra).toEqual({ nickname: 'Ab' })
+    expect(checkRecord({ ...r, extra: { nickname: 'Eve' } })).toBeNull()
+    expect(checkRecord(makeRecord(sign, { first: 'A', last: 'B', key: id.did, ts: 1, open: true, srv: true, extra: { shoe: '1' } }))).toBeNull()
+  })
   it('the server accepts an intent made by the app', () => {
     expect(checkIntent(makeIntent(sign, { to: 'did:x', first: 'A', last: 'B', key: id.did, ts: 3 }))).not.toBeNull()
   })

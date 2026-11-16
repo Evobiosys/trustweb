@@ -64,6 +64,9 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
 
   /* wave44 feed-sources */
   { name: 'feed_source_toggle', write: true }, { name: 'feed_algorithm_set', write: true }, { name: 'feed_no_public_read_set', write: true }, { name: 'feed_publish_target_set', write: true },
+
+  /* wave44b profile-page */
+  { name: 'profile_get', write: false }, { name: 'profile_set', write: true }, { name: 'profile_link_add', write: true }, { name: 'profile_link_remove', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
