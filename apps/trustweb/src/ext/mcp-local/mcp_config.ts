@@ -52,6 +52,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'feed_sources_get', write: false }, { name: 'feed_sources_set', write: true }, { name: 'community_dashboard_share_set', write: true }, { name: 'event_envelope_send', write: true },
   /* wave44 home-dashboard */
   { name: 'home_layout_get', write: false }, { name: 'home_layout_set', write: true }, { name: 'dashboard_open', write: true },
+  /* wave44 steer-ask-placement-2 */
+  { name: 'ai_provider_get', write: false }, { name: 'ai_provider_set', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

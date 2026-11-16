@@ -5,6 +5,7 @@
  * Every tool that exists only with writes on announces itself after it ran (events.ts), so an open preview shows a card for it.
  */
 import { announce } from './events.ts'
+import { aiChoiceTools } from './ai_choice_tools.ts'
 import { assistantTools } from './assistant_tools.ts'
 import { billingTools } from './billing_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
@@ -31,6 +32,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     ...recordTools({ ...o, write }), ...assistantTools({ ...o, write }), ...parityTools({ ...o, write }), ...connectExtrasTools({ ...o, write }), /* wave44 home-dashboard */ ...homeTools({ ...o, write }), ...importTools({ ...o, write }),
     ...billingTools({ file: o.file, write, apiBase: o.apiBase || 'https://app.trustweb.one' }),
     /* wave43c sync-devices */ ...syncTools({ ...o, write }),
+    /* wave44 steer-ask-placement-2 */ ...aiChoiceTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

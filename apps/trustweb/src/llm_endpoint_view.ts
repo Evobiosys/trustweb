@@ -4,6 +4,7 @@
  * Custom (the person's own endpoint: base URL, key, model and a Test button; Ollama on this device and pc24 are presets inside it, wave 39). Kept on this phone and in the sealed record.
  */
 import { el } from '../../demo/src/ui/dom'
+import { AI_CHOICES, aiChoiceOf, chooseAi } from './ai_choice'
 import { activeEndpoint, apiBase, checkSubscription, pollsOnOpen, devPc24Seed, makeClaim, migrateAi, PLANS, validEmail, type Fetch } from './ai_subscription'
 import { billingStatus, planNote, startCheckout } from './billing/billing_client'
 import { BILLING_PLANS, type BillingPlan } from './billing/pricing'
@@ -217,8 +218,26 @@ export function aiSettings(h: AiViewHooks): HTMLElement[] {
     return d
   }
 
+  const chooser = (): HTMLElement => {
+    const now = aiChoiceOf(h.state().advanced?.ai)
+    const warn = el('p', { class: 'meta', 'data-ai-choice-note': '', role: 'status' })
+    return el('div', { class: 'ai-group', 'data-ai-group': 'choice' }, [
+      el('h5', { class: 'eyebrow' }, [S.w44ai.chooseTitle]),
+      ...AI_CHOICES.map((c) => el('button', {
+        class: 'radio' + (now === c ? ' on' : ''), 'aria-pressed': String(now === c), 'data-ai-choice': c,
+        onclick: () => {
+          if (!chooseAi((h.state().advanced ??= {}), c, apiBase())) { warn.textContent = S.w44ai.needSub; return }
+          if (c === 'own') byokOpen = true
+          h.save(); draw()
+        },
+      }, [el('b', {}, [S.w44ai[c]])])),
+      el('p', { class: 'meta' }, [S.w44ai.both]),
+      warn,
+    ])
+  }
+
   const draw = (): void => {
-    box.replaceChildren(el('h4', { class: 'eyebrow' }, [S.aiTitle]), subGroup(), byokGroup(), el('p', { class: 'meta' }, [S.aiHint]))
+    box.replaceChildren(el('h4', { class: 'eyebrow' }, [S.aiTitle]), chooser(), subGroup(), byokGroup(), el('p', { class: 'meta' }, [S.aiHint]))
   }
   draw()
   if (pollsOnOpen(h.state().advanced?.ai?.sub) && Date.now() - lastPoll > POLL_GAP_MS) void pollOnce(h).then((changed) => { if (changed) draw() })
