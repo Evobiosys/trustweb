@@ -1,0 +1,22 @@
+/* SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later */
+/* Wave 44b phone-preview-extension: dev only, phone width. No document scroll: pill and sheet are fixed, the list scrolls inside the sheet. */
+html.twpp-on .twp{display:none!important}
+.twpp-pill{position:fixed;left:8px;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:100000;min-height:44px;padding:0 14px;border:0;border-radius:22px;background:#241b2e;color:#4fd7a0;font:700 13px system-ui,sans-serif;text-decoration:underline;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.twpp-sheet{position:fixed;left:0;right:0;bottom:0;z-index:100001;box-sizing:border-box;display:flex;flex-direction:column;max-height:75dvh;padding-bottom:env(safe-area-inset-bottom,0px);border-radius:14px 14px 0 0;background:#241b2e;color:#fff;font:13px/1.35 system-ui,sans-serif;box-shadow:0 -2px 14px rgba(0,0,0,.45)}
+.twpp-sheet[hidden],.twpp-pill[hidden],.twpp-msg[hidden]{display:none}
+.twpp-sheet header{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 12px;min-height:44px}
+.twpp-x{min-height:44px;min-width:44px;border:0;background:none;color:#fff;text-decoration:underline;font:600 13px system-ui,sans-serif}
+.twpp-msg{flex:none;margin:0;padding:4px 12px;color:#ffc65c}
+.twpp-list{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 12px 12px}
+.twpp-row{padding:8px 0;border-top:1px solid #7a6a8c}
+.twpp-t{display:flex;gap:8px;align-items:baseline;overflow-wrap:anywhere}
+.twpp-state{flex:none}
+.twpp-where{margin:2px 0;color:#b7a8c9;font-size:12px}
+.twpp-row summary{min-height:32px;display:flex;align-items:center;text-decoration:underline;color:#b7a8c9}
+.twpp-row ol{margin:2px 0 4px;padding-left:20px}
+.twpp-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.twpp-v{min-height:44px;padding:0 12px;border-radius:8px;border:1px solid #7a6a8c;background:none;color:#fff;font:600 13px system-ui,sans-serif;text-decoration:underline}
+.twpp-v.on{background:#4fd7a0;color:#241b2e;border-color:#4fd7a0}
+.twpp-v.tw-off{text-decoration:line-through}
+/* the Approve-wave box (dev_feature.ts) sits bottom right above the bar: the pill takes the left, the open sheet takes the whole bottom */
+html.twpp-open .twf-ok{display:none!important}
