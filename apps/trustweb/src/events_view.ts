@@ -66,7 +66,7 @@ export interface EventsView {
   /** Whether the plain list would draw now (the calendar stands in for it unless showList() was asked). */
   atList: () => boolean
   /** The add form, From preset to that day. */
-  openForm: (fromIso?: string) => void
+  openForm: (fromIso?: string, communityId?: string) => void
   /** The plain list (search, filter, paste a link) instead of the calendar. */
   showList: () => void
   /** Wave 28: the event whose page is open (the header's QR button then shows its code); undefined on the list, the calendar and the form. */
@@ -74,7 +74,7 @@ export interface EventsView {
 }
 
 type EventField = 'name' | 'where' | 'conditions' | 'themes' | 'organizer'
-type View = { kind: 'list' } | { kind: 'page'; id: string; noBack?: boolean } | { kind: 'form'; id?: string; from?: string; focus?: EventField }
+type View = { kind: 'list' } | { kind: 'page'; id: string; noBack?: boolean } | { kind: 'form'; id?: string; from?: string; community?: string; focus?: EventField }
 
 const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo, core: S.eventsErrCore }
 
@@ -163,7 +163,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return pick
   }
 
-  function form(existing?: TwEvent, presetFrom?: string): Node[] {
+  function form(existing?: TwEvent, presetFrom?: string, presetCommunity?: string): Node[] {
     const text = (v = ''): HTMLInputElement => el('input', { class: 'field', value: v })
     // A date that carries a time (the since editor sets one) keeps it: a date input would blank it.
     const date = (v = ''): HTMLInputElement => el('input', { class: 'field', type: v.length > 10 ? 'datetime-local' : 'date', value: v })
@@ -189,7 +189,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const addHost = (v = ''): void => { hosts.append(text(v)) }
     ;(existing ? roleLabels(h.state(), existing.hosts ?? []) : [h.state().me.displayName]).forEach(addHost)
     if (!hosts.children.length) addHost()
-    const community = communityPick(existing?.communityId)
+    const community = communityPick(existing?.communityId ?? presetCommunity)
     const error = el('p', { class: 'warn', 'data-event-error': '', hidden: true })
     const focus = view.kind === 'form' ? view.focus : undefined   // wave 43: a long press on a line of the page opens the sheet on that field
     if (focus) setTimeout(() => ({ name, where, conditions, themes, organizer })[focus].focus())
@@ -536,13 +536,13 @@ export function createEventsView(h: EventsViewHooks): EventsView {
 
   return {
     atList: () => view.kind === 'list' && !plain,
-    openForm: (from) => show({ kind: 'form', ...(from ? { from } : {}) }),
+    openForm: (from, community) => show({ kind: 'form', ...(from ? { from } : {}), ...(community ? { community } : {}) }),
     showList: () => { view = { kind: 'list' }; plain = true; h.redraw() },
     current: () => (view.kind === 'page' ? find(view.id) : undefined),
     open: (id, noBack, edit) => { view = id ? (edit ? { kind: 'form', id } : { kind: 'page', id, ...(noBack ? { noBack } : {}) }) : { kind: 'list' } },
     body: () => {
       const ev = view.kind === 'list' ? undefined : find(view.id ?? '')
-      if (view.kind === 'form') return form(ev, view.from)
+      if (view.kind === 'form') return form(ev, view.from, view.community)
       if (view.kind === 'page' && ev) return page(ev)
       view = { kind: 'list' }
       return list()
