@@ -3951,6 +3951,7 @@ export const S = {
       web_default_view_set: 'Pin the view the Web (Contacts) tab opens',
       notifications_list: 'List the bell\'s notifications by section',
       notifications_mark_read: 'Mark all notifications read',
+      /* wave44 steer-notify-dismiss */ notification_dismiss: 'Dismiss one notification',
       resources_list: 'List your resources, filtered by kind, who shared them or community, in a list, outliner or by person',
       resource_set_kind: 'Say whether a resource is a book, publication, reference, recording or link',
       resource_set_suggester: 'Say who suggested a resource to you',
