@@ -444,6 +444,9 @@ export interface EventEnvelope {
   t: 'event'
   want?: string
   link?: string
+  /** Wave 44 steer-event-visibility: how the sender shows at this event, and "the host shares this with the whole community" (a link envelope only). */
+  show?: 'open' | 'discoverable' | 'off'
+  announce?: true
 }
 // ----- END TrustWeb wave 43c -----
 

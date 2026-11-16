@@ -2183,3 +2183,5 @@ html.tw-bw :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) o
 .invite-adv{display:flex; flex-direction:column; gap:8px; margin:6px 0}
 .invite-adv .field.optional{width:6em; padding:2px 6px; font-size:12px; opacity:.6}
 .invite-warn{margin:10px 0}
+/* wave44 steer-event-visibility */
+.post-actions .btn.tw-off,.rv-bar .btn.tw-off{text-decoration:underline}

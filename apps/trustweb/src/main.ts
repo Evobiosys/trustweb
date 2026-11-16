@@ -329,6 +329,7 @@ import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
 import { createEventEnvelopes } from './event_envelope'
+import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
@@ -623,6 +624,9 @@ let redrawWaiting = false
 let superseded = false
 /** Set once the backup card exists (far below); declared here, above the boot-time saves (migration, carry, repair, dev events), so save() can read it from the first call on. */
 let autoBackup: BackupView | null = null
+/** Also read by save(): declared here so a boot-time save never meets them uninitialised (wave 44 steer-event-visibility-3). announceDue is set once eventEnv exists; mirrorTimer is the push-bundle write timer. */
+let announceDue: () => void = () => undefined
+let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
 if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
@@ -690,6 +694,7 @@ function st(): AppState {
 }
 function save(): void {
   if (state && !superseded) {
+    announceDue()
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
     if (!solo) pushLiveDevRecord(persona, state)
@@ -700,7 +705,6 @@ function save(): void {
 
 // Wave 11: the service worker's copy of what it needs to read a waiting wire (push_bundle.ts), refreshed after a save while
 // notifications are on; one write per tick however many saves.
-let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 function mirrorPushBundle(s: AppState): void {
   if (!s.notificationsOn || !(pushSupported() || nativeApp) || mirrorTimer) return
   mirrorTimer = setTimeout(() => { mirrorTimer = null; void writePushBundleNow() }, 250)
@@ -3137,6 +3141,11 @@ function notificationsCard(s: AppState): HTMLElement {
       class: 'radio' + (s.missedPopupOff ? '' : ' on'), 'aria-pressed': String(!s.missedPopupOff), 'data-missed-setting': '',
       onclick: () => { if (s.missedPopupOff) delete s.missedPopupOff; else s.missedPopupOff = true; save(); settingsSheet() },
     }, [el('b', {}, [S.missedSetting]), el('small', {}, [S.missedSettingHint])]),
+    // Wave 44 steer-event-visibility-2: only "off" is stored; absent means on.
+    el('button', {
+      class: 'radio' + (s.eventAlerts === false ? '' : ' on'), role: 'switch', 'aria-checked': String(s.eventAlerts !== false), 'aria-pressed': String(s.eventAlerts !== false), 'data-event-alerts': '',
+      onclick: () => { if (s.eventAlerts === false) delete s.eventAlerts; else s.eventAlerts = false; save(); settingsSheet() },
+    }, [el('b', {}, [S.w44vis.alertEvents]), el('small', {}, [S.w44vis.alertEventsHint])]),
     s.notificationsOn ? el('button', { class: 'btn btn-ghost btn-sm', 'data-notif-test': '', onclick: () => void showNotification(S.appName, S.notifTestBody) }, [S.notifTestButton]) : null,
   ])
 }
@@ -5389,7 +5398,9 @@ const web = createWebView({
 const eventEnv = createEventEnvelopes<Peer>({
   state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
   link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+  members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
 })
+announceDue = () => { eventEnv.announceDue() }
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
