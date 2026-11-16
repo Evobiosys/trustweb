@@ -70,7 +70,7 @@ describe('MCP parity', () => {
     const file = path.join(mkdtempSync(path.join(tmpdir(), 'tw-pp-')), 'r.json')
     writeFileSync(file, JSON.stringify({ v: 1, me: { displayName: 'J' }, peers: [{ id: 'pe1', did: 'did:key:zX' }], people: [{ ...person('a', 'Anna Gruber'), peerId: 'pe1' }, person('b', 'Ben Huber')], sameAs: {}, meetings: [] }))
     const by = Object.fromEntries(recordTools({ file, write: false, now: () => new Date() }).map((t) => [t.name, t]))
-    expect(by.person_qr_target.run({ person: 'Anna Gruber' })).toMatchObject({ id: 'a', target: 'did:key:zX', title: 'Connect with Anna Gruber', fragment: 'to=did%3Akey%3AzX' })
+    expect(by.person_qr_target.run({ person: 'Anna Gruber' })).toMatchObject({ id: 'a', target: 'did:key:zX', title: 'Connect with Anna Gruber', fragment: 'to=did%3Akey%3AzX&for=Anna+Gruber' })
     expect(by.person_qr_target.run({ person: 'b' }).target).toBe('b')
   })
 })

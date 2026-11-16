@@ -126,7 +126,9 @@ import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './chan
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { contactFragment, parsePersonShare, personShareLink, shareOfLink } from './person_share_link'
-import { personQrLink } from './person_qr_link'   // wave 44 steer-people-picker
+import { foreignCode, personQrLink } from './person_qr_link'   // wave 44 steer-people-picker
+import { connectedPerson, placementOf, SCAN_RINGS } from './scan_rules'   // wave 44 steer-people-picker-2
+import { scanButton } from './scan_button'
 import { openMemberPicker } from './member_picker_view'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
@@ -556,6 +558,8 @@ rememberEventMode(pendingEvent)   // wave 43b: mode=event keeps this session in 
 let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 // A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
 const qrBody = pendingConnect ? decodeModeLink(location.href) : null
+/** Wave 44 steer-people-picker-2: the address as scanned, kept before the fragment is cleared: a code made for one person (`to=`) is checked against this phone's DID. */
+const scannedUrl = pendingConnect ? location.href : ''
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 // A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
 let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
@@ -856,7 +860,7 @@ const net = new Net({
     toast(S.demoApprovedToast(peer.displayName))
     render()
   },
-  ringForNewPeer: () => (solo ? Ring.Friend : Ring.Acquaintance),
+  ringForNewPeer: () => placementOf(st(), solo ? Ring.Friend : Ring.Acquaintance),   // wave 44 steer-people-picker-2: the zone chosen under my code
   onLogChanged: () => { if (screen === Screen.Inventory) render() },
   // A demo account asks: while demo content is on this phone it is matched
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
@@ -2525,8 +2529,18 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (!link || !state) return
   pendingConnect = null
   drawCardStack()
+  if (refuseForeign(scannedUrl, link.from.displayName)) return
   const admitted = admitLink(link)
   if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); afterConnectOpen(); return }
+  // Wave 44 steer-people-picker-2: an event or tag code from someone I already hold: no second add (and no zone reset), I only join the event.
+  const held = pendingEvent !== null || qrBody?.kind === 'tag' ? connectedPerson(st(), link.did) : undefined
+  if (held && !picked) {
+    const known = st().peers.find((x) => x.did === link.did)
+    if (known) void eventEnv.afterConnect(known)
+    toast(S.w44pp2.alreadyConnected(held.name))
+    afterConnectOpen(held.id)
+    return
+  }
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
@@ -2607,14 +2621,31 @@ function addedToast(person: Person, ring: Ring, name = person.name): void {
 function offerPendingConnect(): void {
   const link = pendingConnect
   if (!link) return
+  if (refuseForeign(scannedUrl, link.from.displayName)) { pendingConnect = null; return }
   drawCardStack()
   openSheet(renderConnectAdd({
     name: link.from.displayName,
-    ring: Ring.Intending,
+    ring: Ring.Acquaintance,
     lead: S.connectAddLeadInvite,
     onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }) },
     onLater: () => { closeSheet(); declineInvite(link) },
   }).nodes)
+}
+
+/**
+ * Wave 44 steer-people-picker-2 (Jakob 2026-11-16: "Refuse but explain why so they can tell the person"): a code made for one person that someone else scanned.
+ * Nothing is connected, added or sent; the sheet says whose code it was. True when refused.
+ */
+function refuseForeign(url: string, owner: string): boolean {
+  const f = foreignCode(url, net.ownIdentity().did)
+  if (!f) return false
+  pendingEvent = null; pendingShare = null; eventWaitsForConnect = false
+  openSheet([
+    el('h3', {}, [S.w44pp2.foreignTitle]),
+    el('p', { 'data-foreign-code': '' }, [S.w44pp2.foreign(f.name, owner)]),
+    el('button', { class: 'btn btn-electric', type: 'button', onclick: closeSheet }, [S.w44pp2.foreignOk]),
+  ])
+  return true
 }
 
 /** "Not now" (Jakob 2026-10-19): the inviter goes to the Curator's Archive, not connected, the link kept on the entry. */
@@ -3517,6 +3548,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
   drawRadios()
   let after: (() => void) | null = null // set once a person was added and a note still shows: the button then only closes
   const addByCode = async (): Promise<void> => {
+    if (refuseForeign(code.value.trim(), '')) return   // wave 44 steer-people-picker-2
     busy = true
     addBtn.setAttribute('disabled', '')
     codeStatus.textContent = S.addCodeBusy
@@ -3742,6 +3774,7 @@ function personSheet(personId: string): void {
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
+    cardChatButton(p, Boolean(cons)),   // wave 44 steer-people-picker-2: Chat first
     cardNameHeading(p),
     pinButton(p, () => { togglePersonPin(p, Date.now()); save(); render(); personSheet(p.id) }),
     daysSection(st, p),
@@ -3749,7 +3782,6 @@ function personSheet(personId: string): void {
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     cardChannelsRow(p),
-    cardChatButton(p, Boolean(cons)),
     reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
@@ -3773,7 +3805,7 @@ function personSheet(personId: string): void {
 
 function personQr(p: Person): void {
   const did = st().peers.find((x) => x.id === p.peerId)?.did ?? p.did   // wave 44: the code is made for exactly this person
-  void qrPage((link) => ({ kind: 'person', link: personQrLink(link, { id: p.id, ...(did ? { did } : {}) }), name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
+  void qrPage((link) => ({ kind: 'person', link: personQrLink(link, { id: p.id, name: p.name, ...(did ? { did } : {}) }), name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
@@ -4083,7 +4115,8 @@ function reachedOutRow(p: Person): HTMLElement | null {
 
 /** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
 function curatorPerson(personId: string): void {
-  openSheet([curator.person(personId, closeSheet)])
+  const p = st().people.find((x) => x.id === personId)
+  openSheet([p ? el('div', { 'data-chat-row': '' }, [cardChatButton(p, false)]) : null, curator.person(personId, closeSheet)].filter((n): n is HTMLElement => n !== null))   // wave 44 steer-people-picker-2: Chat first, also for an organizer shown in an event
 }
 
 /** An acquaintance, confirmed or suggested: a link to the person's general note and a five-step "more friend ... more acquaintance" score. A note to myself; the ring never changes. */
@@ -6431,12 +6464,20 @@ function meetTrustWebPage(): HTMLElement {
     }
     apply()
   })()
+  const scan = scanButton((text) => void connectScanned(text))
+  // Wave 44 steer-people-picker-2: the code with what belongs to it (scan, zone) is one column that fits the viewport on a laptop; the rest scrolls beside it.
   return el('div', { class: 'meet-page' }, [
-    el('p', { class: 'hint' }, [S.meetLead]),
-    row.el,
-    publicVia,
-    qr,
-    cameraNote,
+    el('div', { class: 'meet-qr-col', 'data-meet-qr-col': '' }, [
+      el('p', { class: 'hint' }, [S.meetLead]),
+      row.el,
+      publicVia,
+      qr,
+      cameraNote,
+      scan.button,
+      placementRow(),
+      scan.view,
+    ]),
+    el('div', { class: 'meet-rest' }, [
     sharing.el,
     el('div', { 'data-contact-box-on-meet': '' }, [
       el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle]),
@@ -6462,7 +6503,27 @@ function meetTrustWebPage(): HTMLElement {
     nfc,
     nfc ? nfcStatus : null,
     seeInActionFoot(),
+    ]),
   ])
+}
+
+/** Wave 44 steer-people-picker-2: under my code, "They will be placed in: <zone>"; whoever scans it lands there (Net ringForNewPeer). */
+function placementRow(): HTMLElement {
+  const dflt = solo ? Ring.Friend : Ring.Acquaintance
+  const select = el('select', { 'data-connect-placement': '', 'aria-label': S.w44pp2.placedIn, onchange: (e: Event) => { st().connectPlacement = (e.target as HTMLSelectElement).value as Ring; save() } },
+    SCAN_RINGS.map((r) => el('option', { value: r, selected: placementOf(st(), dflt) === r }, [S.ringLabel[r]])))
+  return el('label', { class: 'placement-row' }, [S.w44pp2.placedIn + ' ', select])
+}
+
+/** Wave 44 steer-people-picker-2: a code read by "Scan a code": the pasted-code path, then the zone sheet (acquainted or closer); someone already held is not added twice. */
+async function connectScanned(text: string): Promise<void> {
+  if (refuseForeign(text, '')) return
+  const out = await connectByCode(text, Ring.Acquaintance, '', '')
+  if ('type' in out) { toast(S.addCodeFailed(out)); return }
+  render()
+  if (out.existed) { toast(S.w44pp2.alreadyConnected(out.person.name)); personSheet(out.person.id); return }
+  const peer = st().peers.find((x) => x.id === out.person.peerId)
+  if (peer) openConnectAdd(peer, out.person, out.person.name)
 }
 
 // ---------------------------------------------------------------------------

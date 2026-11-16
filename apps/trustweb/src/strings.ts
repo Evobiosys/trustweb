@@ -4734,4 +4734,15 @@ export const S = {
     added: (name: string, tag: string) => `Saved. ${name} is in ${tag}.`,
     connectWith: (name: string) => `Connect with ${name}`,
   },
+  /* wave44 steer-people-picker-2 */
+  w44pp2: {
+    foreignTitle: 'This code is not for you',
+    foreign: (name: string, owner: string) => `This code was made for ${name || 'someone else'}. Ask ${owner || 'the person'} to show you a code made for you (or the open QR).`,
+    foreignOk: 'OK',
+    scanCode: 'Scan a code',
+    scanStop: 'Stop scanning',
+    scanNoCamera: 'The camera did not open. Allow it for this page, or paste the code in Add a person.',
+    placedIn: 'They will be placed in:',
+    alreadyConnected: (name: string) => `Already connected with ${name}.`,
+  },
 } as const

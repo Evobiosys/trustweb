@@ -7,14 +7,16 @@
  */
 import { NAV, TILES, addMember, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { CommunityData, CommunityKind } from '../../trustweb/src/ext/community-mighty/community_data.ts'
-import { personQrLink } from '../../trustweb/src/person_qr_link.ts'
+import { foreignCode, personQrLink } from '../../trustweb/src/person_qr_link.ts'
+import type { Ring } from '../../trustweb/src/model.ts'
+import { SCAN_RINGS, connectedPerson, placementOf } from '../../trustweb/src/scan_rules.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; fields?: Record<string, unknown>; deleted_at?: string }
 interface Ask extends Obj { id: string; chips: string[]; note: string; until: number; to: string[]; here: string[]; queued?: true; agent?: true; cancelled?: true }
 interface In extends Obj { id: string; peerId: string; chips: string[]; note: string; until: number }
-interface Rec extends Obj { people: Person[]; peers?: { id: string; did?: string }[]; extData?: Record<string, unknown>; supportAsks?: Ask[]; supportIn?: In[] }
+interface Rec extends Obj { people: Person[]; peers?: { id: string; did?: string }[]; identity?: { did?: string }; connectPlacement?: string; extData?: Record<string, unknown>; supportAsks?: Ask[]; supportIn?: In[] }
 
 export interface CommunityToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean; write: boolean; now: () => Date }
 
@@ -72,7 +74,26 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
         const p = person(r, a.person)
         const did = (r.peers ?? []).find((x) => x.id === p.peerId)?.did ?? (typeof p.did === 'string' ? p.did : undefined)
         const target = did ?? p.id
-        return { id: p.id, name: p.name, target, title: `Connect with ${p.name}`, fragment: personQrLink('', { id: p.id, ...(did ? { did } : {}) }).slice(1) }
+        return { id: p.id, name: p.name, target, title: `Connect with ${p.name}`, fragment: personQrLink('', { id: p.id, name: p.name, ...(did ? { did } : {}) }).slice(1) }
+      },
+    },
+    /* wave44 steer-people-picker-2 */
+    {
+      name: 'connect_placement', description: `The zone a person who scans my code is placed in (the dropdown "They will be placed in" under my QR code). Zones: ${SCAN_RINGS.join(', ')}.`,
+      inputSchema: schema({}),
+      run: () => ({ zone: placementOf({ connectPlacement: e.load().connectPlacement as Ring | undefined }, 'acquaintance' as unknown as Ring), zones: [...SCAN_RINGS] }),
+    },
+    {
+      name: 'connect_link_check', description: 'What the app does with a connect link someone scanned: refused (made for another person: says whose), already connected (the card; nothing is added twice), or new. Changes nothing.',
+      inputSchema: schema({ link: S('the scanned link; a code made for one person carries to=<DID> in its fragment'), did: S('the DID in the link (who made it), to see whether I already hold them') }, ['link']),
+      run: (a) => {
+        const r = e.load()
+        const link = str(a.link)
+        const foreign = foreignCode(link, r.identity?.did)
+        if (foreign) return { result: 'refused', madeFor: foreign.name }
+        const did = str(a.did).trim()
+        const held = did ? connectedPerson({ people: r.people as never, peers: (r.peers ?? []) as never }, did) : undefined
+        return held ? { result: 'already-connected', person: held.id, name: held.name } : { result: 'new' }
       },
     },
     {
@@ -134,6 +155,16 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
           put(r, setKind(d, id, kind))
         })
         return { id, kind }
+      },
+    },
+    {
+      name: 'connect_placement_set', description: `Choose the zone a person who scans my code is placed in. One of: ${SCAN_RINGS.join(', ')} (never "intending").`,
+      inputSchema: schema({ zone: S(SCAN_RINGS.join(' | ')) }, ['zone']),
+      run: (a) => {
+        const zone = str(a.zone).trim()
+        if (!(SCAN_RINGS as readonly string[]).includes(zone)) throw new Error(`zone must be one of ${SCAN_RINGS.join(', ')}`)
+        e.commit((r) => { r.connectPlacement = zone })
+        return { zone }
       },
     },
     {

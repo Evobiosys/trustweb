@@ -175,11 +175,11 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     ? d.addableTags.map((t) => tagPill(t, { class: 'chip', attrs: { 'data-tag-choice': t.id }, onclick: () => d.onAddTag?.(t.id) }))
     : [el('span', { class: 'meta' }, [S.cardTagsUndefined])])
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
+    el('div', { 'data-chat-row': '' }, [d.chat]),   // wave 44 steer-people-picker-2: Chat is the first thing on a card
     el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
       d.onQr ? el('button', { class: 'btn btn-ghost btn-sm', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, title: S.qrShowAria, onclick: d.onQr }, [S.qrPageTitle]) : null]),
     d.face?.menu,
     d.places ? connectedOnRow(d.places, d.onChat) : null,
-    el('div', { 'data-chat-row': '' }, [d.chat]),
     el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
     picker,
     sharesLine(d),
