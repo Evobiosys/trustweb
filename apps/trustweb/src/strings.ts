@@ -4413,7 +4413,7 @@ export const S = {
     expand: 'Show more',
     collapse: 'Show less',
     notify: 'Notifications',
-    notifyHint: 'Notifications of this event: invitations to it, posts in its feed and asks for support from the people here.',
+    notifyHint: 'Notifications of this event: who joins and what is shared here while you are at it. Off: nothing from this event.',
     nickLabel: 'Your nickname',
     nickHint: 'Shown instead of your name when you pick Nickname. Without one, your first name.',
     iconLink: '🔗',

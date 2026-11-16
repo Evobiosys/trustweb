@@ -17,16 +17,19 @@ export const ROLE_KEYS: readonly RoleKey[] = ['organizers', 'hosts', 'techSuppor
 const clean = (list: readonly string[] | undefined): string[] => [...new Set((list ?? []).map((t) => t.trim()).filter(Boolean))]
 const alive = (people: readonly Person[]): Person[] => people.filter((p) => p.deleted_at === undefined)
 
-/** Wave 43: `organizer` (one text) became `organizers`. Reads organizers, else the legacy text as one organizer. */
+/** The legacy `organizer` text (also what an event link carries: "A, B") as names; comma-separated, like the edit form. */
+const legacyOrganizers = (text: string | undefined): string[] => clean(text?.split(','))
+
+/** Wave 43: `organizer` (one text) became `organizers`. Reads organizers, else the legacy text split on commas. */
 export function eventOrganizers(ev: Pick<TwEvent, 'organizers' | 'organizer'>): string[] {
-  return ev.organizers ?? (ev.organizer?.trim() ? [ev.organizer.trim()] : [])
+  return ev.organizers ?? legacyOrganizers(ev.organizer)
 }
 
-/** Once: a legacy `organizer` text becomes organizers [text]. The text stays (older callers and links read it). True when something changed. */
+/** Once: a legacy `organizer` text becomes organizers (one per comma-separated name). The text stays (older callers and links read it). True when something changed. */
 export function migrateEventRoles(s: Pick<AppState, 'events'>): boolean {
   let changed = false
   for (const ev of s.events ?? []) {
-    if (ev.organizers === undefined && ev.organizer?.trim()) { ev.organizers = [ev.organizer.trim()]; changed = true }
+    if (ev.organizers === undefined && ev.organizer?.trim()) { ev.organizers = legacyOrganizers(ev.organizer); changed = true }
   }
   return changed
 }

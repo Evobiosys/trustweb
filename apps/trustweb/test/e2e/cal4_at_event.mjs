@@ -44,11 +44,11 @@ async function run(label, viewport, mobile) {
   await tap('[data-at-event-name]'); await page.waitForTimeout(300)
   check(`${label}: event page lists Ada, Ben (new: none) and no shares`, await page.locator('[data-at-event-panel]').isVisible() && (await page.locator('[data-at-event-person]').count()) === 2)
   await page.screenshot({ path: `${SHOTS}/cal4-${label}-here.png` })
-  // bell
-  await tap('[data-at-event-bell]'); await page.waitForTimeout(200)
-  check(`${label}: bell off is stored`, (await rec(page)).atEvent.bell === false)
-  await tap('[data-at-event-bell]'); await page.waitForTimeout(200)
-  check(`${label}: bell on removes the key`, !('bell' in (await rec(page)).atEvent))
+  // review-fixes-43: the bell merged into the event page's Notifications control (ev.notify)
+  await tap('[data-event-notify]'); await page.waitForTimeout(200)
+  check(`${label}: notifications off is stored`, (await rec(page)).events.find((e) => e.id === 'e1').notify === false)
+  await tap('[data-event-notify]'); await page.waitForTimeout(200)
+  check(`${label}: notifications on removes the key`, !('notify' in (await rec(page)).events.find((e) => e.id === 'e1')))
   await tap('[data-go="record"]'); await page.waitForTimeout(300)
   // chip x
   await tap('[data-rec-event-drop]'); await page.waitForTimeout(200)

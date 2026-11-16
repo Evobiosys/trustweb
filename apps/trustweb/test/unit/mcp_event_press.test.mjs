@@ -11,7 +11,7 @@ function fixture(write = true) {
   const file = path.join(dir, 'record.json')
   writeFileSync(file, JSON.stringify({ v: 1, me: { id: 'me', displayName: 'Mia Probe' }, people: [], sameAs: {}, meetings: [], events: [EV] }))
   const tools = recordTools({ file, write, now: () => new Date('2026-11-15T10:00:00Z') })
-  return { by: Object.fromEntries(tools.map((t) => [t.name, t])), rec: () => JSON.parse(readFileSync(file, 'utf8')) }
+  return { file, by: Object.fromEntries(tools.map((t) => [t.name, t])), rec: () => JSON.parse(readFileSync(file, 'utf8')) }
 }
 
 describe('event press tools', () => {
@@ -28,6 +28,12 @@ describe('event press tools', () => {
     f.by.event_settings_set.run({ event: 'winter forum', invitePolicy: 'hosts', notify: true })
     expect(f.rec().events[0].invitePolicy).toBeUndefined()
     expect(f.rec().events[0].notify).toBeUndefined()
+  })
+  it('review-fixes-43: notify true also lifts a muted "I\'m here now" bell of that event (one switch, as on the event page)', () => {
+    const f = fixture()
+    const r = f.rec(); r.atEvent = { eventId: 'e1', since: 1, bell: false }; writeFileSync(f.file, JSON.stringify(r))
+    expect(f.by.event_settings_set.run({ event: 'e1', notify: true })).toMatchObject({ notify: true })
+    expect(f.rec().atEvent).toEqual({ eventId: 'e1', since: 1 })
   })
   it('event_settings_set refuses a value outside the choices and an unknown event', () => {
     const f = fixture()

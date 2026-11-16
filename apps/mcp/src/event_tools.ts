@@ -152,6 +152,9 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
         e.commit((r) => {
           const ev = eventOf(r, a.event)
           applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}) })
+          // review-fixes-43: one switch per event, as on the event page: notifications on also lift a muted "I'm here now" bell of this event.
+          const here = (r as { atEvent?: { eventId?: string; bell?: boolean } }).atEvent
+          if (a.notify === true && here?.eventId === ev.id) delete here.bell
           out = { id: ev.id, invitePolicy: ev.invitePolicy ?? 'hosts', notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full' }
         })
         return out

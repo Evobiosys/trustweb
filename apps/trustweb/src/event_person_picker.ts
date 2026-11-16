@@ -22,6 +22,13 @@ export function identifyRows(people: readonly Person[], query: string, exclude: 
   return [...hits, { create: q }]
 }
 
+/** What Enter does: the first row (the best match, else the add-new row), so a partial name never makes a second card. Undefined: nothing typed. */
+export function pickOnEnter(people: readonly Person[], query: string, exclude: readonly string[] = []): { id: string } | { create: string } | undefined {
+  const first = query.trim() ? identifyRows(people, query, exclude)[0] : undefined
+  if (!first) return undefined
+  return 'create' in first ? { create: first.create } : { id: first.id }
+}
+
 export interface PickerHooks {
   state: () => AppState
   save: () => void
@@ -41,6 +48,8 @@ export interface PickerOptions {
   tag?: boolean
   /** Open hook: ask which ring a new person gets. Unused by default (NEW_FROM_EVENT_RING). */
   pickRing?: () => Promise<Ring>
+  /** No rows until something is typed (the three role rows; P3: a simple surface). */
+  quietWhenEmpty?: boolean
   placeholder?: string
   ariaLabel?: string
   /** Data attribute names, so each caller keeps its own selectors. */
@@ -60,7 +69,7 @@ export function eventPersonPicker(h: PickerHooks, eventId: string, o: PickerOpti
     o.onPick(done.personId, done.created)
   }
   const draw = (): void => {
-    rows.replaceChildren(...identifyRows(h.state().people, input.value, o.exclude).map((r) => {
+    rows.replaceChildren(...(o.quietWhenEmpty && !input.value.trim() ? [] : identifyRows(h.state().people, input.value, o.exclude)).map((r) => {
       if ('create' in r) {
         return el('button', { class: 'chip picker-create', 'data-person-create': r.create, onclick: () => { void make(r.create) } }, [S.eventsAddNew(r.create)])
       }
@@ -70,7 +79,13 @@ export function eventPersonPicker(h: PickerHooks, eventId: string, o: PickerOpti
     }))
   }
   input.addEventListener('input', draw)
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) { e.preventDefault(); void make(input.value) } })
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    const first = pickOnEnter(h.state().people, input.value, o.exclude)
+    if (!first) return
+    e.preventDefault()
+    if ('create' in first) void make(first.create); else o.onPick(first.id, false)
+  })
   draw()
   return el('div', {}, [input, rows])
 }
