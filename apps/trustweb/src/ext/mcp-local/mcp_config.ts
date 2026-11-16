@@ -71,6 +71,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'resource_share', write: false }, { name: 'resource_block_add', write: true }, { name: 'resource_block_edit', write: true }, { name: 'resource_block_move', write: true }, { name: 'resource_block_remove', write: true }, { name: 'resource_block_collapse', write: true }, { name: 'resource_blocks_import', write: true },
   /* wave44b hide-from-crypto */
   { name: 'ask_tamper_reports_list', write: false },
+  /* answers-44a */
+  { name: 'profile_link_check', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

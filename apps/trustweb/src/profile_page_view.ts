@@ -7,7 +7,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import type { AppState } from './model'
-import { FIELDS, LINK_MAX, VIS, addLink, fieldOf, maxOf, profileOf, removeLink, setFields, setVis, verifyMeLink, visOf } from './profile_fields'
+import { FIELDS, LINK_MAX, VIS, addLink, fieldOf, maxOf, profileOf, removeLink, setFields, setVis, checkProfileLink, visOf } from './profile_fields'
 import type { FieldKey, VisKey } from './profile_fields'
 import { S } from './strings'
 
@@ -71,8 +71,7 @@ export function profilePage(d: ProfilePageDeps): HTMLElement {
             l.verified ? el('span', { class: 'tw-ok', title: T.linkChecked }, ['✓']) : null,
             el('a', { href: l.url, target: '_blank', rel: 'me noopener noreferrer' }, [l.label]),
             el('button', { class: 'btn btn-ghost', type: 'button', 'data-profile-link-check': '', onclick: async () => {
-              const ok = await verifyMeLink(l.url, d.origin, d.fetch)
-              if (ok) l.verified = true; else delete l.verified
+              const ok = (await checkProfileLink(me(), l.url, d.origin, d.fetch)).verified
               d.save(); state.textContent = ok ? T.linkChecked : T.linkNotChecked; if (ok) draw()
             } }, [T.linkCheck]),
             el('button', { class: 'btn btn-ghost', type: 'button', 'data-profile-link-remove': '', onclick: () => { removeLink(me(), l.url); d.save(); draw() } }, [T.linkRemove]),
