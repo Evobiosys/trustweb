@@ -4670,4 +4670,10 @@ export const S = {
     needSub: 'Sign up for a plan below first; then Claude can answer.',
     both: 'Both stay set up; one tap switches.',
   },
+  /* wave44 steer-ask-placement-3: event editor, optional assistant row */
+  w44ap3: {
+    row: 'Draft with assistant',
+    hint: 'Draft with assistant: set up Your AI first (optional).',
+    prompt: (ctx: string) => `Help me draft this event. What I have so far:\n${ctx}`,
+  },
 } as const

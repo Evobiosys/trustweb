@@ -296,6 +296,7 @@ import { bindModeShell } from './ext/community_mode'
 import { EXT_MODULES, TW_PROFILES, bindTw, createBus, isEnabled, listModules, profileDef, profileOf, twRegistry, type ExtHooks, type ProfileId, type ThreadSummary, type TwCtx } from './ext/registry'
 import { createActions } from './actions'
 import { chainOf } from './ext/assistant/providers'
+import { setEventAssistantDeps } from './event_assistant_row'
 import { defineAppActions, PLACE_TARGET, type Place as AppPlace } from './app_actions'
 import { ensureTags } from './import_curate_view'
 import { curatePage as curateImportPage } from './services_view'
@@ -1862,6 +1863,11 @@ function openAiButton(): void {
   sparkleFallback()
 }
 let assistantPending = false
+// Wave 44 steer-ask-placement-3: the event editor's optional "Draft with assistant" row (event_assistant_row.ts).
+setEventAssistantDeps({
+  ready: () => isEnabled('assistant') && chainOf(st().advanced).length > 0,
+  open: (text) => { openAiButton(); void twRegistry.sync().then(() => twBus.emit('assistant-prefill', text)) },
+})
 
 /** Wave 41: the sparkle without the assistant: the Your AI sheet (screenshot 94df73a3), with or without an endpoint. */
 function sparkleFallback(): void {
