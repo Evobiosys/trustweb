@@ -42,7 +42,7 @@ try {
   const errors = []
   page.on('pageerror', (e) => errors.push(String(e)))
   await page.goto(URL); await page.waitForTimeout(1500)
-  await page.evaluate(([ev, people]) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Jakob' }, people, peers: [], log: [], events: ev })), [EV, PEOPLE])
+  await page.evaluate(([ev, people]) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, strikeSwitchedOff: true, me: { id: 'me1', displayName: 'Jakob' }, people, peers: [], log: [], events: ev })), [EV, PEOPLE])
   await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' })
   await openEvent(page, 'e1')
 

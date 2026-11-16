@@ -5,6 +5,7 @@
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
 import type { EventOffers } from './events'
+import { EVENT_VISIBILITIES, communityOfEvent, listedAttendees, searchableAttendees, visibilityOf } from './event_visibility'
 import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, mayEdit, nameRevealOf, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import { eventForLink, isEventHost, mayApprove, relatedOthers } from './event_roles'
@@ -211,7 +212,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   /** "Identify a person": the shared picker (event_person_picker.ts); a pick tags the person with this event. */
   function picker(ev: TwEvent): HTMLElement {
     return el('div', {}, [el('h3', {}, [S.eventsIdentify]), eventPersonPicker(h, ev.id, {
-      exclude: attendees(h.state(), ev.id).map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
+      exclude: [...listedAttendees(attendees(h.state(), ev.id), ev.id), ...attendees(h.state(), ev.id).filter((p) => !searchableAttendees([p], ev.id).length)].map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
       renderPerson: (p) => el('span', {}, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])]),
       decorate: (chip, p) => { contextPress(chip, () => h.curatorPerson(p.id)); dragPerson(chip, p) },
       onPick: (id) => { tagPerson(h.state(), id, ev.id); h.save(); h.redraw() },
@@ -329,6 +330,24 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return input
   }
 
+  /** Wave 44 steer-event-visibility: how I show to the others at this event (per event), and the host's "Share with the whole community". */
+  function visibilityRows(ev: TwEvent): HTMLElement {
+    const V = S.w44vis
+    const mode = visibilityOf(ev)
+    const host = mayEdit(ev, h.state().me.displayName, h.state().people)
+    return el('div', { 'data-event-visibility': mode }, [
+      el('label', { class: 'meta' }, [V.showMe]),
+      el('div', { class: 'seg', role: 'group', 'aria-label': V.showMe }, EVENT_VISIBILITIES.map((m) => el('button', {
+        type: 'button', class: m === mode ? 'on' : '', 'aria-pressed': String(m === mode), 'data-event-visibility-opt': m,
+        onclick: () => { applyEventSettings(ev, { showMe: m }); h.save(); h.redraw() },
+      }, [V.modes[m]]))),
+      el('p', { class: 'meta' }, [V.modeHints[mode]]),
+      host ? el('div', { class: 'chips', 'data-event-share-community-row': '' }, [toggle(ev.shareCommunity === true, V.share, 'data-event-share-community', () => { applyEventSettings(ev, { shareCommunity: ev.shareCommunity !== true }); h.save(); h.redraw() })]) : null,
+      host && ev.shareCommunity && !communityOfEvent(ev) ? el('p', { class: 'warn', 'data-event-share-needs-community': '' }, [V.shareNeedsCommunity]) : null,
+      host ? el('p', { class: 'meta' }, [V.shareHint]) : null,
+    ])
+  }
+
   /** Renaming the tag locks it against the host and copies the link now showing (host or peer) again at once with the new name. */
   function advanced(ev: TwEvent): HTMLElement {
     const name = el('input', { class: 'field', value: tagLabel(ev), 'aria-label': S.eventTagName, 'data-event-tag-name': '' })
@@ -374,6 +393,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         }, [m === 'full' ? S.w43shell.linkModeFull : S.w43shell.linkModeEvent]))),
       ])] : []),
       ...field(S.w43answers.myNickname, myNicknameInput(ev)), el('p', { class: 'meta' }, [S.w43answers.myNicknameHint]),
+      visibilityRows(ev),
       el('label', { class: 'meta' }, [T.offers]),
       el('div', { class: 'chips', 'data-event-offers': '' }, offerRows.map(([k, label]) => toggle(offers[k], label, `data-event-offer-${k}`, () => { applyEventSettings(ev, { offers: { [k]: !offers[k] } }); h.save(); h.redraw() }))),
       el('p', { class: 'meta', 'data-event-feed-hint': '' }, [S.ev44.feedHint]),
@@ -443,7 +463,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   }
 
   function page(ev: TwEvent): Node[] {
-    const people = attendees(h.state(), ev.id)
+    const people = listedAttendees(attendees(h.state(), ev.id), ev.id)   // wave 44 steer-event-visibility: discoverable / off people stay out of the open list
     const attended = el('button', {
       class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },

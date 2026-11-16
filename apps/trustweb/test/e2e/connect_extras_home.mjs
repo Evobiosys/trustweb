@@ -17,7 +17,7 @@ const people = [person('p1', 'Ben Gruber', 'close', { iyg: 'true' }), person('p2
 const tags = [{ id: 'iyg', colour: '#13847C', label: 'IYG circle', community: true }]
 const EV = { id: 'e1', name: 'Winter IYG', from: '2026-12-30', where: 'Vienna', createdAt: 1, attended: true, communityId: 'iyg', offers: { feed: true } }
 const extData = { 'community-mighty': { tag: 'iyg', meta: { iyg: { kind: 'informal', organizers: [] } } } }
-const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Ana' }, peers: people.map((p) => ({ id: p.peerId, displayName: p.name })), log: [], inventory: [], people, events: [EV], extData, feed: { on: true } })
+const record = JSON.stringify({ v: 1, strikeSwitchedOff: true, me: { id: 'me1', displayName: 'Ana' }, peers: people.map((p) => ({ id: p.peerId, displayName: p.name })), log: [], inventory: [], people, events: [EV], extData, feed: { on: true } })
 const hide = '.twf, .twf-ok, .twp { display: none !important }'
 
 try {

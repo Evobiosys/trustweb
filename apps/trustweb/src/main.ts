@@ -311,6 +311,7 @@ import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
 import { createEventEnvelopes } from './event_envelope'
+import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
@@ -657,8 +658,10 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
+let announceDue: () => void = () => undefined   // wave 44 steer-event-visibility: set once eventEnv exists
 function save(): void {
   if (state && !superseded) {
+    announceDue()
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
     if (!solo) pushLiveDevRecord(persona, state)
@@ -2033,6 +2036,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 }
 
 function render(): void {
+  if (state) document.documentElement.classList.toggle('tw-strike', state.strikeSwitchedOff === true)   // wave 44: strike-through of OFF toggles is a Variations switch
   screen = shownScreen(screen)
   if (screen !== Screen.Web) noticeLayer.slot('wants', null)
   noticeLayer.setOnWeb(screen === Screen.Web)   // review-fixes-43c: ask-result / message cards stay on the Web screen (P06)
@@ -5259,7 +5263,9 @@ const web = createWebView({
 const eventEnv = createEventEnvelopes<Peer>({
   state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
   link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+  members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
 })
+announceDue = () => { eventEnv.announceDue() }
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
@@ -7373,6 +7379,11 @@ function variationRows(s: AppState): Node[] {
       class: 'radio variation' + (c.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(c.id === cur), 'data-variation': c.id, onclick: () => appActions.do('set-profile', { profile: c.id }),
     }, [el('b', {}, [(c.id === cur ? '✓ ' : '') + c.name, ' ', alphaSub()]), el('small', {}, [S.var.names[c.base] + (c.id === cur ? ` · ${S.var.current}` : '')])])),
     ...modeShell.settingsRows(), // wave 41: default interface, Community layout, my versions
+    // Wave 44 steer-event-visibility: OFF toggles are dimmed; the line through them is this switch (default off).
+    el('button', {
+      class: 'radio' + (s.strikeSwitchedOff ? ' on' : ''), role: 'switch', 'aria-checked': String(s.strikeSwitchedOff === true), 'aria-pressed': String(s.strikeSwitchedOff === true), 'data-variation-strike': '',
+      onclick: () => { s.strikeSwitchedOff = !s.strikeSwitchedOff; if (!s.strikeSwitchedOff) delete s.strikeSwitchedOff; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.w44vis.strike]), el('small', {}, [S.w44vis.strikeHint])]),
   ]
 }
 

@@ -12,6 +12,9 @@ import type { EventEnvelope } from '../../demo/src/types'
 import { decodeEventLink } from './event_link'
 import type { LinkedEvent } from './event_link'
 import { isEventHost } from './event_roles'
+import { addItem } from './notify_inbox'
+import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
+import { S } from './strings'
 import type { AppState, TwEvent } from './model'
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
@@ -42,8 +45,24 @@ export function mayAnswer(s: Pick<AppState, 'events' | 'me' | 'people'>, id: str
   return (shown?.id === id && now - shown.at <= EVENT_SHOW_WINDOW_MS) || isEventHost(ev, s.me.displayName, s.people)
 }
 
+/**
+ * Wave 44 steer-event-visibility: an event the host shared with the whole community arrives as a link envelope marked `announce`.
+ * It becomes an event of mine I am not attending, plus one row in the notification inbox (bell badge, Events section), unless the event is known already.
+ * Only a person I am connected to can send it (the envelope is sealed per peer). True when something was added.
+ */
+export function receiveAnnounce(s: Pick<AppState, 'events' | 'notifInbox'>, ev: LinkedEvent, from: string, now: number): boolean {
+  if (s.events?.some((e) => e.id === ev.id)) return false
+  const { kind: _kind, ...rest } = ev
+  s.events = [...(s.events ?? []), { ...rest, createdAt: now, attended: false, fromLink: true }]
+  const hosts = ev.hosts?.join(', ') ?? ''
+  s.notifInbox = addItem(s.notifInbox ?? [], { id: `announce:${ev.id}`, kind: 'event', title: S.w44vis.announceTitle(ev.name), body: S.w44vis.announceBody(from, hosts), at: now, seenAt: null, eventId: ev.id })
+  return true
+}
+
 export interface EnvelopeHost<P extends { id: string }> {
-  state(): Pick<AppState, 'events' | 'me' | 'people'>
+  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox'>>
+  /** Wave 44: the connected peers of the people who carry this community tag (the ones an announce goes to). */
+  members?(tag: string): P[]
   save(): void
   now(): number
   /** The event as an event link, the way the event QR page makes it (names hidden as the event's reveal setting says). */
@@ -67,7 +86,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   async function giveTo(peer: P, id: string): Promise<boolean> {
     const ev = held(id)
     if (!ev || !mayAnswer(host.state(), id, shown, host.now())) return false
-    await host.send(peer, { v: 1, t: 'event', link: host.link(ev) })
+    await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev) })
     return true
   }
 
@@ -79,6 +98,16 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       const ev = held(id)
       if (!ev) throw new Error(`no event "${id}"`)
       await host.send(peer, { v: 1, t: 'event', link: host.link(ev) })
+    },
+    /** Wave 44: every event the host shares with the whole community and has not announced yet goes to the community's connected members, once. True when one went out (the caller saves). */
+    announceDue(): boolean {
+      const due = (host.state().events ?? []).filter(announceDue)
+      for (const ev of due) {
+        ev.announcedAt = host.now()
+        const link = host.link(ev)
+        for (const peer of host.members?.(communityOfEvent(ev) ?? '') ?? []) void host.send(peer, { v: 1, t: 'event', link, show: visibilityOf(ev), announce: true }).catch(() => undefined)
+      }
+      return due.length > 0
     },
     /** The shower: someone just connected through this device's code; they get the event when its QR was just shown. */
     async connected(peer: P): Promise<void> {
@@ -97,6 +126,9 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       if (env.want !== undefined) return (await giveTo(peer, env.want).catch(() => false)) ? 'answered' : 'ignored'
       const linked = env.link === undefined ? null : decodeEventLink(env.link.slice(Math.max(0, env.link.indexOf('#'))))
       if (!linked) return 'ignored'
+      const who = host.state().people.find((p) => p.peerId === peer.id)
+      if (who && env.show) { noteShow(who, linked.id, env.show); host.save() }   // wave 44: how they show at this event
+      if (env.announce && who && receiveAnnounce(host.state() as Pick<AppState, 'events' | 'notifInbox'>, linked, who.name, host.now())) { host.save(); host.changed(); return 'filled' }
       const mine = held(linked.id)
       if (mine) {
         if (!fillEvent(mine, linked)) return 'ignored'

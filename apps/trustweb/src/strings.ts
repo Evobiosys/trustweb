@@ -4726,4 +4726,23 @@ export const S = {
     calBad: 'A calendar needs a name.',
     calDrafts: (n: number) => `Drafts (${n})`,
   },
+  /* wave44 steer-event-visibility */
+  w44vis: {
+    showMe: 'How I show at this event',
+    modes: { open: 'Show me to everyone', discoverable: 'Only discoverable', off: 'Off' } as Record<string, string>,
+    modeHints: {
+      open: 'Show me to everyone else at this event: they see me in the attendee list and can connect.',
+      discoverable: 'Only discoverable to others at the event: I appear when they search or scan, with no name in the open list.',
+      off: 'Off: I do not appear for the others at this event.',
+    } as Record<string, string>,
+    share: 'Share with the whole community',
+    shareHint: 'On: the event appears for every member of the community, with a notification.',
+    shareNeedsCommunity: 'Pick the community under "Part of a community or group" first.',
+    announceTitle: (name: string) => `New event: ${name}`,
+    announceBody: (from: string, host: string) => [from, host && `from ${host}`].filter(Boolean).join(' · '),
+    calendar: 'Calendar',
+    calendarEmpty: 'No events in this community on this day.',
+    strike: 'Strike through switched-off options',
+    strikeHint: 'Off: switched-off options show dimmed. On: they also get a line through them, for greyscale screens.',
+  },
 } as const

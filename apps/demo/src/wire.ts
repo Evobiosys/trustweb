@@ -151,7 +151,9 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   const hasLink = 'link' in o
   if (hasWant === hasLink) return null
   if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
-  return isNonEmptyString(o.link) && o.link.length <= EVENT_LINK_MAX ? { v: WIRE_VERSION, t: 'event', link: o.link } : null
+  if (!isNonEmptyString(o.link) || o.link.length > EVENT_LINK_MAX) return null
+  const show = o.show === 'open' || o.show === 'discoverable' || o.show === 'off' ? o.show : undefined   // wave 44: a value outside the three is dropped
+  return { v: WIRE_VERSION, t: 'event', link: o.link, ...(show ? { show } : {}), ...(o.announce === true ? { announce: true as const } : {}) }
 }
 // ----- END TrustWeb wave 43c -----
 

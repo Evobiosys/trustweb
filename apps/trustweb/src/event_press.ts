@@ -66,8 +66,22 @@ export function instanceHost(input: string): string | undefined {
   return /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(host) ? host : undefined
 }
 
+/** Wave 44 steer-event-visibility: how I show to the other people at an event. open = in the attendee list; discoverable = only when searched or scanned; off = nowhere. */
+export type EventVisibility = 'open' | 'discoverable' | 'off'
+export const EVENT_VISIBILITIES: readonly EventVisibility[] = ['open', 'discoverable', 'off']
+/** Jakob (steering 3): the default is discoverable. One constant. */
+export const DEFAULT_EVENT_VISIBILITY: EventVisibility = 'discoverable'
+export const isVisibility = (v: unknown): v is EventVisibility => EVENT_VISIBILITIES.includes(v as EventVisibility)
+export const visibilityOf = (ev: Pick<TwEvent, 'showMe'>): EventVisibility => (isVisibility(ev.showMe) ? ev.showMe : DEFAULT_EVENT_VISIBILITY)
+
+/** Sets my mode; the default is not stored. Throws on a value outside the choices. */
+export function setShowMe(ev: TwEvent, v: string): void {
+  if (!isVisibility(v)) throw new Error(`showMe must be one of ${EVENT_VISIBILITIES.join(', ')}`)
+  if (v === DEFAULT_EVENT_VISIBILITY) delete ev.showMe; else ev.showMe = v
+}
+
 /** What the app and MCP change on an event on this device; a default value is not stored. Throws on a value outside the choices. */
-export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string; /** Wave 44 (43-D7): the host lets technical support take over. */ techTakeover?: boolean }
+export interface EventSettingsPatch { invitePolicy?: string; notify?: boolean; offers?: Partial<EventOffers>; nameReveal?: string; communityId?: string; myNickname?: string; mastodonInstance?: string; /** Wave 44 (43-D7): the host lets technical support take over. */ techTakeover?: boolean; /** Wave 44 steer-event-visibility: how I show at this event (open | discoverable | off). */ showMe?: string; /** Wave 44: the host shares the event with the whole community. */ shareCommunity?: boolean }
 
 export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
   if (p.invitePolicy !== undefined) {
@@ -89,6 +103,8 @@ export function applyEventSettings(ev: TwEvent, p: EventSettingsPatch): void {
     if (host) ev.mastodonInstance = host; else delete ev.mastodonInstance
   }
   if (p.notify !== undefined) { if (p.notify) delete ev.notify; else ev.notify = false }
+  if (p.showMe !== undefined) setShowMe(ev, p.showMe)
+  if (p.shareCommunity !== undefined) { if (p.shareCommunity) ev.shareCommunity = true; else delete ev.shareCommunity }
   if (p.techTakeover !== undefined) { if (p.techTakeover) ev.techTakeover = true; else delete ev.techTakeover }
   if (p.offers) {
     const next = { ...offersOf(ev), ...Object.fromEntries(Object.entries(p.offers).filter(([k, v]) => k in EVENT_OFFERS_DEFAULT && typeof v === 'boolean')) }

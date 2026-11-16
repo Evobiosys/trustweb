@@ -5,7 +5,7 @@
  * network: a resource ask is written as one queued support ask and the app shows a card and sends it on a tap (support_flush.ts). On this side the
  * person is always "me".
  */
-import { DEFAULT_INVITE_POLICY, applyEventSettings, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
+import { DEFAULT_EVENT_VISIBILITY, DEFAULT_INVITE_POLICY, applyEventSettings, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
 import { eventLinkView, identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
@@ -173,17 +173,17 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
     },
     // Wave 43 event-press-share
     {
-      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite; default everyone), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me), communityId (the community colour tag id this event is part of; empty = an isolated event), mastodonInstance (host whose public hashtag posts the event Feed merges, e.g. mastodon.social; empty = none). Only the fields given change.',
-      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none'), techTakeover: { type: 'boolean', description: 'wave 44: the host lets technical support take over (approve, invite)' } }, ['event']),
+      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite; default everyone), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me), communityId (the community colour tag id this event is part of; empty = an isolated event), mastodonInstance (host whose public hashtag posts the event Feed merges, e.g. mastodon.social; empty = none), showMe open|discoverable|off (wave 44: how I show to the others at this event; default discoverable), shareCommunity (wave 44: the host shares the event with the whole community; the app tells the community members once, with a notification). Only the fields given change.',
+      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none'), techTakeover: { type: 'boolean', description: 'wave 44: the host lets technical support take over (approve, invite)' }, showMe: S('open | discoverable | off'), shareCommunity: { type: 'boolean', description: 'wave 44: share this event with the whole community' } }, ['event']),
       run: (a) => {
         let out: Obj = {}
         e.commit((r) => {
           const ev = eventOf(r, a.event)
-          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}), ...(typeof a.techTakeover === 'boolean' ? { techTakeover: a.techTakeover } : {}) })
+          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}), ...(typeof a.techTakeover === 'boolean' ? { techTakeover: a.techTakeover } : {}), ...(a.showMe !== undefined ? { showMe: str(a.showMe) } : {}), ...(typeof a.shareCommunity === 'boolean' ? { shareCommunity: a.shareCommunity } : {}) })
           // review-fixes-43: one switch per event, as on the event page: notifications on also lift a muted "I'm here now" bell of this event.
           const here = (r as { atEvent?: { eventId?: string; bell?: boolean } }).atEvent
           if (a.notify === true && here?.eventId === ev.id) delete here.bell
-          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}), ...(ev.techTakeover ? { techTakeover: true } : {}) }
+          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}), ...(ev.techTakeover ? { techTakeover: true } : {}), showMe: ev.showMe ?? DEFAULT_EVENT_VISIBILITY, shareCommunity: ev.shareCommunity === true, ...(ev.announcedAt !== undefined ? { announcedAt: ev.announcedAt } : {}) }
         })
         return out
       },

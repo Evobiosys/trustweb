@@ -27,7 +27,7 @@ const inventory = [
   { id: 'i3', text: 'Protected talk', audience: 'friends', included: true, createdAt: 3, kind: 'recording', protected: true, link: local },
 ]
 const extData = { 'community-mighty': { tag: 'iyg', meta: { iyg: { kind: 'managed', organizers: ['me'] } } } }
-const record = { v: 1, me: { id: 'me1', displayName: 'Tester' }, people, peers, log: [], inventory, events: [EVENT], extData,
+const record = { v: 1, strikeSwitchedOff: true, me: { id: 'me1', displayName: 'Tester' }, people, peers, log: [], inventory, events: [EVENT], extData,
   chats: { cy: { unread: 1, messages: [{ key: 'k1', dir: 'in', text: 'Hello there', at: Date.now() - 600e3, sentAt: Date.now() - 600e3, state: 'received' }] } } }
 
 /** Every visible control, shadow roots included, its box clipped to the viewport and to every scrolling / clipping ancestor (across shadow hosts). */

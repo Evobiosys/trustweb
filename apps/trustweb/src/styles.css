@@ -1881,7 +1881,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 
 /* wave 43 event-roles */
 /* P2: an OFF toggle is struck through, never colour alone (greyscale / e-ink screens) */
-.tw-off{text-decoration:line-through}
+.tw-off{opacity:.55}
 .tw-expander{flex:0 0 44px; min-height:44px; background:none; border:0; font-size:15px; cursor:pointer; color:var(--ink); text-decoration:underline}
 .roles-line{display:flex; align-items:center; gap:6px}
 .roles-line .roles-summary{flex:1 1 auto; min-width:0; text-align:left; background:none; border:0; padding:8px 0; font:inherit; color:var(--ink-soft); cursor:pointer; text-decoration:underline; overflow-wrap:anywhere}
@@ -2042,3 +2042,9 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .ev-draft-card{background:var(--linen, #fff); color:var(--ink); border-radius:16px; padding:18px; width:min(340px, 100%); display:flex; flex-direction:column; gap:8px}
 .cal-tags .chips{align-items:center}
 .roles-line>.event-since{flex:1 1 auto; min-width:0; text-align:left}
+
+/* wave44 steer-event-visibility */
+/* P2 now opt-in: Settings > Variations "Strike through switched-off options" puts the line back (html.tw-strike). */
+html.tw-strike .tw-off{text-decoration:line-through}
+html.tw-strike .post-actions .btn.tw-off,html.tw-strike .rv-bar .btn.tw-off{text-decoration:underline line-through}
+.post-actions .btn.tw-off,.rv-bar .btn.tw-off{text-decoration:underline}

@@ -98,6 +98,7 @@ async function main() {
     ok('1. Auto sync is on (aria-pressed=true, not struck through)', (await auto.getAttribute('aria-pressed')) === 'true' && !(await auto.getAttribute('class')).includes('tw-off'))
     await auto.click()
     const off = phone.locator('[data-sync-auto]')
+    await phone.addStyleTag({ content: 'html .tw-off{text-decoration:line-through}' })   // wave 44: the line is opt-in now (Settings > Variations)
     ok('1. off: struck through and aria-pressed=false (P2), stored on this device', (await off.getAttribute('aria-pressed')) === 'false' && (await off.evaluate((e) => getComputedStyle(e).textDecorationLine)).includes('line-through') && (await record(phone)).syncAutoOff === true)
     await shot(phone, 'auto-off-360')
     await off.click()

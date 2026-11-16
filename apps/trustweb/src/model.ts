@@ -393,6 +393,12 @@ export interface TwEvent {
   invitePolicy?: InvitePolicy
   /** Wave 43: what the host switched on; absent = all off (events.ts EVENT_OFFERS_DEFAULT). */
   offers?: Partial<EventOffers>
+  /** Wave 44 steer-event-visibility: how I show at this event; absent = 'discoverable' (event_visibility.ts). Local only. */
+  showMe?: 'open' | 'discoverable' | 'off'
+  /** Wave 44: the host shares this event with the whole community (communityId, else community); absent = off. Local only. */
+  shareCommunity?: true
+  /** Wave 44: when the community was told about it (once). Local only. */
+  announcedAt?: number
   /** Wave 42 community-event: the community (colour tag id) this event was made in. */
   community?: string
   /** Wave 43 answers (epsilon): "Part of a community": the community (colour tag id) whose members this event's people join. Absent = an isolated event. Local only. */
@@ -458,6 +464,8 @@ export interface Person {
   cadenceDays?: number
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]
+  /** Wave 44 steer-event-visibility: how this person told me they show at an event (event id -> mode); absent = I tagged them myself, so they are listed. Local only. */
+  eventShow?: Record<string, 'open' | 'discoverable' | 'off'>
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
   did?: string
   /** Wave 32 (feed_nostr.ts): their Nostr public key (hex), so their group posts show by my trust ring. Local only. Absent: unknown. */
@@ -1357,6 +1365,8 @@ export interface AppState {
   apkUpdates?: boolean
   /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
   showRingNames?: boolean
+  /** Wave 44 steer-event-visibility: Settings > Variations "Strike through switched-off options"; absent = off (switched-off options show dimmed). */
+  strikeSwitchedOff?: boolean
   /**
    * Settings > Advanced (wave 3): ask only my direct contacts. On: every ask
    * carries `direct: true` and nobody passes it on. Absent or anything but

@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const it = (id, text, over = {}) => ({ id, text, audience: 'friends', included: true, createdAt: 1, ...over })
-const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], events: [],
+const record = JSON.stringify({ v: 1, strikeSwitchedOff: true, me: { id: 'me1', displayName: 'Me' }, peers: [], log: [], events: [],
   people: [{ id: 'p1', name: 'Ada Lovelace', ring: 1, lines: [], context: '', metAt: 1 }, { id: 'p2', name: 'Ben Huber', ring: 1, lines: [], context: '', metAt: 1 }],
   inventory: [
     it('i1', 'Cosmos, recommended by Ada Lovelace', { kind: 'book' }),
