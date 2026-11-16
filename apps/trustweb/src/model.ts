@@ -41,6 +41,7 @@ import type { EventOffers, InvitePolicy, NameReveal } from './events'
 import type { ZoneLink } from './zone_share_link'
 import type { PeerItem } from './peer_items'
 import type { SupportAsk, SupportIn } from './support_ask'
+import type { EmbedRecord } from './feed_embed'
 
 export enum Ring {
   /** The top trust zone (wave 25): the few you would call at 3 am. Family keeps its own closeness; this is a ring of its own. */
@@ -1112,7 +1113,7 @@ export interface AppState {
   feedPosts?: SocialPost[]
   feedStars?: string[]
   /** Wave 44 (feed_embed.ts): posts embedded from a pasted link, newest first, at most 200. Absent: none. */
-  feedEmbeds?: import('./feed_embed').EmbedRecord[]
+  feedEmbeds?: EmbedRecord[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
