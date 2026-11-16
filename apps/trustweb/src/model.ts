@@ -441,6 +441,10 @@ export interface Person {
   peerId?: string
   /** Wave 30: the ring before the person was archived (Ring.None); Restore puts them back. Local only. */
   prevRing?: Ring
+  /** Wave 44 (rings_layout.ts isBeyond): the id of the friend through whom I see this person; they sit outside the rings. Local only. */
+  via?: string
+  /** Wave 44: either side asked to keep this second-hand person anonymous: drawn without a name. Local only. */
+  anonymous?: boolean
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
   /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
@@ -1342,6 +1346,8 @@ export interface AppState {
   apkUpdates?: boolean
   /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
   showRingNames?: boolean
+  /** Wave 44 (colour_tags.ts COLOUR_MODES): 'full' = bubbles filled with their ring colour; absent = 'rings', the colour only on the ring around a bubble. */
+  colourMode?: 'rings' | 'full'
   /**
    * Settings > Advanced (wave 3): ask only my direct contacts. On: every ask
    * carries `direct: true` and nobody passes it on. Absent or anything but

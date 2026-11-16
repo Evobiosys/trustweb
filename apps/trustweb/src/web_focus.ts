@@ -14,6 +14,12 @@ export function focusEvent(s: Pick<AppState, 'uiRings'>, eventId: string): void 
   s.uiRings = { ...s.uiRings, show: [eventChip(eventId)], hide: [] }
 }
 
+/** Wave 44: the event the Web is focused on (exactly one chip `event:<id>`), else null: the Web then offers "Tap the event". */
+export const focusedEventId = (s: Pick<AppState, 'uiRings'>): string | null => {
+  const show = s.uiRings?.show ?? []
+  return show.length === 1 && show[0].startsWith('event:') ? show[0].slice(6) : null
+}
+
 export const clearFilters = (s: Pick<AppState, 'uiRings' | 'membraneLimit'>): void => dropFilters(s, () => false)
 
 type FilterState = Pick<AppState, 'uiRings' | 'membraneLimit'>

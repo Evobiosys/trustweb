@@ -5252,7 +5252,7 @@ const curator = createCurator({
 })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
-  curatorPerson, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
+  curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
 /** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
 const eventEnv = createEventEnvelopes<Peer>({

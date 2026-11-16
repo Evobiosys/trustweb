@@ -241,6 +241,19 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
       },
     },
     {
+      name: 'person_hide', description: 'Hide a person from the Web rings (the Expanse, nothing is deleted); the ring stays. The same as the small person menu\'s Hide.',
+      inputSchema: schema({ person: S('id or exact name') }, ['person']),
+      run: (a) => {
+        let who: Person | undefined
+        commit((r) => {
+          who = findPerson(r, a.person)
+          const hidden = (r as { expanse?: string[] }).expanse ?? []
+          if (!hidden.includes(who.id)) (r as { expanse?: string[] }).expanse = [...hidden, who.id]
+        })
+        return { id: who!.id, name: who!.name, hidden: true }
+      },
+    },
+    {
       name: 'restore_person', description: 'Put a removed person back (within their 30 days) on the ring they had.',
       inputSchema: schema({ person: S('id or exact name of the removed person') }, ['person']),
       run: (a) => {
