@@ -18,6 +18,8 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'sync-now': 'sync_now',
   // Wave 43c connect-extras: the debug send of an event envelope has its own tool
   'event-envelope-send': 'event_envelope_send',
+  // Wave 44 home-dashboard: opening a Dashboard has its own tool
+  'dashboard-open': 'dashboard_open',
 }
 
 /** The actions `app_action` accepts (derived, so a new entry above needs no second edit). */
