@@ -2044,7 +2044,4 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .roles-line>.event-since{flex:1 1 auto; min-width:0; text-align:left}
 
 /* wave44 steer-event-visibility */
-/* P2 now opt-in: Settings > Variations "Strike through switched-off options" puts the line back (html.tw-strike). */
-html.tw-strike .tw-off{text-decoration:line-through}
-html.tw-strike .post-actions .btn.tw-off,html.tw-strike .rv-bar .btn.tw-off{text-decoration:underline line-through}
 .post-actions .btn.tw-off,.rv-bar .btn.tw-off{text-decoration:underline}

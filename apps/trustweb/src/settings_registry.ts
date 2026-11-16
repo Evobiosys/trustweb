@@ -95,7 +95,6 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   feature('features.events', 'events', 'Events'),
   feature('features.inventory', 'inventory', 'Resources'),
   sparse('events.alertCommunity', 'general', 'Alert me about new events in my communities', 'eventAlerts', true, false, 'Off: a new event a community member shares is dropped silently, with no row and no badge.'),
-  sparse('variations.strike', 'general', 'Strike through switched-off options', 'strikeSwitchedOff', false, true, 'Off: switched-off options show dimmed. On: they also get a line through them.'),
   flag('web.ringNames', 'web', 'Show ring names on the web', 'showRingNames', false, false, 'Trust zone under each name.'),
   choice('web.queryStyle', 'web', 'How asks read', 'queryStyle', ['call', 'search'], 'call', 'Asks read as a call for help or as a search.'),
   choice('web.pinnedOrder', 'web', 'Pinned order', 'pinnedOrder', ['pinned', 'contact'], 'pinned', 'Newest pin first, or whoever you were last in touch with first.'),

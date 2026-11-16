@@ -4751,7 +4751,5 @@ export const S = {
     change: 'Change',
     calendar: 'Calendar',
     calendarEmpty: 'No events in this community on this day.',
-    strike: 'Strike through switched-off options',
-    strikeHint: 'Off: switched-off options show dimmed. On: they also get a line through them, for greyscale screens.',
   },
 } as const

@@ -166,17 +166,6 @@ describe('community calendar: the community\'s own events', () => {
   })
 })
 
-describe('strike-through of switched-off options is off by default', () => {
-  it('Settings > Variations switch: default false, stored only when on; MCP settings_set reaches it', () => {
-    const r = {}
-    expect(readSetting(r, 'variations.strike')).toBe(false)
-    writeSetting(r, 'variations.strike', true)
-    expect(r.strikeSwitchedOff).toBe(true)
-    writeSetting(r, 'variations.strike', false)
-    expect('strikeSwitchedOff' in r).toBe(false)
-  })
-})
-
 describe('MCP parity: event_settings_set carries showMe and shareCommunity', () => {
   it('is listed, changes both, reports them', () => {
     expect(MCP_TOOLS.map((t) => t.name)).toContain('event_settings_set')

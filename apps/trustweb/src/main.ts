@@ -2037,7 +2037,6 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 }
 
 function render(): void {
-  if (state) document.documentElement.classList.toggle('tw-strike', state.strikeSwitchedOff === true)   // wave 44: strike-through of OFF toggles is a Variations switch
   screen = shownScreen(screen)
   if (screen !== Screen.Web) noticeLayer.slot('wants', null)
   noticeLayer.setOnWeb(screen === Screen.Web)   // review-fixes-43c: ask-result / message cards stay on the Web screen (P06)
@@ -7385,11 +7384,6 @@ function variationRows(s: AppState): Node[] {
       class: 'radio variation' + (c.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(c.id === cur), 'data-variation': c.id, onclick: () => appActions.do('set-profile', { profile: c.id }),
     }, [el('b', {}, [(c.id === cur ? '✓ ' : '') + c.name, ' ', alphaSub()]), el('small', {}, [S.var.names[c.base] + (c.id === cur ? ` · ${S.var.current}` : '')])])),
     ...modeShell.settingsRows(), // wave 41: default interface, Community layout, my versions
-    // Wave 44 steer-event-visibility: OFF toggles are dimmed; the line through them is this switch (default off).
-    el('button', {
-      class: 'radio' + (s.strikeSwitchedOff ? ' on' : ''), role: 'switch', 'aria-checked': String(s.strikeSwitchedOff === true), 'aria-pressed': String(s.strikeSwitchedOff === true), 'data-variation-strike': '',
-      onclick: () => { s.strikeSwitchedOff = !s.strikeSwitchedOff; if (!s.strikeSwitchedOff) delete s.strikeSwitchedOff; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.w44vis.strike]), el('small', {}, [S.w44vis.strikeHint])]),
   ]
 }
 

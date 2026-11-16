@@ -47,20 +47,10 @@ try {
     check(`${tag}: share on: stored, and announced once (stamp)`, e1.shareCommunity === true && typeof e1.announcedAt === 'number')
     await page.screenshot({ path: `${SHOTS}/steer-event-visibility-advanced-${tag}.png` })
 
-    // 5: strike-through default off, Variations switch
+    // 5: OFF toggles are dimmed; the line through them belongs to Black and white mode (steer-strike-mode)
     const decoration = () => page.locator('[data-event-share-community]').evaluate((n) => getComputedStyle(n).textDecorationLine)
     await page.locator('[data-event-share-community]').click(); await page.waitForTimeout(300)
     check(`${tag}: an OFF toggle is dimmed, not struck through, by default`, (await page.locator('[data-event-share-community]').getAttribute('aria-pressed')) === 'false' && !(await decoration()).includes('line-through') && (await page.locator('[data-event-share-community]').evaluate((n) => Number(getComputedStyle(n).opacity))) < 1)
-    await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(600)
-    if (!(await page.locator('[data-variation-strike]').isVisible())) { await page.locator('details.settings-advanced-all > summary').first().click(); await page.waitForTimeout(300); if (!(await page.locator('[data-variation-strike]').isVisible())) { await page.locator('[data-settings-group="variations"] summary').first().click(); await page.waitForTimeout(300) } }
-    const sw = page.locator('[data-variation-strike]')
-    await sw.scrollIntoViewIfNeeded()
-    check(`${tag}: Variations has the switch, off`, (await sw.getAttribute('aria-pressed')) === 'false')
-    await sw.click(); await page.waitForTimeout(500)
-    check(`${tag}: switch on stored and class set`, (await rec(page)).strikeSwitchedOff === true && await page.evaluate(() => document.documentElement.classList.contains('tw-strike')))
-    await page.screenshot({ path: `${SHOTS}/steer-event-visibility-variations-${tag}.png` })
-    await page.keyboard.press('Escape'); await page.waitForTimeout(400)
-    check(`${tag}: with the switch on the OFF toggle is struck through`, (await decoration()).includes('line-through'))
     check(`${tag}: no document scroll sideways`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
     check(`${tag}: no page errors`, errors.length === 0)
     if (errors.length) console.log(errors.join('\n'))

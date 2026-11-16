@@ -451,7 +451,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const tag = tagNow()
     const items = leftNav(data(), tag)
     if (!(items as readonly string[]).includes(ui.nav) && !(ui.nav === 'calendar' && items.includes('events'))) ui.nav = items[0] ?? 'home'
-    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '') + (st().strikeSwitchedOff ? ' tw-strike' : '')
+    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '')
     cm.dataset.nav = ui.nav
     bar.replaceChildren(
       btn('☰ ' + t.menu, () => { ui.drawer = !ui.drawer; draw() }, { 'aria-expanded': String(ui.drawer), 'data-community-menu': '' }, 'lnk menu'),

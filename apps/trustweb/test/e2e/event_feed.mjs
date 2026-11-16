@@ -13,7 +13,7 @@ const events = [
   { id: 'e1', name: 'Winter IYG', from: day(2), where: 'Wien', createdAt: 1, attended: true, offers: { feed: true } },
   { id: 'e2', name: 'Quiet day', from: day(3), where: 'Graz', createdAt: 1, attended: true },
 ]
-const record = { v: 1, strikeSwitchedOff: true, me: { id: 'me1', displayName: 'Tester' }, peers: [], log: [], inventory: [], people: [], events }
+const record = { v: 1, bwMode: true, me: { id: 'me1', displayName: 'Tester' }, peers: [], log: [], inventory: [], people: [], events }
 const hit = (a, b) => !(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y)
 try {
   for (const [w, h] of [[360, 780], [1280, 900]]) {

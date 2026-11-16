@@ -16,7 +16,7 @@ try {
     const errors = []
     page.on('pageerror', (e) => errors.push(String(e)))
     await page.goto(URL); await page.waitForTimeout(1500)
-    await page.evaluate(([ev, ppl]) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, strikeSwitchedOff: true, me: { id: 'me1', displayName: 'Jakob' }, people: ppl, peers: [], log: [], events: [ev] })), [EV, [P('a1', 'Anna Huber', 'friend'), P('b1', 'Ben Gruber', 'friend')]])
+    await page.evaluate(([ev, ppl]) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, bwMode: true, me: { id: 'me1', displayName: 'Jakob' }, people: ppl, peers: [], log: [], events: [ev] })), [EV, [P('a1', 'Anna Huber', 'friend'), P('b1', 'Ben Gruber', 'friend')]])
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
     await page.locator('[data-go="events"]').first().click(); await page.waitForTimeout(300)
     await page.locator('[data-cal-all]').click(); await page.waitForTimeout(200)
