@@ -392,7 +392,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     ])
   }
 
-  /** An event page's Feed row: a V expander (P3) with the latest posts on the event and a way into the Feed; a long press or right click opens the Feed itself (P1). */
+  /** An event page's Feed row: a V expander (P3) with the latest posts on the event and a way into the Feed; a long press or right click opens the Feed settings (wave 44, 43-D5). */
   function eventRow(ev: TwEvent): HTMLElement | null {
     if (!feedOn(h.state()) || !eventFeedOn(ev)) return null
     const tag = tagOfEvent(ev)
@@ -411,7 +411,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-event-feed-open': '1', onclick: () => showEvent(ev.id) }, [S.feedEventRowOpen]),
       )
     })
-    contextPress(toggle, () => showEvent(ev.id))
+    contextPress(toggle, () => h.openSheet([el('h3', { 'data-event-feed-settings': ev.id }, [S.ev44.feedSettings]), ...settingsGroup()]))   // wave 44 (43-D5 flip): a long press opens the Feed settings, not the Feed
     return el('div', { class: 'event-feed-row', 'data-event-feed': ev.id }, [toggle, panel])
   }
 

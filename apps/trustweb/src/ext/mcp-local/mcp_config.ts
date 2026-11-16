@@ -49,6 +49,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'directory_search', write: false }, { name: 'profile_discoverable_set', write: true }, { name: 'hosting_set', write: true }, { name: 'trusted_only_set', write: true }, { name: 'trust_override_set', write: true },
   /* wave43c connect-extras */
   { name: 'feed_sources_get', write: false }, { name: 'feed_sources_set', write: true }, { name: 'community_dashboard_share_set', write: true }, { name: 'event_envelope_send', write: true },
+  /* wave44 event-editor */
+  { name: 'event_drafts_list', write: false }, { name: 'event_draft_save', write: true }, { name: 'event_invite', write: true }, { name: 'event_details_set', write: true }, { name: 'calendar_add', write: true }, { name: 'calendar_tag_toggle', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

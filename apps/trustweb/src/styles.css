@@ -2020,3 +2020,25 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
 /* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
 #notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}
+/* wave44 event-editor */
+/* P7: an optional input looks optional: minuscule and greyed until used. */
+.opt-min{font-size:12px; color:var(--ink-soft); opacity:.72}
+.field.opt-min{padding:5px 8px; border-style:dashed}
+.chip.opt-min{font-size:11.5px}
+.more-features{margin-top:12px}
+.more-features-line{flex:1; min-width:0; text-align:left; background:none; border:0; font:inherit; color:var(--ink); padding:10px 2px; cursor:pointer; text-decoration:underline}
+.more-features-panel{display:flex; flex-direction:column; gap:6px; padding-bottom:6px}
+.more-features-panel[hidden]{display:none}
+.ev-editor .ev-row{display:flex; flex-direction:column; gap:6px; padding:10px 0; border-bottom:1px solid var(--line, rgba(0,0,0,.08))}
+.ev-editor .ev-name{font-size:18px; font-weight:600}
+.ev-editor .ev-span{display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0}
+.ev-editor .ev-span>.field{flex:1 1 130px; min-width:0; width:auto}
+.ev-editor .ev-guest{display:flex; align-items:center; gap:6px; min-width:0}
+.ev-editor .ev-guest .who{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ev-editor .ev-loc{display:flex; align-items:center; gap:6px; min-width:0}
+.ev-editor .ev-loc>.field{flex:1; min-width:0; width:auto}
+.ev-editor .ev-conf-btn{flex:none; white-space:nowrap}
+.ev-draft-modal{place-items:center}
+.ev-draft-card{background:var(--linen, #fff); color:var(--ink); border-radius:16px; padding:18px; width:min(340px, 100%); display:flex; flex-direction:column; gap:8px}
+.cal-tags .chips{align-items:center}
+.roles-line>.event-since{flex:1 1 auto; min-width:0; text-align:left}

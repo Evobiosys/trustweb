@@ -12,6 +12,7 @@ import { parseCommunity } from '../../trustweb/src/ext/community-mighty/communit
 import type { SupportAsk } from '../../trustweb/src/support_ask.ts'
 import type { AppState, TwEvent } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
+import { eventEditorTools } from './event_editor_tools.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; did?: string; fields?: Record<string, unknown>; deleted_at?: string }
@@ -173,16 +174,16 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
     // Wave 43 event-press-share
     {
       name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite; default everyone), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me), communityId (the community colour tag id this event is part of; empty = an isolated event), mastodonInstance (host whose public hashtag posts the event Feed merges, e.g. mastodon.social; empty = none). Only the fields given change.',
-      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none') }, ['event']),
+      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none'), techTakeover: { type: 'boolean', description: 'wave 44: the host lets technical support take over (approve, invite)' } }, ['event']),
       run: (a) => {
         let out: Obj = {}
         e.commit((r) => {
           const ev = eventOf(r, a.event)
-          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}) })
+          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}), ...(typeof a.techTakeover === 'boolean' ? { techTakeover: a.techTakeover } : {}) })
           // review-fixes-43: one switch per event, as on the event page: notifications on also lift a muted "I'm here now" bell of this event.
           const here = (r as { atEvent?: { eventId?: string; bell?: boolean } }).atEvent
           if (a.notify === true && here?.eventId === ev.id) delete here.bell
-          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}) }
+          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}), ...(ev.techTakeover ? { techTakeover: true } : {}) }
         })
         return out
       },
@@ -249,5 +250,6 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
       },
     },
   ]
-  return { read, write }
+  const editor = eventEditorTools(e as never)   // wave 44 event-editor
+  return { read: [...read, ...editor.read], write: [...write, ...editor.write] }
 }
