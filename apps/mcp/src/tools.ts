@@ -9,6 +9,7 @@ import { assistantTools } from './assistant_tools.ts'
 import { billingTools } from './billing_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
 import { handshakeTools } from './handshake_tools.ts'
+import { hideTools } from './hide_tools.ts'
 import { homeTools } from './home_tools.ts'
 import { profilePageTools } from './profile_page_tools.ts'
 
@@ -36,6 +37,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     ...billingTools({ file: o.file, write, apiBase: o.apiBase || 'https://app.trustweb.one' }),
     /* wave43c sync-devices */ ...syncTools({ ...o, write }),
     /* wave44 handshake-crypto */ ...handshakeTools(o),
+    /* wave44b hide-from-crypto */ ...hideTools(o),
 
     /* wave44 feed-sources */ ...feedSourcesTools({ ...o, write }),
     /* wave44b profile-page */ ...profilePageTools({ ...o, write }),

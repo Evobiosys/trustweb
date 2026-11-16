@@ -6,6 +6,7 @@ import { memberIds } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import type { AppState, Person } from './model'
 import { eventFilterOf, narrowToEvent } from './event_filter_mode'
+import { didsOf } from './device_alias'
 
 type Held = Pick<AppState, 'people' | 'askAudience' | 'askReach'>
 
@@ -37,4 +38,17 @@ export function allowedPeerIds(s: Held & Partial<Pick<AppState, 'uiRings' | 'eve
   // Wave 44b: event mode narrows an ask to the people connected with that event.
   const inEvent = narrowToEvent(s, s.people).map((p) => p.peerId).filter((x): x is string => !!x)
   return own ? own.filter((id) => inEvent.includes(id)) : inEvent
+}
+
+/* wave44b hide-from-crypto */
+/** The DIDs (every device) of the connected people the stored filter hides an ask from; they travel sealed (hide_from_crypto.ts). */
+export function hiddenDids(s: Held & Pick<AppState, 'peers'>, tags: readonly ColourTag[]): string[] {
+  const f = askFilterOf(s)
+  if (!f.exclude.length) return []
+  const has = tagTester(s.people, tags)
+  const ids = new Set(f.exclude.flatMap((c) => (c.startsWith('person:') ? [c.slice(7)] : s.people.filter((p) => has(p, c.slice(4))).map((p) => p.id))))
+  return s.people.filter((p) => ids.has(p.id) && p.peerId).flatMap((p) => {
+    const peer = s.peers.find((x) => x.id === p.peerId)
+    return peer ? didsOf(peer) : []
+  })
 }

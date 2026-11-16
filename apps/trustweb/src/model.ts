@@ -11,6 +11,7 @@
  */
 import type { AssistantCfg } from './ext/assistant/providers'
 import type { AlgoCfg, SourceCfg } from './feed_sources_page'
+import type { HideReportEntry } from './hide_reports'
 import type { InboxItem } from './notify_inbox'
 import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
@@ -1308,6 +1309,8 @@ export interface AppState {
   seenHandshakeNonces?: string[]
   /** Wave 44: refused connect handshakes (tampered, replayed, an app before v2), newest first, bounded. This device only. */
   handshakeLog?: HandshakeLogEntry[]
+  /** Wave 44b (hide_from_net.ts): verified reports that a device on the way changed or could not check an ask's "Hide from" list. This device only. */
+  hideReports?: HideReportEntry[]
   /**
    * Wave 15 (sync_code.ts): further connect codes of this account that linked devices brought (a different code from another device whose names did
    * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.

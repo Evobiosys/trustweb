@@ -364,6 +364,11 @@ export interface QueryEnvelope {
    */
   reask?: ReaskRef
   // ----- END TrustWeb wave 6i -----
+  /* wave44b hide-from-crypto */
+  /** The asker's signed exclusion list as keyed tags (apps/trustweb/src/hide_from_crypto.ts ExclusionBlob); passed on unchanged, checked there. */
+  hx?: Record<string, unknown>
+  /** The level secret for this receiver (base64url, 32 bytes): sealed by the pair key like the whole envelope; lets it test candidates, never read the list. */
+  hk?: string
 }
 
 // ----- BEGIN TrustWeb wave 6i -----
@@ -691,4 +696,23 @@ export interface QueryLogEntry {
    *  doc comment on why it is safe to keep this granular locally even though
    *  the wire may never distinguish it. */
   outcome: LocalOutcome
+}
+
+/* wave44b hide-from-crypto */
+/** The largest QueryEnvelope.hx as JSON (HIDE_TAGS_MAX tags at the furthest reach fit): a larger one rejects the envelope. */
+export const HIDE_BLOB_MAX_JSON = 8192
+/** The largest HideReportEnvelope.rep as JSON. */
+export const HIDE_REPORT_MAX_JSON = 2048
+/** QueryEnvelope.hk: 32 bytes, base64url. */
+export const HIDE_KEY_RE = /^[A-Za-z0-9_-]{43}$/
+/**
+ * A tamper report on its way back to the asker (apps/trustweb/src/hide_from_crypto.ts TamperReport): sealed with the pair key, sent by the
+ * device that found the exclusion list changed to the one that sent it the ask, and passed up hop by hop (qid = the ask that hop received).
+ * The wire guards only the outer shape and size; the asker checks the report (signature, MAC). An older build drops the unknown `t`.
+ */
+export interface HideReportEnvelope {
+  v: 1
+  t: 'hide-report'
+  qid: string
+  rep: Record<string, unknown>
 }
