@@ -4,6 +4,7 @@
  * the celebration, which shows only to people on the invitee list (event_plan.ts celebrationVisible). Shown through events_view `extra`.
  */
 import { el } from '../../demo/src/ui/dom'
+import { offersOf } from './events'
 import { askResource, celebrationVisible, coverResource, leaveSignup, queueResourceAsk, resourceSummary, signUp, takeRole } from './event_plan'
 import type { AppState, TwEvent } from './model'
 import { S } from './strings'
@@ -23,7 +24,8 @@ const T = S.w42ev
 
 export function eventPlanSection(ev: TwEvent, h: EventPlanHooks): Node[] {
   const celebration = celebrationVisible(ev, h.meDid())
-  if (!ev.signup && !celebration) return []   // an event not made as a community event: nothing here, no hint of a celebration
+  const offersResources = offersOf(ev).resources   // wave 43: the host switched "Ask for resources" on
+  if (!ev.signup && !celebration && !offersResources) return []   // an event not made as a community event: nothing here, no hint of a celebration
   const people = h.state().people
   const who = (id: string): string => (id === 'me' ? T.me : people.find((p) => p.id === id)?.name ?? id)
   const change = (fn: () => unknown): void => { fn(); h.save(); h.redraw() }
@@ -60,7 +62,7 @@ export function eventPlanSection(ev: TwEvent, h: EventPlanHooks): Node[] {
     } catch (e) { note.textContent = (e as Error).message }
   }
   const sum = resourceSummary(ev)
-  const resources = ev.signup ? el('section', { 'data-event-resources': '' }, [
+  const resources = ev.signup || offersResources ? el('section', { 'data-event-resources': '' }, [
     el('h3', {}, [T.resourcesTitle]),
     ev.resources?.length ? el('p', { class: 'meta', 'data-event-resource-summary': '' }, [T.resourceSummary(sum.open, sum.covered)]) : null,
     ...(ev.resources ?? []).map((r) => el('div', { class: 'row', 'data-event-resource': r.id }, [

@@ -191,7 +191,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
     const community = communityOf(s)
     // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
-    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? []))) (everyone[zoneFor(p, community)] ??= []).push(p)
+    for (const p of visibleIn(s, desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [], s.events))) (everyone[zoneFor(p, community)] ??= []).push(p)
     // Wave 33: "closest 150" keeps the 150 closest across all rings (ring membership unchanged) and draws them all.
     const only150 = !desk && s.uiRings?.closest150 === true
     if (only150) {

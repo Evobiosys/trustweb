@@ -5,6 +5,7 @@
  * network: a resource ask is written as one queued support ask and the app shows a card and sends it on a tap (support_flush.ts). On this side the
  * person is always "me".
  */
+import { applyEventSettings, setEventTimes } from '../../trustweb/src/event_press.ts'
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
 import { identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
@@ -14,7 +15,7 @@ import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; did?: string; fields?: Record<string, unknown>; deleted_at?: string }
-interface Rec extends Obj { people: Person[]; events?: TwEvent[]; extData?: Record<string, unknown>; supportAsks?: SupportAsk[] }
+interface Rec extends Obj { me?: { displayName: string; nickname?: string }; people: Person[]; events?: TwEvent[]; extData?: Record<string, unknown>; supportAsks?: SupportAsk[] }
 
 export interface EventToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean; now: () => Date }
 
@@ -140,6 +141,56 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
           out = done
         })
         return out
+      },
+    },
+    // Wave 43 event-press-share
+    {
+      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me). Only the fields given change.',
+      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick') }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}) })
+          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? 'hosts', notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full' }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_offers_set', description: 'Switch what an event offers (all off by default): support (ask for support), resources (ask for resources, borrowing), feed (the event feed). Only the switches given change.',
+      inputSchema: schema({ event: S('event id or exact name'), support: { type: 'boolean' }, resources: { type: 'boolean' }, feed: { type: 'boolean' } }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          applyEventSettings(ev, { offers: Object.fromEntries(['support', 'resources', 'feed'].filter((k) => typeof a[k] === 'boolean').map((k) => [k, a[k]])) })
+          out = { id: ev.id, offers: { support: false, resources: false, feed: false, ...ev.offers } }
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_times_set', description: 'Change when I am at an event, e.g. stay longer: from and/or to (YYYY-MM-DD, optionally THH:MM); an empty to removes the end. A core time that no longer fits is dropped.',
+      inputSchema: schema({ event: S('event id or exact name'), from: S('start'), to: S('end, empty = none') }, ['event']),
+      run: (a) => {
+        let out: Obj = {}
+        e.commit((r) => {
+          const ev = eventOf(r, a.event)
+          const bad = setEventTimes(ev, a.from !== undefined ? str(a.from).trim() : ev.from, a.to !== undefined ? str(a.to).trim() : ev.to ?? '')
+          if (bad) throw new Error(`${bad}: not a valid date, or the end is before the start`)
+          out = { id: ev.id, from: ev.from, ...(ev.to ? { to: ev.to } : {}) }
+        })
+        return out
+      },
+    },
+    {
+      name: 'me_nickname_set', description: 'Set my nickname (empty clears it): what event links say instead of my name when an event\'s name reveal is "nick".',
+      inputSchema: schema({ nickname: S('nickname, empty = none') }, ['nickname']),
+      run: (a) => {
+        const nickname = str(a.nickname).trim()
+        e.commit((r) => { if (!r.me) throw new Error('no profile in the record'); if (nickname) r.me.nickname = nickname; else delete r.me.nickname })
+        return { nickname }
       },
     },
   ]

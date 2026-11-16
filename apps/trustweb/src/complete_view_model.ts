@@ -40,7 +40,7 @@ export interface Sort { key: SortKey; dir: 1 | -1 }
 /** Most drifted contact first. */
 export const DEFAULT_SORT: Sort = { key: 'last', dir: 1 }
 
-export interface RowCtx { s: Pick<AppState, 'people'> & Partial<Pick<AppState, 'chats' | 'shareProfiles' | 'zoneTags' | 'uiRings'>>; tags: readonly ColourTag[]; now: number }
+export interface RowCtx { s: Pick<AppState, 'people'> & Partial<Pick<AppState, 'chats' | 'shareProfiles' | 'zoneTags' | 'uiRings' | 'events'>>; tags: readonly ColourTag[]; now: number }
 export interface RowOpts { query: string; overdueOnly: boolean; quietOnly?: boolean; birthdayOnly?: boolean }
 
 export const tagLabel = (t: ColourTag): string => t.label ?? t.id
@@ -61,7 +61,7 @@ export function groupsOf(s: Pick<AppState, 'shareProfiles'>, p: Pick<Person, 'id
 export function completeRows(c: RowCtx, o: RowOpts): CompleteRow[] {
   const { s, tags, now } = c
   const ui = s.uiRings
-  const shown = filterByChips(s.people.filter((p) => !isDeleted(p) && !isArchived(p) && ringShown({ uiRings: ui }, webSlot(p))), tags, ui?.show ?? [], ui?.hide ?? [])
+  const shown = filterByChips(s.people.filter((p) => !isDeleted(p) && !isArchived(p) && ringShown({ uiRings: ui }, webSlot(p))), tags, ui?.show ?? [], ui?.hide ?? [], s.events)
   const q = fold(o.query.trim())
   // Wave 40: the groups (tags with children) a person resolves into, worked out once per list, shown as inherited tags.
   const groups = tags.filter((g) => tags.some((t) => t.parents?.includes(g.id))).map((g) => ({ g, ids: new Set(memberIds(s.people, tags, g.id)) }))

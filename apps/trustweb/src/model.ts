@@ -35,7 +35,7 @@ import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
-import type { NameReveal } from './events'
+import type { EventOffers, InvitePolicy, NameReveal } from './events'
 import type { ZoneLink } from './zone_share_link'
 import type { PeerItem } from './peer_items'
 import type { SupportAsk, SupportIn } from './support_ask'
@@ -385,6 +385,12 @@ export interface TwEvent {
   icsUid?: string
   /** E3 (events.ts revealedBy): how much of my name my links for this event tell other attendees. Absent = 'full'. This device only; never in an event link (event_link.ts whitelist). */
   nameReveal?: NameReveal
+  /** Wave 43 event-press-share: notifications of this event; absent = on. Local only. */
+  notify?: boolean
+  /** Wave 43: who may invite others; absent = 'hosts'. Local only. */
+  invitePolicy?: InvitePolicy
+  /** Wave 43: what the host switched on; absent = all off (events.ts EVENT_OFFERS_DEFAULT). */
+  offers?: Partial<EventOffers>
   /** Wave 42 community-event: the community (colour tag id) this event was made in. */
   community?: string
   /** Wave 42: the free-text documents of the event (event_plan.ts). */
@@ -829,6 +835,8 @@ export interface AwayAsk {
 export interface Me {
   id: string
   displayName: string
+  /** Wave 43: what a link says instead of my name when an event's name reveal is "Nickname". Local only. */
+  nickname?: string
   /** Wave 33: the owner's own mail address; local only, never in the connect link. */
   primaryEmail?: { provider: string; address: string }
   /** Wave 36b: further own addresses (channel_readers.ts). Local only. */
@@ -1063,6 +1071,9 @@ export interface AppState {
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
   /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
   groupPosts?: GroupPost[]
+  /** Wave 43 (feed_social.ts): my own Feed posts, kept on this phone; stars are post ids (`social:<id>`, `group:<id>`, ...). */
+  feedPosts?: SocialPost[]
+  feedStars?: string[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
@@ -1456,6 +1467,9 @@ export interface FeedSettings {
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
 export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number; /** feed_nostr.ts: discussion, request, offer or event. Absent: discussion. */ type?: string; /** A channel id of the group (FeedSettings.groupMeta). Absent: the group itself. */ channel?: string; /** 0 members only, 1 friends of members, 2 friends of friends. Absent: 0. */ hops?: number; /** A relay took it. Absent: kept on this phone only. */ sent?: true }
+
+/** Wave 43: a Feed post of mine. `tag` = event_<slug> and `eventId` when made on an event's Feed; `replyTo` = the Feed id of the post it answers. */
+export interface SocialPost { id: string; text: string; by: string; at: number; tag?: string; eventId?: string; replyTo?: string; /** The first 120 characters of the post it answers. */ replyText?: string }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {

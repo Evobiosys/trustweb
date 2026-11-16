@@ -151,7 +151,7 @@ export function completeView(io: CompleteIo): HTMLElement {
 
   function refreshBar(total: number): void {
     const st = io.state()
-    const chips = activeFilters(st.uiRings, io.tags(), st.people).filter((f) => f.chip.startsWith('person:') || f.chip.startsWith('tag:'))
+    const chips = activeFilters(st.uiRings, io.tags(), st.people, undefined, st.events).filter((f) => f.chip.startsWith('person:') || f.chip.startsWith('tag:') || f.chip.startsWith('event:'))
     bar.replaceChildren(
       el('span', { class: 'cv-count', 'data-cv-count': '' }, [S.completeCount(rows.length, total)]),
       el('button', { class: 'linkbtn cv-chip' + (overdueOnly ? ' on' : ''), 'data-cv-overdue': '', 'aria-pressed': String(overdueOnly), onclick: () => { overdueOnly = !overdueOnly; refresh() } }, [S.completeOverdue]),

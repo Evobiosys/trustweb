@@ -11,7 +11,7 @@ export function raisedIndices(n: number): number[] {
   return n % 2 ? [(n - 1) / 2] : [n / 2 - 1, n / 2]
 }
 
-export type BarId = 'ask' | 'inventory' | 'web' | 'feed' | 'record' | 'chat' | 'events' | 'network' | 'people' | 'map' | `view:${string}` | `mod:${string}`
+export type BarId = 'ask' | 'inventory' | 'web' | 'feed' | 'timeline' | 'record' | 'chat' | 'events' | 'network' | 'people' | 'map' | `view:${string}` | `mod:${string}`
 
 export interface UiBar {
   order?: string[]
@@ -39,13 +39,16 @@ export interface BarFlags {
   mods?: readonly string[]
 }
 
-export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
+/** Wave 43: the default order with the Feed in; Record stays in it and removable (wave 42). The old row lives on as the Note taker preset. */
+export const DEFAULT_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory', 'record']
+/** The wave-33 row, Record in the centre: the once-per-record order reset (resetBarOrder) and the Note taker preset. */
+const WAVE33_ORDER: readonly BarId[] = ['web', 'chat', 'record', 'events', 'inventory']
 /** Wave 42 D2: the stock row nobody has changed: Web, Chat, Feed, Events, Resources (the centre Feed raised). Record, Community and the module views wait in the ⋮ list; Community has the heading pill. */
 export const STOCK_ORDER: readonly BarId[] = ['web', 'chat', 'feed', 'events', 'inventory']
 export const PHONE_MAX = 6
 
 /** The sheet's checklist, in its order. */
-const CHOICES: readonly BarId[] = ['web', 'feed', 'chat', 'record', 'events', 'inventory', 'ask', 'network', 'people', 'map']
+const CHOICES: readonly BarId[] = ['web', 'feed', 'timeline', 'chat', 'record', 'events', 'inventory', 'ask', 'network', 'people', 'map']
 
 /** Wave 35: the view a `view:<id>` bar entry opens (a view_menu ViewKey); null for every other entry. */
 export const viewOfBar = (id: string): string | null => (id.startsWith('view:') && id.length > 5 ? id.slice(5) : null)
@@ -57,7 +60,7 @@ export const modOfBar = (id: string): string | null => (id.startsWith('mod:') &&
 const viewEntries = (bar: UiBar | undefined): BarId[] => [...new Set(Array.isArray(bar?.order) ? bar.order : [])].filter((id): id is BarId => typeof id === 'string' && viewOfBar(id) !== null)
 
 function offered(f: BarFlags, bar?: UiBar): BarId[] {
-  const off: Partial<Record<BarId, boolean>> = { events: !f.events, feed: !f.feed, inventory: !f.inventory, people: !f.people, map: !f.map }
+  const off: Partial<Record<BarId, boolean>> = { events: !f.events, feed: !f.feed, timeline: !f.feed, inventory: !f.inventory, people: !f.people, map: !f.map }
   return [...CHOICES.filter((id) => !off[id]), ...(f.advanced ? viewEntries(bar) : []), ...(f.mods ?? []).map((m): BarId => `mod:${m}`)]
 }
 
@@ -236,8 +239,8 @@ export function resetBarOrder(s: { uiBar?: UiBar }): boolean {
   s.uiBar.orderVersion = BAR_ORDER_VERSION
   const old = s.uiBar.order
   if (!Array.isArray(old)) return true
-  const extras = [...new Set(old)].filter((id) => typeof id === 'string' && id !== 'ask' && !DEFAULT_ORDER.includes(id as BarId))
-  s.uiBar.order = [...DEFAULT_ORDER, ...extras]
+  const extras = [...new Set(old)].filter((id) => typeof id === 'string' && id !== 'ask' && !WAVE33_ORDER.includes(id as BarId))
+  s.uiBar.order = [...WAVE33_ORDER, ...extras]
   return true
 }
 
@@ -248,7 +251,7 @@ export function resetBarOrder(s: { uiBar?: UiBar }): boolean {
 export const PROFILES: readonly { id: string; order: readonly BarId[]; primary: BarId }[] = [
   { id: 'connector', order: ['web', 'record', 'chat', 'events', 'inventory'], primary: 'chat' },
   { id: 'up_to_date', order: ['web', 'chat', 'feed', 'events', 'inventory'], primary: 'feed' },
-  { id: 'note_taker', order: DEFAULT_ORDER, primary: 'record' },
+  { id: 'note_taker', order: WAVE33_ORDER, primary: 'record' },
   // Retired in wave 34 (archived here; a stored 'communicator' counts as 'custom'):
   // { id: 'communicator', order: ['web', 'feed', 'chat', 'events', 'inventory'], primary: 'chat' },
 ]

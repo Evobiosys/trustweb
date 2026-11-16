@@ -9,6 +9,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'search', write: false }, { name: 'notifications_inbox_list', write: false }, { name: 'add_note', write: true }, { name: 'add_tag', write: true },
   { name: 'notifications_inbox_mark_seen', write: true }, { name: 'notifications_popup_set', write: true },
   { name: 'bar_list', write: false }, { name: 'bar_set', write: true }, { name: 'bar_hide', write: true }, { name: 'bar_show', write: true },
+  { name: 'web_filter_get', write: false }, { name: 'web_filter_set', write: true },
   { name: 'remove_person', write: true }, { name: 'restore_person', write: true },
   { name: 'assistant_providers', write: false }, { name: 'assistant_ask', write: false }, { name: 'assistant_set_model', write: true },
   // Wave 42 mcp-parity: every registry action reachable
@@ -18,6 +19,10 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'community_create', write: true }, { name: 'community_set_kind', write: true }, { name: 'community_add_member', write: true },
   { name: 'community_settings_set', write: true }, { name: 'support_ask', write: true }, { name: 'support_cancel', write: true },
   { name: 'event_create', write: true }, { name: 'event_signup', write: true }, { name: 'event_resource_ask', write: true }, { name: 'event_resource_cover', write: true }, { name: 'event_invitees_set', write: true }, { name: 'event_roles_set', write: true }, { name: 'event_person_identify', write: true },
+  // Wave 43 event-press-share
+  { name: 'event_settings_set', write: true }, { name: 'event_offers_set', write: true }, { name: 'event_times_set', write: true }, { name: 'me_nickname_set', write: true },
+  // Wave 43 event-feed
+  { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
   // Wave 42 settings-llm-first
   { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai

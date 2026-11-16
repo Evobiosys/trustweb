@@ -48,6 +48,7 @@ try {
     const openEvent = async (id) => { await tap('[data-go="events"]'); await page.waitForTimeout(300); await tap('[data-cal-all]'); await page.waitForTimeout(200); await tap(`[data-event="${id}"]`); await page.waitForTimeout(300) }
 
     await openEvent('e1')
+    await tap('[data-event-since]'); await page.waitForTimeout(200)   // wave 43: a press on the since line shows the core days
     check(`${name}: event view shows the core line`, (await page.locator('[data-event-core]').innerText()) === 'Core time 30 Dec – 4 Jan')
     check(`${name}: Desires offered, Memories not yet`, (await page.locator('[data-co-desires]').count()) === 1 && (await page.locator('[data-co-memories]').count()) === 0)
     await noScroll('event view'); await snap('event')
