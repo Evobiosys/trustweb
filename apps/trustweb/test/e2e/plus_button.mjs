@@ -82,8 +82,10 @@ async function main() {
     ok('header right reads QR, Settings, Your AI', hdr.length === 3 && /QR/.test(hdr[0]) && /Settings/.test(hdr[1]) && /AI/.test(hdr[2]), JSON.stringify(hdr))
     ok('no "Online" text in the header', !(await page.locator('.hdr').innerText()).includes('Online'))
 
-    await page.getByRole('button', { name: 'Search contacts' }).click()
-    await page.getByRole('button', { name: /Curate your web/ }).click()
+    // review-44: the wave-6 search overlay (#search-results) is gone; Curate is in Settings (the one Advanced fold, wave 43c).
+    await page.locator('.hdr [aria-label="Settings"]').click()
+    await page.evaluate(() => document.querySelectorAll('.sheet.on details').forEach((d) => { d.open = true }))
+    await page.locator('[data-settings-curate]').first().scrollIntoViewIfNeeded(); await page.locator('[data-settings-curate]').first().click()
     await page.getByRole('heading', { name: 'Curate' }).waitFor({ timeout: 10_000 })
     ok('Curate lists the connections', true)
     await page.getByRole('button', { name: /Add someone/ }).click()
@@ -91,10 +93,9 @@ async function main() {
     ok('Curate > Add someone opens the add sheet', true)
     await page.getByPlaceholder('Name').first().fill('Plus Person')
     await page.getByRole('button', { name: 'Add to my web' }).click()
-    await page.getByRole('button', { name: 'Back' }).click()
+    await page.getByRole('button', { name: 'Back' }).click().catch(() => {})
+    await page.keyboard.press('Escape').catch(() => {}); await page.waitForTimeout(400)
     await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 10_000 })
-    ok('back from Curate returns to the open search, with the new person found', /Plus Person/.test(await page.locator('#search-results').innerText()))
-    await page.getByRole('button', { name: 'Close search' }).click()
     ok('back on Web with the new person on the rings', await page.locator('.node', { hasText: 'Plus Person' }).count() === 1)
     ok('Record is still the raised middle tab', await page.locator('nav.tabs .tab-record').isVisible())
     // your own name: tap yourself in the web
