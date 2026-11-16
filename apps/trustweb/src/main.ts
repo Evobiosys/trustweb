@@ -172,6 +172,7 @@ import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, sh
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
+import { applyBwMode, bwModeRow } from './bw_mode_view'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
 import { createMapView } from './map_view'
@@ -2094,6 +2095,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
 }
 
 function render(): void {
+  applyBwMode(state)   // wave 44 steer-strike-mode
   screen = shownScreen(screen)
   if (screen !== Screen.Web) noticeLayer.slot('wants', null)
   noticeLayer.setOnWeb(screen === Screen.Web)   // review-fixes-43c: ask-result / message cards stay on the Web screen (P06)
@@ -7450,6 +7452,7 @@ function variationRows(s: AppState): Node[] {
       class: 'radio variation' + (c.id === cur ? ' on' : ''), role: 'radio', 'aria-checked': String(c.id === cur), 'data-variation': c.id, onclick: () => appActions.do('set-profile', { profile: c.id }),
     }, [el('b', {}, [(c.id === cur ? '✓ ' : '') + c.name, ' ', alphaSub()]), el('small', {}, [S.var.names[c.base] + (c.id === cur ? ` · ${S.var.current}` : '')])])),
     ...modeShell.settingsRows(), // wave 41: default interface, Community layout, my versions
+    bwModeRow(s, () => { save(); render(); settingsSheet() }),   // wave 44 steer-strike-mode
   ]
 }
 

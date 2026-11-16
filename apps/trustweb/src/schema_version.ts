@@ -15,6 +15,7 @@ import { repairPinned } from './membranes_five'
 import { migrateSources } from './provenance'
 import { repairShareFields } from './share_modes'
 import { repairOtherCodes } from './sync_code'
+import { migrateBwMode } from './bw_mode'
 
 /** 1 = every record from before this field existed. Raise it when a change older builds could misread is made. */
 export const SCHEMA_VERSION = 3
@@ -44,7 +45,7 @@ export function migrate(s: AppState): boolean {
   const ran = [
     migrateSources(s), normaliseNoteFields(s), migrateChats(s),
     repairConnectRecord(s), repairOtherCodes(s), repairShareFields(s), repairGeneralNotes(s), repairProfile(s), repairAgreements(s), repairPinned(s),
-    resetBarOrder(s), migrateEventRoles(s), migrateNicknames(s), repairColourMode(s), repairHomeLayout(s),
+    resetBarOrder(s), migrateEventRoles(s), migrateNicknames(s), repairColourMode(s), repairHomeLayout(s), migrateBwMode(s),
   ]
   const stamped = s.schemaVersion !== SCHEMA_VERSION
   s.schemaVersion = SCHEMA_VERSION
