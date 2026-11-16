@@ -51,6 +51,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'feed_sources_get', write: false }, { name: 'feed_sources_set', write: true }, { name: 'community_dashboard_share_set', write: true }, { name: 'event_envelope_send', write: true },
   /* wave44 handshake-crypto */
   { name: 'handshake_status', write: false },
+  /* wave44 steer-invite-link */
+  { name: 'invite_link_create', write: true }, { name: 'invite_link_revoke', write: true }, { name: 'invite_link_status', write: false },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

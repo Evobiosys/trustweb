@@ -2020,3 +2020,13 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
 /* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
 #notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}
+
+/* wave44 steer-invite-link */
+.invite-sheet .invite-kind{margin:12px 0}
+.invite-sheet .event-share{display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start}
+.invite-sheet .event-share .btn{width:auto}
+.invite-qr{max-width:240px; margin:8px 0}
+.invite-qr svg, .invite-qr canvas, .invite-qr img{width:100%; height:auto}
+.invite-adv{display:flex; flex-direction:column; gap:8px; margin:6px 0}
+.invite-adv .field.optional{width:6em; padding:2px 6px; font-size:12px; opacity:.6}
+.invite-warn{margin:10px 0}

@@ -10,6 +10,7 @@ import { billingTools } from './billing_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
 import { handshakeTools } from './handshake_tools.ts'
 import { importTools } from './import_tools.ts'
+import { inviteTools } from './invite_tools.ts'
 import { parityTools } from './parity_tools.ts'
 import { previewTools } from './preview_tools.ts'
 import type { Tool } from './protocol.ts'
@@ -32,6 +33,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     ...billingTools({ file: o.file, write, apiBase: o.apiBase || 'https://app.trustweb.one' }),
     /* wave43c sync-devices */ ...syncTools({ ...o, write }),
     /* wave44 handshake-crypto */ ...handshakeTools(o),
+    /* wave44 steer-invite-link */ ...inviteTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

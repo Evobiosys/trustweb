@@ -200,6 +200,10 @@ export interface NetHooks {
   onHost?(fromDid: string, m: Record<string, unknown>): void
   /** Wave 44 (handshake_crypto.ts): a connect handshake was refused (tampered, replayed, or an app before v2); nothing was added. */
   onHandshakeRefused?(reason: HandshakeFailure): void
+  /** Wave 44 steer-invite-link (invite_policy.ts redeemInvite): a connect-ack carried an invite token; false = refused, nothing is added. */
+  inviteVerdict?(inv: string, fromDid: string): boolean
+  /** Wave 44 steer-invite-link: the connection with an accepted invite token exists (its card too): join it to the community. */
+  onInviteAccepted?(peer: Peer, inv: string): void
   /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
   mayPassOnFrom(peer: Peer): boolean
   /**
@@ -450,7 +454,7 @@ export class Net {
   }
 
   /** The scanning side of the one-scan ceremony: add the peer, tell them who we are. */
-  async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false): Promise<Peer> {
+  async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false, inv?: string): Promise<Peer> {
     const s = this.hooks.state()
     this.ensureIdentity()
     // Wave 44: a QR of an app before v2 carries no key: refused before anything is added (never a cleartext ack).
@@ -467,6 +471,7 @@ export class Net {
       ...(reachOut ? { reachOut: true as const } : {}),
       handshake: mode,
       ...(mode === 'qr' && params.qk ? { qk: params.qk } : {}),
+      ...(inv ? { inv } : {}),
     })
     this.hooks.save()
     await this.start()
@@ -486,7 +491,7 @@ export class Net {
       if (!this.channel) return
       this.ackAttempts.set(peer.did, nextAttempts(this.ackAttempts.get(peer.did), Date.now()))
       const identity = this.ensureIdentity()
-      await this.channel.sendRaw(peer.did, await sealConnectAck(buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true), identity.did, peer.did, peer.qk))
+      await this.channel.sendRaw(peer.did, await sealConnectAck({ ...buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true), ...(peer.inv ? { inv: peer.inv } : {}) }, identity.did, peer.did, peer.qk))
       const stored = this.peerByDid(peer.did)
       if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
     } catch {
@@ -579,18 +584,23 @@ export class Net {
       connectedAt: Date.now(),
       ...(mode ? { handshake: known?.handshake ?? mode } : {}),
     }
+    // Wave 44 steer-invite-link: a refused invite (used, expired, revoked, tampered, rate) adds nothing; an accepted one is not held.
+    const inv = env.inv
+    if (inv && this.hooks.inviteVerdict?.(inv, env.did) === false) return true
     if (known) {
       const peer = upsertPeer(s, incoming)
       noteHeard(peer, Date.now())
       this.hooks.save()
       this.hooks.onPeerConfirmed(peer)
+      if (inv) this.hooks.onInviteAccepted?.(peer, inv)
       return true
     }
-    if (this.hooks.holdPeer(incoming)) return true
-    if (env.reachOut && this.hooks.refuseReachOut?.()) return true
-    const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut ? { ring: Ring.Intending, reachOut: true as const } : {}) })
+    if (!inv && this.hooks.holdPeer(incoming)) return true
+    if (!inv && env.reachOut && this.hooks.refuseReachOut?.()) return true
+    const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut && !inv ? { ring: Ring.Intending, reachOut: true as const } : {}) })
     this.hooks.save()
     this.hooks.onPeerConnected(peer)
+    if (inv) this.hooks.onInviteAccepted?.(peer, inv)
     return true
   }
 
