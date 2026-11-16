@@ -64,7 +64,8 @@ try {
     check(`${w}: the dropdown lists three looks`, (await page.locator('[data-look-choice]').count()) === 3 && (await page.locator('[data-look-choice]').first().isVisible()))
     await shot(page, '3-theme-dropdown', w)
     await page.locator('[data-theme-pill]').click()
-    const last = await page.locator('.sheet.on > *').last().getAttribute('data-settings-import-bottom')
+    // review-44: Settings folds all but the simple rows into one "Advanced" (wave 43c); Import is the last thing inside that fold.
+    const last = await page.evaluate(() => { let n = document.querySelector('.sheet.on')?.lastElementChild; if (n?.hasAttribute('data-settings-advanced-all')) n = n.lastElementChild; return n?.getAttribute('data-settings-import-bottom') ?? null })
     check(`${w}: Import stands alone at the very bottom of Settings`, last !== null)
     await page.locator('[data-settings-import-bottom]').scrollIntoViewIfNeeded(); await shot(page, '4-import-bottom', w)
     await page.locator('[data-settings-import-bottom]').click(); await page.waitForTimeout(500)
@@ -125,7 +126,12 @@ try {
     // halo
     await page.locator('.sheet.on [data-bar-halo="events"]').click(); await page.waitForTimeout(200)
     await page.locator('.sheet.on [data-bar-halo="inventory"]').click(); await page.waitForTimeout(200)
-    check(`${w}: a halo rings two views in the row`, (await page.locator('.tabs .tab-halo').count()) === 2 && (await page.locator('.sheet.on .bar-opt-row.tab-halo').count()) === 2)
+    // review-44: a raised (primary or paired) button carries no halo (main.ts renderTabs: haloOf excludes them); on a phone Events is raised
+    // in this row, so the bar shows the halo only on the chosen views that are not raised; the arrange list rings both.
+    const raised = await page.locator('.tabs button.tab-primary').evaluateAll((n) => n.map((x) => x.dataset.go))
+    const want = ['events', 'inventory'].filter((id) => !raised.includes(id)).length
+    const haloN = [await page.locator('.tabs .tab-halo').count(), await page.locator('.sheet.on .bar-opt-row.tab-halo').count(), JSON.stringify(raised)]
+    check(`${w}: a halo rings two views in the row`, haloN[0] === want && haloN[1] === 2, haloN.join(' '))
     check(`${w}: there is no separate Highlight section any more`, (await page.locator('.sheet.on [data-bar-primary]').count()) === 0)
     await page.locator('.sheet.on [data-bar-halo="feed"]').click(); await page.waitForTimeout(200)
     check(`${w}: a third halo drops the oldest (still two)`, (await page.locator('.tabs .tab-halo').count()) <= 2 && (await page.locator('.sheet.on .bar-opt-row.tab-halo').count()) === 2)
@@ -211,10 +217,16 @@ try {
     await page.locator('[data-chat-communities]').click(); await page.waitForTimeout(400)
     check(`${w}: communities only keeps the community member's chat`, (await page.locator('[data-chat-row]').count()) === 1 && (await page.locator('[data-chat-row="p0"]').count()) === 1)
     await shot(page, '8-chat-communities-only', w)
+    // review-44: "communities only" is one switch for Chat and the Community view's chat pane (wave 43c chatOnlyCommunity); off again first.
+    await page.locator('[data-chat-communities]').click(); await page.waitForTimeout(400)
     await page.locator('[data-chat-community-row]').click(); await page.waitForTimeout(1500)
     check(`${w}: the community chat row opens the Community view with its chat pane`, (await page.locator('[data-community]').count()) === 1 && (await page.locator('[data-community]').evaluate((h) => !!h.shadowRoot?.querySelector('[data-community-chat]'))))
+    // review-44: the pane starts at "Only people of this community" (wave 43c chatOnlyCommunity, default on); its switch off shows the regular chats too.
+    const onlyFirst = await page.locator('[data-community]').evaluate((h) => [...(h.shadowRoot?.querySelectorAll('[data-community-chat-row]') ?? [])].length)
+    check(`${w}: the Community chat pane starts with the community's own chats (${onlyFirst})`, onlyFirst === 1)
+    await page.locator('[data-community]').evaluate((h) => (h.shadowRoot?.querySelector('[data-community-chat-only]'))?.click()); await page.waitForTimeout(400)
     const listed = await page.locator('[data-community]').evaluate((h) => [...(h.shadowRoot?.querySelectorAll('[data-community-chat-row]') ?? [])].map((b) => b.dataset.communityChatRow))
-    check(`${w}: the Community view shows the regular chats too (${listed})`, listed.length === 2)
+    check(`${w}: the Community view shows the regular chats too (${listed})`, listed.length === 2, await page.locator('[data-community]').evaluate((h) => (h.shadowRoot?.querySelector('[data-community-chat]')?.textContent ?? '').slice(0, 200)))
     await shot(page, '8-community-chats', w)
     await page.locator('[data-community]').evaluate((h) => h.shadowRoot.querySelector('[data-community-chat-row="p0"]').click()); await page.waitForTimeout(600)
     check(`${w}: a tap on one opens that chat`, (await page.locator('.sheet.on').innerText()).includes('Person 0'))

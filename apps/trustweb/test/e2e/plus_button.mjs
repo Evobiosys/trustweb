@@ -38,7 +38,8 @@ async function main() {
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
   const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
   const { port: relayPort } = await relay.listen(0, '127.0.0.1')
-  const viteProc = spawn(process.execPath, [path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
+  // review-44: the vite of swiss_harness.mjs (TW_VITE_BIN, apps/crm's Vite 8 that the app config needs), else apps/demo's.
+  const viteProc = spawn(process.execPath, [process.env.TW_VITE_BIN || path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,
     env: { ...process.env, TW_PORT: String(PORT), TW_RELAY_PROXY: `http://127.0.0.1:${relayPort}` },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -49,12 +50,16 @@ async function main() {
 
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
   const engine = (pw.chromium ? pw : pw.default).chromium
-  const browser = await engine.launch({ headless: true })
+  const browser = await engine.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--use-mock-keychain', '--password-store=basic'] }) // review-44: the local headless shell, as swiss_harness.mjs
   try {
     const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } })
     const page = await ctx.newPage()
     page.on('pageerror', (e) => console.log('  [pageerror]', e.message))
     await page.goto(base)
+    // review-44: as swiss_harness.mjs startPhone: a fresh dev server reloads once after optimising dependencies (a name typed before is lost),
+    // and the dev overlays (.twf/.twp) stay out of the way.
+    await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(1500)
+    await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' })
 
     await page.getByLabel('Your first name').fill('Smoke Tester')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
@@ -68,10 +73,13 @@ async function main() {
     ok('the QR button carries no status dot', await page.locator('.hdr .relay-dot').count() === 0)
     const tabs = await page.locator('nav.tabs button').allInnerTexts()
     // Wave 2 (P9): the Feed is optional and off by default, so the bar is the old one; feed_flow switches it on.
-    ok('nav is exactly Membranes | Record | Resources', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'Resources']), JSON.stringify(tabs))
+    // review-44: the bar grew (Chat, Feed, Events as its own button: wave 44 item 6) and ends in ⋮; Web stays first, Resources stays in it.
+    const tabNames = tabs.map((t) => t.trim())
+    ok('nav starts with Web, holds Events and Resources, ends in ⋮', tabNames[0] === 'Web' && tabNames.includes('Events') && tabNames.includes('Resources') && tabNames[tabNames.length - 1] === '⋮', JSON.stringify(tabs))
     ok('"Ask your web" sits on the Web screen', await page.getByRole('button', { name: 'Ask your web' }).isVisible())
-    const hdr = await page.locator('.hdr-right > *, .hdr-tools > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
-    ok('header right reads manage (the outliner glyph, wave 6 N3), QR, more', hdr.length === 3 && /Manage and search contacts/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
+    // review-44 (header-layout, item 23): the top right is the same everywhere: QR, Settings, the AI sparkle; search and the eye sit in the tools row.
+    const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.querySelector('[aria-label]')?.getAttribute('aria-label') ?? ''))
+    ok('header right reads QR, Settings, Your AI', hdr.length === 3 && /QR/.test(hdr[0]) && /Settings/.test(hdr[1]) && /AI/.test(hdr[2]), JSON.stringify(hdr))
     ok('no "Online" text in the header', !(await page.locator('.hdr').innerText()).includes('Online'))
 
     await page.getByRole('button', { name: 'Search contacts' }).click()

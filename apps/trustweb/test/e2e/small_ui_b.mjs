@@ -79,6 +79,8 @@ try {
 
     // 3 + 8: view picker and Theme
     await page.keyboard.press('Escape'); await page.waitForTimeout(300); await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(400)   // wave 41: the sparkle opens the AI sheet; Settings via the gear
+    // review-44: Settings folds everything but the simple rows under one "Advanced" (wave 43c settings-advanced-all); the view picker sits there.
+    await page.locator('[data-settings-advanced-all]').evaluate((d) => { d.open = true }).catch(() => {}); await page.waitForTimeout(200)
     await page.locator('[data-view-pill]').scrollIntoViewIfNeeded(); await page.locator('[data-view-pill]').click(); await page.waitForTimeout(200)
     const views = await page.locator('.view-menu [data-view]').evaluateAll((b) => b.map((x) => x.dataset.view))
     check(`${w}: view picker offers only Dex and TrustWeb (${views})`, views.join() === 'dex,trustweb')

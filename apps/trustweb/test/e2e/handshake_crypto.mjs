@@ -125,6 +125,8 @@ async function main() {
 
     // 4. a link without its key (an app before v2)
     const cos2 = await newPhone(browser, errors, { viewport: VIEW })
+    // review-44: the dev overlays hidden here too (the 360 run failed: the dev "Personal preview" header lay over Start on this phone)
+    await cos2.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.textContent = '.twf, .twf-ok, .twp { display: none !important }'; document.head.append(st) }))
     await startPhone(cos2, vite.base, 'Cora')
     const before = tap.length
     const old = new URL(url); old.searchParams.delete('k')
