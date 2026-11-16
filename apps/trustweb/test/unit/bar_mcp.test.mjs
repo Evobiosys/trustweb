@@ -14,7 +14,7 @@ describe('bar tools', () => {
   it('bar_list works read-only; the writes need the write switch', () => {
     reset()
     expect(Object.keys(tools(false)).filter((n) => n.startsWith('bar_'))).toEqual(['bar_list'])
-    expect(tools(false).bar_list.run({})).toEqual({ shown: ['web', 'chat', 'feed', 'events', 'inventory'], primary: 'feed', hidden: [] }) // wave 42 D2
+    expect(tools(false).bar_list.run({})).toEqual({ shown: ['web', 'chat', 'events', 'inventory'], primary: null, hidden: [] }) // wave 44: no Feed in the stock bar
   })
   it('bar_hide takes Record out, bar_show brings it back (the same store the Settings list uses)', () => {
     reset({ uiBar: { order: ['web', 'chat', 'record', 'events', 'inventory'] } })

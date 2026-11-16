@@ -63,6 +63,7 @@ async function main() {
   try {
     const A = await phone(browser, 'Anna', { width: 360, height: 780 })
     const B = await phone(browser, 'Ben', { width: 360, height: 780 })
+    const clickSwitch = async (pg) => { if (!(await pg.locator('[data-community-switch]').isVisible())) await pg.locator('[data-community-menu]').click(); await pg.locator('[data-community-switch]').click() } // wave 44: on a phone the switch sits in the closed drawer
     await start(A.page, app.base, 'Anna'); await start(B.page, app.base, 'Ben')
     const a = A.page, b = B.page
     await b.locator('.hdr [aria-label^="Show my code"]').click(); await b.locator('.qrwrap canvas').waitFor({ timeout: 15_000 }); await b.getByRole('button', { name: 'Back' }).click()
@@ -71,7 +72,7 @@ async function main() {
     // ---- 1 switcher
     await a.locator('[data-mode="community"]').click(); await a.locator('[data-community]').waitFor({ timeout: 15_000 })
     t.ok('1: Community view opens, heading carries a caret button', await a.locator('[data-community-switch]').count() === 1)
-    await a.locator('[data-community-switch]').click()
+    await clickSwitch(a)
     t.ok('1: the caret opens the list of my communities with "New community"', await a.locator('[data-community-switcher]').count() === 1 && await a.locator('[data-community-new-name]').count() === 1)
     // overlay: the dropdown never covers the bar's own controls
     const sw = await box(a.locator('[data-community-switcher]'))
@@ -81,9 +82,9 @@ async function main() {
     await a.locator('[data-community-new-name]').fill('Session'); await a.locator('[data-community-new-kind]').selectOption('managed'); await a.locator('[data-community-create]').click()
     await until(async () => /Session/.test(await a.locator('[data-community-switch]').innerText()))
     t.ok('1: the new community is the one in force and managed', /Session/.test(await a.locator('[data-community-switch]').innerText()) && (await rec(a)).extData['community-mighty'].meta.session.kind === 'managed')
-    await a.locator('[data-community-switch]').click()
+    await clickSwitch(a)
     t.ok('1: the list now has the new community with its kind and member count', /Managed/.test(await a.locator('[data-community-pick="session"]').innerText()) && /0 members/.test(await a.locator('[data-community-pick="session"]').innerText()))
-    await a.locator('[data-community-switch]').click()
+    await clickSwitch(a)
 
     // ---- 2 members tile + add B by code
     await cgoMembers(a); await a.locator('[data-community-add-member]').waitFor()

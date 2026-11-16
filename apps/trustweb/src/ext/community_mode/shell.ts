@@ -20,6 +20,8 @@ const PICK_KEY = 'trustweb.ui.interface'
 const COMMUNITY_MODULE = 'community-mighty'
 /** Wave 44: the Community interface draws its own bottom row only when this is true; Jakob asked for the Personal bar there. */
 const COMMUNITY_OWN_BAR = false
+/** Wave 44: the Settings > Variations "Community layout" rows (Jakob: "Hide them"); archived behind this flag, not removed. */
+export const COMMUNITY_LAYOUT_ROWS = false
 
 export interface ModeHost {
   state: () => AppState | null
@@ -137,6 +139,10 @@ export function createModeShell(host: ModeHost) {
       if (!COMMUNITY_OWN_BAR || !communityShown(now(), isEnabled(COMMUNITY_MODULE), viewReady())) return null
       return communityBar(data(), navOff()).map((i) => host.tabButton(`community:${i}`, label(i), ICONS[COMM_ICON[i]], () => host.openItem(i)))
     },
+    /** Wave 44: the Community Home button that leads the Personal bar while Community is the interface; null otherwise. */
+    homeButton(): HTMLElement | null {
+      return COMMUNITY_OWN_BAR || !communityShown(now(), isEnabled(COMMUNITY_MODULE), viewReady()) ? null : host.tabButton('community:home', label('home'), ICONS[COMM_ICON.home], () => host.openItem('home'))
+    },
     mark,
     /** The Community view's section marks its button; the module's init/dispose own this subscription (index.ts). */
     attach(bus: TwBus): () => void {
@@ -206,9 +212,11 @@ export function createModeShell(host: ModeHost) {
         el('h4', { class: 'eyebrow' }, alphaHeading(S.mode.defaultTitle)),
         el('p', { class: 'meta' }, [S.mode.defaultHint]),
         ...allProfiles(s.twSettings).map((p) => defaultRow(p.id)),
-        el('h4', { class: 'eyebrow' }, alphaHeading(S.mode.layoutTitle)),
-        el('p', { class: 'meta' }, [S.mode.layoutHint]),
-        ...[...row, ...COMM_ITEMS.filter((i) => !row.includes(i))].map(layoutRow),
+        ...(COMMUNITY_LAYOUT_ROWS ? [
+          el('h4', { class: 'eyebrow' }, alphaHeading(S.mode.layoutTitle)),
+          el('p', { class: 'meta' }, [S.mode.layoutHint]),
+          ...[...row, ...COMM_ITEMS.filter((i) => !row.includes(i))].map(layoutRow),
+        ] : []),
         el('div', { class: 'mode-save' }, [name, el('button', {
           type: 'button', class: 'mode-act strong', 'data-mode-save': '', onclick: () => redo(saveVersion(d, name.value, host.newId(), S.mode.versionDefault)),
         }, [S.mode.saveVersion])]),

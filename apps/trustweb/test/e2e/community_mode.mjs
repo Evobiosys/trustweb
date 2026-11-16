@@ -57,8 +57,8 @@ try {
     // ---- Community: the whole shell
     await page.locator('[data-mode="community"]').click(); await page.waitForTimeout(1500)
     check(`${vw}: Community shows the Community view`, (await page.locator('[data-community]').count()) === 1 && (await mode(page)) === 'community')
-    // wave 44 steer-community-bar: the bottom bar stays the Personal one; the sections sit in the Community view's own menu
-    check(`${vw}: bottom bar = the Personal bar (no community: buttons, Web present)`, (await page.locator('.tabs [data-go^="community:"]').count()) === 0 && (await page.locator('.tabs [data-go="web"]').count()) === 1)
+    // wave 44 steer-community-bar-2: the bar is the Personal bar with the community Home first and Web second; the sections sit in the Community view's own menu
+    check(`${vw}: bottom bar = community Home, Web, then the Personal items`, (await page.locator('.tabs [data-go]').evaluateAll((b) => b.map((x) => x.getAttribute('data-go')).join())) === 'community:home,web,chat,events,inventory')
     check(`${vw}: Home marked`, (await page.locator('[data-community-nav="home"][aria-current="page"]').count()) === 1)
     await cgo(page, 'spaces')
     check(`${vw}: Spaces opens Spaces and is marked`, (await page.locator('[data-community-space]').count()) === 1 && (await page.locator('[data-community-nav="spaces"][aria-current="page"]').count()) === 1)
@@ -77,15 +77,10 @@ try {
     // ---- Settings > Variations: default interface, layout, versions
     await page.locator('[data-settings-gear]').click(); await page.waitForTimeout(600)
     await page.evaluate(() => { for (const q of ['[data-settings-group="variations"]', '[data-settings-section="variations"]']) { const d = document.querySelector(q); if (d) d.open = true } }); await page.waitForTimeout(300) // wave 44: sections remember open/closed, so set it (a click toggled it shut)
-    check(`${vw}: Variations has Default interface per variation and the Community layout`, (await page.locator('[data-mode-default]').count()) === 5 && (await page.locator('[data-mode-default="custom-fest"]').count()) === 1 && (await page.locator('[data-mode-item]').count()) === 7)
+    check(`${vw}: Variations has Default interface per variation and the Community layout`, (await page.locator('[data-mode-default]').count()) === 5 && (await page.locator('[data-mode-default="custom-fest"]').count()) === 1 && (await page.locator('[data-mode-item]').count()) === 0) // wave 44: Community layout rows hidden
     check(`${vw}: Default interface heading carries the alpha subscript`, (await page.locator('[data-settings-group="variations"] [data-alpha-label]').count()) >= 2)
-    await page.locator('[data-mode-item="docs"]').evaluate((e) => e.click()); await page.waitForTimeout(300)
-    await page.locator('[data-mode-move="web:-1"]').click().catch(() => {}); await page.waitForTimeout(200)
     await page.locator('[data-mode-version-name]').evaluate((e) => { e.value = 'Festival' }); await page.locator('[data-mode-save]').evaluate((e) => e.click()); await page.waitForTimeout(300)
     check(`${vw}: Save as my version lists it`, (await page.locator('[data-mode-version]').count()) === 1 && /Festival/.test(await page.locator('[data-mode-version]').textContent()))
-    await page.locator('[data-mode-item="chat"]').evaluate((e) => e.click()); await page.waitForTimeout(300)
-    await page.locator('[data-mode-use]').evaluate((e) => e.click()); await page.waitForTimeout(300)
-    check(`${vw}: Use restores the saved layout (chat back, docs still out)`, (await page.locator('[data-mode-item="chat"]').isChecked()) && !(await page.locator('[data-mode-item="docs"]').isChecked()))
     await shot(page, '5-settings')
     await page.locator('[data-mode-default="full"]').evaluate((e) => { e.value = 'community'; e.dispatchEvent(new Event('change')) }); await page.waitForTimeout(1500)
     check(`${vw}: choosing Community as the default switches now`, (await mode(page)) === 'community')

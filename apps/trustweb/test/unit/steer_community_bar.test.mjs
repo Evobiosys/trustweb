@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44 steer-community-bar: in Community mode the bottom bar is the Personal bar (same items, same order); the shell draws no 7-item bar of its own. */
-import { createModeShell } from '../../src/ext/community_mode/shell.ts'
-import { communityBar, communityShown, activeInterface } from '../../src/ext/community_mode/mode.ts'
+import { STOCK_ORDER } from '../../src/bottom_bar.ts'
+import { createModeShell, COMMUNITY_LAYOUT_ROWS } from '../../src/ext/community_mode/shell.ts'
+import { communityBar, communityLead, communityShown, activeInterface } from '../../src/ext/community_mode/mode.ts'
 import { bindTw, twRegistry } from '../../src/ext/registry.ts'
 
 const store = new Map()
@@ -26,5 +27,16 @@ describe('Community mode bottom bar', () => {
 
   it('the Community navigation stays in the community view: the old 7-item row is still computable but unused', () => {
     expect(communityBar({}, [])).toEqual(['home', 'spaces', 'events', 'members', 'docs', 'chat', 'web'])
+  })
+
+  it('Personal keeps the stock order without the Feed; Community puts its Home first and Web second', () => {
+    expect(STOCK_ORDER).toEqual(['web', 'chat', 'events', 'inventory'])
+    expect(communityLead(STOCK_ORDER, 'community:home')).toEqual(['community:home', 'web', 'chat', 'events', 'inventory'])
+    expect(communityLead(['chat', 'web'], 'h')).toEqual(['h', 'web', 'chat'])
+    expect(communityLead(['chat'], 'h')).toEqual(['h', 'chat']) // no Web in the row: nothing invented
+  })
+
+  it('the Community layout rows are hidden in Settings > Variations', () => {
+    expect(COMMUNITY_LAYOUT_ROWS).toBe(false)
   })
 })
