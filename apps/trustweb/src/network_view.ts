@@ -32,6 +32,8 @@ export interface NetworkOptions {
   openMe: () => void
   /** Wave 28b: the Filter (advanced) block (acquaintances, not yet sorted, community tag) lives here; absent = no block, no filtering. */
   ui?: { s: AppState; tags: readonly ColourTag[]; save: () => void }
+  /** Wave 43c social-hosting: "Find someone by name" (global directory hits), drawn under the search box. */
+  extra?: () => HTMLElement
 }
 
 const SETTINGS_KEY = 'trustweb.ui.netSettings'
@@ -155,7 +157,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const legend = el('small', { class: 'net-legend', 'data-net-legend': '' }, [S.netLegend])
   // Wave 28b: Filter (advanced) moved here from the TrustZones web: folded by default, same saved state.
   const filters = o.ui ? filterSection({ s: o.ui.s, tags: o.ui.tags, onChange: () => { o.ui?.save(); root.replaceWith(createNetworkView(o)) } }) : el('span', { hidden: '' })
-  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, menuBtn]), menu, filters, canvas, tip, pop, othersBtn, legend])
+  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, menuBtn]), ...(o.extra ? [o.extra()] : []), menu, filters, canvas, tip, pop, othersBtn, legend])
 
   const fit = (): Camera => fitBounds(g.nodes, w, h)
   const cam = (): Camera => (state.camera ??= { k: 0.8, x: w / 2, y: h / 2 })

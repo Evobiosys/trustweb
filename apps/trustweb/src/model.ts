@@ -546,7 +546,10 @@ export interface Person {
    */
   pendingInvite?: ConnectLinkParams
   /** Wave 16: only on a person in the Web Curator's Archive: a reach-out I dismissed (wants_to_connect.ts). Restore puts the row back. Absent: none. */
-  wantsToConnect?: WantsToConnect
+  wantsToConnect?: WantsToConnect  /** Wave 43c social-hosting (trust_mode.ts): my own say on whether this person counts as trusted; absent = by ring (Closest and Close). Local only, never sent. */
+  trust?: 'yes' | 'no'
+  /** Wave 43c (social_hosting.ts applyIntent): the did of someone who found me in the name directory and wants to connect, or whom I found and intend to connect with. Local only. */
+  globalKey?: string
 }
 
 /** Wave 16: someone who reached out through my link and waits under the web for Add or Dismiss (wants_to_connect.ts). */
@@ -1130,6 +1133,20 @@ export interface AppState {
   notifInbox?: InboxItem[]
   /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
   notifReadAt?: number
+  /** Wave 43c social-hosting: "Discoverable by name" is on (my signed name record is published to my friends and the directory). Absent: off. */
+  discoverable?: true
+  /** Wave 43c: the "open to connect" flag of that record. Absent: true. Only false is stored. */
+  discoverOpen?: false
+  /** Wave 43c: whose names I host for friends: 'off' | 'closest' | 'close' (Closest and Close). Absent: 'closest'. */
+  hostFriends?: 'off' | 'close'
+  /** Wave 43c (trust_mode.ts): "Only through people I trust (no servers)". Absent: off. */
+  trustedOnly?: true
+  /** Wave 43c (directory_client.ts serversOf): the directory servers I chose. Absent or empty: the Swiss default (this app's origin, questhub). */
+  directoryServers?: string[]
+  /** Wave 43c (social_hosting.ts): records I hold for friends by owner did; lookup cache by name; verified intents waiting to become people. This phone only, never synced. */
+  hosted?: Record<string, import('./name_record').NameRecord>
+  nameCache?: Record<string, { recs: import('./name_record').NameRecord[]; at: number }>
+  intentsIn?: import('./name_record').Intent[]
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
   /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */

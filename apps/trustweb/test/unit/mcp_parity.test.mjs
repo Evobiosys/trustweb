@@ -57,7 +57,7 @@ describe('registry <-> MCP parity (data-driven)', () => {
     for (const d of SETTINGS_REGISTRY) {
       expect(listed, d.id).toContain(d.id)
       if (d.type === 'action') continue
-      const probe = d.type === 'boolean' ? !d.default : d.type === 'choice' ? d.choices[d.choices.length - 1] : d.type === 'number' ? d.max : 'x'
+      const probe = d.type === 'boolean' ? !d.default : d.type === 'choice' ? d.choices[d.choices.length - 1] : d.type === 'number' ? d.max : 'https://x.test'
       const r = JSON.parse(readFileSync(fixture().file, 'utf8'))
       expect(writeSetting(r, d.id, probe), d.id).toBe(probe)
     }

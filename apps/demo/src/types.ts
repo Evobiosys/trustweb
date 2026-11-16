@@ -414,6 +414,20 @@ export interface DevicesEnvelope {
   dids: string[]
 }
 export const DEVICES_MAX = 8
+// ----- BEGIN TrustWeb wave 43c (social-hosting) -----
+/**
+ * Friends-first social hosting: ONE envelope type for the whole small protocol (apps/trustweb/src/social_hosting.ts HostMsg), sealed with the pair
+ * key like chat. `m.k` is put | drop | get | rec | intent; the wire only guards the outer shape and size, the receiver checks the body (signatures).
+ * An older build's decodeFromQr does not know `t` and returns null, so its relay channel never acks the wire.
+ */
+export const HOST_KINDS = ['put', 'drop', 'get', 'rec', 'intent'] as const
+export const HOST_MAX_JSON = 8192
+export interface HostEnvelope {
+  v: 1
+  t: 'host'
+  m: { k: (typeof HOST_KINDS)[number]; [field: string]: unknown }
+}
+// ----- END TrustWeb wave 43c -----
 
 // ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----
 /** The furthest any ask travels (also what "no limit" means). Each step adds one answer window (gate.ts RELAY_DEADLINE_MS). */

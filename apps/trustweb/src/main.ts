@@ -359,6 +359,8 @@ import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { createMissedPopup } from './notify_popup_view'
 import { createNotifyCenter, hasBell } from './notify_center_view'
+import { createSocial } from './social_hosting_view'
+import { linkGlobal } from './social_hosting'
 import { newlyAdded } from './notify_center'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
@@ -772,6 +774,8 @@ const net = new Net({
   save,
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
+  onHeard: (did) => social.onHeard(did),
+  onHost: (did, m) => social.onHost(did, m),
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
     queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken,
@@ -803,6 +807,7 @@ const net = new Net({
       s.people.push(person)
     }
     if (person.doorPeerId !== peer.id) person.peerId = peer.id
+    linkGlobal(person, peer)   // wave 43c: a person found by name becomes an ordinary card
     save()
     sendHelloTo(peer)
     void autoShareProfile(peer, 'public')
@@ -1095,6 +1100,12 @@ const notifyCenter = createNotifyCenter({
   state: st, save: () => save(), page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), changed: () => render(),
   openChat: (personId) => { pages.closeAll(); chatSheet(personId) }, addWant: (peerId, name) => addWantSheet(peerId, name),
   openCard: (personId) => openCardPage(personId), openEvents: () => openEvents(),
+})
+/** Wave 43c social-hosting: global profile, friends-first hosting, trusted-only mode (social_hosting_view.ts). */
+const social = createSocial({
+  state: st, save: () => save(), sendHost: (peer, m) => net.sendHost(peer, m),
+  connect: (did, name) => net.completeConnect({ did, from: { id: randomId(8), displayName: name } }, Ring.Acquaintance),
+  origin: SERVER_ORIGIN, fetch: (url, init) => fetch(url, init), now: () => Date.now(), toast: (msg) => toast(msg), render: () => render(), newId: () => randomId(8),
 })
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
 /** Wave 39: the one Import page (contacts, resources file, Tana, earlier imports with Undo); every old entry point opens it. */
@@ -2921,7 +2932,7 @@ function webPageScreen(page: WebPage): Node[] {
       onAdd: (title, category) => { addPeerItem(st(), p.id, title, category, 'self', Date.now()); save() },
     },
     onTag: (id) => { tagFilter = id; if (cardExpanded) { cardExpanded = false; history.go(-2) } else back() },
-  })])]
+  }), social.trustRow(p, render), social.connectButton(p, render)])]
 }
 
 /** Wave 31: what we know of a person's resources, in the same list as My Resources (whose = theirs). */
@@ -3354,7 +3365,7 @@ function screenWeb(): Node[] {
     passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
-      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save }, extra: social.findBlock })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
     supportLine(supportIo),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -7149,6 +7160,7 @@ function editNameSheet(fromWeb = false): void {
     el('p', { class: 'meta' }, [S.meNameHint]),
     el('button', { class: 'btn btn-electric', onclick: saveName }, [S.meNameSave]),
     ...ownEmailLines(s.me.primaryEmail),
+    social.profileBlock(() => editNameSheet(fromWeb)),   // wave 43c: Discoverable by name
     // Tapped in the Web view: a line, then the section for the web itself.
     ...(fromWeb ? [
       el('hr', { class: 'sheet-line' }),
@@ -7688,6 +7700,7 @@ function settingsSheet(): void {
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
+    social.settingsGroup(settingsSheet),   // wave 43c: People and servers
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('div', { 'data-settings-group': 'variations' }, [settingsSection('variations', alphaHeading(S.var.title), variationRows(s), true)]),
     // Wave 41: AI is a section of its own (it sat inside Advanced); same block as the AI sparkle's sheet.
@@ -8322,7 +8335,7 @@ if (state && !state.testOf?.handedOverAt) {
   // still holds for it arrive with the drain and are released with them (review 6h, appOpened).
   appOpened()
   // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable (in the tab that drains, review 6h).
-  void net.start().then(announceLink).then(() => net.restoreHeldAsks())
+  void net.start().then(announceLink).then(() => net.restoreHeldAsks()).then(() => social.start())
   void completePendingConnect().catch(connectFailed)
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
