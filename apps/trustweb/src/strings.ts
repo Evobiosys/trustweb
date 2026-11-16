@@ -4662,4 +4662,9 @@ export const S = {
     tanaPullCancel: 'Cancel',
     tanaPullSkipped: (n: number) => `${n} could not be read and were left as they are.`,
   },
+  /* wave44 steer-strike-mode */
+  w44bw: {
+    title: 'Black and white mode',
+    hint: 'Switched-off options get a line through them, and pictures turn grey, for greyscale screens.',
+  },
 } as const

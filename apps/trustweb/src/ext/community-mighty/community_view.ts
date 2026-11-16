@@ -12,6 +12,7 @@ import { addGroupPost } from '../../feed_sources'
 import type { AppState } from '../../model'
 import { hasColourTag, loadColourTags, saveColourTags } from '../../colour_tags'
 import { contextPress } from '../../context_press'
+import { strikeOff } from '../../bw_mode'
 import { ICONS } from '../../icons'
 import type { TwCtx } from '../tw_registry'
 import {
@@ -448,7 +449,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const tag = tagNow()
     const items = leftNav(data(), tag)
     if (!items.includes(ui.nav)) ui.nav = items[0] ?? 'home'
-    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '')
+    cm.className = 'cm' + (ui.drawer ? ' drawer-open' : '') + (strikeOff(st()) ? ' tw-bw' : '')
     cm.dataset.nav = ui.nav
     bar.replaceChildren(
       btn('☰ ' + t.menu, () => { ui.drawer = !ui.drawer; draw() }, { 'aria-expanded': String(ui.drawer), 'data-community-menu': '' }, 'lnk menu'),

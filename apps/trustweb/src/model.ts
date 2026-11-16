@@ -1126,6 +1126,10 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 42 (notify_inbox.ts): "Popup for missed notifications" is on unless this is true. Only "off" is stored. */
   missedPopupOff?: true
+  /** Wave 44 steer-strike-mode (bw_mode.ts): Black and white mode; switched-off options get a line through them only then. Only "on" is stored. */
+  bwMode?: boolean
+  /** Old wave44 steer-event-visibility name of bwMode; migrateBwMode folds it in. */
+  strikeSwitchedOff?: boolean
   /** Wave 43c sync-devices: Auto sync with my linked devices is on unless this is true (Settings > My devices). This device only. */
   syncAutoOff?: true
   /** Wave 43c: what Settings shows and MCP sync_status reads: linked devices and the last sync with any of them. This device only. */
