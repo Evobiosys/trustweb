@@ -2020,3 +2020,7 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet[data-kind=bar-more].on{bottom:122px; max-height:calc(100% - 134px)}
 /* review-fixes-43c: off the Web screen the persistent cards sit out (notice_layer.ts WEB_ONLY_KINDS); toasts and notices still show */
 #notice-layer[data-notice-off-web]>[data-notice-kind=cards],#notice-layer[data-notice-off-web]>[data-notice-kind=wants]{display:none}
+/* wave44 steer-inapp-browser */
+.inapp-banner{position:fixed; top:0; left:0; right:0; z-index:60; padding:8px 12px; background:var(--surface,#fff); border-bottom:1px solid currentColor; display:flex; flex-direction:column; gap:4px; max-height:40vh; overflow:auto; font-size:13px}
+.inapp-note{font-size:12px; opacity:.75}
+body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
