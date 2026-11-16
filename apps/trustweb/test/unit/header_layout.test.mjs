@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44 header-layout: the top right is one fixed set on every screen; the screen's own tools sit in their own row. */
-import { HEADER_RIGHT, headerRight, headerTools, headerControls } from '../../src/header_controls.ts'
+import { HEADER_RIGHT, HEADER_LEFT, headerRight, headerTools, headerControls } from '../../src/header_controls.ts'
 
 const SCREENS = ['web', 'chat', 'people', 'events', 'inventory', 'feed', 'timeline', 'ask', 'notes', 'groups', 'ext']
 
 describe('header_layout', () => {
+  it('puts the logo leftmost, then the title, then the inbox and the bell (Jakob steering 2)', () => {
+    expect([...HEADER_LEFT]).toEqual(['logo', 'title', 'inbox', 'bell'])
+  })
   it('names the fixed right-hand set once: QR, settings, then the AI sparkle', () => {
     expect([...HEADER_RIGHT]).toEqual(['qr', 'settings', 'ai'])
   })

@@ -17,6 +17,9 @@ export function headerControls(screen: string): HeaderControl[] | undefined {
 export const HEADER_RIGHT = ['qr', 'settings', 'ai'] as const
 export const headerRight = (aiOn: boolean): readonly (typeof HEADER_RIGHT)[number][] => HEADER_RIGHT.filter((c) => c !== 'ai' || aiOn)
 
+/** Wave 44 steer-header-logo: the top left is the same on every header, left to right: the logo (a back arrow on a sub-page), the title, the inbox, the notification bell. */
+export const HEADER_LEFT = ['logo', 'title', 'inbox', 'bell'] as const
+
 /** The screen's own controls (the tools row): headerControls without the fixed right-hand set. */
 export const headerTools = (screen: string): HeaderControl[] => (headerControls(screen) ?? []).filter((c) => !(HEADER_RIGHT as readonly string[]).includes(c))
 

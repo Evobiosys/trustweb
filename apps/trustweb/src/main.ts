@@ -1749,11 +1749,11 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
-      inboxButton(),
-      notifyCenter.bell(),
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : appTitleMark(),
       el('h2', {}, [title]),
       opts.glyph ?? null,
+      inboxButton(),
+      notifyCenter.bell(),
     ]),
     el('div', { class: 'hdr-right' }, [opts.right ?? null, qr, opts.more ? moreButton() : opts.after ?? null]),
   ])
@@ -1776,7 +1776,7 @@ function mountAskButton(): void {
   host.append(queryFab())
 }
 
-/** Wave 44 header-layout: the inbox ("Review requests") is the first icon at the top left of every header; wave 43c had it top right. */
+/** Wave 44 header-layout: the inbox ("Review requests") sits after the logo and the title at the top left of every header (HEADER_LEFT); wave 43c had it top right. */
 function inboxButton(): HTMLElement {
   const b = iconButton('inbox', S.reqAria, requestsSheet, 'requests-btn')
   b.setAttribute('data-open-requests', '1')
