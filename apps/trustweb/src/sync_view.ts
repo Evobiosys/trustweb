@@ -90,10 +90,14 @@ export interface SyncView {
   syncAll(): Promise<number>
   /** Wave 43c: linked devices, the last sync, and whether Auto sync is on (MCP sync_status reads the record's copy). */
   status(): { devices: number; lastAt: number; auto: boolean }
+  /** review-fixes-43c: a connection was just made here: one round soon (KICK_MS), not at the next tick, so my other devices show it within seconds. */
+  kick(): void
 }
 
 /** Wave 43c: how often the automatic sync runs while the page is visible (also on start and whenever the page comes back). */
 export const AUTO_TICK_MS = 15_000
+/** review-fixes-43c: the round after a new connection waits this long (the card and its connection are saved by then; several in a row make one round). */
+export const KICK_MS = 800
 
 const SHEET_KIND = 'devices'
 const LOG_MAX = 30
@@ -648,6 +652,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     if (deps && h.peek()?.connectCode) void refreshAll(deps).then(() => { if (showing()) devicesSheet() })
   }
 
+  let kickTimer: ReturnType<typeof setTimeout> | undefined
   function start(): void {
     if (started) return
     started = true
@@ -676,5 +681,9 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     mergeNow: (keepId, dropId) => { void mergeNow(keepId, dropId) },
     syncAll,
     status,
+    kick: () => {
+      if (!started || kickTimer !== undefined) return
+      kickTimer = setTimeout(() => { kickTimer = undefined; tick() }, KICK_MS)
+    },
   }
 }

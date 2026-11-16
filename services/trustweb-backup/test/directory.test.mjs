@@ -167,6 +167,30 @@ test('the same sender asking twice leaves one intent, the newest', async () => {
   })
 })
 
+test('review-fixes-43c: a withdrawal sticks: a record signed before it (a host that missed the drop hands it over) is not listed again', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'twdir-'))
+  const cfg = { dir: path.join(dir, 'backup'), hostedDir: path.join(dir, 'hosted'), allowedHosts: [HOST, '127.0.0.1'], port: 0, log: () => undefined, hostedMinFreeBytes: 0 }
+  const ada = identity()
+  const old = record(ada, { ts: Date.now() - 60_000 })
+  const first = await startServer(cfg)
+  try {
+    await put(first.port, old)
+    assert.equal((await del(first.port, ada)).status, 204)
+    assert.equal((await put(first.port, old)).status, 204)
+    assert.deepEqual((await find(first.port, 'ada lovelace')).json.records, [], 'replayed old record listed again')
+  } finally { await first.close() }
+  const second = await startServer(cfg)
+  try {
+    assert.equal((await put(second.port, old)).status, 204)
+    assert.deepEqual((await find(second.port, 'ada lovelace')).json.records, [], 'withdrawal forgotten after a restart')
+    assert.equal((await put(second.port, record(ada, { ts: Date.now() + 1000 }))).status, 204)
+    assert.equal((await find(second.port, 'ada lovelace')).json.records.length, 1, 'switching Discoverable on again (newer record) lists again')
+  } finally {
+    await second.close()
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 30 })
+  }
+})
+
 test('records and intents survive a restart (the store is a file)', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'twdir-'))
   const cfg = { dir: path.join(dir, 'backup'), hostedDir: path.join(dir, 'hosted'), allowedHosts: [HOST, '127.0.0.1'], port: 0, log: () => undefined, hostedMinFreeBytes: 0 }

@@ -150,7 +150,7 @@ import { groupsView } from './groups_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
-import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel } from './web_default_view'
+import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel, webViewAfterDefault } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
@@ -1369,7 +1369,13 @@ function webDefaultLine(s: AppState, changed: () => void): HTMLElement {
   const now = webDefaultOf(s)
   const select = el('select', {
     class: 'web-default-select', 'data-web-default': '', 'aria-label': S.webDefaultLabel,
-    onchange: (e: Event) => { const v = setWebDefault(s.uiViews, (e.target as HTMLSelectElement).value); if (v) s.uiViews = v; else delete s.uiViews; changed() },
+    onchange: (e: Event) => {
+      const view = (e.target as HTMLSelectElement).value
+      const v = setWebDefault(s.uiViews, view); if (v) s.uiViews = v; else delete s.uiViews
+      const now = webViewAfterDefault(view)   // review-fixes-43c: the Web screen under the sheet follows at once (Jakob Ω)
+      if (now) try { window.localStorage.setItem(WEB_VIEW_KEY, now) } catch { /* not remembered */ }
+      changed()
+    },
   }, viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: undefined }).map((i) => el('option', { value: i.view, ...(i.view === now ? { selected: '' } : {}) }, [S.viewNames[i.view]])))
   return el('div', { class: 'web-default-line' }, [el('span', { class: 'meta' }, [S.webDefaultLabel + ':']), select])
 }
@@ -4515,6 +4521,7 @@ function applyContact(peer: Peer, person: Person, text: string): void {
 
 /** Call right after a card for `peer` exists (onPeerConnected, completePendingConnect). */
 function applyHeldContact(peer: Peer, person: Person): void {
+  devices.kick()   // review-fixes-43c: my other devices get the new connection now, not at the next 15 s tick
   const text = takeContact(heldContacts, peer.id)
   if (text) applyContact(peer, person, text)
 }

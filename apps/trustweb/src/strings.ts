@@ -4633,6 +4633,8 @@ export const S = {
     shareLayout: 'Share my tile layout anonymously',
     shareLayoutHint: 'Sends only which tiles you show, with no name or key, so others can see how members set up their Home.',
     shareLayoutOff: 'Off: nothing about your layout leaves this phone.',
+    /** review-fixes-43c: trusted-only closes this server path too. */
+    shareLayoutNoServer: 'Not shared while "Only through people I trust (no servers)" is on.',
     others: (parts: string[]) => `Other members show: ${parts.join(', ')}`,
     follow: 'Follow them?',
     followYes: 'Follow',
