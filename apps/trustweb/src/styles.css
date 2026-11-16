@@ -2053,3 +2053,17 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .post-compact .post-text{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:14px}
 .post-compact .post-main .ava{width:32px; height:32px; font-size:14px}
 .post-compact-wrap:last-child .post-compact{border-bottom:0}
+/* wave44 feed-sources: the Sources page, the "Only <source>" chips, the publish target */
+.sources-page{display:flex; flex-direction:column; gap:6px; min-width:0}
+.sources-page .eyebrow{margin:14px 0 0}
+.src-row{display:flex; flex-direction:column; gap:4px; min-width:0}
+.src-main{display:flex; align-items:center; gap:4px}
+.src-main .radio{flex:1 1 auto; min-width:0; margin-top:6px; overflow-wrap:anywhere}
+.src-filters{display:flex; flex-direction:column; gap:6px; padding:4px 0 8px 10px; min-width:0}
+.src-filters[hidden]{display:none}
+.src-opt{font-size:11px; color:var(--ink-soft); opacity:.7; padding:4px 8px; min-height:0}
+.algo-row{display:flex; flex-direction:column; gap:2px; min-width:0}
+.algo-range{width:100%; min-height:32px}
+.feed-target{font-size:12px; color:var(--ink-soft)}
+.feed-target summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
+.feed-target .meta{margin:4px 0}
