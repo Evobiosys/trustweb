@@ -153,6 +153,11 @@ const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:', t
 /** Wave 43c: a connection (by DID) and a chat thread (by peer id) are stamped entities too, so a delta can carry just them. */
 const PEER_PREFIX = 'r:'
 const CHAT_PREFIX = 'h:'
+/** A connection's stamp key: its DID's key part (unique per identity), never the whole DID: a bundle refuses keys over 120 characters (strMap). */
+const peerKey = (did: string): string => PEER_PREFIX + (did.split('.')[1] ?? did).slice(0, 100)
+
+/** The connections that can travel: a record of an older build may hold one without a DID (it names nobody on the wire). */
+const travelling = (peers: Peer[] | undefined): Peer[] => (peers ?? []).filter((p) => typeof p?.did === 'string' && typeof p.id === 'string')
 
 /** A connection as it travels: what is true of the person, never this device's handshake bookkeeping (acks, ask-again, told, synced). */
 export function syncPeer(p: Peer): Peer {
@@ -206,8 +211,9 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
     ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
-    ...(s.peers ?? []).map((x): [string, unknown] => [PEER_PREFIX + x.did, syncPeer(x)]),
-    ...Object.entries(s.chats ?? {}).map(([id, t]): [string, unknown] => [CHAT_PREFIX + id, t]),
+    ...travelling(s.peers).map((x): [string, unknown] => [peerKey(x.did), syncPeer(x)]),
+    // a thread key over the bundle's key limit stays out of the stamps (it still travels whole with Sync now)
+    ...Object.entries(s.chats ?? {}).filter(([id]) => id.length <= 100).map(([id, t]): [string, unknown] => [CHAT_PREFIX + id, t]),
   ]
 }
 
@@ -243,7 +249,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     settings: settingsOf(s),
     ...codesForBundle(s, shareCode),
     ...(shareCode && s.me?.displayName ? { displayName: s.me.displayName } : {}),
-    peers: (s.peers ?? []).map(syncPeer),
+    peers: travelling(s.peers).map(syncPeer),
   }
 }
 
@@ -267,7 +273,7 @@ export function deltaOf(s: AppState, stamps: Stamps, since: number, device: stri
     events: pick(KEY_PREFIX.event, full.events ?? [], (x) => x.id),
     ...(full.tasks ? { tasks: pick(KEY_PREFIX.task, full.tasks, (x) => x.id) } : {}),
     ...(full.invitations ? { invitations: pick(KEY_PREFIX.invitation, full.invitations, (x) => x.id) } : {}),
-    peers: pick(PEER_PREFIX, full.peers ?? [], (x) => x.did),
+    peers: (full.peers ?? []).filter((x) => keys.has(peerKey(x.did))),
     chats: Object.fromEntries(Object.entries(full.chats ?? {}).filter(([id]) => keys.has(CHAT_PREFIX + id))),
     settings: Object.fromEntries(Object.entries(full.settings ?? {}).filter(([k]) => keys.has(SETTING_PREFIX + k))),
     channels: channels ? full.channels : { mine: {}, share: {} },
@@ -572,7 +578,18 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   mergeDisplayName(mine, myStamps, theirs, res)
   collapseSamePersons(mine)
   dedupeByPeerId(mine)
+  dropAnsweredWants(mine)
   return res
+}
+
+/** Wave 43c: a "Wants to connect" row whose connection has a card by now (Add was pressed on the other device) is answered: it goes. */
+function dropAnsweredWants(s: AppState): void {
+  if (!s.wantsToConnect?.length) return
+  const carded = new Set(alive(s.people).flatMap((p) => (p.peerId ? [p.peerId] : [])))
+  const rest = s.wantsToConnect.filter((w) => !carded.has(w.peerId))
+  if (rest.length === s.wantsToConnect.length) return
+  if (rest.length) s.wantsToConnect = rest
+  else delete s.wantsToConnect
 }
 
 /** A person's two versions united, the winner's delete state kept as it is: an older delete never fills in over a newer edit, and an undelete travels. */
@@ -593,7 +610,7 @@ function mergePeers(mine: AppState, theirs: Peer[], c: Ctx): void {
     const i = peers.findIndex((p) => p.did === t.did)
     if (i < 0) { peers.push({ ...t, synced: true, heardAt: t.connectedAt }); c.res.added++; continue }
     const m = peers[i]
-    const key = PEER_PREFIX + t.did
+    const key = peerKey(t.did)
     const theirsWins = (c.theirs.at[key] ?? 0) > (c.myAt[key]?.at ?? 0)
     const also = [...new Set([...(m.alsoDids ?? []), ...(t.alsoDids ?? [])])].filter((d) => d !== m.did).slice(0, ALSO_DIDS_MAX)
     const next: Peer = { ...m, ...(theirsWins ? { displayName: t.displayName, ring: t.ring } : {}), ...(also.length ? { alsoDids: also } : {}) }

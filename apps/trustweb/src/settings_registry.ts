@@ -113,6 +113,8 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   flag('general.apkUpdates', 'general', 'Check for app updates', 'apkUpdates', true, false, 'Android app only.'),
   flag('general.notificationsOn', 'general', 'Notifications', 'notificationsOn', false, false, 'The app asks the system for permission when you switch it on; here the record only keeps the choice.'),
   sparse('mcp.applyDirectly', 'general', 'MCP applies directly', 'mcpApplyDirectly', false, true, 'Personal preview: what an agent changes through MCP is taken at once, without a card to approve.'),
+  /* wave43c sync-devices: this device's switch (never synced); Settings > My devices shows it struck through when off */
+  sparse('general.syncAuto', 'general', 'Auto sync between my devices', 'syncAutoOff', true, true, 'Off: changes go to your other devices only with Sync now.'),
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),
   pin('qr-only', 'Pin the QR only button to the toolbar', 'A button beneath Settings.'),

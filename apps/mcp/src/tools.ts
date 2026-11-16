@@ -12,6 +12,7 @@ import { parityTools } from './parity_tools.ts'
 import { previewTools } from './preview_tools.ts'
 import type { Tool } from './protocol.ts'
 import { recordTools, type RecordToolsOptions } from './record_tools.ts'
+import { syncTools } from './sync_tools.ts'
 
 export interface AllToolsOptions extends RecordToolsOptions {
   /** The server the app talks to (billing tools). Default https://app.trustweb.one. */
@@ -21,12 +22,13 @@ export interface AllToolsOptions extends RecordToolsOptions {
 }
 
 /** Tools that change the preview registry, not the record: no card in the preview. */
-const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged'])
+const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now'])
 
 export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] {
   const build = (write: boolean): Tool[] => [
     ...recordTools({ ...o, write }), ...assistantTools({ ...o, write }), ...parityTools({ ...o, write }), ...importTools({ ...o, write }),
     ...billingTools({ file: o.file, write, apiBase: o.apiBase || 'https://app.trustweb.one' }),
+    /* wave43c sync-devices */ ...syncTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

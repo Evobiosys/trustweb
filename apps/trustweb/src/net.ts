@@ -54,6 +54,7 @@ import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
 import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ChatThread, DecodedAnswer, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
 import { ackDue, attemptAllowed, nextAttempts, noteAckSent, noteHeard } from './ack_retry'
+import { addAlsoDids, devicesToTell, peerForDid, toldKey } from './device_alias'
 import type { AckAttempts } from './ack_retry'
 import { ANSWER_WINDOW_MS, carriesWindow, passOnWindowFields, receivedWindowMs, windowFields } from './ask_window'
 import { AWAY_TEXT_MAX, isAwayAsk } from './away_asks'
@@ -317,16 +318,27 @@ export class Net {
   }
 
   private pairKey(peer: Peer): Promise<CryptoKey> {
-    let k = this.keys.get(peer.did)
+    return this.keyFor(peer.did)
+  }
+
+  /** The pair key with one DID (a connection's own, or one of its other devices: wave 43c device_alias.ts). */
+  private keyFor(did: string): Promise<CryptoKey> {
+    let k = this.keys.get(did)
     if (!k) {
-      k = deriveEcdhPairKey(ecdhSharedSecret(this.ensureIdentity(), peer.did))
-      this.keys.set(peer.did, k)
+      k = deriveEcdhPairKey(ecdhSharedSecret(this.ensureIdentity(), did))
+      this.keys.set(did, k)
     }
     return k
   }
 
+  /** Wave 43c: by the connection's own DID, else by one of the other devices it told me (device_alias.ts). */
   private peerByDid(did: string): Peer | undefined {
-    return this.hooks.state().peers.find((p) => p.did === did)
+    return peerForDid(this.hooks.state().peers, did)
+  }
+
+  /** Wave 43c: the connection as the device that sent this wire, so an answer goes back to that device (the stored record is not changed). */
+  private asSender(peer: Peer, did: string): Peer {
+    return peer.did === did ? peer : { ...peer, did }
   }
 
   /**
@@ -366,7 +378,7 @@ export class Net {
     channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
     channel.onEnvelope(async (fromDid) => {
       const peer = this.peerByDid(fromDid)
-      return peer ? this.pairKey(peer) : null
+      return peer ? this.keyFor(fromDid) : null
     }, (env, fromDid) => { void this.handleEnvelope(env, fromDid) })
     try {
       await channel.connect(identity)
@@ -544,6 +556,8 @@ export class Net {
       if (peer) this.hooks.onText(peer, env.text, env.ts, env.re, env.pic)
     }
     if (env.t === 'ask-again' && from) await this.onAskAgain(from)
+    // Wave 43c: the connection names its other devices; only its own sealed channel can, and never a DID of another connection or of mine.
+    if (env.t === 'devices' && from && addAlsoDids(this.hooks.state().peers, from, env.dids, [this.ensureIdentity().did])) this.hooks.save()
     // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
   }
 
@@ -560,6 +574,27 @@ export class Net {
     const key = await this.pairKey(peer)
     if (!this.channel) throw new Error('relay not connected')
     await this.channel.send(peer.did, env, key)
+    // Wave 43c: the same text to each of their other devices (best effort; the message key is the same, so their sync unites it).
+    for (const did of peer.alsoDids ?? []) await this.channel.send(did, env, await this.keyFor(did)).catch(() => { /* their own device got it */ })
+  }
+
+  /**
+   * Wave 43c (device_alias.ts): tells every connection this device made the DIDs of my other linked devices, once per set, so they accept
+   * and answer those devices too. A send that fails is tried again on the next call.
+   */
+  async tellDevices(dids: string[]): Promise<void> {
+    const peers = devicesToTell(this.hooks.state().peers, dids)
+    if (!peers.length) return
+    await this.start()
+    if (!this.channel) return
+    for (const p of peers) {
+      try {
+        await this.channel.send(p.did, { v: 1, t: 'devices', dids: dids.slice(0, 8) }, await this.pairKey(p))
+        const stored = this.peerByDid(p.did)
+        if (stored) stored.toldDevices = toldKey(dids)
+      } catch { /* next round */ }
+    }
+    this.hooks.save()
   }
 
   /** Logs an ask the moment it is decided (before its answer leaves, as apps/demo's answer_log.ts does). */
@@ -594,8 +629,10 @@ export class Net {
     // checked BEFORE the qid is marked seen, so a redelivery that comes in ahead of restoreHeldAsks does not hide the held prompt.
     if (liveHeldAsks(s.heldAsks, receivedAt).some((h) => h.qid === q.qid)) return
     this.seenQids.add(q.qid)
-    const peer = this.peerByDid(fromDid)
-    if (!peer || !this.channel) return
+    const found = this.peerByDid(fromDid)
+    if (!found || !this.channel) return
+    // Wave 43c: an ask from one of their other devices is answered to that device.
+    const peer = this.asSender(found, fromDid)
     const info = hopInfo(q)
     const text = q.freeText ?? ''
     // Wave 6h (ask_window.ts): the window the asker sent (120 s), or 30 s for an ask without one (an older asker, a front door).

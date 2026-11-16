@@ -153,6 +153,8 @@ export function createSyncLink(d: SyncLinkDeps) {
   const autoVersion = d.autoVersion ?? AUTO_VERSION
   const au = (): { au?: number } => (autoVersion ? { au: autoVersion } : {})
   let lastAutoSnapshot: number | null = null
+  /** Wave 43c: the first connect of the channel; the relay refuses a send of an identity it has not seen connect yet (401), so a send waits for it. */
+  let connected: Promise<void> = Promise.resolve()
   /** Wave 43c: one automatic push at a time (a tick and a kick close together must not send the same delta twice). */
   let pushing: Promise<void> | null = null
   let store: Store
@@ -175,7 +177,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     if (!k) { k = await pairKeyOf(ecdhSharedSecret(identity, did)); keys.set(did, k) }
     return k
   }
-  const send = async (did: string, msg: Msg): Promise<void> => channel.sendRaw(did, await sealMsg(await pairKey(did), msg))
+  const send = async (did: string, msg: Msg): Promise<void> => { await connected; await channel.sendRaw(did, await sealMsg(await pairKey(did), msg)) }
   const stamp = (): number => now() + SYNC_TTL_MS
   const ask = (): { ask?: string } => { const a = d.askDid?.(); return askOk(a) ? { ask: a } : {} }
 
@@ -384,7 +386,7 @@ export function createSyncLink(d: SyncLinkDeps) {
       // True = this wire was ours and is consumed, so the relay acks it. Anything else stays un-acked and comes again on the next
       // drain; before this returned false for every wire, so the "Receive from <phone>?" sheet reopened on each reconnect.
       channel.onRawWire((from, payload) => handle(from, payload).catch(() => false))
-      void channel.connect(identity).catch(() => { /* the channel keeps retrying; Sync now says "not on" until it is */ })
+      connected = channel.connect(identity).catch(() => { /* the channel keeps retrying; Sync now says "not on" until it is */ })
     },
     /** The code to show on the device that offers: its DID and a fresh one-time secret (valid 10 minutes, one use). */
     async offerCode(): Promise<string> {
@@ -396,6 +398,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     async join(code: string): Promise<PairRequest | null> {
       const c = parsePairingCode(code)
       if (!c) return null
+      await connected
       await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), ...ask(), ...au(), exp: stamp() }))
       return request(c.did, 'Other device')
     },
@@ -437,8 +440,8 @@ export function createSyncLink(d: SyncLinkDeps) {
       pushing ??= autoPushOnce().catch(() => { /* logged per pairing */ }).finally(() => { pushing = null })
       return pushing
     },
-    /** Wave 43c: what Settings > My devices and MCP sync_status show: linked devices and the last sync with any of them (0: never). */
-    status: (): { devices: number; lastAt: number } => ({ devices: store.pairings.length, lastAt: Math.max(0, ...store.pairings.map((p) => p.lastSyncAt)) }),
+    /** Wave 43c: what Settings > My devices and MCP sync_status show: linked devices and the last sync with any of them, either way (0: never). */
+    status: (): { devices: number; lastAt: number } => ({ devices: store.pairings.length, lastAt: Math.max(0, ...store.pairings.map((p) => Math.max(p.lastSyncAt, p.autoSentAt ?? 0))) }),
     stop: (): void => channel.close(),
   }
 }

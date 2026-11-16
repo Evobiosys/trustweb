@@ -3,13 +3,15 @@
 import { createActions } from '../../src/actions.ts'
 import { defineAppActions } from '../../src/app_actions.ts'
 import { defineEventActions } from '../../src/event_actions.ts'
+import { defineSyncActions } from '../../src/sync_actions.ts'
 import { ACTION_MCP, mcpToolFor } from '../../src/ext/assistant/actions.ts'
 import { allTools } from '../../../mcp/src/tools.ts'
 
 const host = new Proxy({}, { get: () => () => undefined })
 const reg = createActions()
 defineAppActions(reg, host)
-defineEventActions(reg, host)   // main.ts defines both on the one registry
+defineEventActions(reg, host)
+defineSyncActions(reg, host) // wave43c sync-devices   // main.ts defines both on the one registry
 
 describe('registry <-> MCP parity', () => {
   const tools = allTools({ file: '/nonexistent', write: true }).map((t) => t.name)

@@ -6,7 +6,8 @@ import { AUTO_TTL_MS, createSyncLink } from '../../src/sync_link.ts'
 const line = (id, text = id) => ({ id, text, tag: 'note', audience: 'close', status: 'current', notedAt: 1, checkedAt: 1 })
 const person = (id, name, over = {}) => ({ id, name, context: '', ring: 'friend', metAt: 1, lines: [], ...over })
 const state = (over = {}) => ({ v: 1, me: { name: 'J' }, people: [], peers: [], inventory: [], log: [], meetings: [], ...over })
-const DID = (c) => 'did:peer:2.' + c.repeat(40)
+// as long as a real did:peer:2 (key part + service part): a stamp key built from the whole DID would break the bundle's 120-character key limit
+const DID = (c) => 'did:peer:2.Vz6Mk' + c.repeat(44) + '.Ez6LS' + c.repeat(44) + '.SeyJ0' + 'x'.repeat(150)
 const peer = (id, c, over = {}) => ({ id, displayName: 'Other', did: DID(c), ring: 'friend', connectedAt: 10, ...over })
 
 describe('connections travel with the person', () => {
@@ -14,7 +15,8 @@ describe('connections travel with the person', () => {
     const s = state({ peers: [peer('o1', 'a', { heardAt: 11, ackTries: 2, ackSentAt: 12, askAgainDue: 13, askAgainSentAt: 14, toldDevices: 'x', synced: true, alsoDids: [DID('b')] })] })
     const b = bundleOf(s, refreshStamps(s, {}, 1, 'Mac'))
     expect(b.peers).toEqual([{ id: 'o1', displayName: 'Other', did: DID('a'), ring: 'friend', connectedAt: 10, alsoDids: [DID('b')] }])
-    expect(b.at['r:' + DID('a')]).toBe(1)
+    expect(Object.keys(b.at).filter((k) => k.startsWith('r:'))).toHaveLength(1)
+    expect(Object.keys(b.at).every((k) => k.length <= 120)).toBe(true)
     expect(parseBundle(JSON.parse(JSON.stringify(b))).peers).toEqual(b.peers)
   })
 
@@ -66,6 +68,16 @@ describe('one card per connection', () => {
     expect(phone.people.filter((p) => p.peerId === 'o1').map((p) => p.id)).toEqual(['m1'])
     expect(phone.sameAs).toEqual({ p1: 'm1' })
     expect(phone.chats.o1.messages).toHaveLength(1)
+  })
+})
+
+describe('a reach-out answered on the other device', () => {
+  it('the "Wants to connect" row goes once a card for that connection arrives', () => {
+    const laptop = state({ wantsToConnect: [{ peerId: 'o1', name: 'Other', at: 5 }, { peerId: 'o2', name: 'Otto', at: 6 }], peers: [peer('o1', 'a', { reachOut: true })] })
+    const phone = state({ people: [person('c1', 'Other', { peerId: 'o1', ring: 'acquaintance' })], peers: [peer('o1', 'a', { reachOut: true })] })
+    mergeBundle(laptop, refreshStamps(laptop, {}, 1, 'Laptop'), bundleOf(phone, refreshStamps(phone, {}, 2, 'Phone')), 0)
+    expect(laptop.people.map((p) => p.id)).toEqual(['c1'])
+    expect(laptop.wantsToConnect).toEqual([{ peerId: 'o2', name: 'Otto', at: 6 }])
   })
 })
 

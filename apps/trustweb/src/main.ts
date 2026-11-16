@@ -316,6 +316,7 @@ import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
 import { eventPlanSection } from './event_plan_view'
 import { defineEventActions } from './event_actions'
+import { defineSyncActions } from './sync_actions' // wave43c sync-devices
 import { templatePrompt } from './event_plan'
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
@@ -3211,7 +3212,8 @@ function chatListBody(): Node[] {
   const rows = chatCommunitiesOnly ? communityChatRows(all, s.people.map((p) => ({ id: p.id, tags: tagsOf(p, tags).map((t) => t.id) })), new Set(communityTags(tags).map((t) => t.id))) : all
   const find = chatFindRows(s.chats, people, chatQuery)
   const community = communityChatRow()
-  const fresh = newlyAdded(people, s.peers, now)
+  // wave43c sync-devices: a person shows once in the chat list: "Newly added" leaves out who already has a thread row below
+  const fresh = newlyAdded(people, s.peers, now).filter((r) => !rows.some((x) => x.personId === r.personId))
   return [
     ...(community ? [community] : []),
     ...(fresh.length && !chatQuery.trim() && !s.chatsHidden ? [el('section', { class: 'chat-newly', 'data-chat-newly': '' }, [
@@ -5102,6 +5104,7 @@ const devices = createSyncView({
   connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
   editLink: () => openLinkChange(linkHooks),
   afterSyncNow: () => void pollNotesRelay(),
+  tellDevices: (dids) => { if (state) void net.tellDevices(dids) }, // wave43c sync-devices
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -5368,6 +5371,7 @@ defineAppActions(appActions, {
   now: () => Date.now(),
 })
 defineEventActions(appActions, { state: st, save, newId: () => randomId(8), community: () => eventCommunity, hosted: () => eventHosted, me: () => st().me.displayName })
+defineSyncActions(appActions, devices) // wave43c sync-devices
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
   fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,
