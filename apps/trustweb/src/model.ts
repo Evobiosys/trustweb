@@ -1302,6 +1302,8 @@ export interface AppState {
    * that is not served from one of the two app origins. Older builds ignore it.
    */
   connectCode?: ConnectRecord
+  /** Wave 44 steer-people-picker-2: the zone a person who scans MY code is placed in (the dropdown under the code); absent = the default zone (scan_rules.ts placementOf). */
+  connectPlacement?: Ring
   /** Connect nonces this phone accepted (connect_freshness.ts), pruned past the window: a link used once is refused the second time. */
   seenConnectNonces?: SeenNonce[]
   /** Wave 44 (handshake_crypto.ts): nonces of the sealed connect-acks this phone opened (replay ledger, bounded). This device only. */

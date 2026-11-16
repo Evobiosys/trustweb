@@ -127,6 +127,12 @@ import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './chan
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { contactFragment, parsePersonShare, personShareLink, shareOfLink } from './person_share_link'
+import { foreignCode, personQrLink } from './person_qr_link'   // wave 44 steer-people-picker
+import { connectedPerson, placementOf } from './scan_rules'
+import { placementPills } from './placement_pills'   // wave 44 steer-people-picker-4
+import { tagNamed } from './zone_tags'   // wave 44 steer-people-picker-2
+import { scanButton } from './scan_button'
+import { openMemberPicker } from './member_picker_view'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
 import { pollRelay, postNote, readRelayOn, type RelayDeps } from './notes_relay'
@@ -571,6 +577,8 @@ let pendingIntro: IntroLink | null = decodeIntroLink(location.hash)
 const qrBody = pendingConnect ? decodeModeLink(location.href) : null
 // Wave 44 steer-bubble-connect-3: the card of the person an introduction link brings (bubble_card.ts); offered once the connect flow is done.
 let cardFromLink = pendingConnect ? readCard(location.hash) : null
+/** Wave 44 steer-people-picker-2: the address as scanned, kept before the fragment is cleared: a code made for one person (`to=`) is checked against this phone's DID. */
+const scannedUrl = pendingConnect ? location.href : ''
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 // A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
 let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
@@ -872,7 +880,7 @@ const net = new Net({
     toast(S.demoApprovedToast(peer.displayName))
     render()
   },
-  ringForNewPeer: () => (solo ? Ring.Friend : Ring.Acquaintance),
+  ringForNewPeer: () => placementOf(st(), solo ? Ring.Friend : Ring.Acquaintance),   // wave 44 steer-people-picker-2: the zone chosen under my code
   onLogChanged: () => { if (screen === Screen.Inventory) render() },
   // A demo account asks: while demo content is on this phone it is matched
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
@@ -2590,8 +2598,18 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (!link || !state) return
   pendingConnect = null
   drawCardStack()
+  if (refuseForeign(scannedUrl)) return
   const admitted = admitLink(link)
   if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); afterConnectOpen(); return }
+  // Wave 44 steer-people-picker-2: an event or tag code from someone I already hold: no second add (and no zone reset), I only join the event.
+  const held = pendingEvent !== null || qrBody?.kind === 'tag' ? connectedPerson(st(), link.did) : undefined
+  if (held && !picked) {
+    const known = st().peers.find((x) => x.did === link.did)
+    if (known) void eventEnv.afterConnect(known)
+    toast(S.w44pp2.alreadyConnected(held.name))
+    afterConnectOpen(held.id)
+    return
+  }
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo || link.introduced ? Ring.Friend : Ring.Acquaintance) // wave 44: an introduced code lands in Friends & acquainted community members
@@ -2672,14 +2690,30 @@ function addedToast(person: Person, ring: Ring, name = person.name): void {
 function offerPendingConnect(): void {
   const link = pendingConnect
   if (!link) return
+  if (refuseForeign(scannedUrl)) { pendingConnect = null; return }
   drawCardStack()
   openSheet(renderConnectAdd({
     name: link.from.displayName,
-    ring: Ring.Intending,
+    ring: Ring.Acquaintance,
     lead: S.connectAddLeadInvite,
     onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }).catch(connectFailed) },
     onLater: () => { closeSheet(); declineInvite(link) },
   }).nodes)
+}
+
+/**
+ * Wave 44 steer-people-picker-2 (Jakob 2026-11-16: "Refuse but explain why so they can tell the person"): a code made for one person that someone else scanned.
+ * Nothing is connected, added or sent; the sheet says the code is for someone else (the code carries no name). True when refused.
+ */
+function refuseForeign(url: string): boolean {
+  if (!foreignCode(url, net.ownIdentity().did)) return false
+  pendingEvent = null; pendingShare = null; eventWaitsForConnect = false
+  openSheet([
+    el('h3', {}, [S.w44pp2.foreignTitle]),
+    el('p', { 'data-foreign-code': '' }, [S.w44pp2.foreign]),
+    el('button', { class: 'btn btn-electric', type: 'button', onclick: closeSheet }, [S.w44pp2.foreignOk]),
+  ])
+  return true
 }
 
 /** "Not now" (Jakob 2026-10-19): the inviter goes to the Curator's Archive, not connected, the link kept on the entry. */
@@ -3035,6 +3069,7 @@ function webPageScreen(page: WebPage): Node[] {
     rings: RINGS.map((ring) => ({ ring, label: S.ringLabel[ring], current: webSlot(p) === ring })),
     onRing: (ring) => placePerson(p.id, ring, true),
     addableTags: tagsAddable(p, tags), onAddTag: (id) => { addTagTo(p, id); save(); render() },
+    onNewTag: (name) => { const out = tagNamed(tags, name); if (!out.tag) return; if (out.created) saveColourTags([...out.tags]); addTagTo(p, out.tag.id); save(); render() },
     chat: cardChatButton(p, false),
     inventory: {
       list: () => peerItemList(p.id),
@@ -3583,6 +3618,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
   drawRadios()
   let after: (() => void) | null = null // set once a person was added and a note still shows: the button then only closes
   const addByCode = async (): Promise<void> => {
+    if (refuseForeign(code.value.trim())) return   // wave 44 steer-people-picker-2
     busy = true
     addBtn.setAttribute('disabled', '')
     codeStatus.textContent = S.addCodeBusy
@@ -3595,7 +3631,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
       return
     }
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
-    if (communityTag && addMember(st().people, out.person.id, communityTag)) save()
+    if (communityTag && addMember(st().people, out.person.id, communityTag)) { save(); twBus.emit('community-go', 'members') }
     render()
     // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.
     const noteId = out.previous === undefined ? null : namePreviousId(out.previous)
@@ -3620,6 +3656,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
     closeSheet()
     toast(S.savedToast(n, S.ringLabel[picked]))
     render()
+    if (communityTag) twBus.emit('community-go', 'members')   // wave 44: the Members grid shows the new person
   }
   const addBtn = el('button', { class: 'btn btn-electric', 'data-add-person': '', onclick: add }, [S.addSave])
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
@@ -3813,6 +3850,7 @@ function personSheet(personId: string): void {
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
+    cardChatButton(p, Boolean(cons)),   // wave 44 steer-people-picker-2: Chat first
     cardNameHeading(p),
     pinButton(p, () => { togglePersonPin(p, Date.now()); save(); render(); personSheet(p.id) }),
     daysSection(st, p),
@@ -3820,7 +3858,6 @@ function personSheet(personId: string): void {
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     cardChannelsRow(p),
-    cardChatButton(p, Boolean(cons)),
     reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
@@ -3843,7 +3880,8 @@ function personSheet(personId: string): void {
 }
 
 function personQr(p: Person): void {
-  void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
+  const did = st().peers.find((x) => x.id === p.peerId)?.did ?? p.did   // wave 44: the code is made for exactly this person
+  void qrPage((link) => ({ kind: 'person', link: personQrLink(link, { id: p.id, ...(did ? { did } : {}) }), name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
@@ -4153,7 +4191,8 @@ function reachedOutRow(p: Person): HTMLElement | null {
 
 /** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
 function curatorPerson(personId: string): void {
-  openSheet([curator.person(personId, closeSheet)])
+  const p = st().people.find((x) => x.id === personId)
+  openSheet([p ? el('div', { 'data-chat-row': '' }, [cardChatButton(p, false)]) : null, curator.person(personId, closeSheet)].filter((n): n is HTMLElement => n !== null))   // wave 44 steer-people-picker-2: Chat first, also for an organizer shown in an event
 }
 
 /** An acquaintance, confirmed or suggested: a link to the person's general note and a five-step "more friend ... more acquaintance" score. A note to myself; the ring never changes. */
@@ -5407,7 +5446,12 @@ twBus.on('support-ask', (d) => {   // wave 42: the Community view's "Ask for sup
   const used = (key: string): void => { st().extData = { ...st().extData, 'community-mighty': rememberAudience(parseCommunity(st().extData?.['community-mighty']), tag, key) }; save() }
   openSheet([el('h3', {}, [S.supportTitle]), supportForm(supportIo, closeSheet, { tag, remembered: meta.audiences ?? [], used })])
 })
-twBus.on('add-member', (d) => { const tag = (d as { tag?: string } | undefined)?.tag; if (tag) addPersonSheet(Ring.Friend, false, tag) })   // wave 42: the add-person flow, scoped to a community
+twBus.on('add-member', (d) => {   // wave 44 steer-people-picker: "+" opens the people I know first, "Add a new person" below; no AI gate (wave 42 went straight to the add view)
+  const tag = (d as { tag?: string } | undefined)?.tag
+  if (!tag) return
+  const tagLabel = loadColourTags().find((x) => x.id === tag)?.label ?? tag
+  openMemberPicker({ state: st, save: () => save(), newId: () => randomId(8), tag, tagLabel, open: openSheet, done: (m) => { closeSheet(); toast(m); render(); twBus.emit('community-go', 'members') }, addNew: () => addPersonSheet(Ring.Friend, false, tag) })
+})
 /** Wave 42 community-event: "New event" in a community opens the assistant with the event template; its cards are approved one by one. */
 let eventCommunity: string | undefined
 /** Wave 43b (B33): the menu's Add event: Hosted (true), Informal (false); absent from the older "New event" button. */
@@ -6504,12 +6548,20 @@ function meetTrustWebPage(): HTMLElement {
     }
     apply()
   })()
+  const scan = scanButton((text) => void connectScanned(text))
+  // Wave 44 steer-people-picker-2: the code with what belongs to it (scan, zone) is one column that fits the viewport on a laptop; the rest scrolls beside it.
   return el('div', { class: 'meet-page' }, [
-    el('p', { class: 'hint' }, [S.meetLead]),
-    row.el,
-    publicVia,
-    qr,
-    cameraNote,
+    el('div', { class: 'meet-qr-col', 'data-meet-qr-col': '' }, [
+      el('p', { class: 'hint' }, [S.meetLead]),
+      row.el,
+      publicVia,
+      qr,
+      cameraNote,
+      scan.button,
+      placementRow(),
+      scan.view,
+    ]),
+    el('div', { class: 'meet-rest' }, [
     sharing.el,
     el('div', { 'data-contact-box-on-meet': '' }, [
       el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle]),
@@ -6535,7 +6587,25 @@ function meetTrustWebPage(): HTMLElement {
     nfc,
     nfc ? nfcStatus : null,
     seeInActionFoot(),
+    ]),
   ])
+}
+
+/** Wave 44 steer-people-picker-2: under my code, "They will be placed in: <zone>"; whoever scans it lands there (Net ringForNewPeer). */
+function placementRow(): HTMLElement {
+  const dflt = solo ? Ring.Friend : Ring.Acquaintance
+  return el('div', { class: 'placement-row' }, [el('span', {}, [S.w44pp2.placedIn]), placementPills(placementOf(st(), dflt), (r) => { st().connectPlacement = r; save() })])
+}
+
+/** Wave 44 steer-people-picker-2: a code read by "Scan a code": the pasted-code path, then the zone sheet (acquainted or closer); someone already held is not added twice. */
+async function connectScanned(text: string): Promise<void> {
+  if (refuseForeign(text)) return
+  const out = await connectByCode(text, Ring.Acquaintance, '', '')
+  if ('type' in out) { toast(S.addCodeFailed(out)); return }
+  render()
+  if (out.existed) { toast(S.w44pp2.alreadyConnected(out.person.name)); personSheet(out.person.id); return }
+  const peer = st().peers.find((x) => x.id === out.person.peerId)
+  if (peer) openConnectAdd(peer, out.person, out.person.name)
 }
 
 // ---------------------------------------------------------------------------

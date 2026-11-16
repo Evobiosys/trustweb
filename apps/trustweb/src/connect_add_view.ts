@@ -8,7 +8,8 @@
  * "Add to my web" is never blocked by a missing name.
  */
 import { el } from '../../demo/src/ui/dom'
-import { RINGS, Ring } from './model'
+import { Ring } from './model'
+import { SCAN_RINGS, scanRing } from './scan_rules'
 import { S } from './strings'
 import { cleanHelloName } from './hello'
 
@@ -38,7 +39,7 @@ export function addLabel(ring: Ring): string {
 }
 
 export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
-  let picked = o.ring
+  let picked = scanRing(o.ring)   // wave 44 steer-people-picker-2: a scan offers acquainted or closer only
   let given = cleanHelloName(o.name)
   let dirty = false
   const add = el('button', { class: 'btn btn-electric', 'data-connect-add': '', onclick: () => o.onAdd(name.value.trim().slice(0, 40), picked) }, [addLabel(picked)])
@@ -51,7 +52,7 @@ export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
   name.addEventListener('input', () => { dirty = true })
   const radios = el('div', { class: 'add-rings' })
   const drawRadios = (): void => {
-    radios.replaceChildren(...RINGS.map((r) => el('button', {
+    radios.replaceChildren(...SCAN_RINGS.map((r) => el('button', {
       class: 'radio' + (picked === r ? ' on' : ''), 'data-ring': r,
       onclick: () => { picked = r; drawRadios(); add.textContent = addLabel(r) },
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))

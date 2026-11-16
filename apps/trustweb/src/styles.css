@@ -2151,3 +2151,26 @@ html.tw-bw :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) o
 .ev-draft-card{background:var(--linen, #fff); color:var(--ink); border-radius:16px; padding:18px; width:min(340px, 100%); display:flex; flex-direction:column; gap:8px}
 .cal-tags .chips{align-items:center}
 .roles-line>.event-since{flex:1 1 auto; min-width:0; text-align:left}
+
+/* wave44 steer-people-picker-2 */
+.placement-row{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:8px 0; font-size:13px; color:var(--ink-soft)}
+.placement-row select{flex:1 1 12em; min-width:0}
+.scan-code{margin:8px 0}
+.scan-code .btn{width:100%}
+.scan-view .meta{margin:4px 0}
+.scan-video{width:100%; max-height:40vh; margin-top:8px; border-radius:12px; background:#000}
+/* Laptop and desktop: the code, its scan button and zone choice are one column that always fits the viewport (the code shrinks to make room); the rest of Meet scrolls beside it. */
+@media (min-width:900px){
+  .qrwrap{max-width:max(200px, min(440px, calc(100vh - 480px)))}
+  .meet-page{display:grid; grid-template-columns:minmax(300px,480px) minmax(0,1fr); gap:0 28px; align-items:start}
+  .meet-qr-col{position:sticky; top:0}
+}
+/* A toast ("Connected with ...") never lies over a sheet's buttons (the event's "Add to my events"): while a sheet is open the notice layer sits at the top of the frame, above the sheet's content. */
+.phone:has(.sheet.on) #notice-layer{bottom:auto; top:calc(12px + env(safe-area-inset-top,0px)); justify-content:flex-start; max-height:40%}
+
+/* wave44 steer-people-picker-4 */
+.placement-row{margin:6px 0}
+.placement-row .seg{flex:1 1 16em; flex-wrap:wrap; border-radius:18px}
+.placement-row .seg button{flex:1 1 auto; padding:4px 7px; font-size:12px; white-space:nowrap}
+.share-glyph svg{width:18px; height:18px; vertical-align:-3px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+[data-tag-pick] .input{flex:1 1 8em; min-width:0; max-width:14em}

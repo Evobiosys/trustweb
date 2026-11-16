@@ -4946,4 +4946,28 @@ export const S = {
     unsupportedBody: 'This code comes from an older TrustWeb. Update the app on both phones, then scan again.',
     settingsLine: 'Handshake: encrypted with the QR key (v2)',
   },
+  /* wave44 steer-people-picker */
+  w44pp: {
+    pickTitle: (tag: string) => `Add to ${tag}`,
+    pickHint: 'People you know. Type a name, @name for people, #tag for a group.',
+    addNew: 'Add a new person',
+    added: (name: string, tag: string) => `Saved. ${name} is in ${tag}.`,
+    connectWith: (name: string) => `Connect with ${name}`,
+  },
+  /* wave44 steer-people-picker-2 */
+  w44pp2: {
+    foreignTitle: 'This code is not for you',
+    foreign: 'This code was made for someone else. Ask the person who showed it to you for a code made for you (or their open QR).',
+    foreignOk: 'OK',
+    scanCode: 'Scan a code',
+    scanStop: 'Stop scanning',
+    scanNoCamera: 'The camera did not open. Allow it for this page, or paste the code in Add a person.',
+    placedIn: 'They will be placed in:',
+    alreadyConnected: (name: string) => `Already connected with ${name}.`,
+  },
+  /* wave44 steer-people-picker-4 */
+  w44pp4: {
+    newTagPh: 'New tag',
+    newTagAria: 'Name of a new tag; Enter adds it to this person',
+  },
 } as const
