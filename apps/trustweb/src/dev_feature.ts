@@ -174,7 +174,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const setHint = (text: string): void => {
         const { head, detail } = hintParts(text)
         hint.replaceChildren(...conflictNodes(head), ...(detail ? [Object.assign(document.createElement('details'), { innerHTML: '<summary>details</summary>' })] : []))
-        if (detail) hint.querySelector('details')!.append(...conflictNodes(detail))
+        if (detail) hint.querySelector('details')!.append(...detail.split('\n').map((l) => { const d = document.createElement('div'); d.append(...conflictNodes(l)); return d }))   // wave 44: one line per row, collapsed by default
       }
       // The press state (dev_wave_press.ts) decides the label and the button, never a refresh tick: a tick only updates what the gate says (`view`).
       let press = waveIdle

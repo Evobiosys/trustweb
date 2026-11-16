@@ -53,27 +53,56 @@ export function approveMergeRoute({ loopback, branch, cache, ops, wt, exists, re
   }
 }
 
-/** The brief of the Sonnet session that resolves one row's conflict (SPR: the reader is an agent). */
-export function conflictBrief({ id, key, branch, baseSha, worktree, mergeTree }) {
+/** Wave 44: the conflicting paths of `git merge-tree --write-tree` output (its stage lines and CONFLICT lines), once each, in order. */
+export function conflictFiles(mergeTree) {
+  const out = []
+  for (const l of mergeTree.split('\n')) {
+    const f = /^\d{6} [0-9a-f]{40} [123]\t(.+)$/.exec(l)?.[1] ?? /^CONFLICT \([^)]*\): Merge conflict in (.+)$/.exec(l)?.[1]
+    if (f && !out.includes(f)) out.push(f)
+  }
+  return out
+}
+
+/**
+ * The brief of the Sonnet session that resolves one row's conflict (SPR: the reader is an agent).
+ * Wave 44 (Jakob, pi261116k merged the whole preview INTO a feature branch): the fix happens in the PREVIEW worktree on the preview branch,
+ * and the resolution is saved as DEVLOG/<wave>/conflicts/<key>.patch, which `preview apply` replays, so an apply never undoes it.
+ * devlog = trustweb-ops/DEVLOG/<wave> (the newest wave folder).
+ */
+export function conflictBrief({ id, key, branch, previewBranch, baseSha, worktree, mergeTree, devlog }) {
+  const ops = devlog.replace(/\/DEVLOG\/[^/]+$/, '')
+  const files = conflictFiles(mergeTree)
   return [
-    `conflict-fix brief: row ${key} (branch ${branch}) conflicts when merged into preview ${id}.`,
-    `base: ${baseSha}   preview worktree: ${worktree}`,
-    `git merge-tree --write-tree ${baseSha} ${branch}:`,
+    `conflict-fix brief (wave44 format): row ${key} (branch ${branch}) conflicts when merged into preview ${id}.`,
+    `preview: ${id}   worktree: ${worktree}   preview branch: ${previewBranch}   base: ${baseSha}`,
+    'conflicting files:',
+    ...(files.length ? files.map((f) => `- ${f}`) : ['- (none named by merge-tree: run the merge and read git status)']),
+    `git merge-tree --write-tree HEAD ${branch} (in the worktree):`,
     mergeTree.trim() || '(no output)',
     '',
-    'DO:',
-    `1. find the worktree that holds ${branch} (git worktree list); work only there. Merge main into it (or rebase), resolve every conflict, keep both sides' intent.`,
-    '2. gates: cd apps/trustweb && npx tsc --noEmit && npx vitest run && node scripts/bundle_check.mjs. Fix, do not skip.',
-    `3. commit on ${branch} (one-line message). Then: preview ${id} sync && preview ${id} apply.`,
-    'NEVER: push, touch main, force anything, delete (trash <abs path> or a dated archive).',
-    'Hard conflict or unsure: escalate per the fallback ladder (Sonnet -> Opus; Fable only after asking Jakob) and say so in your report.',
+    `DO (all in ${worktree}, on ${previewBranch}):`,
+    `1. cd ${worktree}; git status --short must be empty (else stop, report). git merge --no-ff ${branch}`,
+    '2. resolve every conflict keeping BOTH sides: every `/* wave44 <slug> */` section (any slug, both sides) and every import and call stay; nothing dropped.',
+    '3. gates (from the worktree root, verbatim; fix, never skip):',
+    '   export PATH=/opt/homebrew/opt/node@22/bin:$PATH',
+    '   cd apps/trustweb && ../demo/node_modules/.bin/tsc --noEmit -p tsconfig.json',
+    '   cd apps/demo && node_modules/.bin/vitest run --config ../trustweb/test/unit/vitest.config.mjs --root ../trustweb',
+    `4. git add -A && git commit --no-edit -m "preview ${id}: merge ${key} (conflicts resolved)"`,
+    `5. save the resolution: ${ops}/bin/preview ${id} save-resolution ${key}   -> ${devlog}/conflicts/${key}.patch (every later \`preview apply\` replays it while ${branch} stays at this tip)`,
+    `6. ${ops}/bin/preview ${id} apply   (re-assembles with the saved patch; the panel's conflict line clears)`,
+    `7. panel status line (the panel shows it): node ${ops}/bin/preview_lib.mjs patch ${id} '{"fixStatus":{"key":"${key}","text":"resolved: <sha7>, patch saved","at":"<ISO time>"}}'`,
+    '   not resolved / escalated: the same command with text "not resolved: <one-line reason>".',
+    `8. report: ${devlog}/conflict-${key}_result-report.txt (sha, files, gate last lines, what each side kept).`,
+    `NEVER: merge the preview branch (or main) into ${branch} or any feature branch; commit on a row branch; push; touch main; force; reset --hard; delete (trash <abs path> or a dated archive).`,
+    `ALWAYS: work on ${previewBranch} in ${worktree} only; keep both sides; run the gates; save the patch before apply.`,
+    'model: Sonnet (claude-sonnet-5-5). Hard conflict or unsure: escalate per the fallback ladder (Sonnet -> Opus; Fable only after asking Jakob) and say so in the report and the status line.',
     '',
   ].join('\n')
 }
 
 /**
  * POST /__tw/preview/fix-conflict {id, key}: writes DEVLOG/<wave>/conflict-<key>.txt and starts a background Sonnet session on it.
- * preview() = the registry, devlog() = the newest wave folder, mergeTree(worktree, base, branch) = git's output, write(file, text), launch(file, task) -> {window}.
+ * preview() = the registry, devlog() = the newest wave folder, mergeTree(worktree, ours, branch) = git's output (ours = HEAD: the preview branch), write(file, text), launch(file, task) -> {window}.
  */
 export function fixConflictRoute({ loopback, preview, devlog, readBody, mergeTree, write, launch }) {
   const send = (res, code, o) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
@@ -85,8 +114,9 @@ export function fixConflictRoute({ loopback, preview, devlog, readBody, mergeTre
     const f = p.features.find((x) => x.key === b?.key)
     if (!f || b?.id !== p.id) { send(res, 400, { error: 'bad request' }); return }
     try {
-      const file = `${devlog()}/conflict-${f.key}.txt`
-      write(file, conflictBrief({ id: p.id, key: f.key, branch: f.branch, baseSha: p.baseSha, worktree: p.worktree, mergeTree: await mergeTree(p.worktree, p.baseSha, f.branch) }))
+      const dir = devlog()
+      const file = `${dir}/conflict-${f.key}.txt`
+      write(file, conflictBrief({ id: p.id, key: f.key, branch: f.branch, previewBranch: p.branch, baseSha: p.baseSha, worktree: p.worktree, devlog: dir, mergeTree: await mergeTree(p.worktree, 'HEAD', f.branch) }))
       send(res, 202, { started: true, brief: file, ...(await launch(file, `fix the conflict of ${f.key}`)) })
     } catch (e) { send(res, e?.busy ? 409 : 500, { error: String(e.message ?? e).slice(-600) }) }
   }

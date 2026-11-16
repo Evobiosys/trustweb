@@ -243,8 +243,16 @@ export function compatHint(c: Compat | undefined, baseSha: string | undefined, l
 /** A gate hint split for the Approve box: the short head and the long detail kept under a folded "details" (the conflict text is never a paragraph). */
 export function hintParts(hint: string): { head: string; detail: string } {
   const m = /^(Fix the conflict first):\s*([\s\S]*)$/.exec(hint)
-  return m ? { head: m[1], detail: m[2] } : { head: hint, detail: '' }
+  if (m) return { head: m[1], detail: m[2] }
+  // Wave 44 (Jakob, shot s18: "a wall of text"): long row detail folds under one "details"; the head stays one short line.
+  if (hint.length <= HINT_SHORT) return { head: hint, detail: '' }
+  const first = /^(Approve first):\s*([\s\S]*)$/.exec(hint)
+  if (first) return { head: first[1], detail: first[2] }
+  const reasons = hint.split('; ')
+  return { head: `Blocked: ${reasons.length} row${reasons.length === 1 ? '' : 's'} need${reasons.length === 1 ? 's' : ''} attention`, detail: reasons.join('\n') }
 }
+/** Wave 44: a gate hint up to this length shows whole; a longer one folds its detail. */
+export const HINT_SHORT = 120
 
 /** A row and the loaded rows below it (their `requires` chain). Only for a whole subtree (e.g. unloading a parent); one row's approve is just [key]. */
 export function subtreeKeys(features: PreviewFeature[], key: string): string[] {
