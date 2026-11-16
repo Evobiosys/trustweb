@@ -43,7 +43,7 @@ describe('wave43c chat-notices: Contacts wording and the pin', () => {
   })
   it('pinning a remembered view (rings, network, map) shows it at once; pages (people, dex) wait for the next tap', () => {
     for (const v of ['rings', 'network', 'map']) expect(shownAtOnce(v)).toBe(true)
-    for (const v of ['people', 'complete', 'dex', 'compact', 'groups']) expect(shownAtOnce(v)).toBe(false)
+    for (const v of ['people', 'complete', 'dex', 'compact', 'groups', 'circles']) expect(shownAtOnce(v)).toBe(false)
   })
   it('Settings texts call the Web view Contacts', async () => {
     const { S } = await import('../../src/strings.ts')

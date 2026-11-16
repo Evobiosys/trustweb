@@ -117,7 +117,7 @@ describe('who was asked, and the second round', () => {
     const before = [B, C, D].map((p) => p.asks.length)
     D.share = () => false
     B.share = () => false
-    const results = await A.net.ask('Who has a drill?', undefined, [C.state.peers[0].id, B.state.peers[0].id, D.state.peers[0].id].length ? undefined : undefined, { know: true })
+    const results = await A.net.ask('Who has a drill?', undefined, [C.state.peers[0].id, B.state.peers[0].id, D.state.peers[0].id].length ? undefined : undefined, [], { know: true })
     expect([B, C, D].map((p, i) => p.asks.length - before[i])).toEqual([1, 1, 1])
     for (const p of [B, C, D]) expect(p.asks.at(-1)).toMatchObject({ know: true, matches: [] })
     const items = sharedOf(results)

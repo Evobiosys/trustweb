@@ -2243,3 +2243,42 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .ol-paste{width:100%; font-size:12px}
 .req-count{position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 3px; border-radius:8px; font-size:10px; line-height:16px; text-align:center; background:var(--ink, #222); color:var(--paper, #fff)}
 .requests-btn{position:relative}
+/* wave44 steer-circles-view */
+.circles{display:flex; flex-direction:column; gap:var(--s-3,12px); padding-bottom:24px; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none}
+.circles-hint{margin:0}
+/* Phone: the circles sit in one row that scrolls sideways; wide screens wrap them into a grid. */
+.circles-row{display:flex; gap:18px; overflow-x:auto; padding:22px 16px 16px; scroll-snap-type:x proximity; align-items:center}
+.circle{position:relative; flex:none; width:var(--d); height:var(--d); border-radius:50%; border:2px solid var(--c,var(--line-strong)); background:var(--surface-0); scroll-snap-align:center; transition:box-shadow .18s, transform .18s}
+.circle.open{box-shadow:0 0 0 4px color-mix(in srgb, var(--c) 25%, transparent)}
+.circle-body{position:absolute; inset:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; border:0; background:none; color:var(--ink); font:inherit; text-align:center; cursor:pointer; border-radius:50%; overflow:hidden; text-decoration:underline; text-decoration-color:var(--line-strong)}
+.circle-name{font-size:13px; line-height:1.15; max-width:100%; overflow-wrap:break-word; max-height:2.4em; overflow:hidden}
+.circle-count,.circle-more{color:var(--ink-3); font-size:11px}
+.circle-av,.circle-chip{border:0; padding:0; background:none; cursor:grab; touch-action:manipulation; color:var(--ink)}
+.circle-av{position:absolute; width:26px; height:26px; transform:translate(-50%,-50%); border-radius:50%; z-index:1}
+.circle-av .ava{width:26px; height:26px; font-size:12px; box-shadow:0 0 0 2px var(--surface-0)}
+.circle-chip{display:inline-flex; align-items:center; gap:6px; padding:3px 10px 3px 3px; border:1.5px solid var(--line); border-radius:999px; background:var(--card); font-size:13px}
+.circle-chip .ava{width:28px; height:28px; font-size:13px}
+.circle-pname{max-width:12em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.circle-chips{display:flex; flex-wrap:wrap; gap:8px}
+.circle-pool .eyebrow{margin:4px 0 8px}
+/* The empty tile: dashed, no tag yet; its name box is optional, so greyed and small (P7). */
+.circle-new{border-style:dashed; border-color:var(--line-strong); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:10px; text-align:center}
+.circle-new-text{font-size:11px; line-height:1.2; color:var(--ink-2); max-width:100%}
+.circle-new-name{width:78%; min-width:0; font:inherit; font-size:10px; padding:1px 4px; border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--ink-3); text-align:center}
+.circle-new-name::placeholder{color:var(--ink-3); opacity:.7}
+.circle-panel{display:flex; flex-direction:column; gap:8px; padding:10px 12px; border:1.5px solid var(--c); border-radius:var(--r-card,14px); background:var(--surface-0)}
+.circle-panel-head{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.circle-rename{align-self:flex-start; max-width:14em; font:inherit; font-size:11px; padding:1px 4px; border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--ink-3)}
+/* Dragging: the lifted avatar follows the pointer; every circle shows it can take it, the one under the pointer lights up and swells. */
+.circle-ghost{animation:none; position:fixed; z-index:200; transform:translate(-50%,-50%) scale(1.15); pointer-events:none; opacity:.92; margin:0; box-shadow:0 6px 18px rgba(0,0,0,.25); border-radius:999px}
+.circle-av.circle-ghost{width:26px; height:26px}
+.lifted{opacity:.35}
+.circles.dragging .circle{box-shadow:0 0 0 2px color-mix(in srgb, var(--c,var(--line-strong)) 35%, transparent)}
+.circles.dragging .circle.drop{transform:scale(1.08); box-shadow:0 0 0 5px color-mix(in srgb, var(--c,var(--trust)) 55%, transparent)}
+.circles.dragging .circle-new.drop{border-style:solid; border-color:var(--trust)}
+.circle-av{animation:circle-pop .22s ease-out}
+@keyframes circle-pop{0%{opacity:0; transform:translate(-50%,-50%) scale(.3)}100%{opacity:1; transform:translate(-50%,-50%) scale(1)}}
+@media (prefers-reduced-motion:reduce){.circle,.circle-av{animation:none; transition:none}}
+@media (min-width:700px){
+  .circles-row{flex-wrap:wrap; overflow-x:visible; justify-content:flex-start; gap:28px; padding:26px 20px 20px; scroll-snap-type:none}
+}

@@ -87,6 +87,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'ask_tamper_reports_list', write: false },
   /* answers-44a */
   { name: 'profile_link_check', write: true },
+  /* wave44 steer-circles-view */
+  { name: 'circles_layout', write: false },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
