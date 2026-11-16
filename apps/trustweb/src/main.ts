@@ -30,6 +30,7 @@ import { ownDataImported } from './own_data'
 import { installMotionGate } from './motion_gate'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
+import { mountInAppBanner } from './inapp_banner_view'
 import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf } from './colour_tags'
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
@@ -8644,6 +8645,7 @@ applyVariation()
 applyImageMode()
 bindModeShell((ctx) => modeShell.attach(ctx.bus))
 void twRegistry.start().then(() => { modeShell.start(); flushQueuedAsks(); renderTabs(); render() }) // wave 39 (+ wave 41 mode shell): a heavy module's view joins the row once it has loaded
+mountInAppBanner({ ua: navigator.userAgent, standalone: installedHere(), href: bootHref, search: bootSearch, solo, recordKey: storageKey(persona, storeCtx), now: Date.now() }) // wave 44: Telegram & co. run a separate storage
 // Wave 40: a connection link may suggest a Variation (#tp=<id>); it applies only on a tap.
 if (linkProfile && profileOf(state?.twSettings) !== linkProfile) toast(S.w40.linkVarOffer(S.var.names[linkProfile]), { onClick: () => chooseProfile(linkProfile, () => undefined) })
 render()

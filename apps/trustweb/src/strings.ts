@@ -5067,4 +5067,18 @@ export const S = {
     addPlace: 'Add place',
     place: (p: string): string => `at ${p}`,
   },
+  /* wave44 steer-inapp-browser */
+  w44inapp: {
+    banner: (name: string) => (name ? `Open in your browser to add ${name} to your web` : 'Open in your browser to add this person to your web'),
+    note: 'Not in your web yet. You can chat here; the person joins your web once the link opens in your browser.',
+    openAndroid: 'Open in browser',
+    copyIos: 'Copy link',
+    shareIos: 'Share link',
+    copied: 'Link copied. Open Safari, paste it into the address bar and go.',
+    iosHow: 'On iPhone: tap the share icon or the ⋯ menu here, then "Open in Safari".',
+    export: 'Save this record first',
+    exportHint: 'This browser already holds a record. Save it as a file so nothing is lost.',
+    exported: 'Record saved as a file.',
+    fileName: 'trustweb-record.json',
+  },
 } as const

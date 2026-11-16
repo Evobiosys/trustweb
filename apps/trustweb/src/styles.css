@@ -2193,3 +2193,7 @@ html.tw-bw :is(.post-img,.prof-their-pic,.logo,[data-pic]){filter:grayscale(1) o
 .know-note{width:100%; margin:8px 0}
 .place-wrap{display:flex; gap:6px; align-items:center; margin-top:4px}
 .place-wrap input{flex:1; opacity:.7; font-size:12px; min-height:28px}
+/* wave44 steer-inapp-browser */
+.inapp-banner{position:fixed; top:0; left:0; right:0; z-index:60; padding:8px 12px; background:var(--surface,#fff); border-bottom:1px solid currentColor; display:flex; flex-direction:column; gap:4px; max-height:40vh; overflow:auto; font-size:13px}
+.inapp-note{font-size:12px; opacity:.75}
+body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
