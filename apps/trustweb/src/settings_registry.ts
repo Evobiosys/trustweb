@@ -129,6 +129,9 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
       if (bad) throw new Error(`a directory server must be an https address, not "${bad}"`)
       if (urls.length) r.directoryServers = urls; else delete r.directoryServers
     } },
+  { id: 'home.start', section: 'web', label: 'Open Home first', hint: 'The Web tab opens the Home tile board instead of the rings (Settings > Home).', type: 'boolean', default: false, simple: false,
+    get: (r) => obj(r.uiViews).webDefault === 'home',
+    set: (r, v) => { const views = { ...obj(r.uiViews) }; if (v) views.webDefault = 'home'; else delete views.webDefault; if (Object.keys(views).length) r.uiViews = views; else delete r.uiViews } },
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),
   pin('qr-only', 'Pin the QR only button to the toolbar', 'A button beneath Settings.'),

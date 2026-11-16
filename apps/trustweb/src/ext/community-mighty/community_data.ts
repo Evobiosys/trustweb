@@ -29,6 +29,8 @@ export interface CommunityMeta {
   tiles?: TileId[]; managedTiles?: TileId[]; connectEvents?: true
   /** Wave 43c connect-extras (theta): my opt-in to share which tiles I show, anonymously (explicit false once switched off, so a device merge keeps it off), and my random anonymous slot at the community's server. */
   shareLayout?: boolean; slot?: string
+  /** Wave 44 home-dashboard: 'otherGroup' = an affiliation that is not a community (family, a circle of friends); absent = a community. */
+  group?: 'otherGroup'
 }
 export const REMEMBER_MAX = 5
 /** Wave 43c: an anonymous slot is random lower-case hex, 16 to 64 characters (the server's check is the same). */
@@ -84,6 +86,7 @@ function parseMeta(v: unknown): Record<string, CommunityMeta> | undefined {
     out[id] = {
       kind: o.kind === 'managed' ? 'managed' : 'informal', organizers: strs(o.organizers),
       ...(Array.isArray(o.tiles) ? { tiles } : {}), ...(managedTiles.length ? { managedTiles } : {}), ...(o.connectEvents === true ? { connectEvents: true as const } : {}), ...(typeof o.shareLayout === 'boolean' ? { shareLayout: o.shareLayout } : {}), ...(isStr(o.slot) && SLOT_RE.test(o.slot) ? { slot: o.slot } : {}),
+      ...(o.group === 'otherGroup' ? { group: 'otherGroup' as const } : {}),
       ...(nav.length ? { nav } : {}), ...(o.ask === false ? { ask: false } : {}), ...(audiences.length ? { audiences } : {}), ...(isStr(o.name) && o.name ? { name: o.name } : {}),
     }
   }
@@ -211,7 +214,7 @@ export function listCommunities(d: CommunityData, tags: readonly TagLike[], peop
 }
 
 /** A new community (or the one of that name): its tag, an entry in the settings, and it becomes the chosen one. Null for an empty name. */
-export function createCommunity(d: CommunityData, tags: readonly TagLike[], name: string, kind: CommunityKind): { data: CommunityData; tags: TagLike[]; id: string } | null {
+export function createCommunity(d: CommunityData, tags: readonly TagLike[], name: string, kind: CommunityKind, group?: 'otherGroup'): { data: CommunityData; tags: TagLike[]; id: string } | null {
   const n = norm(name)
   if (!n) return null
   const known = tags.find((t) => norm(t.label ?? t.id) === n || norm(t.id) === n)
@@ -219,7 +222,7 @@ export function createCommunity(d: CommunityData, tags: readonly TagLike[], name
   let id = known?.id ?? slug
   for (let i = 2; !known && tags.some((t) => t.id === id); i++) id = `${slug}-${i}`
   const added: TagLike[] = known ? [] : [{ id, colour: PALETTE[tags.length % PALETTE.length], label: name.trim(), ...(tags.some((t) => t.community) ? { community: true } : {}) }]
-  const data = d.meta?.[id] ? { ...d, tag: id } : withMeta({ ...d, tag: id }, id, { kind, organizers: kind === 'managed' ? [ME] : [], ...(known ? {} : { name: name.trim() }) })
+  const data = d.meta?.[id] ? { ...d, tag: id } : withMeta({ ...d, tag: id }, id, { kind, organizers: kind === 'managed' ? [ME] : [], ...(group ? { group } : {}), ...(known ? {} : { name: name.trim() }) })
   return { data, tags: [...tags, ...added], id }
 }
 

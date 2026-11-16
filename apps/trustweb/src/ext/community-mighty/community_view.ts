@@ -357,8 +357,10 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const rows = listCommunities(data(), loadColourTags(), st().people)
     const name = el('input', { type: 'text', maxlength: '40', placeholder: w.newName, 'aria-label': w.newName, 'data-community-new-name': '' })
     const kind = el('select', { 'aria-label': w.kindLabel, 'data-community-new-kind': '' }, [el('option', { value: 'informal' }, [w.kindInformal]), el('option', { value: 'managed' }, [w.kindManaged])])
+    // Wave 44 home-dashboard: what it is (a community or another group, e.g. family); managed or unmanaged is asked only here, later it lives in Settings.
+    const group = el('select', { 'aria-label': ctx.strings.dashboard.newKind, 'data-community-new-group': '' }, [el('option', { value: '' }, [ctx.strings.dashboard.kinds.community]), el('option', { value: 'otherGroup' }, [ctx.strings.dashboard.kinds.otherGroup])])
     const make = (): void => {
-      const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind)
+      const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind, (group as HTMLSelectElement).value === 'otherGroup' ? 'otherGroup' : undefined)
       if (!out) { name.focus(); return }
       saveColourTags(out.tags as never)
       ui.switcher = false
@@ -368,8 +370,8 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       ...rows.map((r) => el('button', {
         class: 'lnk switch-row' + (r.current ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': String(r.current), 'data-community-pick': r.id,
         onclick: () => { ui.switcher = false; ui.space = null; save({ ...data(), tag: r.id }) },
-      }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${r.kind === 'managed' ? w.kindManaged : w.kindInformal} · ${w.memberCount(r.members)}`])])),
-      el('div', { class: 'row wrap switch-new' }, [name, kind, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
+      }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${w.memberCount(r.members)}`])])),
+      el('div', { class: 'row wrap switch-new' }, [name, group, kind, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
     ])
   }
 

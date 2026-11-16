@@ -8,7 +8,7 @@ export type SettingsSection = 'web' | 'chat' | 'record' | 'events' | 'inventory'
 const OWN: readonly SettingsSection[] = ['web', 'chat', 'record', 'events', 'inventory']
 
 const OF_SCREEN: Record<string, SettingsSection> = {
-  web: 'web', people: 'web', still: 'web',
+  web: 'web', people: 'web', still: 'web', home: 'web', dashboard: 'web',
   chat: 'chat',
   record: 'record', meeting: 'record',
   events: 'events',
