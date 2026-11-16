@@ -3573,7 +3573,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
   const radios = el('div', { class: 'add-rings' })
   const drawRadios = (): void => {
     radios.replaceChildren(...RINGS.map((r) => el('button', {
-      class: 'radio' + (picked === r ? ' on' : ''),
+      class: 'radio' + (picked === r ? ' on' : ''), 'data-ring': r,
       onclick: () => { picked = r; drawRadios() },
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
   }
