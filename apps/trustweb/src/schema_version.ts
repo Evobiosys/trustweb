@@ -5,6 +5,7 @@ import { resetBarOrder } from './bottom_bar'
 import { repairAgreements } from './agreements'
 import { migrateEventRoles } from './event_roles'
 import { migrateNicknames } from './event_press'
+import { repairHomeLayout } from './home_layout'
 import { migrateChats } from './chat'
 import { repairConnectRecord } from './connect_code'
 import { repairGeneralNotes } from './general_notes'
@@ -16,7 +17,7 @@ import { repairShareFields } from './share_modes'
 import { repairOtherCodes } from './sync_code'
 
 /** 1 = every record from before this field existed. Raise it when a change older builds could misread is made. */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** A record or bundle written by a newer build: this one must not read it half (a downgrade never loses fields). */
 export class SchemaNewerError extends Error {
@@ -36,7 +37,7 @@ export function migrate(s: AppState): boolean {
   const ran = [
     migrateSources(s), normaliseNoteFields(s), migrateChats(s),
     repairConnectRecord(s), repairOtherCodes(s), repairShareFields(s), repairGeneralNotes(s), repairProfile(s), repairAgreements(s), repairPinned(s),
-    resetBarOrder(s), migrateEventRoles(s), migrateNicknames(s),
+    resetBarOrder(s), migrateEventRoles(s), migrateNicknames(s), repairHomeLayout(s),
   ]
   const stamped = s.schemaVersion !== SCHEMA_VERSION
   s.schemaVersion = SCHEMA_VERSION

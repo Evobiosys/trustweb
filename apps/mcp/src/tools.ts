@@ -8,6 +8,7 @@ import { announce } from './events.ts'
 import { assistantTools } from './assistant_tools.ts'
 import { billingTools } from './billing_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
+import { homeTools } from './home_tools.ts'
 import { importTools } from './import_tools.ts'
 import { parityTools } from './parity_tools.ts'
 import { previewTools } from './preview_tools.ts'
@@ -23,11 +24,11 @@ export interface AllToolsOptions extends RecordToolsOptions {
 }
 
 /** Tools that change the preview registry, not the record: no card in the preview. */
-const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send'])
+const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send', /* wave44 */ 'dashboard_open'])
 
 export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] {
   const build = (write: boolean): Tool[] => [
-    ...recordTools({ ...o, write }), ...assistantTools({ ...o, write }), ...parityTools({ ...o, write }), ...connectExtrasTools({ ...o, write }), ...importTools({ ...o, write }),
+    ...recordTools({ ...o, write }), ...assistantTools({ ...o, write }), ...parityTools({ ...o, write }), ...connectExtrasTools({ ...o, write }), /* wave44 home-dashboard */ ...homeTools({ ...o, write }), ...importTools({ ...o, write }),
     ...billingTools({ file: o.file, write, apiBase: o.apiBase || 'https://app.trustweb.one' }),
     /* wave43c sync-devices */ ...syncTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
