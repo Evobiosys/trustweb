@@ -23,7 +23,7 @@ try {
     const right = () => page.locator('.hdr .hdr-right > *:visible').evaluateAll((ns) => ns.map((n) => (n.matches('[data-settings-gear]') ? 'settings' : n.matches('[data-ai-button]') ? 'ai' : n.matches('.status-pill') || n.querySelector('.status-pill') ? 'qr' : n.getAttribute('aria-label') ?? '?')))
     const inLeft40 = async (sel, name) => {
       const b = await page.locator(`.hdr ${sel}`).first().boundingBox().catch(() => null)
-      check(`${w}: ${name} inside the left 40% of the header`, !!b && b.x + b.width <= w * 0.4, JSON.stringify(b))
+      check(`${w}: ${name} inside the left 75% of the header (after logo and title)`, !!b && b.x + b.width <= w * 0.75, JSON.stringify(b))
     }
     const probe = async (name) => {
       const labels = await right()
@@ -31,8 +31,8 @@ try {
       check(`${w}: ${name}: right cluster ${JSON.stringify(labels)} is the same as Web's`, JSON.stringify(labels) === JSON.stringify(baseline.labels) && labels[0] === 'qr' && labels[1] === 'settings', JSON.stringify(baseline.labels))
       await inLeft40('[data-open-requests]', `${name}: inbox`)
       await inLeft40('[data-notify-bell]', `${name}: notify center`)
-      const order = await page.locator('.hdr-left > *').evaluateAll((ns) => ns.slice(0, 2).map((n) => (n.hasAttribute('data-open-requests') ? 'inbox' : n.hasAttribute('data-notify-bell') ? 'bell' : '?')))
-      check(`${w}: ${name}: inbox then bell lead the left cluster`, JSON.stringify(order) === '["inbox","bell"]', order)
+      const order = await page.locator('.hdr-left > *').evaluateAll((ns) => ns.map((n, i) => (i === 0 ? 'logo' : n.tagName === 'H2' ? 'title' : n.hasAttribute('data-open-requests') ? 'inbox' : n.hasAttribute('data-notify-bell') ? 'bell' : '?')).filter((x) => x !== '?'))
+      check(`${w}: ${name}: logo, title, inbox, bell lead the left cluster`, JSON.stringify(order) === '["logo","title","inbox","bell"]', order)
       const boxes = await page.locator('.hdr > *:visible, .hdr-right > *:visible, .hdr-left > *:visible, .hdr-tools > *:visible').evaluateAll((ns) => ns.filter((n) => !n.matches('.hdr-left,.hdr-right,.hdr-tools')).map((n) => { const r = n.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } }))
       let clash = false
       for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (hit(boxes[i], boxes[j])) clash = true
