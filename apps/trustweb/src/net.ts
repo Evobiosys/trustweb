@@ -43,7 +43,7 @@ import type { Identity as DidIdentity, SerializedIdentityV1 } from '../../demo/s
 import { createRelayChannel } from '../../demo/src/relay'
 import type { PushSubscriptionJson, RelayChannel, RelayStatus } from '../../demo/src/relay'
 import { deriveEcdhPairKey, randomId } from '../../demo/src/crypto'
-import { decodeFromQr, encodeForQr } from '../../demo/src/wire'
+import { decodeFromQr } from '../../demo/src/wire'
 import type { Envelope } from '../../demo/src/wire'
 import { buildConnectAck, buildConnectLinkUrl } from '../../demo/src/connect_link'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
@@ -52,7 +52,10 @@ import { sealRelayAnswer } from '../../demo/src/answer_key'
 import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
-import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ChatThread, DecodedAnswer, EventEnvelope, HostEnvelope, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ConnectAckEnvelope, ChatRe, ChatThread, DecodedAnswer, EventEnvelope, HostEnvelope, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import { HANDSHAKE_PLAINTEXT_FALLBACK, HandshakeError, isCleartextAck, linkHandshake, logHandshake, openConnectAck, parseHandshakeWire, qrSecretOf, sealConnectAck } from './handshake_crypto'
+import type { HandshakeFailure, HandshakeMode, HandshakeWire } from './handshake_crypto'
+import { fingerprint } from './safe_text'
 import { ackDue, attemptAllowed, nextAttempts, noteAckSent, noteHeard } from './ack_retry'
 import { addAlsoDids, devicesToTell, peerForDid, toldKey } from './device_alias'
 import type { AckAttempts } from './ack_retry'
@@ -195,6 +198,8 @@ export interface NetHooks {
   /** Wave 43c (social_hosting.ts): any sealed wire opened with this peer's key arrived (they are online), and a `host` wire's body (the small hosting protocol). */
   onHeard?(fromDid: string): void
   onHost?(fromDid: string, m: Record<string, unknown>): void
+  /** Wave 44 (handshake_crypto.ts): a connect handshake was refused (tampered, replayed, or an app before v2); nothing was added. */
+  onHandshakeRefused?(reason: HandshakeFailure): void
   /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
   mayPassOnFrom(peer: Peer): boolean
   /**
@@ -440,13 +445,17 @@ export class Net {
 
   /** The URL a phone camera opens to connect to this device (one scan). */
   connectLink(appUrl: string): string {
-    return buildConnectLinkUrl(appUrl, this.ensureIdentity().did, this.hooks.state().me)
+    const identity = this.ensureIdentity()
+    return buildConnectLinkUrl(appUrl, identity.did, this.hooks.state().me, qrSecretOf(identity))
   }
 
   /** The scanning side of the one-scan ceremony: add the peer, tell them who we are. */
   async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false): Promise<Peer> {
     const s = this.hooks.state()
     this.ensureIdentity()
+    // Wave 44: a QR of an app before v2 carries no key: refused before anything is added (never a cleartext ack).
+    const mode = linkHandshake(params)
+    if (mode === 'unsupported') { this.refuseHandshake('unsupported', params.did); throw new HandshakeError('unsupported') }
     // A connection this phone already holds under that DID keeps its id and name (a bare-DID add made it up, a scan may bring the real ones).
     const known = s.peers.find((x) => x.did === params.did)
     const peer = upsertPeer(s, {
@@ -456,6 +465,8 @@ export class Net {
       ring,
       connectedAt: Date.now(),
       ...(reachOut ? { reachOut: true as const } : {}),
+      handshake: mode,
+      ...(mode === 'qr' && params.qk ? { qk: params.qk } : {}),
     })
     this.hooks.save()
     await this.start()
@@ -464,7 +475,8 @@ export class Net {
   }
 
   /**
-   * One connect-ack to `peer` (the cleartext bootstrap wire of connect_link.ts, byte-for-byte the same every time). Counted only when
+   * One connect-ack to `peer`, sealed (wave 44, handshake_crypto.ts: with the QR key of their link when this phone scanned one, else with
+   * their DID's key alone; a fresh ephemeral key and nonce every time). Counted only when
    * the relay accepted it; a failure is retried by resendAcks (ack_retry.ts). Never two at once for one peer.
    */
   private async sendAck(peer: Peer): Promise<void> {
@@ -473,7 +485,8 @@ export class Net {
     try {
       if (!this.channel) return
       this.ackAttempts.set(peer.did, nextAttempts(this.ackAttempts.get(peer.did), Date.now()))
-      await this.channel.sendRaw(peer.did, encodeForQr(buildConnectAck(this.hooks.state().me, this.ensureIdentity(), peer.reachOut === true)))
+      const identity = this.ensureIdentity()
+      await this.channel.sendRaw(peer.did, await sealConnectAck(buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true), identity.did, peer.did, peer.qk))
       const stored = this.peerByDid(peer.did)
       if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
     } catch {
@@ -507,10 +520,52 @@ export class Net {
     if (noteHeard(peer, Date.now())) this.hooks.save()
   }
 
-  /** Only a cleartext connect-ack is ever recognised here; every other wire is ciphertext. */
-  private handleRaw(fromDid: string, payload: string): boolean {
+  /**
+   * Wave 44: the sealed connect-ack (handshake_crypto.ts) is the bootstrap wire; a cleartext one (an app before v2) is refused while
+   * HANDSHAKE_PLAINTEXT_FALLBACK is off. Every other wire is ciphertext under the pair key and is not handled here.
+   */
+  private handleRaw(fromDid: string, payload: string): boolean | Promise<boolean> {
+    const sealed = parseHandshakeWire(payload)
+    if (sealed) return this.openAck(sealed, fromDid)
+    if (!isCleartextAck(payload)) return false
     const env = decodeFromQr(payload)
     if (!env || env.t !== 'connect-ack' || env.did !== fromDid) return false
+    if (!HANDSHAKE_PLAINTEXT_FALLBACK) { this.refuseHandshake('unsupported', fromDid); return true }
+    return this.acceptAck(env, undefined)
+  }
+
+  /** Nonces of sealed acks being opened or opened in this visit (two deliveries of one wire at once are one). */
+  private readonly hsNonces = new Set<string>()
+
+  private async openAck(wire: HandshakeWire, fromDid: string): Promise<boolean> {
+    const s = this.hooks.state()
+    const quietReplay = (): boolean => { this.refuseHandshake('replay', fromDid, this.peerByDid(fromDid) !== undefined); return true }
+    if (this.hsNonces.has(wire.n)) return quietReplay()
+    this.hsNonces.add(wire.n)
+    try {
+      const got = await openConnectAck(wire, this.ensureIdentity(), fromDid, s.seenHandshakeNonces ?? [])
+      s.seenHandshakeNonces = got.seen
+      return this.acceptAck(got.ack, got.mode)
+    } catch (e) {
+      // a nonce counts as used only once its wire opened: a tampered copy must not burn the genuine one's nonce
+      if (!(e instanceof HandshakeError)) { this.hsNonces.delete(wire.n); throw e }
+      if (e.reason === 'replay') return quietReplay()
+      this.hsNonces.delete(wire.n)
+      this.refuseHandshake(e.reason, fromDid)
+      return true
+    }
+  }
+
+  /** A refused handshake: one line in the record (I6, a DID fingerprint, never a name), the notice unless `quiet`. Nothing is added. */
+  private refuseHandshake(reason: HandshakeFailure, did: string, quiet = false): void {
+    const s = this.hooks.state()
+    s.handshakeLog = logHandshake(s.handshakeLog, { at: Date.now(), reason, from: fingerprint(did) })
+    this.hooks.save()
+    if (!quiet) this.hooks.onHandshakeRefused?.(reason)
+  }
+
+  /** An authentic connect-ack (sealed in `mode`; undefined = the cleartext fallback). */
+  private acceptAck(env: ConnectAckEnvelope, mode: HandshakeMode | undefined): boolean {
     const s = this.hooks.state()
     const known = this.peerByDid(env.did)
     // Review 2026-10-19: the outer `from` is not authenticated by the relay, so a repeated ack never renames or re-ids a held
@@ -522,6 +577,7 @@ export class Net {
       did: env.did,
       ring: known?.ring ?? this.hooks.ringForNewPeer(),
       connectedAt: Date.now(),
+      ...(mode ? { handshake: known?.handshake ?? mode } : {}),
     }
     if (known) {
       const peer = upsertPeer(s, incoming)

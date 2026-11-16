@@ -80,6 +80,7 @@ import { createRelayChannel } from '../../apps/demo/src/relay'
 import type { RelayChannel, RelayStatus } from '../../apps/demo/src/relay'
 import { deriveEcdhPairKey, randomId } from '../../apps/demo/src/crypto'
 import { decodeFromQr } from '../../apps/demo/src/wire'
+import { HANDSHAKE_PLAINTEXT_FALLBACK, HandshakeError, isCleartextAck, openConnectAck, parseHandshakeWire } from '../../apps/trustweb/src/handshake_crypto'
 import type { Envelope } from '../../apps/demo/src/wire'
 import { RELAY_DEADLINE_MS, interpret, settleAt, truncateSharedJson } from '../../apps/demo/src/gate'
 import { sealRelayAnswer } from '../../apps/demo/src/answer_key'
@@ -642,8 +643,27 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   // open the first unknown phone becomes the owner. Otherwise: Open policy
   // welcomes an asker; Granted policy only a name on the grant list. An
   // unknown DID that is not welcome is left un-acked and forgotten.
-  channel.onRawWire((fromDid, payload) => {
-    const env = decodeFromQr(payload)
+  // Wave 44 (handshake_crypto.ts): the connect-ack arrives sealed to this peer's DID; a cleartext one (an app before v2), a tampered or a
+  // replayed one is refused and logged. The ledger lives in memory (a restart forgets it; a replay then only re-greets a held peer).
+  let seenAcks: string[] = []
+  channel.onRawWire(async (fromDid, payload) => {
+    const sealed = parseHandshakeWire(payload)
+    if (!sealed) {
+      if (isCleartextAck(payload) && !HANDSHAKE_PLAINTEXT_FALLBACK) { log('connect-ack refused (cleartext, an app before v2)'); return true }
+      if (!HANDSHAKE_PLAINTEXT_FALLBACK) return false
+    }
+    let env = sealed ? null : decodeFromQr(payload)
+    if (sealed) {
+      try {
+        const got = await openConnectAck(sealed, identity, fromDid, seenAcks)
+        seenAcks = got.seen
+        env = got.ack
+      } catch (e) {
+        if (!(e instanceof HandshakeError)) throw e
+        log(`connect-ack refused (${e.reason})`)
+        return true
+      }
+    }
     if (!env || env.t !== 'connect-ack' || env.did !== fromDid) return false
     if (isOwner(env.did)) return true
     if (peerByDid(env.did)) return true

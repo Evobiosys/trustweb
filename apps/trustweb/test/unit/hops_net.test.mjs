@@ -12,8 +12,8 @@ import { InMemoryRelayQueueStore } from '../../../../packages/transport/src/rela
 import { createIdentity, ecdhSharedSecret } from '../../../demo/src/did.ts'
 import { createRelayChannel } from '../../../demo/src/relay.ts'
 import { deriveEcdhPairKey, randomId } from '../../../demo/src/crypto.ts'
-import { encodeForQr } from '../../../demo/src/wire.ts'
 import { buildConnectAck } from '../../../demo/src/connect_link.ts'
+import { sealConnectAck } from '../../src/handshake_crypto.ts'
 import { interpret } from '../../../demo/src/gate.ts'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -201,7 +201,7 @@ describe('older builds', () => {
     channel.onRawWire(() => true)
     channel.onEnvelope(async () => key, (env) => { if (env.t === 'answer') answers.push({ env, at: Date.now() }) })
     await channel.connect(identity)
-    await channel.sendRaw(B.did, encodeForQr(buildConnectAck(me, identity)))
+    await channel.sendRaw(B.did, await sealConnectAck(buildConnectAck(me, identity), identity.did, B.did)) // wave 44: the handshake is sealed
     await until(() => B.state.peers.some((x) => x.did === identity.did))
     const t0 = Date.now()
     const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: t0, freeText: 'Who has a ladder?' }

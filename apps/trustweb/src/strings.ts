@@ -4662,4 +4662,13 @@ export const S = {
     tanaPullCancel: 'Cancel',
     tanaPullSkipped: (n: number) => `${n} could not be read and were left as they are.`,
   },
+  /* wave44 handshake-crypto */
+  handshake: {
+    noticeTitle: 'Connection not secure',
+    /** A tampered, replayed or unreadable sealed connect: nothing was added. */
+    noticeBody: 'Connection not secure, try the QR again.',
+    /** A QR of an app before v2 (no key), or a cleartext connect from one: nothing was added, nothing was sent. */
+    unsupportedBody: 'This code comes from an older TrustWeb. Update the app on both phones, then scan again.',
+    settingsLine: 'Handshake: encrypted with the QR key (v2)',
+  },
 } as const

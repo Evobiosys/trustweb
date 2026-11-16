@@ -12,7 +12,7 @@ import { deserializeIdentity, ecdhSharedSecret, signChallenge } from '../../../d
 import type { Identity } from '../../../demo/src/did'
 import { deriveEcdhPairKey } from '../../../demo/src/crypto'
 import { decryptEnvelope, parseOuterWire } from '../../../demo/src/relay'
-import { decodeFromQr } from '../../../demo/src/wire'
+import { openConnectAck, parseHandshakeWire } from '../handshake_crypto'
 import { kindOfWire, workerItems, NOTIFY_KINDS, WORKER_FALLBACK } from '../notify_kinds'
 import type { NotifyKind } from '../notify_kinds'
 import { inboxId, inboxPut, newItem, type InboxKind } from '../notify_inbox'
@@ -84,9 +84,11 @@ export function peekDrain(bundle: PushBundle, identity: Identity, wsCtor: new (u
         const env = await decryptEnvelope(outer.payload, await key).catch(() => null)
         if (env) { const kind = kindOfWire(env.t); if (kind) arrivals.push({ kind, name }); return }
       }
-      // Not from a connection, or not under a pair key: the one unencrypted wire is a connect-ack (someone opened this phone's link).
-      const env = decodeFromQr(outer.payload)
-      if (env && env.t === 'connect-ack') arrivals.push({ kind: 'connect', name: env.from.displayName || null })
+      // Not from a connection, or not under a pair key: a sealed connect-ack (wave 44, someone opened this phone's link). Opened here
+      // only to name the sender; the page opens it again (replay ledger and all). A cleartext ack (an app before v2) is refused there.
+      const sealed = parseHandshakeWire(outer.payload)
+      const opened = sealed ? await openConnectAck(sealed, identity, outer.from, []).catch(() => null) : null
+      if (opened) arrivals.push({ kind: 'connect', name: opened.ack.from.displayName || null })
     }
     ws.addEventListener('message', (ev: MessageEvent) => {
       let msg: { type?: unknown; nonce?: unknown; wire?: unknown }

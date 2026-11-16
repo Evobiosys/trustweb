@@ -23,8 +23,8 @@ import { LineSource, MarkKind, assertServerFileSafe, buildExport, parseChoices, 
 import { createIdentity, ecdhSharedSecret } from '../../../apps/demo/src/did.ts'
 import { createRelayChannel } from '../../../apps/demo/src/relay.ts'
 import { deriveEcdhPairKey, fromB64u, open, randomId } from '../../../apps/demo/src/crypto.ts'
-import { encodeForQr } from '../../../apps/demo/src/wire.ts'
 import { buildConnectAck } from '../../../apps/demo/src/connect_link.ts'
+import { sealConnectAck } from '../../../apps/trustweb/src/handshake_crypto.ts'
 import { interpret } from '../../../apps/demo/src/gate.ts'
 import { sealRelayAnswer } from '../../../apps/demo/src/answer_key.ts'
 
@@ -78,7 +78,7 @@ async function phone(relayOrigin, name, decide) {
   return {
     did: identity.did,
     asks,
-    connectTo: (did) => channel.sendRaw(did, encodeForQr(buildConnectAck(me, identity))),
+    connectTo: async (did) => channel.sendRaw(did, await sealConnectAck(buildConnectAck(me, identity), identity.did, did)), // wave 44: sealed
     ask: async (did, text, timeoutMs = 4000) => {
       const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: text }
       const answered = new Promise((resolve) => {

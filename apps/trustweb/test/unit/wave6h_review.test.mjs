@@ -14,8 +14,8 @@ import { InMemoryRelayQueueStore } from '../../../../packages/transport/src/rela
 import { createIdentity, ecdhSharedSecret } from '../../../demo/src/did.ts'
 import { createRelayChannel } from '../../../demo/src/relay.ts'
 import { deriveEcdhPairKey, randomId } from '../../../demo/src/crypto.ts'
-import { encodeForQr } from '../../../demo/src/wire.ts'
 import { buildConnectAck } from '../../../demo/src/connect_link.ts'
+import { sealConnectAck } from '../../src/handshake_crypto.ts'
 import { interpret } from '../../../demo/src/gate.ts'
 import { Net } from '../../src/net.ts'
 import {
@@ -114,7 +114,7 @@ async function rawAsker(name, target) {
   channel.onRawWire(() => true)
   channel.onEnvelope(async () => key, (env) => { if (env.t === 'answer') answers.push(env) })
   await channel.connect(identity)
-  await channel.sendRaw(target.did, encodeForQr(buildConnectAck(me, identity)))
+  await channel.sendRaw(target.did, await sealConnectAck(buildConnectAck(me, identity), identity.did, target.did)) // wave 44: the handshake is sealed
   await until(() => target.state.peers.some((x) => x.did === identity.did))
   return {
     answers, key,
