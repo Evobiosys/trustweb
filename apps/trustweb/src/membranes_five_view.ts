@@ -21,6 +21,8 @@ export interface SmallCardDeps {
   /** The defined tags this person lacks; a "+ tag" button offers them (empty: it says none are defined). */
   addableTags?: readonly ColourTag[]
   onAddTag?: (id: string) => void
+  /** Wave 44 steer-people-picker-4: a name typed in the picker (Enter); a name no tag has yet defines one. */
+  onNewTag?: (name: string) => void
   /** What the person sees of my resources, by granting category (zone_visibility.ts visibleVia). */
   visible: { count: number; categories: readonly VisibleCategory[] }
   /** Kind label of one resource for the inline list ("typed", "recorded"). */
@@ -171,9 +173,12 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
   const picker = el('div', { class: 'chips ring-pick', hidden: true, 'data-ring-pick': p.id, role: 'group', 'aria-label': S.cardRingPickTitle }, (d.rings ?? []).map((r) =>
     el('button', { class: 'chip', 'data-ring-choice': r.ring, 'aria-pressed': String(r.current), onclick: () => d.onRing?.(r.ring) }, [r.label])))
   const togglePicker = (): void => { picker.hidden = !picker.hidden }
-  const tagPicker = el('div', { class: 'chips', hidden: true, 'data-tag-pick': p.id }, d.addableTags?.length
-    ? d.addableTags.map((t) => tagPill(t, { class: 'chip', attrs: { 'data-tag-choice': t.id }, onclick: () => d.onAddTag?.(t.id) }))
-    : [el('span', { class: 'meta' }, [S.cardTagsUndefined])])
+  const newTag = el('input', { type: 'text', class: 'input', 'data-tag-new': p.id, placeholder: S.w44pp4.newTagPh, 'aria-label': S.w44pp4.newTagAria, autocomplete: 'off' }) as HTMLInputElement
+  newTag.addEventListener('keydown', (e) => { if (e.key === 'Enter' && newTag.value.trim()) { e.preventDefault(); d.onNewTag?.(newTag.value.trim()) } })
+  const tagPicker = el('div', { class: 'chips', hidden: true, 'data-tag-pick': p.id }, [
+    ...(d.addableTags ?? []).map((t) => tagPill(t, { class: 'chip', attrs: { 'data-tag-choice': t.id }, onclick: () => d.onAddTag?.(t.id) })),
+    newTag,
+  ])
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
     el('div', { 'data-chat-row': '' }, [d.chat]),   // wave 44 steer-people-picker-2: Chat is the first thing on a card
     el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
@@ -187,7 +192,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
       ...(d.tags.length
         ? d.tags.map((t) => tagPill(t, { class: 'chip', attrs: { 'data-card-tag': t.id }, onclick: () => d.onTag(t.id) }))
         : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
-      el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden } }, [S.cardTagAdd]),
+      el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden; if (!tagPicker.hidden) newTag.focus() } }, [S.cardTagAdd]),
     ]),
     tagPicker,
     d.inventory ? inventoryPanel(p.id, d.inventory) : null,

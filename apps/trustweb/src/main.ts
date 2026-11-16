@@ -127,7 +127,9 @@ import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { contactFragment, parsePersonShare, personShareLink, shareOfLink } from './person_share_link'
 import { foreignCode, personQrLink } from './person_qr_link'   // wave 44 steer-people-picker
-import { connectedPerson, placementOf, SCAN_RINGS } from './scan_rules'   // wave 44 steer-people-picker-2
+import { connectedPerson, placementOf } from './scan_rules'
+import { placementPills } from './placement_pills'   // wave 44 steer-people-picker-4
+import { tagNamed } from './zone_tags'   // wave 44 steer-people-picker-2
 import { scanButton } from './scan_button'
 import { openMemberPicker } from './member_picker_view'
 import { parseNoteShare } from './notes_outline'
@@ -3000,6 +3002,7 @@ function webPageScreen(page: WebPage): Node[] {
     rings: RINGS.map((ring) => ({ ring, label: S.ringLabel[ring], current: webSlot(p) === ring })),
     onRing: (ring) => placePerson(p.id, ring, true),
     addableTags: tagsAddable(p, tags), onAddTag: (id) => { addTagTo(p, id); save(); render() },
+    onNewTag: (name) => { const out = tagNamed(tags, name); if (!out.tag) return; if (out.created) saveColourTags([...out.tags]); addTagTo(p, out.tag.id); save(); render() },
     chat: cardChatButton(p, false),
     inventory: {
       list: () => peerItemList(p.id),
@@ -6509,9 +6512,7 @@ function meetTrustWebPage(): HTMLElement {
 /** Wave 44 steer-people-picker-2: under my code, "They will be placed in: <zone>"; whoever scans it lands there (Net ringForNewPeer). */
 function placementRow(): HTMLElement {
   const dflt = solo ? Ring.Friend : Ring.Acquaintance
-  const select = el('select', { 'data-connect-placement': '', 'aria-label': S.w44pp2.placedIn, onchange: (e: Event) => { st().connectPlacement = (e.target as HTMLSelectElement).value as Ring; save() } },
-    SCAN_RINGS.map((r) => el('option', { value: r, selected: placementOf(st(), dflt) === r }, [S.ringLabel[r]])))
-  return el('label', { class: 'placement-row' }, [S.w44pp2.placedIn + ' ', select])
+  return el('div', { class: 'placement-row' }, [el('span', {}, [S.w44pp2.placedIn]), placementPills(placementOf(st(), dflt), (r) => { st().connectPlacement = r; save() })])
 }
 
 /** Wave 44 steer-people-picker-2: a code read by "Scan a code": the pasted-code path, then the zone sheet (acquainted or closer); someone already held is not added twice. */

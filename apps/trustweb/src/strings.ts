@@ -4745,4 +4745,9 @@ export const S = {
     placedIn: 'They will be placed in:',
     alreadyConnected: (name: string) => `Already connected with ${name}.`,
   },
+  /* wave44 steer-people-picker-4 */
+  w44pp4: {
+    newTagPh: 'New tag',
+    newTagAria: 'Name of a new tag; Enter adds it to this person',
+  },
 } as const

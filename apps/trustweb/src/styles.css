@@ -2058,3 +2058,10 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 }
 /* A toast ("Connected with ...") never lies over a sheet's buttons (the event's "Add to my events"): while a sheet is open the notice layer sits at the top of the frame, above the sheet's content. */
 .phone:has(.sheet.on) #notice-layer{bottom:auto; top:calc(12px + env(safe-area-inset-top,0px)); justify-content:flex-start; max-height:40%}
+
+/* wave44 steer-people-picker-4 */
+.placement-row{margin:6px 0}
+.placement-row .seg{flex:1 1 16em; flex-wrap:wrap; border-radius:18px}
+.placement-row .seg button{flex:1 1 auto; padding:4px 7px; font-size:12px; white-space:nowrap}
+.share-glyph svg{width:18px; height:18px; vertical-align:-3px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+[data-tag-pick] .input{flex:1 1 8em; min-width:0; max-width:14em}

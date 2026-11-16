@@ -99,10 +99,10 @@ try {
       check(`${vw}: the page itself does not scroll`, await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1))
       check(`${vw}: code is big enough to scan (>= 200px)`, code.width >= 200, String(code.width))
     }
-    const opts = await page.locator('[data-connect-placement] option').evaluateAll((o) => o.map((x) => x.value))
+    const opts = await page.locator('[data-connect-placement] button').evaluateAll((o) => o.map((x) => x.getAttribute('data-ring')))
     check(`${vw}: dropdown offers the four zones (no Intending)`, JSON.stringify(opts) === JSON.stringify(['closest', 'close', 'friend', 'acquaintance']), opts.join(','))
-    check(`${vw}: default is the default zone`, (await page.locator('[data-connect-placement]').inputValue()) === 'acquaintance')
-    await page.locator('[data-connect-placement]').selectOption('friend'); await page.waitForTimeout(200)
+    check(`${vw}: default is the default zone`, (await page.locator('[data-connect-placement] .on').getAttribute('data-ring')) === 'acquaintance')
+    await page.locator('[data-connect-placement] [data-ring="friend"]').click(); await page.waitForTimeout(200)
     check(`${vw}: choosing a zone is stored`, (await store(page)).connectPlacement === 'friend')
     await page.locator('[data-scan-code]').click(); await page.waitForTimeout(1200)
     check(`${vw}: Scan a code opens the scanner (or says the camera did not open)`, (await page.locator('[data-scan-video]:not([hidden])').count()) === 1 || /camera/i.test(await page.locator('[data-scan-note]').innerText()))

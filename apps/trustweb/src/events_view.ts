@@ -264,11 +264,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   /** Wave 43: the share row, two icons side by side; the QR carries the link the toggle now shows. */
   function shareRow(ev: TwEvent): HTMLElement {
     const T = S.w43press
-    const icon = (glyph: string, label: string, attr: string, onclick: () => void): HTMLElement =>
-      el('button', { class: 'btn btn-ghost', type: 'button', 'aria-label': label, title: label, [attr]: '', onclick }, [el('span', { 'aria-hidden': 'true' }, [glyph]), ' ', el('u', {}, [label === S.eventLinkShare ? T.shareLink : T.shareQr])])
+    const icon = (glyph: string, label: string, attr: string, onclick: () => void): HTMLElement => {
+      const g = el('span', { class: 'share-glyph', 'aria-hidden': 'true' }, glyph.startsWith('<svg') ? [] : [glyph])
+      if (glyph.startsWith('<svg')) g.innerHTML = glyph   // wave 44 steer-people-picker-4: the QR is the app's own SVG symbol, not a text character
+      return el('button', { class: 'btn btn-ghost', type: 'button', 'aria-label': label, title: label, [attr]: '', onclick }, [g, ' ', el('u', {}, [label === S.eventLinkShare ? T.shareLink : T.shareQr])])
+    }
     return el('div', { class: 'chips event-share', 'data-event-share-row': '' }, [
       icon(T.iconLink, S.eventLinkShare, 'data-event-share', () => copyShown(ev)),
-      h.showQr ? icon(T.iconQr, S.eventQrShare, 'data-event-qr', () => h.showQr?.(ev, hostLink)) : null,
+      h.showQr ? icon(ICONS.qr, S.eventQrShare, 'data-event-qr', () => h.showQr?.(ev, hostLink)) : null,
     ])
   }
 
