@@ -16,8 +16,8 @@ function fixture(write) {
 
 describe('settings MCP tools', () => {
   it('read-only offers list/get/search; write adds set', () => {
-    expect(fixture(false).tools.map((t) => t.name).sort()).toEqual(['settings_get', 'settings_list', 'settings_search'])
-    expect(fixture(true).tools.map((t) => t.name).sort()).toEqual(['settings_get', 'settings_list', 'settings_search', 'settings_set'])
+    expect(fixture(false).tools.map((t) => t.name).sort()).toEqual(['settings_get', 'settings_list', 'settings_search', 'settings_sync_capabilities'])
+    expect(fixture(true).tools.map((t) => t.name).sort()).toEqual(['settings_get', 'settings_list', 'settings_search', 'settings_set', 'settings_sync_capabilities'])
   })
   it('settings_list equals the registry, with values', () => {
     const { by } = fixture(false)
@@ -35,9 +35,16 @@ describe('settings MCP tools', () => {
     expect(() => by.settings_get.run({ id: 'x' })).toThrow(/unknown setting/)
     expect(by.settings_search.run({ q: 'birthday' }).map((s) => s.id)).toContain('birthdays.reminders')
   })
+  it('settings_sync_capabilities returns both flags and the placement per device; the vault flag is false on a phone', () => {
+    const { by } = fixture(false)
+    expect(by.settings_sync_capabilities.run({})).toEqual({ device: 'desktop', localVault: true, tana: true, placement: { obsidian: 'main', tana: 'main' } })
+    expect(by.settings_sync_capabilities.run({ device: 'phone' })).toEqual({ device: 'phone', localVault: false, tana: true, placement: { obsidian: 'advanced', tana: 'advanced' } })
+    expect(by.settings_sync_capabilities.run({ device: 'tauri' }).localVault).toBe(true)
+    expect(() => by.settings_sync_capabilities.run({ device: 'fridge' })).toThrow(/device/)
+  })
   it('the app-side tool list names exactly these tools', () => {
     const names = MCP_TOOLS.map((t) => t.name)
-    for (const n of ['settings_list', 'settings_get', 'settings_search']) expect(MCP_TOOLS.find((t) => t.name === n)?.write).toBe(false)
+    for (const n of ['settings_list', 'settings_get', 'settings_search', 'settings_sync_capabilities']) expect(MCP_TOOLS.find((t) => t.name === n)?.write).toBe(false)
     expect(MCP_TOOLS.find((t) => t.name === 'settings_set')?.write).toBe(true)
     expect(names).toContain('settings_set')
   })

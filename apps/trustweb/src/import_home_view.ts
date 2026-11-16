@@ -22,6 +22,7 @@ import { S } from './strings'
 import { unsortedCount } from './unsorted_count'
 import { alphaSub } from './alpha_heading'
 import { isEnabled } from './ext/registry'
+import { syncSections } from './sync_visibility_view'
 
 const T = S.imp39
 const u = { style: 'text-decoration:underline;cursor:pointer' }
@@ -194,8 +195,7 @@ export function openImportHome(base: ServicesHooks): void {
       doneBox,
       ...contactsSection(),
       ...resources(),
-      ...obsidian(),
-      ...tana(),
+      ...syncSections(obsidian(), tana()),
       ...earlier(),
     )
   }

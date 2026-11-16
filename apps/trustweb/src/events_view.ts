@@ -60,7 +60,7 @@ export interface EventsView {
   /** The screen's children, for render(). */
   body: () => Node[]
   /** Show this event's page, or the list without an id (the next body() draws it). */
-  open: (eventId?: string, noBack?: boolean) => void
+  open: (eventId?: string, noBack?: boolean, edit?: boolean) => void
   /** Whether the plain list would draw now (the calendar stands in for it unless showList() was asked). */
   atList: () => boolean
   /** The add form, From preset to that day. */
@@ -478,7 +478,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     openForm: (from) => show({ kind: 'form', ...(from ? { from } : {}) }),
     showList: () => { view = { kind: 'list' }; plain = true; h.redraw() },
     current: () => (view.kind === 'page' ? find(view.id) : undefined),
-    open: (id, noBack) => { view = id ? { kind: 'page', id, ...(noBack ? { noBack } : {}) } : { kind: 'list' } },
+    open: (id, noBack, edit) => { view = id ? (edit ? { kind: 'form', id } : { kind: 'page', id, ...(noBack ? { noBack } : {}) }) : { kind: 'list' } },
     body: () => {
       const ev = view.kind === 'list' ? undefined : find(view.id ?? '')
       if (view.kind === 'form') return form(ev, view.from)

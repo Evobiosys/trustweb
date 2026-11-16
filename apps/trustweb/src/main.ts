@@ -138,7 +138,7 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import { communityChatRows } from './chat_communities'
 import type { ChatListPerson } from './chat_list'
 import { skinsFor, skinOf, chooseSkin } from './skins'
-import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, overflowChoices, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, PROFILES, activeProfile, addBar, applyProfile, arrangeRows, barLayout, canHideBar, canMoveBar, customFrom, haloOf, modOfBar, moveBar, moreViews, promoteBar, resolveBar, showViewInBar, toggleBar, toggleHalo, viewOfBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { noMatchLine } from './empty_state'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
@@ -1297,9 +1297,8 @@ function variationChips(after: () => void): HTMLElement {
 function barMoreTap(): void {
   const s = st()
   const f = barFlags()
-  const { ids, primary } = resolveBar(s.uiBar, f)
-  const rest = [...barLayout(ids, primary, barMax()).overflow, ...overflowChoices(ids, s.uiBar?.hidden ?? [], f)]
-  const halo = new Set(haloOf(s.uiBar, ids))
+  const rest = moreViews(s.uiBar, f, barMax())
+  const halo = new Set(haloOf(s.uiBar, resolveBar(s.uiBar, f).ids))
   openSheet([
     rest.length ? el('h3', {}, [S.barMoreViews]) : null,
     ...rest.map((id) => el('button', { class: 'btn btn-ghost bar-more-view' + (halo.has(id) ? ' tab-halo' : ''), 'data-bar-view': id, onclick: () => bringIntoRow(id) }, [barName(id)])),
@@ -1307,6 +1306,7 @@ function barMoreTap(): void {
     variationChips(barMoreTap),
     el('button', { class: 'linkbtn', 'data-bar-open-settings': '', onclick: barSheet }, [S.barOpenSettings]),
   ])
+  sheet.dataset.kind = 'bar-more' // wave 43: styles.css lifts the sheet above the bottom bar
 }
 
 /** Wave 35: "Default view: <name>" under the Web row of the bottom-row sheet; the select changes the view the Web tab opens. */
@@ -5158,7 +5158,7 @@ const eventsView = createEventsView({
 })
 const extHooks: ExtHooks = {
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
-  openEvent: (id, fromCalendar) => { eventsView.open(id, fromCalendar); if (screen === Screen.Events) render(); else go(Screen.Events) },
+  openEvent: (id, fromCalendar, edit) => { eventsView.open(id, fromCalendar, edit); if (screen === Screen.Events) render(); else go(Screen.Events) },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),
   avatar,

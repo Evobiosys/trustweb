@@ -5,7 +5,10 @@
  */
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { SETTINGS_REGISTRY, describeSetting, readSetting, searchSettings, writeSetting, type Rec } from '../../trustweb/src/settings_registry.ts'
+import { syncCapabilities } from '../../trustweb/src/sync_capability.ts'
 import type { Tool } from './protocol.ts'
+
+const DEVICES = { desktop: { phone: false, tauri: false }, phone: { phone: true, tauri: false }, tauri: { phone: false, tauri: true } } as const
 
 const schema = (properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> => ({ type: 'object', properties, required, additionalProperties: false })
 const need = (v: unknown, what: string): string => { if (typeof v !== 'string' || !v.trim()) throw new Error(`${what} is required`); return v.trim() }
@@ -22,6 +25,15 @@ export function settingsTools(o: { file: string; write: boolean }): Tool[] {
     {
       name: 'settings_search', description: 'Settings whose id, label, hint or section contain every word of the query.',
       inputSchema: schema({ q: { type: 'string' } }, ['q']), run: (a) => { const r = load(); return searchSettings(typeof a.q === 'string' ? a.q : '').map((d) => describeSetting(d, r)) },
+    },
+    {
+      name: 'settings_sync_capabilities', description: 'Which sync entries a device offers: localVault (Obsidian/Logseq vault: computers and the desktop app, not phones), tana (every device), and where each sits in Settings (main or advanced). Both stay reachable here on every device.',
+      inputSchema: schema({ device: { type: 'string', enum: Object.keys(DEVICES), description: 'default desktop' } }),
+      run: (a) => {
+        const device = a.device === undefined ? 'desktop' : String(a.device)
+        if (!(device in DEVICES)) throw new Error(`device must be one of ${Object.keys(DEVICES).join(', ')}`)
+        return { device, ...syncCapabilities(DEVICES[device as keyof typeof DEVICES]) }
+      },
     },
   ]
   const write: Tool[] = [{
