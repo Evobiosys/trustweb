@@ -120,12 +120,12 @@ try {
     check(`${vw}: Ana's own connect link names her DID`, !!aDid && aDid.startsWith('did:'), link.slice(0, 120))
 
     // 2. foreign scan of a person-bound code
-    const bound = link + (link.includes('#') ? '&' : '#') + 'to=did%3Apeer%3AzSomeoneElse&for=Ben+Gruber'
+    const bound = link + (link.includes('#') ? '&' : '#') + 'to=did%3Apeer%3AzSomeoneElse'
     let b = await phone(vp, null)
     await b.page.goto(toLocal(bound)); await b.page.addStyleTag({ content: hide }); await b.page.waitForTimeout(900)
     await b.page.locator('input[autocomplete="given-name"]').fill('Cleo'); await b.page.keyboard.press('Enter'); await b.page.waitForTimeout(1500)
     const msg = await b.page.locator('[data-foreign-code]').innerText().catch(() => '')
-    check(`${vw}: a code made for someone else is refused, with the name`, /^This code was made for Ben Gruber\. Ask Ana to show you a code made for you \(or the open QR\)\.$/.test(msg), msg)
+    check(`${vw}: a code made for someone else is refused, no name`, /^This code was made for someone else\. Ask the person who showed it to you for a code made for you \(or their open QR\)\.$/.test(msg), msg)
     await b.page.screenshot({ path: `${SHOTS}/steer-people-picker-2-${vw}-foreign.png` })
     check(`${vw}: nothing was added`, ((await store(b.page))?.people ?? []).length === 0 && !(await b.page.locator('[data-connect-add]').count()))
     await b.ctx.close()

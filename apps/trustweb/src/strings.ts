@@ -4737,7 +4737,7 @@ export const S = {
   /* wave44 steer-people-picker-2 */
   w44pp2: {
     foreignTitle: 'This code is not for you',
-    foreign: (name: string, owner: string) => `This code was made for ${name || 'someone else'}. Ask ${owner || 'the person'} to show you a code made for you (or the open QR).`,
+    foreign: 'This code was made for someone else. Ask the person who showed it to you for a code made for you (or their open QR).',
     foreignOk: 'OK',
     scanCode: 'Scan a code',
     scanStop: 'Stop scanning',

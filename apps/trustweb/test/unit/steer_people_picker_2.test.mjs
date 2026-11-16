@@ -3,7 +3,7 @@
  * Wave 44 steer-people-picker-2: zones of a scan, foreign person-bound codes refused, already-connected not re-added, placement under my code, Chat first, toast above sheets. */
 import { readFileSync } from 'node:fs'
 import { Ring } from '../../src/model.ts'
-import { personQrLink, personQrFor, personQrTarget, foreignCode } from '../../src/person_qr_link.ts'
+import { personQrLink, personQrTarget, foreignCode } from '../../src/person_qr_link.ts'
 import { SCAN_RINGS, scanRing, placementOf, connectedPerson } from '../../src/scan_rules.ts'
 import { renderConnectAdd } from '../../src/connect_add_view.ts'
 import { S } from '../../src/strings.ts'
@@ -28,21 +28,20 @@ describe('zones of a scan (item 6)', () => {
 })
 
 describe('foreign scan of a person-bound code (item 2)', () => {
-  const l = personQrLink(base, { id: 'p1', did: 'did:key:zBen', name: 'Ben Gruber' })
-  it('the code carries the name it was made for', () => {
-    expect(personQrFor(l)).toBe('Ben Gruber')
+  const l = personQrLink(base, { id: 'p1', did: 'did:key:zBen', })
+  it('the code carries the DID but no name', () => {
+    expect(l).not.toMatch(/for=|Gruber/)
     expect(personQrTarget(l)).toBe('did:key:zBen')
-    expect(personQrFor(base)).toBe('')
   })
-  it('is refused for another DID, with the name; accepted for the right one, for the open QR, and when only a local id is known', () => {
-    expect(foreignCode(l, 'did:key:zOther')).toEqual({ name: 'Ben Gruber' })
-    expect(foreignCode(l, undefined)).toEqual({ name: 'Ben Gruber' })
-    expect(foreignCode(l, 'did:key:zBen')).toBeNull()
-    expect(foreignCode(base, 'did:key:zOther')).toBeNull()
-    expect(foreignCode(personQrLink(base, { id: 'p1' }), 'did:key:zOther')).toBeNull()
+  it('is refused for another DID, ; accepted for the right one, for the open QR, and when only a local id is known', () => {
+    expect(foreignCode(l, 'did:key:zOther')).toBe(true)
+    expect(foreignCode(l, undefined)).toBe(true)
+    expect(foreignCode(l, 'did:key:zBen')).toBe(false)
+    expect(foreignCode(base, 'did:key:zOther')).toBe(false)
+    expect(foreignCode(personQrLink(base, { id: 'p1' }), 'did:key:zOther')).toBe(false)
   })
-  it('the sentence names the person and the owner, and the flow refuses before anything is connected', () => {
-    expect(S.w44pp2.foreign('Ben Gruber', 'Ana')).toBe('This code was made for Ben Gruber. Ask Ana to show you a code made for you (or the open QR).')
+  it('the refusal names nobody, and the flow refuses before anything is connected', () => {
+    expect(S.w44pp2.foreign).toBe('This code was made for someone else. Ask the person who showed it to you for a code made for you (or their open QR).')
     const main = read('../../src/main.ts')
     const at = main.indexOf('async function completePendingConnect')
     const body = main.slice(at, main.indexOf('\n}\n', at))
@@ -121,7 +120,7 @@ describe('MCP parity (item 5, 2, 7)', () => {
     expect(by.connect_placement_set.run({ zone: 'friend' })).toEqual({ zone: 'friend' })
     expect(by.connect_placement.run({}).zone).toBe('friend')
     expect(() => by.connect_placement_set.run({ zone: 'intending' })).toThrow()
-    expect(by.connect_link_check.run({ link: personQrLink(base, { id: 'x', did: 'did:key:zOther', name: 'Cleo' }) })).toEqual({ result: 'refused', madeFor: 'Cleo' })
+    expect(by.connect_link_check.run({ link: personQrLink(base, { id: 'x', did: 'did:key:zOther' }) })).toEqual({ result: 'refused' })
     expect(by.connect_link_check.run({ link: base, did: 'did:key:zBen' })).toMatchObject({ result: 'already-connected', person: 'a' })
     expect(by.connect_link_check.run({ link: base, did: 'did:key:zNew' })).toEqual({ result: 'new' })
   })

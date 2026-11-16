@@ -2529,7 +2529,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (!link || !state) return
   pendingConnect = null
   drawCardStack()
-  if (refuseForeign(scannedUrl, link.from.displayName)) return
+  if (refuseForeign(scannedUrl)) return
   const admitted = admitLink(link)
   if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); afterConnectOpen(); return }
   // Wave 44 steer-people-picker-2: an event or tag code from someone I already hold: no second add (and no zone reset), I only join the event.
@@ -2621,7 +2621,7 @@ function addedToast(person: Person, ring: Ring, name = person.name): void {
 function offerPendingConnect(): void {
   const link = pendingConnect
   if (!link) return
-  if (refuseForeign(scannedUrl, link.from.displayName)) { pendingConnect = null; return }
+  if (refuseForeign(scannedUrl)) { pendingConnect = null; return }
   drawCardStack()
   openSheet(renderConnectAdd({
     name: link.from.displayName,
@@ -2634,15 +2634,14 @@ function offerPendingConnect(): void {
 
 /**
  * Wave 44 steer-people-picker-2 (Jakob 2026-11-16: "Refuse but explain why so they can tell the person"): a code made for one person that someone else scanned.
- * Nothing is connected, added or sent; the sheet says whose code it was. True when refused.
+ * Nothing is connected, added or sent; the sheet says the code is for someone else (the code carries no name). True when refused.
  */
-function refuseForeign(url: string, owner: string): boolean {
-  const f = foreignCode(url, net.ownIdentity().did)
-  if (!f) return false
+function refuseForeign(url: string): boolean {
+  if (!foreignCode(url, net.ownIdentity().did)) return false
   pendingEvent = null; pendingShare = null; eventWaitsForConnect = false
   openSheet([
     el('h3', {}, [S.w44pp2.foreignTitle]),
-    el('p', { 'data-foreign-code': '' }, [S.w44pp2.foreign(f.name, owner)]),
+    el('p', { 'data-foreign-code': '' }, [S.w44pp2.foreign]),
     el('button', { class: 'btn btn-electric', type: 'button', onclick: closeSheet }, [S.w44pp2.foreignOk]),
   ])
   return true
@@ -3548,7 +3547,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
   drawRadios()
   let after: (() => void) | null = null // set once a person was added and a note still shows: the button then only closes
   const addByCode = async (): Promise<void> => {
-    if (refuseForeign(code.value.trim(), '')) return   // wave 44 steer-people-picker-2
+    if (refuseForeign(code.value.trim())) return   // wave 44 steer-people-picker-2
     busy = true
     addBtn.setAttribute('disabled', '')
     codeStatus.textContent = S.addCodeBusy
@@ -3805,7 +3804,7 @@ function personSheet(personId: string): void {
 
 function personQr(p: Person): void {
   const did = st().peers.find((x) => x.id === p.peerId)?.did ?? p.did   // wave 44: the code is made for exactly this person
-  void qrPage((link) => ({ kind: 'person', link: personQrLink(link, { id: p.id, name: p.name, ...(did ? { did } : {}) }), name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
+  void qrPage((link) => ({ kind: 'person', link: personQrLink(link, { id: p.id, ...(did ? { did } : {}) }), name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
@@ -6517,7 +6516,7 @@ function placementRow(): HTMLElement {
 
 /** Wave 44 steer-people-picker-2: a code read by "Scan a code": the pasted-code path, then the zone sheet (acquainted or closer); someone already held is not added twice. */
 async function connectScanned(text: string): Promise<void> {
-  if (refuseForeign(text, '')) return
+  if (refuseForeign(text)) return
   const out = await connectByCode(text, Ring.Acquaintance, '', '')
   if ('type' in out) { toast(S.addCodeFailed(out)); return }
   render()

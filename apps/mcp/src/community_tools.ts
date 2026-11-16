@@ -74,7 +74,7 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
         const p = person(r, a.person)
         const did = (r.peers ?? []).find((x) => x.id === p.peerId)?.did ?? (typeof p.did === 'string' ? p.did : undefined)
         const target = did ?? p.id
-        return { id: p.id, name: p.name, target, title: `Connect with ${p.name}`, fragment: personQrLink('', { id: p.id, name: p.name, ...(did ? { did } : {}) }).slice(1) }
+        return { id: p.id, name: p.name, target, title: `Connect with ${p.name}`, fragment: personQrLink('', { id: p.id, ...(did ? { did } : {}) }).slice(1) }
       },
     },
     /* wave44 steer-people-picker-2 */
@@ -84,13 +84,12 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
       run: () => ({ zone: placementOf({ connectPlacement: e.load().connectPlacement as Ring | undefined }, 'acquaintance' as unknown as Ring), zones: [...SCAN_RINGS] }),
     },
     {
-      name: 'connect_link_check', description: 'What the app does with a connect link someone scanned: refused (made for another person: says whose), already connected (the card; nothing is added twice), or new. Changes nothing.',
+      name: 'connect_link_check', description: 'What the app does with a connect link someone scanned: refused (made for another person), already connected (the card; nothing is added twice), or new. Changes nothing.',
       inputSchema: schema({ link: S('the scanned link; a code made for one person carries to=<DID> in its fragment'), did: S('the DID in the link (who made it), to see whether I already hold them') }, ['link']),
       run: (a) => {
         const r = e.load()
         const link = str(a.link)
-        const foreign = foreignCode(link, r.identity?.did)
-        if (foreign) return { result: 'refused', madeFor: foreign.name }
+        if (foreignCode(link, r.identity?.did)) return { result: 'refused' }
         const did = str(a.did).trim()
         const held = did ? connectedPerson({ people: r.people as never, peers: (r.peers ?? []) as never }, did) : undefined
         return held ? { result: 'already-connected', person: held.id, name: held.name } : { result: 'new' }
