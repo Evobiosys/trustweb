@@ -9,7 +9,7 @@
  *   start / onHost / onHeard   the running part: publish, pull intents, answer friends, hand the record to the server when this device goes offline
  * Logic lives in social_hosting.ts, directory_client.ts, name_record.ts and trust_mode.ts; this file only draws and wires.
  */
-import { deserializeIdentity, signBytes, verifyDidSignature } from '../../demo/src/did'
+import { signBytes, verifyDidSignature } from '../../demo/src/did'
 import type { Identity } from '../../demo/src/did'
 import { el } from '../../demo/src/ui/dom'
 import type { HostEnvelope } from '../../demo/src/types'
@@ -27,6 +27,8 @@ import { serversAllowed, setTrustOverride, setTrustedOnly, trustLabel, trustedOn
 export interface SocialHooks {
   state: () => AppState
   save: () => void
+  /** net.ownIdentity: the signing identity of this phone (made when missing). */
+  identity: () => Identity
   /** net.sendHost: one `host` wire to a connected peer. */
   sendHost: (peer: Peer, m: HostEnvelope['m']) => Promise<void>
   /** net.completeConnect for a did found in the directory (the connect-ack goes out). */
@@ -63,7 +65,7 @@ export function createSocial(h: SocialHooks): Social {
   let node: SocialHost | null = null
   let timer: ReturnType<typeof setInterval> | undefined
 
-  const identity = (): Identity | null => { const i = h.state().identity; try { return i ? deserializeIdentity(i) : null } catch { return null } }
+  const identity = (): Identity | null => { try { return h.identity() } catch { return null } }
   const dirDeps = (): DirDeps => ({
     fetch: (url, init) => h.fetch(url, { ...init, keepalive: true, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' }),
     origins: serversOf(h.state(), h.origin), now: h.now, verify: verifyDidSignature,
@@ -252,7 +254,6 @@ export function createSocial(h: SocialHooks): Social {
       await host()?.sendIntent(makeIntent((b) => signBytes(id, b), { to: r.key, first: me.first, last: me.last, key: id.did, ts: h.now() }))
       h.toast(S.social.intendSent(`${r.first} ${r.last}`))
       const b = row.querySelector('[data-find-intend]'); if (b) { b.setAttribute('disabled', ''); b.textContent = S.social.intended }
-      h.render()
     }
     async function go(deep = false): Promise<void> {
       const f = first.value.trim(); const l = last.value.trim()

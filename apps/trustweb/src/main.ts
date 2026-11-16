@@ -1103,7 +1103,7 @@ const notifyCenter = createNotifyCenter({
 })
 /** Wave 43c social-hosting: global profile, friends-first hosting, trusted-only mode (social_hosting_view.ts). */
 const social = createSocial({
-  state: st, save: () => save(), sendHost: (peer, m) => net.sendHost(peer, m),
+  state: st, save: () => save(), identity: () => net.ownIdentity(), sendHost: (peer, m) => net.sendHost(peer, m),
   connect: (did, name) => net.completeConnect({ did, from: { id: randomId(8), displayName: name } }, Ring.Acquaintance),
   origin: SERVER_ORIGIN, fetch: (url, init) => fetch(url, init), now: () => Date.now(), toast: (msg) => toast(msg), render: () => render(), newId: () => randomId(8),
 })
@@ -8335,7 +8335,8 @@ if (state && !state.testOf?.handedOverAt) {
   // still holds for it arrive with the drain and are released with them (review 6h, appOpened).
   appOpened()
   // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable (in the tab that drains, review 6h).
-  void net.start().then(announceLink).then(() => net.restoreHeldAsks()).then(() => social.start())
+  void net.start().then(announceLink).then(() => net.restoreHeldAsks())
+  social.start()   // wave 43c: publish, pull intents; needs no open relay
   void completePendingConnect().catch(connectFailed)
   maybeOpenPendingShare()
   maybeOpenPendingEvent()

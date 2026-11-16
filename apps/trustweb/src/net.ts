@@ -320,6 +320,9 @@ export class Net {
     return this.identity
   }
 
+  /** Wave 43c (social_hosting_view.ts): this phone's identity, made now when it has none yet; the name directory signs with it. */
+  ownIdentity(): DidIdentity { return this.ensureIdentity() }
+
   private pairKey(peer: Peer): Promise<CryptoKey> {
     return this.keyFor(peer.did)
   }

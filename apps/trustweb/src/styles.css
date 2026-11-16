@@ -1995,11 +1995,11 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .social-more{margin:4px 0 8px 12px; padding-left:10px; border-left:2px solid var(--line)}
 .social-settings{display:flex; flex-direction:column; gap:8px; margin:8px 0}
 .social-host,.social-trust-choice{display:flex; flex-wrap:wrap; gap:6px}
-.social-host .radio,.social-trust-choice .radio{flex:0 1 auto; width:auto; min-height:40px; padding:6px 12px}
+.social-host .radio,.social-trust-choice .radio{flex:0 1 auto; width:auto; min-height:40px; padding:6px 12px 6px 40px}
 .social-server{display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:40px; overflow-wrap:anywhere}
 .social-server-add{display:flex; gap:6px; flex-wrap:wrap}
 .social-server-add .field{flex:1 1 160px; min-width:0}
-.social-trust{display:flex; flex-direction:column; gap:6px; padding:12px 0}
+.social-trust{display:flex; flex-direction:column; gap:6px; padding:12px 14px}
 .social-find{display:flex; flex-direction:column; gap:6px; padding:6px 0}
 .social-find-inputs{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
 .social-find-inputs .field{flex:1 1 120px; min-width:0}
