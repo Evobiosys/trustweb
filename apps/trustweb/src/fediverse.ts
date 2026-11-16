@@ -170,7 +170,7 @@ async function getText(url: string, f: FetchFn, accept: string): Promise<string 
   }
 }
 
-async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem> {
+export async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem> {
   const text = await getText(url, f, 'application/json')
   if (isProblem(text)) return text
   try { return JSON.parse(text) as unknown } catch { return FetchProblem.Malformed }

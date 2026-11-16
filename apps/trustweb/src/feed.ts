@@ -13,6 +13,7 @@
  */
 import { isDemoItem, isDemoPerson, Provenance } from './model'
 import type { AppState } from './model'
+import { sameEventTag } from './feed_social'
 import { showsUnmatched } from './unmatched_asks'
 
 export enum PostKind {
@@ -193,7 +194,7 @@ export function sourceOf(p: Post): FeedSource {
 
 /** The chips' filter: a source, and inside Groups one group. */
 export function filterFeed(posts: readonly Post[], f: { source?: FeedSource; group?: string; tag?: string }): Post[] {
-  return posts.filter((p) => (!f.source || sourceOf(p) === f.source) && (!f.group || p.group === f.group) && (!f.tag || p.tag === f.tag))
+  return posts.filter((p) => (!f.source || sourceOf(p) === f.source) && (!f.group || p.group === f.group) && (!f.tag || sameEventTag(p.tag, f.tag)))
 }
 
 /** Every post this phone can show, newest first. Pure: reads the record, sends nothing. */

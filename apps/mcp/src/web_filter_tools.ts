@@ -10,10 +10,11 @@ import type { Tool } from './protocol.ts'
 interface Ev { id: string; name: string; tagName?: string }
 type Rec = Record<string, unknown> & { uiRings?: { show?: string[]; hide?: string[] } & Record<string, unknown>; events?: Ev[] }
 
-const slugs = (r: Rec): Map<string, string> => new Map((r.events ?? []).map((e) => [eventTagSlug(e.tagName ?? e.name), e.id]))
+/** Keyed by the lower-cased slug: event tags match whatever their letter case (event_tag.ts sameEventTag). */
+const slugs = (r: Rec): Map<string, string> => new Map((r.events ?? []).map((e) => [eventTagSlug(e.tagName ?? e.name).toLowerCase(), e.id]))
 
 function shape(r: Rec): Record<string, unknown> {
-  const byId = new Map([...slugs(r)].map(([slug, id]) => [id, slug]))
+  const byId = new Map((r.events ?? []).map((e) => [e.id, eventTagSlug(e.tagName ?? e.name)]))
   const tag = (chip: string): string => (chip.startsWith('event:') ? byId.get(chip.slice(6)) ?? chip : chip)
   const show = r.uiRings?.show ?? []
   const hide = r.uiRings?.hide ?? []
@@ -26,7 +27,7 @@ function chipOf(r: Rec, tag: unknown): string {
   const t = tag.trim()
   if (/^(tag|person|event):.+/.test(t)) return t
   if (t.startsWith('event_')) {
-    const id = slugs(r).get(t)
+    const id = slugs(r).get(t.toLowerCase())
     if (!id) throw new Error(`unknown event tag: ${t}`)
     return 'event:' + id
   }

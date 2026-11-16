@@ -8,6 +8,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { arcsGradient, loadColourTags, tagColours } from './colour_tags'
+import { clusterAngles, eventColours } from './event_cluster'
 import { isBlocked, isNonResponsive } from './non_responsive'
 import { type Column, YOU_EDGE, DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, avoidSector, beyondRings, columnSector, lapRadius, CONTROL_GAP, nudgeAngles, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry, Spot } from './rings_layout'
@@ -230,7 +231,10 @@ export function createWebView(deps: WebViewDeps): WebView {
     }
     if (shownNow) for (const ps of Object.values(members)) for (const p of ps ?? []) if (fadeOf.get(p.id) !== 'out') shownNow.add(p.id)
     // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
-    const angleOfP = (p: Person): number => angleOf(p)
+    // Wave 43 answers (alpha): people of one event or community sit together inside their ring (event_cluster.ts); a dropped dot keeps its angle.
+    const communityIds = loadColourTags().filter((t) => t.community).map((t) => t.id)
+    const clustered = new Map(Object.values(members).flatMap((ps) => [...clusterAngles(ps ?? [], angleOf, communityIds)]))
+    const angleOfP = (p: Person): number => clustered.get(p.id) ?? angleOf(p)
     const quiet = new Map(desk ? [] : dueMoves(s, Date.now()).map((m) => [m.person.id, m.to] as const))
     for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
     // The layout keeps every person's place; a hidden ring's people are only not drawn (and so not hit-testable).
@@ -318,7 +322,7 @@ export function createWebView(deps: WebViewDeps): WebView {
           svg.appendChild(path)
         }
         const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
-        const arcs = arcsGradient(tagColours(p, colourTags))
+        const arcs = arcsGradient([...tagColours(p, colourTags), ...eventColours(p, s.events ?? [])])
         const face = avatar(p.name, p.id)
         face.style.background = p.reachedOut && ring === Ring.Intending ? ringColor(p) : toneVar(ring)
         if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK

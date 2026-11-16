@@ -5,7 +5,7 @@
  * network: a resource ask is written as one queued support ask and the app shows a card and sends it on a tap (support_flush.ts). On this side the
  * person is always "me".
  */
-import { applyEventSettings, setEventTimes } from '../../trustweb/src/event_press.ts'
+import { DEFAULT_INVITE_POLICY, applyEventSettings, setEventTimes, setNicknames } from '../../trustweb/src/event_press.ts'
 import { addRole, askResource, buildEvent, coverResource, queueResourceAsk, resourceSummary, setDoc, setInvitees, signUp } from '../../trustweb/src/event_plan.ts'
 import { identifyPerson, ROLE_KEYS, setRoles } from '../../trustweb/src/event_roles.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
@@ -15,7 +15,7 @@ import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; did?: string; fields?: Record<string, unknown>; deleted_at?: string }
-interface Rec extends Obj { me?: { displayName: string; nickname?: string }; people: Person[]; events?: TwEvent[]; extData?: Record<string, unknown>; supportAsks?: SupportAsk[] }
+interface Rec extends Obj { me?: { displayName: string; nickname?: string; nicknames?: string[] }; people: Person[]; events?: TwEvent[]; extData?: Record<string, unknown>; supportAsks?: SupportAsk[] }
 
 export interface EventToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean; now: () => Date }
 
@@ -145,17 +145,17 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
     },
     // Wave 43 event-press-share
     {
-      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me). Only the fields given change.',
-      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick') }, ['event']),
+      name: 'event_settings_set', description: 'Change an event on this device (id or exact name): invitePolicy hosts|trusted|everyone (who may invite; default everyone), notify (notifications of this event), nameReveal full|first|hidden|nick (what my links say of me), communityId (the community colour tag id this event is part of; empty = an isolated event), mastodonInstance (host whose public hashtag posts the event Feed merges, e.g. mastodon.social; empty = none). Only the fields given change.',
+      inputSchema: schema({ event: S('event id or exact name'), invitePolicy: S('hosts | trusted | everyone'), notify: { type: 'boolean' }, nameReveal: S('full | first | hidden | nick'), communityId: S('community tag id, empty = isolated event'), mastodonInstance: S('instance host, empty = none') }, ['event']),
       run: (a) => {
         let out: Obj = {}
         e.commit((r) => {
           const ev = eventOf(r, a.event)
-          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}) })
+          applyEventSettings(ev, { ...(a.invitePolicy !== undefined ? { invitePolicy: str(a.invitePolicy) } : {}), ...(typeof a.notify === 'boolean' ? { notify: a.notify } : {}), ...(a.nameReveal !== undefined ? { nameReveal: str(a.nameReveal) } : {}), ...(a.communityId !== undefined ? { communityId: str(a.communityId) } : {}), ...(a.mastodonInstance !== undefined ? { mastodonInstance: str(a.mastodonInstance) } : {}) })
           // review-fixes-43: one switch per event, as on the event page: notifications on also lift a muted "I'm here now" bell of this event.
           const here = (r as { atEvent?: { eventId?: string; bell?: boolean } }).atEvent
           if (a.notify === true && here?.eventId === ev.id) delete here.bell
-          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? 'hosts', notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full' }
+          out = { id: ev.id, invitePolicy: ev.invitePolicy ?? DEFAULT_INVITE_POLICY, notify: ev.notify !== false, nameReveal: ev.nameReveal ?? 'full', ...(ev.communityId ? { communityId: ev.communityId } : {}), ...(ev.mastodonInstance ? { mastodonInstance: ev.mastodonInstance } : {}) }
         })
         return out
       },
@@ -188,12 +188,18 @@ export function eventTools(e: EventToolsEnv): { write: Tool[] } {
       },
     },
     {
-      name: 'me_nickname_set', description: 'Set my nickname (empty clears it): what event links say instead of my name when an event\'s name reveal is "nick".',
-      inputSchema: schema({ nickname: S('nickname, empty = none') }, ['nickname']),
+      name: 'me_nickname_set', description: 'Set my nickname (empty clears it; several separated by commas, the first is used): what event links say instead of my name when an event\'s name reveal is "nick". With eventId (id or exact name) it sets my nickname at that event only.',
+      inputSchema: schema({ nickname: S('nickname, empty = none; several separated by commas'), eventId: S('event id or exact name: the nickname for that event only') }, ['nickname']),
       run: (a) => {
         const nickname = str(a.nickname).trim()
-        e.commit((r) => { if (!r.me) throw new Error('no profile in the record'); if (nickname) r.me.nickname = nickname; else delete r.me.nickname })
-        return { nickname }
+        let out: Obj = {}
+        e.commit((r) => {
+          if (a.eventId !== undefined) { const ev = eventOf(r, a.eventId); applyEventSettings(ev, { myNickname: nickname }); out = { eventId: ev.id, nickname }; return }
+          if (!r.me) throw new Error('no profile in the record')
+          setNicknames(r.me, nickname.split(','))
+          out = { nickname: r.me.nickname ?? '', nicknames: r.me.nicknames ?? [] }
+        })
+        return out
       },
     },
   ]

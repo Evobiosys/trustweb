@@ -6,9 +6,9 @@ import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { EventBy, LinkedEvent } from './event_link'
 import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
-import { eventOrganizers, roleLabels } from './event_roles'
+import { eventOrganizers, joinEventCommunity, roleLabels } from './event_roles'
 import { DEFAULT_INVITE_POLICY, NICK_FALLBACK, nameRevealOf, stamp, timesError } from './event_press'
-export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, NICK_FALLBACK, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, nameRevealOf, offersOf, setEventTimes } from './event_press'
+export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, NICK_FALLBACK, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, migrateNicknames, nameRevealOf, nickFor, nicknamesOf, offersOf, setEventTimes, setNicknames } from './event_press'
 export type { EventOffers, EventSettingsPatch, InvitePolicy, NameReveal } from './event_press'
 import type { AppState, Person, TwEvent } from './model'
 
@@ -85,11 +85,12 @@ export function eventMatches(ev: Pick<TwEvent, 'name' | 'tagName' | 'where'>, qu
 }
 
 /** The device-local settings an edit of the form must not drop. */
-export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal' | 'notify' | 'invitePolicy' | 'offers'> {
-  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal, notify, invitePolicy, offers } = ev
+export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal' | 'notify' | 'invitePolicy' | 'offers' | 'communityId' | 'myNickname' | 'mastodonInstance'> {
+  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal, notify, invitePolicy, offers, communityId, myNickname, mastodonInstance } = ev
   return {
     ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}), ...(nameReveal ? { nameReveal } : {}),
     ...(notify !== undefined ? { notify } : {}), ...(invitePolicy ? { invitePolicy } : {}), ...(offers ? { offers } : {}),
+    ...(communityId ? { communityId } : {}), ...(myNickname ? { myNickname } : {}), ...(mastodonInstance ? { mastodonInstance } : {}),
   }
 }
 
@@ -99,11 +100,12 @@ export function firstName(name: string): string {
 }
 
 /** What an event link may say about me: full -> name and did (never the nickname field); first -> the first name only (no did: it would name me fully); nick -> my nickname, else the first name (no did); hidden -> undefined (no name, no did). */
-export function revealedBy(by: EventBy | undefined, ev: Pick<TwEvent, 'nameReveal'>): EventBy | undefined {
+export function revealedBy(by: EventBy | undefined, ev: Pick<TwEvent, 'nameReveal' | 'myNickname'>): EventBy | undefined {
   if (!by) return undefined
   const r = nameRevealOf(ev)
   if (r === 'hidden') return undefined
-  if (r === 'nick' && by.nick?.trim()) return { name: by.nick.trim() }
+  const nick = ev.myNickname?.trim() || by.nick?.trim()   // wave 43 answers (iota): my nickname at this event first
+  if (r === 'nick' && nick) return { name: nick }
   if (r === 'nick' && NICK_FALLBACK === 'hidden') return undefined
   if (r === 'first' || r === 'nick') { const name = firstName(by.name); return name ? { name } : undefined }
   return { name: by.name, ...(by.did ? { did: by.did } : {}) }
@@ -137,6 +139,7 @@ export function tagPerson(s: AppState, personId: string, eventId: string): void 
   if (!p || p.events?.includes(eventId)) return
   p.events = [...(p.events ?? []), eventId]
   const ev = s.events?.find((e) => e.id === eventId)
+  joinEventCommunity(s, personId, eventId)
   if (ev?.srv && !ev.hitTagged) { ev.hitTagged = true; sendHit(ev.srv, 'tagged') }
 }
 
@@ -217,6 +220,9 @@ function roleNames(ev: TwEvent, people: readonly Pick<Person, 'id' | 'name'>[], 
 export function isEventHost(ev: TwEvent, meName: string, people: readonly Pick<Person, 'id' | 'name'>[] = []): boolean {
   return roleNames(ev, people, ['hosts', 'organizers', 'techSupport']).some((n) => sameName(n, meName)) || (!ev.fromLink && !ev.hosts?.length && !eventOrganizers(ev).length)
 }
+
+/** Jakob's answer (2026-11-15, beta): hosts, organizers and technical support may edit the event (one predicate; isEventHost already resolves all three roles). */
+export const mayEdit = isEventHost
 
 /** One predicate for "show the invite button": hosts always; 'everyone' lets attendees; 'trusted' lets attendees when one of the hosts or organizers sits in my Closest or Close ring (family by its closeness). */
 export function mayInvite(ev: TwEvent, s: Pick<AppState, 'me' | 'people'>): boolean {

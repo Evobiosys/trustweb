@@ -25,7 +25,7 @@ describe('feed tools', () => {
     const f = fixture()
     expect(f.by.feed_post.run({ text: ' Hi all ' })).toMatchObject({ text: 'Hi all' })
     const out = f.by.feed_post.run({ text: 'Arrived', eventId: 'e1' })
-    expect(out).toMatchObject({ tag: 'event_winter_iyg', eventId: 'e1' })
+    expect(out).toMatchObject({ tag: 'event_Winter_IYG', eventId: 'e1' })
     expect(f.rec().feedPosts).toHaveLength(2)
   })
   it('feed_post refuses empty text, an unknown event and a reply to nothing', () => {

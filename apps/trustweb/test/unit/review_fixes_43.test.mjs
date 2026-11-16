@@ -54,7 +54,7 @@ describe('one event slug', () => {
   })
   it('the slug case is one switch, the same in both copies', () => {
     expect(EVENT_SLUG_CASE).toBe(FEED_SLUG_CASE)
-    expect(eventTagSlug('Winter IYG')).toBe(EVENT_SLUG_CASE === 'lower' ? 'event_winter_iyg' : 'event_Winter_IYG')
+    expect(eventTagSlug('Winter IYG')).toBe('event_Winter_IYG')
   })
 })
 

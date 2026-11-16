@@ -72,16 +72,18 @@ describe('nickname reveal', () => {
 })
 
 describe('mayInvite', () => {
-  it('default policy hosts: host, organizer and tech support only', () => {
+  it('policy hosts (answers-43: no longer the default): host, organizer and tech support only', () => {
     const s = state()
-    expect(mayInvite(ev({ hosts: ['Mia Probe'] }), s)).toBe(true)
-    expect(mayInvite(ev({ hosts: ['Other'], organizer: 'mia probe' }), s)).toBe(true)
-    expect(mayInvite(ev({ hosts: ['Other'], techSupport: ['Mia Probe'] }), s)).toBe(true)
-    expect(mayInvite(ev({ hosts: ['Other'] }), s)).toBe(false)
+    const only = { invitePolicy: 'hosts' }
+    expect(mayInvite(ev({ hosts: ['Mia Probe'], ...only }), s)).toBe(true)
+    expect(mayInvite(ev({ hosts: ['Other'], organizer: 'mia probe', ...only }), s)).toBe(true)
+    expect(mayInvite(ev({ hosts: ['Other'], techSupport: ['Mia Probe'], ...only }), s)).toBe(true)
+    expect(mayInvite(ev({ hosts: ['Other'], ...only }), s)).toBe(false)
+    expect(mayInvite(ev({ hosts: ['Other'] }), s)).toBe(true)   // the default is everyone
   })
   it('an event I made without hosts is mine; one that came through a link is not', () => {
     expect(mayInvite(ev({ hosts: undefined }), state())).toBe(true)
-    expect(mayInvite(ev({ hosts: undefined, fromLink: true }), state())).toBe(false)
+    expect(mayInvite(ev({ hosts: undefined, fromLink: true, invitePolicy: 'hosts' }), state())).toBe(false)
   })
   it('everyone: any attendee, nobody who does not attend', () => {
     const e = ev({ hosts: ['Other'], invitePolicy: 'everyone' })
@@ -116,9 +118,9 @@ describe('offers', () => {
 describe('applyEventSettings (the app and MCP share it)', () => {
   it('sets the policy, notifications, offers and name reveal; defaults are not stored', () => {
     const e = ev()
-    applyEventSettings(e, { invitePolicy: 'everyone', notify: false, offers: { support: true }, nameReveal: 'nick' })
-    expect(e).toMatchObject({ invitePolicy: 'everyone', notify: false, offers: { support: true }, nameReveal: 'nick' })
-    applyEventSettings(e, { invitePolicy: 'hosts', notify: true, offers: { support: false }, nameReveal: 'full' })
+    applyEventSettings(e, { invitePolicy: 'hosts', notify: false, offers: { support: true }, nameReveal: 'nick' })
+    expect(e).toMatchObject({ invitePolicy: 'hosts', notify: false, offers: { support: true }, nameReveal: 'nick' })
+    applyEventSettings(e, { invitePolicy: 'everyone', notify: true, offers: { support: false }, nameReveal: 'full' })
     expect(e.invitePolicy).toBeUndefined()
     expect(e.notify).toBeUndefined()
     expect(e.offers).toBeUndefined()

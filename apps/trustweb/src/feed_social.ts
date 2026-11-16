@@ -10,13 +10,16 @@
 import type { AppState, SocialPost, TwEvent } from './model'
 
 /** event_tag.ts EVENT_SLUG_CASE, repeated (flip both; review_fixes_43.test.mjs fails while they differ). */
-export const EVENT_SLUG_CASE: 'lower' | 'keep' = 'lower'
+export const EVENT_SLUG_CASE: 'lower' | 'keep' = 'keep'
 
 /** event_tag.ts eventTagSlug, repeated character for character: this leaf loads under plain node, where an extension-less value import fails; review_fixes_43.test.mjs proves the two agree. */
 function slugOf(name: string): string {
   const cased = EVENT_SLUG_CASE === 'lower' ? name.trim().toLowerCase() : name.trim()
   return `event_${cased.replace(/[^\p{L}\p{N}\s_]+/gu, '').replace(/[\s_]+/g, '_').replace(/^_+|_+$/g, '')}`
 }
+
+/** event_tag.ts sameEventTag, repeated: event tags match whatever their letter case. */
+export const sameEventTag = (a: string | undefined, b: string | undefined): boolean => a !== undefined && b !== undefined && a.toLowerCase() === b.toLowerCase()
 
 /** The tag of an event on this device: its tag name (events.ts tagLabel) as `event_<slug>`. */
 export const tagOfEvent = (ev: Pick<TwEvent, 'name' | 'tagName'>): string => slugOf(ev.tagName ?? ev.name)
@@ -69,5 +72,5 @@ export function feedList(s: AppState, o: { eventId?: string; limit?: number }): 
   const mine = (s.feedPosts ?? []).map((p): ListedPost => ({ id: `social:${p.id}`, kind: 'social', by: p.by, at: p.at, text: p.text, ...(p.tag ? { tag: p.tag } : {}), starred: stars.has(`social:${p.id}`) }))
   const groups = (s.groupPosts ?? []).filter((p) => attended.has(p.group)).map((p): ListedPost => ({ id: `group:${p.id}`, kind: 'group', by: p.by, at: p.at, text: p.text, tag: attended.get(p.group), starred: stars.has(`group:${p.id}`) }))
   const tag = ev ? tagOfEvent(ev) : undefined
-  return [...mine, ...groups].filter((p) => !tag || p.tag === tag).sort((a, b) => b.at - a.at).slice(0, Math.max(0, Math.min(o.limit ?? 150, 150)))
+  return [...mine, ...groups].filter((p) => !tag || sameEventTag(p.tag, tag)).sort((a, b) => b.at - a.at).slice(0, Math.max(0, Math.min(o.limit ?? 150, 150)))
 }
