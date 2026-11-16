@@ -38,9 +38,8 @@ const overlaps = (page) => page.evaluate(() => {
     return box.r - box.l > 1 && box.b - box.t > 1 ? box : null
   }
   const shown = (n) => n.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, contentVisibilityAuto: true }) && n.getClientRects().length > 0
-  // Known, older than wave 43 (listed in the review report, not failed here): the hint "i" badge on a header button (wave 20s), the bar's ⋮ circle on the last tab and the raised centre tab over the page (wave 42 bottom bar).
-  // Also older: the stock-mode "Show demo content" chip (.demo-toggle, floats bottom-left on the welcome record).
-  const known = (n) => n.matches('.hint-i, .bar-more, .demo-toggle') || n.matches('.tab.tab-primary')
+  // Wave 43c shell-fix-2: no exclusions any more (hint "i", bar ⋮, raised centre tab and the demo chip are fixed); `known` stays as the hook.
+  const known = () => false
   // A control under an open sheet (modal) is not reachable, so it cannot overlay anything: skip it when the sheet covers its centre.
   const layer = (x) => x?.closest('.page-layer, .sheet.on, [role=dialog], .scrim') ?? null
   const underModal = (n, b) => {

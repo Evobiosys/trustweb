@@ -23,6 +23,7 @@ import { unsortedCount } from './unsorted_count'
 import { alphaSub } from './alpha_heading'
 import { isEnabled } from './ext/registry'
 import { syncSections } from './sync_visibility_view'
+import { tanaPullBlock } from './tana_pull_view'
 
 const T = S.imp39
 const u = { style: 'text-decoration:underline;cursor:pointer' }
@@ -108,6 +109,7 @@ export function openImportHome(base: ServicesHooks): void {
   }
 
   // ---- Tana ----
+  const pullBlock = tanaPullBlock(h)   // wave 43c shell-fix-2: Pull from Tana
   function tana(): HTMLElement[] {
     const s = h.state()
     const n = sourceCount(s, Provenance.Tana)
@@ -120,6 +122,7 @@ export function openImportHome(base: ServicesHooks): void {
       ...left.map(([why, k]) => el('p', { class: 'warn', 'data-import-tana-left': why }, [T.tanaLeftOut(k, T.tanaWhy[why])])),
       sourceHidden(s, Provenance.Tana) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-import-tana-show': '', ...u, onclick: () => { setSourceHidden(s, Provenance.Tana, false); h.save(); h.changed(); draw() } }, [T.tanaShow]) : null,
       c.tanaUnsorted ? el('p', { class: 'meta' }, [T.tanaCap]) : null,
+      pullBlock,
     ])
   }
 

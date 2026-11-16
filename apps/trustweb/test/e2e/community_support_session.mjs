@@ -125,11 +125,11 @@ async function main() {
     t.ok('4: A sees "Ben could use support" as a calm card', !!(await until(async () => { await a.locator('[data-mode="personal"]').click().catch(() => {}); await a.locator('.tabs [data-go="web"]').click().catch(() => {}); return (await a.locator('[data-support-card]').count()) === 1 }, 25_000)))
     await shot(a, '360-4-card')
     // the one inbox list on A (Resources screen, "Review requests")
-    await a.locator('.tabs [data-go="inventory"]').click(); await a.locator('.requests-fab').click()
+    await a.locator('.tabs [data-go="inventory"]').click(); await a.locator('[data-open-requests]').click()
     t.ok('4: the inbox lists the ask in one list', await a.locator('[data-support-inbox-row][data-kind="theirs"]').count() === 1)
     await a.locator('.sheet.on .sheet-home').click().catch(() => {})
     // B's own ask shows in B's inbox and can be cancelled -> A's card goes
-    await b.locator('.tabs [data-go="inventory"]').click(); await b.locator('.requests-fab').click()
+    await b.locator('.tabs [data-go="inventory"]').click(); await b.locator('[data-open-requests]').click()
     t.ok('4: B\'s inbox lists the own ask with Cancel', await b.locator('[data-support-inbox-row][data-kind="mine"]').count() === 1 && await b.locator('[data-support-inbox-cancel]').count() === 1)
     await b.locator('[data-support-inbox-cancel]').click()
     t.ok('4: cancelling removes the ask on B', !!(await until(async () => ((await rec(b)).supportAsks ?? []).length === 0)))

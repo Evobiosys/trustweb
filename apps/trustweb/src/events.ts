@@ -7,6 +7,7 @@ import type { EventBy, LinkedEvent } from './event_link'
 import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
 import { eventOrganizers, isEventHost, joinEventCommunity, roleNames, sameName } from './event_roles'
+import { eventNotifies } from './event_notify'
 import { DEFAULT_INVITE_POLICY, NICK_FALLBACK, nameRevealOf, stamp, timesError } from './event_press'
 export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, NICK_FALLBACK, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, migrateNicknames, nameRevealOf, nickFor, nicknamesOf, offersOf, setEventTimes, setNicknames } from './event_press'
 export type { EventOffers, EventSettingsPatch, InvitePolicy, NameReveal } from './event_press'
@@ -206,7 +207,7 @@ export function untilLabel(ev: Pick<TwEvent, 'to'>): string {
 }
 
 /** Wave 43: notifications of this event (invitations, feed posts, support asks of the people here); on unless switched off. */
-export const notifyOn = (ev: Pick<TwEvent, 'notify'>): boolean => ev.notify !== false
+export const notifyOn = eventNotifies
 
 export { isEventHost }
 

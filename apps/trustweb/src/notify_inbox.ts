@@ -4,12 +4,15 @@
  * worker and the page share). When the app comes to the front with an unseen item in it, one modal popup lists them until the person
  * presses its X. The list logic is pure; the store at the bottom is a thin IndexedDB wrapper. Nothing leaves the device (I1).
  */
+import type { AppState } from './model'
+import { inboxItemNotifies } from './event_notify'
 import type { NotifyKind } from './notify_kinds'
 import { route, type NotifyHome } from './notify_route'
 
 /** `other`: the worker's fallback line, when no wire could be read. */
 export type InboxKind = NotifyKind | 'other'
-export interface InboxItem { id: string; kind: InboxKind; title: string; body: string; at: number; seenAt: number | null }
+/** `eventId`: the event this is about (43c): its Notifications switch decides whether it is listed. */
+export interface InboxItem { id: string; kind: InboxKind; title: string; body: string; at: number; seenAt: number | null; eventId?: string }
 export interface PopupRow { id: string; kind: InboxKind; title: string; body: string; at: number; home: NotifyHome }
 
 export const INBOX_CAP = 50
@@ -49,9 +52,9 @@ export function reconcileInbox(store: readonly InboxItem[], mirror: readonly Inb
 }
 
 /** What the popup lists: nothing while the setting is off (`off`) or all is seen; else unseen items, newest first, each with the screen it opens. */
-export function popupRows(list: readonly InboxItem[], off: boolean): PopupRow[] {
+export function popupRows(list: readonly InboxItem[], off: boolean, events?: AppState['events']): PopupRow[] {
   if (off) return []
-  return unseen(list).map((i) => ({ id: i.id, kind: i.kind, title: i.title, body: i.body, at: i.at, home: route(i.kind === 'other' ? 'connect' : i.kind) }))
+  return unseen(list).filter((i) => inboxItemNotifies({ events }, i)).map((i) => ({ id: i.id, kind: i.kind, title: i.title, body: i.body, at: i.at, home: route(i.kind === 'other' ? 'connect' : i.kind) }))
 }
 
 // --- IndexedDB (page and worker) ---------------------------------------------------------------------------------------------------

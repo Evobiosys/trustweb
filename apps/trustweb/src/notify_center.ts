@@ -6,13 +6,16 @@
  */
 import type { AppState, Person, Peer } from './model'
 
+/** An inbox row about an event whose Notifications switch is off (43c). Same rule as event_notify.ts eventNotifies: this file runs under plain node (apps/mcp), which cannot load a value import without an extension. */
+const quietEvent = (s: Pick<Src, 'events'>, i: { eventId?: string }): boolean => !!i.eventId && s.events?.find((e) => e.id === i.eventId)?.notify === false
+
 /** "Newly added" in the chat list and the "Connected" section: people connected within this many days. */
 export const NEWLY_ADDED_DAYS = 7
 export const SECTIONS = ['messages', 'wants', 'connected', 'events'] as const
 export type Section = (typeof SECTIONS)[number]
 export type CenterAction = 'open-chat' | 'add' | 'open-card' | 'message' | 'open-event'
 export interface CenterItem { id: string; section: Section; title: string; body: string; at: number; read: boolean; action: CenterAction; personId?: string; peerId?: string }
-type Src = Pick<AppState, 'people'> & Partial<Pick<AppState, 'peers' | 'chats' | 'wantsToConnect' | 'notifInbox' | 'notifReadAt'>>
+type Src = Pick<AppState, 'people'> & Partial<Pick<AppState, 'peers' | 'chats' | 'wantsToConnect' | 'notifInbox' | 'notifReadAt' | 'events'>>
 
 /** Someone who reached out to me and is not sorted yet: drawn on the unsorted ring in the "wants to connect" colour (rings_layout.ts webSlot). */
 export const wantsConnect = (p: Pick<Person, 'ring' | 'reachedOut'>): boolean => p.reachedOut === 'received' && p.ring === 'intending'
@@ -45,7 +48,7 @@ export function centerItems(s: Src, now: number): CenterItem[] {
   for (const w of s.wantsToConnect ?? []) out.push(item({ id: `want:${w.peerId}`, section: 'wants', title: w.name, body: '', at: w.at, action: 'add', peerId: w.peerId }))
   for (const p of people) if (wantsConnect(p)) out.push(item({ id: `wantp:${p.id}`, section: 'wants', title: p.name, body: '', at: p.metAt, action: 'open-card', personId: p.id }))
   for (const r of newlyAdded(people, s.peers ?? [], now)) out.push(item({ id: `conn:${r.personId}`, section: 'connected', title: r.name, body: '', at: r.at, action: 'message', personId: r.personId }))
-  for (const i of s.notifInbox ?? []) if (i.kind === 'event') out.push(item({ id: `inbox:${i.id}`, section: 'events', title: i.title, body: i.body, at: i.at, action: 'open-event' }, i.seenAt !== null))
+  for (const i of s.notifInbox ?? []) if (i.kind === 'event' && !quietEvent(s, i)) out.push(item({ id: `inbox:${i.id}`, section: 'events', title: i.title, body: i.body, at: i.at, action: 'open-event' }, i.seenAt !== null))
   return out.sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || b.at - a.at)
 }
 

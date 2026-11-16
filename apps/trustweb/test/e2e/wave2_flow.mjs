@@ -54,14 +54,14 @@ async function partQuery(a) {
   await tab(a, 'Resources')
   const call = a.locator('[data-open-query]').first()
   ok('Inventory: "Ask your web" is there', await call.isVisible() && (await call.getAttribute('aria-label')) === 'Ask your web')
-  const [cb, rb] = [await call.boundingBox(), await a.locator('.requests-fab').boundingBox()]
+  const [cb, rb] = [await call.boundingBox(), await a.locator('[data-open-requests]').boundingBox()]
   ok('it never sits over "Review requests"', Boolean(cb && rb) && (cb.y + cb.height <= rb.y || rb.y + rb.height <= cb.y || cb.x + cb.width <= rb.x || rb.x + rb.width <= cb.x), JSON.stringify({ cb, rb }))
   await shot(a, 'w2-01-inventory-call')
   await call.click()
   ok('Inventory: one tap opens the Ask page', await dockOpen(a) && (await a.locator('[data-ask-page]').count()) === 1)
   await shot(a, 'w2-02-query-from-inventory')
   await askBack()
-  ok('Back from the Ask page returns to Resources', (await a.locator('[data-ask-page]').count()) === 0 && await a.locator('.requests-fab').isVisible())
+  ok('Back from the Ask page returns to Resources', (await a.locator('[data-ask-page]').count()) === 0 && await a.locator('[data-open-requests]').isVisible())
 }
 
 /** Item 4: who can ask about an inventory item: acquaintances, friends, close friends, only me. */

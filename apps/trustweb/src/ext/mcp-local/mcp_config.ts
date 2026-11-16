@@ -34,7 +34,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   // Wave 42 settings-llm-first
   { name: 'settings_list', write: false }, { name: 'settings_get', write: false }, { name: 'settings_search', write: false }, { name: 'settings_sync_capabilities', write: false }, { name: 'settings_set', write: true },
   // Wave 42 import-obsidian-ai
-  { name: 'import_sources', write: false }, { name: 'import_suggestions_list', write: false }, { name: 'import_run', write: true }, { name: 'import_suggestions_accept', write: true },
+  { name: 'import_sources', write: false }, { name: 'import_suggestions_list', write: false }, { name: 'import_run', write: true }, { name: 'import_suggestions_accept', write: true }, { name: 'import_tana_pull', write: true },
   // Wave 42 in-person-e2e
   { name: 'connect_code', write: false }, { name: 'connect_redeem', write: false },
   // Wave 42 signup-stripe
