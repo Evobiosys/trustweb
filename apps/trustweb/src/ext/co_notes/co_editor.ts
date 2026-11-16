@@ -7,6 +7,7 @@ import { configured } from '../../llm_endpoint'
 import type { Person } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks } from '../registry'
+import { bottomLine } from './co_lines'
 import { canEdit, combine, cycleShare, isEventDoc, mineId, SHARE_LABELS } from './co_desires'
 import { editText, fromText, indent, insertAfter, merge, moveDown, moveUp, outdent, remove, setLogseq, setShare, setTitle, textOver, toText, tree, type CoDoc, type CoPerson } from './co_doc'
 import { chatPanel } from './co_chat_view'
@@ -38,16 +39,17 @@ const AT = /@([^\s@[\]]{0,30})$/
 const S_ = S.coNotes
 const D_ = S.coDesires
 
-export function openCoNote(c: CoCtx, id: string): void {
+export function openCoNote(c: CoCtx, id: string, focus = ''): void {
   const d = c.get(id)
-  if (d) c.h.page(d.title, [coEditor(c, id)], 'co-note')
+  if (d) c.h.page(d.title, [coEditor(c, id, focus)], 'co-note')
 }
 
-export function coEditor(c: CoCtx, id: string): HTMLElement {
+/** `focus`: a block whose input takes the caret as soon as the page is on screen. */
+export function coEditor(c: CoCtx, id: string, focus = ''): HTMLElement {
   const root = el('div', { class: 'co-editor', 'data-co-editor': id })
   const folded = new Set<string>()
   const refs = refsOf(c.get(id) as CoDoc)
-  let editing = ''
+  let editing = focus
   let adding = false
   const chatDraft = { text: '' }
   /** The copy the plain-text box shows; typing applies against it, so lines others added meanwhile are not taken for deleted. */
@@ -121,7 +123,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     const f = e.target as HTMLInputElement
     const me = c.me()
     const i = rows.findIndex((r) => r.id === bid)
-    if (e.key === 'Enter') { e.preventDefault(); act((d) => { const r = insertAfter(d, bid, '', me, Date.now(), newOpts()); editing = r.id; return r.doc }) }
+    if (e.key === 'Enter') { e.preventDefault(); act((d) => { const r = evDoc() ? bottomLine(d, me, Date.now()) : insertAfter(d, bid, '', me, Date.now(), newOpts()); editing = r.id; return r.doc }) }
     else if (e.key === 'Tab') { e.preventDefault(); if (!evDoc()) act((d) => (e.shiftKey ? outdent : indent)(d, bid, me)) }
     else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); act((d) => (e.key === 'ArrowUp' ? moveUp : moveDown)(d, bid, me)) }
     else if (e.key === 'ArrowUp' && rows[i - 1]) { e.preventDefault(); start(rows[i - 1].id) }
@@ -160,7 +162,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
       const share = evDoc() && r.depth > 0 && !r.ai ? shareChip(r.id, r.share, editable(r.id, r.depth)) : null
       const mark = r.ai ? el('span', { class: 'co-ai', 'data-co-ai': '' }, [D_.aiMade]) : null
       list.append(el('div', { class: 'co-row', role: 'treeitem', 'aria-level': String(r.depth + 1), 'data-co-block': r.id, style: `padding-left:${r.depth * 16}px` }, [toggle, text, mark, share]))
-      if (evDoc() && r.id === mineId(c.me()) && !r.hasKids) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-add-wish': '', onclick: () => act((x) => { const n = insertAfter(x, r.id, '', c.me(), Date.now(), newOpts()); editing = n.id; return indent(n.doc, n.id, c.me()) }) }, [D_.addWish]))
+      if (evDoc() && r.id === mineId(c.me()) && !r.hasKids) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-add-wish': '', onclick: () => act((x) => { const n = bottomLine(x, c.me(), Date.now()); editing = n.id; return n.doc }) }, [D_.addWish]))
       if (isEditing) list.append(el('div', { class: 'co-under', style: `padding-left:${r.depth * 16 + 22}px` }, [mention(text as HTMLInputElement), tools(r.id)]))
     }
     if (!rows.length && !evDoc() && !ro()) list.append(el('button', { class: 'btn btn-ghost btn-sm', 'data-co-first': '', onclick: () => act((x) => { const r = insertAfter(x, null, '', c.me(), Date.now()); editing = r.id; return r.doc }) }, [S_.firstLine]))
@@ -267,7 +269,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
     root.replaceChildren(
       title,
       el('p', { class: 'meta', 'data-co-honest': '' }, [S_.honest]), presence(d) ?? '',
-      participants(d), evDoc() || ro() ? '' : modeButtons(d),
+      participants(d), d.kind === 'desires' ? el('p', { class: 'meta co-explain', 'data-co-explain': '' }, [D_.explain]) : '', evDoc() || ro() ? '' : modeButtons(d),
       d.mode === 'text' && !evDoc() ? plain(d) : outline(d),
       d.kind === 'desires' ? combineRow() : '',
       c.chat && !ro() ? chatPanel(c, id, chatDraft) : '',
@@ -293,5 +295,7 @@ export function coEditor(c: CoCtx, id: string): HTMLElement {
   }, POLL_MS)
 
   draw()
+  // The page is not in the document yet while draw() runs: take the caret once it is.
+  if (focus) setTimeout(() => { if (root.isConnected) { const f = field(); f?.focus(); f?.setSelectionRange(f.value.length, f.value.length) } }, 0)
   return root
 }

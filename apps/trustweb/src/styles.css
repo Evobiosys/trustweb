@@ -2093,3 +2093,50 @@ input.tr-switch:focus-visible{outline:3px solid var(--electric); outline-offset:
 .ev-draft-card{background:var(--linen, #fff); color:var(--ink); border-radius:16px; padding:18px; width:min(340px, 100%); display:flex; flex-direction:column; gap:8px}
 .cal-tags .chips{align-items:center}
 .roles-line>.event-since{flex:1 1 auto; min-width:0; text-align:left}
+
+/* wave44 feed-hopes */
+.co-explain{font-size:12px; margin:2px 0 8px}
+/* wave44 feed-look: Mastodon-style status list (pattern only): full-width rows with 1px dividers, avatar column left, icon action row */
+.posts{gap:0}
+.posts .post{background:none; border-radius:0; box-shadow:none; padding:12px 4px; border-bottom:1px solid var(--line)}
+.posts .post:last-child{border-bottom:0}
+.post-main .ava{width:46px; height:46px; flex:none; font-size:18px}
+@media (min-width:600px){ .post-main .ava{width:40px; height:40px; font-size:16px} }
+.post-head{flex-wrap:nowrap; gap:0 6px; min-width:0}
+.post-head .post-name{flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.post-head .post-handle{flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px}
+.post-head .post-age{flex:none; margin-left:auto; font-size:13px}
+.post-boost{font-size:12.5px; margin-bottom:2px}
+.post-tags{margin-top:3px; font-size:11.5px; align-items:center}
+.post-tags .chip{padding:1px 7px; font-size:11.5px; border-width:1px; cursor:default}
+.post-indent{padding-left:58px}
+@media (min-width:600px){ .post-indent{padding-left:52px} }
+.post-indent:empty{display:none}
+.post-indent .post-img{margin-top:6px}
+.post-card{display:block; margin-top:8px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); font-size:13px; text-decoration:underline; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.post-actions{display:flex; justify-content:space-between; max-width:300px; margin-top:6px}
+.post-actions .act{position:relative; width:40px; height:36px; display:flex; align-items:center; justify-content:center; border:0; background:none; color:var(--ink-soft); cursor:pointer; border-radius:8px}
+.post-actions .act svg{width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.post-actions .act.on{color:var(--teal)}
+.post-actions .act.on svg{fill:currentColor}
+.post-actions .act.tw-off{text-decoration:line-through; opacity:.75}
+.post-actions .act.tw-off::after{content:""; position:absolute; left:11px; right:11px; top:50%; border-top:2px solid currentColor; transform:rotate(-35deg)}
+.post-actions .act[disabled]{cursor:default}
+.post-compact{background:none; box-shadow:none; border-radius:0; padding:6px 0; border-bottom:1px solid var(--line)}
+.post-compact .post-text{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:14px}
+.post-compact .post-main .ava{width:32px; height:32px; font-size:14px}
+.post-compact-wrap:last-child .post-compact{border-bottom:0}
+/* wave44 feed-sources: the Sources page, the "Only <source>" chips, the publish target */
+.sources-page{display:flex; flex-direction:column; gap:6px; min-width:0}
+.sources-page .eyebrow{margin:14px 0 0}
+.src-row{display:flex; flex-direction:column; gap:4px; min-width:0}
+.src-main{display:flex; align-items:center; gap:4px}
+.src-main .radio{flex:1 1 auto; min-width:0; margin-top:6px; overflow-wrap:anywhere}
+.src-filters{display:flex; flex-direction:column; gap:6px; padding:4px 0 8px 10px; min-width:0}
+.src-filters[hidden]{display:none}
+.src-opt{font-size:11px; color:var(--ink-soft); opacity:.7; padding:4px 8px; min-height:0}
+.algo-row{display:flex; flex-direction:column; gap:2px; min-width:0}
+.algo-range{width:100%; min-height:32px}
+.feed-target{font-size:12px; color:var(--ink-soft)}
+.feed-target summary{cursor:pointer; text-decoration:underline; min-height:32px; display:flex; align-items:center}
+.feed-target .meta{margin:4px 0}

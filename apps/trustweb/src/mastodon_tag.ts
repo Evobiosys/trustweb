@@ -17,6 +17,13 @@ export function mastodonTagUrl(host: string, slug: string, allowLocal = false): 
   return h ? `${instanceBase(h)}/api/v1/timelines/tag/${encodeURIComponent(slug)}?limit=${MASTODON_LIMIT}` : null
 }
 
+/** Wave 44: "@user@host" from a Mastodon acct ("user" on the instance itself, "user@host" elsewhere); undefined when it is not one. */
+function handleOfAcct(acct: unknown, host: string): string | undefined {
+  if (typeof acct !== 'string') return undefined
+  const m = /^([A-Za-z0-9_.-]{1,64})(?:@([A-Za-z0-9.-]{1,253}))?$/.exec(acct.trim())
+  return m ? `@${m[1]}@${(m[2] ?? host).toLowerCase()}` : undefined
+}
+
 function toPost(v: unknown, host: string, slug: string, allowLocal: boolean): Post | null {
   if (typeof v !== 'object' || v === null) return null
   const o = v as Record<string, unknown>
@@ -27,8 +34,10 @@ function toPost(v: unknown, host: string, slug: string, allowLocal: boolean): Po
   if (!Number.isFinite(at) || !text) return null
   const account = typeof o.account === 'object' && o.account !== null ? (o.account as Record<string, unknown>) : {}
   const who = [account.display_name, account.acct].find((n): n is string => typeof n === 'string' && n.trim() !== '')
+  const handle = handleOfAcct(account.acct, host)
   return {
     id: `mastodon:${host}:${o.id.slice(0, 64)}`, kind: PostKind.Remote, who: who?.slice(0, 80) ?? host, at, text, context: host, dummy: false, tag: slug,
+    ...(handle ? { handle } : {}),
     open: { kind: 'url', url: safeRemoteUrl(o.url, allowLocal) ?? `${instanceBase(host)}/` },
   }
 }

@@ -10,6 +10,7 @@
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
 import type { AssistantCfg } from './ext/assistant/providers'
+import type { AlgoCfg, SourceCfg } from './feed_sources_page'
 import type { InboxItem } from './notify_inbox'
 import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
@@ -1130,6 +1131,8 @@ export interface AppState {
   /** Wave 43 (feed_social.ts): my own Feed posts, kept on this phone; stars are post ids (`social:<id>`, `group:<id>`, ...). */
   feedPosts?: SocialPost[]
   feedStars?: string[]
+  /** Wave 44 (feed_embed.ts): posts embedded from a pasted link, newest first, at most 200. Absent: none. */
+  feedEmbeds?: import('./feed_embed').EmbedRecord[]
   /** Wave 32 (feed_nostr.ts): the Nostr secret key (hex) that signs group posts. This phone only, never exported. Absent: none yet. */
   nostrKey?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
@@ -1553,6 +1556,15 @@ export interface FeedSettings {
   relays?: string[]
   /** Wave 32 (feed_nostr.ts): per group (our id) its governance, channels and vouches. Absent: open, no channels. */
   groupMeta?: Record<string, { governance?: 'open' | 'invite' | 'vouch' | 'admin' | 'consensus'; channels?: { id: string; name: string }[]; vouchedBy?: string[] } | undefined>
+  /* wave44 feed-sources (feed_sources_page.ts): the Sources page. All optional, no schema bump. */
+  /** Per source id: on/off and filters (only what differs from the default). */
+  sources?: Record<string, SourceCfg>
+  /** The ranking weights (recency, trust, source, perSource); absent: 0.6 / 0.3 / 0.1. */
+  algo?: Partial<AlgoCfg>
+  /** "Never read public content": no public place is read. Absent: reading allowed. */
+  noPublicRead?: boolean
+  /** Where the composer posts by default (feed_sources_page.ts PUBLISH_TARGETS); absent: fediverse. */
+  publishTarget?: string
 }
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
