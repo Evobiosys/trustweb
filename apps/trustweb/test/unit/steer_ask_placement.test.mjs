@@ -16,8 +16,8 @@ describe('steer_ask_placement', () => {
     const fn = src.slice(src.indexOf('function mountAskButton'), src.indexOf('function inboxButton'))
     for (const s of ['Screen.Web', 'Screen.Chat', 'Screen.Inventory']) expect(fn).toContain(s)
     expect(src).toContain('mountAiButton()')
-    expect([...HEADER_RIGHT]).toEqual(['qr', 'settings', 'ai'])
-    expect(headerRight(true)).toContain('ai')
+    expect([...HEADER_RIGHT]).toEqual(['views', 'search', 'qr', 'settings', 'ai']) // wave44c header-cluster
+    expect(headerRight('web', true)).toContain('ai')
   })
   it('opens the community event editor directly, with no assistant gate', () => {
     const src = readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')

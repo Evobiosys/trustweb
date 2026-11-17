@@ -2282,3 +2282,9 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 @media (min-width:700px){
   .circles-row{flex-wrap:wrap; overflow-x:visible; justify-content:flex-start; gap:28px; padding:26px 20px 20px; scroll-snap-type:none}
 }
+
+/* wave44c header-cluster: one header row again (eye, search, QR, settings top right; chat switch + pins after the title); title truncates first.
+   The wave44 header-layout `.hdr-tools` rules above stay as they were, unused now (never deleted). */
+.hdr{flex-wrap:nowrap}
+.hdr-left > :is(h2){flex:0 1 auto}
+.hdr-left > :not(h2){flex-shrink:0}

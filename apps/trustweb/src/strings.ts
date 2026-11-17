@@ -5219,4 +5219,11 @@ export const S = {
     card: (scope: string) => `Send a ${scope === 'line' ? 'line' : 'block'} of a resource to a chat`,
   },
   verdictNote: { ph: 'note (optional), sent with Needs work', aria: 'Note for this verdict' },
+  /* wave44c header-cluster */
+  w44cUpdate: {
+    updateNow: 'Update now',
+    sendLink: 'Send update link',
+    latest: 'You already run the latest version, the other phone needs the update.',
+    shareText: 'Update TrustWeb on your phone, then scan my code again: ',
+  },
 } as const
