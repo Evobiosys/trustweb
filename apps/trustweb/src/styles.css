@@ -2295,3 +2295,8 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .home-focus{outline:2px solid var(--electric); outline-offset:2px}
 .requests-list{padding:12px; display:flex; flex-direction:column; gap:10px}
 .requests-list .req-group h3{margin:6px 0 4px}
+/* wave44c header-cluster: one header row again (eye, search, QR, settings top right; chat switch + pins after the title); title truncates first.
+   The wave44 header-layout `.hdr-tools` rules above stay as they were, unused now (never deleted). */
+.hdr{flex-wrap:nowrap}
+.hdr-left > :is(h2){flex:0 1 auto}
+.hdr-left > :not(h2){flex-shrink:0}

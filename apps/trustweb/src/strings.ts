@@ -5241,4 +5241,11 @@ export const S = {
     none: 'No open requests.',
     thumbAria: 'Your web, small',
   },
+  /* wave44c header-cluster */
+  w44cUpdate: {
+    updateNow: 'Update now',
+    sendLink: 'Send update link',
+    latest: 'You already run the latest version, the other phone needs the update.',
+    shareText: 'Update TrustWeb on your phone, then scan my code again: ',
+  },
 } as const

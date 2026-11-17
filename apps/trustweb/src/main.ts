@@ -166,7 +166,7 @@ import { defineHomeActions } from './home_actions'
 import { resetLayout } from './home_layout'
 import { circlesView } from './circles_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
-import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, headerRight, headerTools, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
+import { advancedKeyOf, HEADER_PINS, headerControls, headerAfterTitle, headerPins, headerRight, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel, webViewAfterDefault } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
@@ -241,7 +241,8 @@ import { guardLeaving, lastKept, markCopy, markOffered, wasOffered } from './kee
 import type { BackupView } from './backup_view'
 import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
-import { createUpdateCheck, reloadFresh, shouldReloadOnce } from './app_update'
+import { createUpdateCheck, reloadFresh, shouldReloadOnce, UpdateResult } from './app_update'
+import { updateNow } from './update_now' // wave44c header-cluster
 import { devicesSectionChildren } from './devices_section'
 import { syncSectionParts } from './settings_sync_section' // wave44 steer-settings-sync
 import { linkButton, openLinkChange } from './link_change_view'
@@ -408,7 +409,7 @@ import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscri
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
 import { createToast, fadeHost, type ToastOpts } from './toast'
 import { createNoticeLayer } from './notice_layer'
-import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
+import { LIVE_SERVER, nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 // Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
 // imports walkthrough too) ran this whole app without an #app and stayed blank (live 2026-10-19). test/scan_demo_entries.mjs (CI, after the build) guards it.
@@ -842,7 +843,7 @@ const net = new Net({
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
   inviteVerdict: (inv, did) => invites.verdict(inv, did), onInviteAccepted: (peer, inv) => invites.accepted(peer, inv),   // wave44 steer-invite-link
-  onHandshakeRefused: (r) => showNotice(S.handshake.noticeTitle, r === 'unsupported' ? S.handshake.unsupportedBody : S.handshake.noticeBody, [], HANDSHAKE_NOTICE_MS), // wave44 handshake-crypto
+  onHandshakeRefused: (r) => r === 'unsupported' ? showUpdateBothPhones() : showNotice(S.handshake.noticeTitle, S.handshake.noticeBody, [], HANDSHAKE_NOTICE_MS), // wave44 handshake-crypto; wave44c header-cluster: the old-QR notice carries the update buttons
   onHideReport: (e) => announceHideReport(e, (t, b) => showNotice(t, b, [], HANDSHAKE_NOTICE_MS)), // wave44b hide-from-crypto
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
@@ -2055,10 +2056,9 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   const nodes = (ids: readonly string[]): Node[] => ids.flatMap((c) => parts[c] ?? []).filter((n): n is Node => n !== null)
-  // Wave 44: the right cluster is the same everywhere (QR, settings; no Ask/AI control, steer-ask-placement); the screen's own tools get their row.
-  right.replaceChildren(...nodes(headerRight(false)))
-  const tools = nodes(headerTools(screen))
-  if (tools.length) host.querySelector('.hdr')?.append(el('div', { class: 'hdr-tools' }, tools))
+  // Wave 44c header-cluster: one row. Top right: eye, search, QR, settings (the AI sparkle is mounted after); the chat switch and the pins follow the title.
+  right.replaceChildren(...nodes(headerRight(screen, false)))
+  host.querySelector('.hdr-left h2')?.after(...nodes(headerAfterTitle(screen)))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
@@ -8118,6 +8118,30 @@ const updates = createUpdateCheck({
   onNewer: (info) => { if (recorder.live || !shouldReloadOnce(info.release, sessionStorage)) updateBanner.hidden = false; else void reloadNow() },
 })
 const reloadNow = (): Promise<void> => reloadFresh({ caches: 'caches' in window ? window.caches : undefined, reload: () => location.reload() })
+
+/** Wave 44c header-cluster (ε): a QR of an app before v2 was refused; the notice says "Update the app on both phones" with "Update now" and "Send update link". */
+function showUpdateBothPhones(): void {
+  const T = S.w44cUpdate
+  showNotice(S.handshake.noticeTitle, S.handshake.unsupportedBody, [
+    el('button', { class: 'btn btn-electric btn-sm', 'data-update-now': '1', onclick: () => void runUpdateNow() }, [T.updateNow]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-send-update-link': '1', onclick: () => void sendUpdateLink() }, [T.sendLink]),
+  ], HANDSHAKE_NOTICE_MS)
+}
+async function runUpdateNow(): Promise<void> {
+  const outcome = await updateNow({
+    registration: async () => navigator.serviceWorker?.getRegistration(),
+    newerRelease: async () => (await updates.check()) === UpdateResult.Newer,
+    reload: reloadNow,
+    android: isAndroidAgent(navigator.userAgent),
+    openInstallPage: () => { window.open(APK_URL, '_blank', 'noopener') },
+  })
+  if (outcome === 'latest') toast(S.w44cUpdate.latest)
+}
+async function sendUpdateLink(): Promise<void> {
+  const text = S.w44cUpdate.shareText + LIVE_SERVER
+  if (typeof navigator.share === 'function') await navigator.share({ text }).catch(() => undefined)
+  else { await navigator.clipboard.writeText(text).catch(() => undefined); toast(S.meetCopied) }
+}
 void updates.auto()
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void updates.auto() })
 
