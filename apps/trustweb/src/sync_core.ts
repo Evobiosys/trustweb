@@ -729,12 +729,20 @@ const CODE_PREFIX = 'TWD1'
 const SECRET_RE = /^[A-Za-z0-9_-]{22,43}$/
 const DID_RE = /^did:peer:2\.[A-Za-z0-9.:_-]{20,1500}$/
 
+/** Wave 44c: the QR of "Link a device" holds a link of the app (the phone's camera app opens it), the pairing code is its fragment. Switch: one constant. */
+export const PAIR_LINK_BASE = 'https://app.trustweb.one/'
+export const pairLink = (code: string): string => `${PAIR_LINK_BASE}#pair=${code}`
+/** The code in a page fragment (`#pair=<code>`), or null. */
+export const pairCodeFromHash = (hash: string): string | null => /^#?pair=([^&\s]+)/.exec(hash)?.[1] ?? null
+
 export function pairingCode(did: string, secret: string): string {
   return [CODE_PREFIX, did, secret].join('~')
 }
 
 export function parsePairingCode(text: string): { did: string; secret: string } | null {
-  const [prefix, did, secret, ...rest] = text.trim().split('~')
+  const t = text.trim()
+  // Wave 44c: the code also comes inside a link of the app (`/#pair=<code>`, or `/pair#<code>`): only the code matters, never the host.
+  const [prefix, did, secret, ...rest] = (/(?:#pair=|\/pair#)([^&\s#]+)/.exec(t)?.[1] ?? t).split('~')
   return prefix === CODE_PREFIX && rest.length === 0 && DID_RE.test(did ?? '') && SECRET_RE.test(secret ?? '') ? { did, secret } : null
 }
 

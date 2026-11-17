@@ -16,6 +16,7 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'event-create': 'event_create', 'event-doc': 'app_action', 'event-role': 'app_action', 'event-resource': 'app_action',
   /* wave43c sync-devices (sync_actions.ts) */
   'sync-now': 'sync_now',
+  'sync-pair-link': 'sync_pair_link', // wave44c sync-seamless
   // Wave 43c connect-extras: the debug send of an event envelope has its own tool
   'event-envelope-send': 'event_envelope_send',
   // Wave 44 home-dashboard: opening a Dashboard has its own tool

@@ -2,7 +2,7 @@
 /** Wave 44c sync-seamless: delivery acks (A1), schema hold (A2), forwarding + stable sync id (A3), pairing link (A5). Two or three stock devices over a fake relay. */
 import { AUTO_RETRY_MS, AUTO_TTL_MS, createSyncLink } from '../../src/sync_link.ts'
 import { SCHEMA_VERSION } from '../../src/schema_version.ts'
-import { HOP_MAX, deltaOf, parseBundle, refreshStamps, syncIdOf } from '../../src/sync_core.ts'
+import { HOP_MAX, PAIR_LINK_BASE, deltaOf, pairCodeFromHash, pairLink, pairingCode, parseBundle, parsePairingCode, refreshStamps, syncIdOf } from '../../src/sync_core.ts'
 
 const person = (id, name, over = {}) => ({ id, name, context: '', ring: 'friend', metAt: 1, lines: [], ...over })
 const state = (over = {}) => ({ v: 1, me: { name: 'J' }, people: [], peers: [], inventory: [], log: [], meetings: [], ...over })
@@ -263,5 +263,54 @@ describe('A3 sync-forward + sync id', () => {
     expect(moved.by).not.toBe('Mac')
     expect(moved.from).toBe(moved.by)
     expect(again.st.people).toHaveLength(1)
+  })
+})
+
+describe('A5 pair-deeplink', () => {
+  const DID1 = 'did:peer:2.Vz6Mk' + 'a'.repeat(44) + '.Ez6LS' + 'a'.repeat(44) + '.SeyJ0' + 'x'.repeat(150)
+  const SECRET = 'abcdefghijklmnopqrstuv'
+
+  it('the QR holds an https link of the app, so the phone camera app opens TrustWeb; the code is its fragment', () => {
+    const link = pairLink(pairingCode(DID1, SECRET))
+    expect(link).toBe(`${PAIR_LINK_BASE}#pair=${pairingCode(DID1, SECRET)}`)
+    expect(link.startsWith('https://app.trustweb.one/')).toBe(true)
+  })
+
+  it('the code is read from a link of the app (either spelling), from a page fragment, and still from the bare code', () => {
+    const code = pairingCode(DID1, SECRET)
+    const want = { did: DID1, secret: SECRET }
+    expect(parsePairingCode(pairLink(code))).toEqual(want)
+    expect(parsePairingCode(`https://app.trustweb.one/pair#${code}`)).toEqual(want)
+    expect(parsePairingCode(`#pair=${code}`)).toEqual(want)
+    expect(parsePairingCode(`  ${code}  `)).toEqual(want)
+    expect(parsePairingCode(`https://evil.example/#pair=${code}x~y`)).toBeNull()
+    expect(parsePairingCode('https://app.trustweb.one/#pair=')).toBeNull()
+    expect(pairCodeFromHash('#pair=' + code)).toBe(code)
+    expect(pairCodeFromHash('#n=hello')).toBeNull()
+  })
+
+  it('a device joins from the link text alone', async () => {
+    const h = hub()
+    const mac = await device(h, 'Mac', state(), { auto: () => true })
+    const phone = await device(h, 'Phone', state(), { auto: () => true })
+    const r = await phone.api.join(pairLink(await mac.api.offerCode()))
+    expect(r.fp).toMatch(/^[0-9A-F]{4}$/)
+    await until(() => mac.box.requests.length === 1)
+    expect(mac.box.requests[0].fp).toBe(r.fp)
+  })
+})
+
+describe('A5 boot from a pairing link', () => {
+  it('a fragment with a pair code is handed to the view once and cleared from the address bar; any other fragment is left alone', async () => {
+    const { openPairLink } = await import('../../src/sync_pair_link.ts')
+    const joined = []
+    const cleared = []
+    const view = { joinLink: async (c) => { joined.push(c) } }
+    expect(openPairLink('#n=hi', view, () => cleared.push(1))).toBe(false)
+    expect(openPairLink('', view, () => cleared.push(1))).toBe(false)
+    expect(joined).toEqual([])
+    expect(openPairLink('#pair=TWD1~x~y', view, () => cleared.push(1))).toBe(true)
+    expect(joined).toEqual(['TWD1~x~y'])
+    expect(cleared).toHaveLength(1)
   })
 })

@@ -89,6 +89,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'profile_link_check', write: true },
   /* wave44 steer-circles-view */
   { name: 'circles_layout', write: false },
+  /* wave44c sync-seamless */
+  { name: 'sync_pair_link', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

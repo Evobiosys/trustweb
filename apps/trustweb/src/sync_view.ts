@@ -35,7 +35,7 @@ import { S } from './strings'
 import { setDeviceNameSource } from './device_name'
 import { readSyncMode, shouldSend, writeSyncMode } from './sync_mode'
 import { readRelayOn, writeRelayOn } from './notes_relay'
-import { dedupeByPeerId } from './sync_core'
+import { dedupeByPeerId, pairLink } from './sync_core'
 
 export interface SyncViewHooks {
   persona: string
@@ -82,6 +82,10 @@ export interface SyncView {
   start(): void
   /** The My devices sheet. */
   open(): void
+  /** Wave 44c: opened from a pairing link: joins with the code and shows the confirm sheet (a bad or used code says so in the code box). */
+  joinLink(code: string): Promise<void>
+  /** Wave 44c (MCP sync_pair_link): the Link a device sheet with its QR and link. */
+  showLink(): void
   /** The "Same person as..." picker on a person's card. */
   samePersonPicker(personId: string): void
   /** The "Which one do you keep?" sheet for two persons; `aId` is the preselected one to keep (Enter), `bId` the duplicate. */
@@ -445,16 +449,17 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   async function linkSheet(): Promise<void> {
     const code = await link.offerCode()
+    const pair = pairLink(code)
     const qr = el('div', { class: 'qr-box' })
     open('devices-link', [
       el('h3', {}, [S.dvLinkTitle]),
       el('p', { class: 'meta' }, [S.dvLinkLead]),
       qr,
-      el('code', { class: 'recovery-key', 'data-device-code': '1' }, [code]),
+      el('code', { class: 'recovery-key', 'data-device-code': '1', 'data-pair-link': pair }, [code]),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void navigator.clipboard?.writeText(code).then(() => h.toast(S.dvCodeCopied), () => { /* selectable text above */ }) } }, [S.dvCodeCopy]),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: devicesSheet }, [S.dvCancel]),
     ])
-    void renderQr(qr, code).catch(() => { /* the text code still works */ })
+    void renderQr(qr, pair).catch(() => { /* the text code still works */ })
   }
 
   function enterSheet(): void {
@@ -661,6 +666,13 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     if (deps && h.peek()?.connectCode) void refreshAll(deps).then(() => { if (showing()) devicesSheet() })
   }
 
+  async function joinLink(code: string): Promise<void> {
+    start()
+    const r = await link.join(code).catch(() => null)
+    if (r) confirmSheet(r)
+    else { enterSheet(); h.toast(S.dvBadCode) }
+  }
+
   let kickTimer: ReturnType<typeof setTimeout> | undefined
   function start(): void {
     if (started) return
@@ -685,6 +697,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     },
     start,
     open: openDevices,
+    joinLink,
+    showLink: () => { start(); void linkSheet() },
     samePersonPicker,
     mergeSheet: (aId, bId) => samePersonSheet(aId, bId, h.closeSheet),
     mergeNow: (keepId, dropId) => { void mergeNow(keepId, dropId) },
