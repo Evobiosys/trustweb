@@ -399,7 +399,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   /** The box at the top of the Feed: a post of mine, on the event's Feed while one is chosen. */
   function composer(eventId?: string): HTMLElement {
     const text = el('textarea', { class: 'field', rows: '2', placeholder: S.feedComposePh, 'aria-label': S.feedComposePh, 'data-feed-compose': '1' }) as HTMLTextAreaElement
-    const embed = el('button', { class: 'btn btn-ghost btn-sm', hidden: true, 'data-feed-embed': '1', onclick: () => { void embedLink(text, embed) } }, [S.feedEmbed.button]) as HTMLButtonElement
+    const embed = el('button', { class: 'btn btn-ghost btn-sm', hidden: true, 'data-feed-embed': '1', onclick: () => { void embedLink(text, embed, () => kept.clear()) } }, [S.feedEmbed.button]) as HTMLButtonElement
     text.addEventListener('input', () => { embed.hidden = !parsePostLink(text.value) })   // a lone link: offer to embed it (wave 44)
     const box = el('div', { class: 'feed-compose' }, [text, embed, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) { text.value = ''; kept.clear() } else text.focus() } }, [S.feedComposeSend]), publishTarget()])
     const kept = draftable(box, 'feed', eventId ?? 'mine')   // wave44c event-autosave
@@ -407,7 +407,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   }
 
   /** Wave 44 feed-embed: the pasted link of one post becomes a post in the Feed; the one GET happens only on this press. */
-  async function embedLink(text: HTMLTextAreaElement, button: HTMLButtonElement): Promise<void> {
+  /** review-44c: `clearDraft` drops the composer's draft with the text (event-autosave), else the redraw below restores the link. */
+  async function embedLink(text: HTMLTextAreaElement, button: HTMLButtonElement, clearDraft: () => void): Promise<void> {
     const link = parsePostLink(text.value)
     if (!link || button.disabled) return
     button.disabled = true
@@ -415,7 +416,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     const embed = await fetchEmbed(link, fetch)
     button.disabled = false
     if (!addEmbed(h.state(), embed)) { h.toast(S.feedEmbed.already); return }
-    text.value = ''; button.hidden = true
+    text.value = ''; clearDraft(); button.hidden = true
     h.save(); h.redrawFeed(); h.toast(embed.card ? S.feedEmbed.card : S.feedEmbed.done)
   }
 

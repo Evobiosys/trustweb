@@ -6,6 +6,7 @@
  *   R3 event-autosave: drafts live inside the record (one localStorage key): their sum stays under DRAFT_STORE_MAX_BYTES, so a draft never stops the record saving.
  *   R4 seen-through: the host's "Introduce to the people here" is reachable through the MCP (D-P02).
  *   R5 sync-seamless/header-cluster: one update button logic (the held banner runs Update now, not a bare reload); a new phone opening a pair link joins.
+ *   R6 event-autosave x feed: embedding a post empties the composer AND its draft (else the redraw restores the link; e2e feed_embed).
  */
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -160,5 +161,13 @@ describe('R5 one update logic; a new phone joins from a pair link', () => {
   })
   it('a phone without a record yet still reads the pair link at boot', () => {
     expect(src).toMatch(/else if \(!state && deviceSyncEligible\(\)\) \{ devices\.start\(\); openPairLink\(bootHash, devices\) \}/)
+  })
+})
+
+describe('R6 feed composer: an embedded link leaves no draft behind', () => {
+  it('embedLink drops the composer draft with the text (feed_embed.mjs proves it in the page)', () => {
+    const src = readFileSync(new URL('../../src/feed_view.ts', import.meta.url), 'utf8')
+    expect(src).toMatch(/async function embedLink\(text: HTMLTextAreaElement, button: HTMLButtonElement, clearDraft: \(\) => void\)/)
+    expect(src).toMatch(/text\.value = ''; clearDraft\(\); button\.hidden = true/)
   })
 })
