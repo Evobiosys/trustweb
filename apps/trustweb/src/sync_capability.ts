@@ -28,8 +28,8 @@ export const syncEnv = (): SyncEnv => syncEnvFrom(typeof window === 'undefined' 
 /** A vault is a folder on a computer: desktop browsers and the Tauri shell. */
 export const canSyncLocalVault = (env: SyncEnv): boolean => env.tauri || !env.phone
 
-/** The Tana API needs a network and a token only, so every device can; a phone just keeps it under Advanced. */
-export const canSyncTana = (_env: SyncEnv): boolean => true
+/** Wave 44c: Tana's local API answers on the computer's loopback (127.0.0.1:8262), so only a computer or the desktop app reaches it; a phone receives the result by device sync. */
+export const canSyncTana = (env: SyncEnv): boolean => env.tauri || !env.phone
 
 /** Open decision (wave 43 questions, sync device predicate): where a phone without the Tauri shell shows the Obsidian and Tana entries. One-line switch. */
 export const SYNC_PHONE_PLACEMENT: Placement = 'advanced'
