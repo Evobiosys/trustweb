@@ -86,6 +86,10 @@ export interface SyncView {
   joinLink(code: string): Promise<void>
   /** Wave 44c (MCP sync_pair_link): the Link a device sheet with its QR and link. */
   showLink(): void
+  /** answers-44c (MCP sync_pair_show_new): on a new device, its own code for the device in use to scan (Signal-like). */
+  showNewCode(): void
+  /** answers-44c (MCP sync_pair_scan): on the device in use, the camera for a new device's code. */
+  scanNew(): void
   /** The "Same person as..." picker on a person's card. */
   samePersonPicker(personId: string): void
   /** The "Which one do you keep?" sheet for two persons; `aId` is the preselected one to keep (Enter), `bId` the duplicate. */
@@ -260,7 +264,9 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       receiveOnlyToggle(),
       ...usernameBlock(s),
       el('button', { class: 'btn btn-electric', 'data-link-device': '1', onclick: () => void linkSheet() }, [S.dvLink]),
-      el('button', { class: 'btn btn-ghost', 'data-enter-code': '1', onclick: enterSheet }, [S.dvEnter]),
+      el('button', { class: 'btn btn-ghost', 'data-scan-new-device': '1', onclick: () => enterSheet(true) }, [S.a44cPair.scanNew]), // answers-44c: Signal-like, the new device shows
+      el('button', { class: 'btn btn-ghost', 'data-show-new-code': '1', onclick: () => void linkSheet(true) }, [S.a44cPair.showNew]),
+      el('button', { class: 'btn btn-ghost', 'data-enter-code': '1', onclick: () => enterSheet() }, [S.dvEnter]),
       reviewing || (s && possibleDuplicates(s.people).length) ? el('button', { class: 'btn btn-ghost', 'data-open-review': '1', onclick: reviewSheet }, [reviewing ? `${S.dvReview} (${reviewing})` : S.dvReview]) : null,
       ...h.snapshots.block(devicesSheet),
       ...orphanChats(s),
@@ -447,13 +453,14 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   /** Wave 40: Take this device's state / Send my state to this device; the answer comes back as an Incoming sheet. */
   const ask = (p: Pairing, run: Promise<void>, msg: string): Promise<void> => request(p, run, () => h.toast(msg))
 
-  async function linkSheet(): Promise<void> {
+  /** `asNew` (answers-44c, Signal-like): this is the new device; the device in use scans it (My devices > Scan a new device). */
+  async function linkSheet(asNew = false): Promise<void> {
     const code = await link.offerCode()
     const pair = pairLink(code)
     const qr = el('div', { class: 'qr-box' })
     open('devices-link', [
-      el('h3', {}, [S.dvLinkTitle]),
-      el('p', { class: 'meta' }, [S.dvLinkLead]),
+      el('h3', {}, [asNew ? S.a44cPair.newTitle : S.dvLinkTitle]),
+      el('p', { class: 'meta', ...(asNew ? { 'data-pair-new-lead': '1' } : {}) }, [asNew ? S.a44cPair.newLead : S.dvLinkLead]),
       qr,
       el('code', { class: 'recovery-key', 'data-device-code': '1', 'data-pair-link': pair }, [code]),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void navigator.clipboard?.writeText(code).then(() => h.toast(S.dvCodeCopied), () => { /* selectable text above */ }) } }, [S.dvCodeCopy]),
@@ -462,7 +469,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     void renderQr(qr, pair).catch(() => { /* the text code still works */ })
   }
 
-  function enterSheet(): void {
+  /** `scan` (answers-44c): opened as "Scan a new device": the camera starts at once. */
+  function enterSheet(scan = false): void {
     const input = el('input', { class: 'field', placeholder: S.dvEnterPh, 'aria-label': S.dvEnterPh, autocomplete: 'off', 'data-code-input': '1' })
     const msg = el('p', { class: 'meta' }, [])
     const video = el('video', { class: 'scan-video', hidden: true })
@@ -474,18 +482,21 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       confirmSheet(r)
     }
     input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') void join(input.value) })
+    const camera = (): void => {
+      video.hidden = false
+      const handle = scanQr(video as HTMLVideoElement, (text) => void join(text))
+      stop = handle.stop
+      handle.ready.catch(() => { video.hidden = true })
+    }
     open('devices-enter', [
-      el('h3', {}, [S.dvEnter]),
+      el('h3', {}, [scan ? S.a44cPair.scanNew : S.dvEnter]),
+      scan ? el('p', { class: 'meta' }, [S.a44cPair.scanLead]) : null,
       input, msg, video,
       el('button', { class: 'btn btn-electric', 'data-code-ok': '1', onclick: () => void join(input.value) }, [S.dvEnterOk]),
-      el('button', { class: 'btn btn-ghost', onclick: () => {
-        video.hidden = false
-        const handle = scanQr(video as HTMLVideoElement, (text) => void join(text))
-        stop = handle.stop
-        handle.ready.catch(() => { video.hidden = true })
-      } }, [S.dvScan]),
+      el('button', { class: 'btn btn-ghost', onclick: camera }, [S.dvScan]),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { stop?.(); devicesSheet() } }, [S.dvCancel]),
     ])
+    if (scan) camera()
   }
 
   function confirmSheet(r: PairRequest): void {
@@ -495,7 +506,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       el('p', { class: 'meta' }, [S.dvConfirmLead(r.name)]),
       el('code', { class: 'recovery-key', 'data-fingerprint': r.fp }, [r.fp]),
       el('label', { class: 'consent' }, [share, el('span', {}, [S.unShareTick])]),
-      el('button', { class: 'btn btn-electric', 'data-pair-confirm': '1', onclick: () => { r.confirm({ shareCode: share.checked }); h.toast(S.dvLinked(r.name)); devicesSheet() } }, [S.dvConfirm]),
+      el('button', { class: 'btn btn-electric', 'data-pair-confirm': '1', onclick: () => { if (!h.peek()) { h.state(); h.changed() } r.confirm({ shareCode: share.checked }); h.toast(S.dvLinked(r.name)); devicesSheet() } }, [S.dvConfirm]), // answers-44c: a new device without a record makes its empty one, so Auto sync brings the other device's record
       el('button', { class: 'btn btn-ghost', onclick: () => { r.cancel(); devicesSheet() } }, [S.dvCancel]),
     ])
   }
@@ -699,6 +710,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     open: openDevices,
     joinLink,
     showLink: () => { start(); void linkSheet() },
+    showNewCode: () => { start(); void linkSheet(true) }, // wave44c answers-44c
+    scanNew: () => { start(); enterSheet(true) },
     samePersonPicker,
     mergeSheet: (aId, bId) => samePersonSheet(aId, bId, h.closeSheet),
     mergeNow: (keepId, dropId) => { void mergeNow(keepId, dropId) },

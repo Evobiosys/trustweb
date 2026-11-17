@@ -101,6 +101,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'feed_refresh', write: false }, { name: 'feed_post_read', write: false }, { name: 'feed_source_add', write: true }, { name: 'feed_source_remove', write: true }, { name: 'feed_extension_set', write: true },
   /* wave44c sync-seamless */
   { name: 'sync_pair_link', write: true },
+  /* wave44c answers-44c */
+  { name: 'sync_pair_show_new', write: true }, { name: 'sync_pair_scan', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

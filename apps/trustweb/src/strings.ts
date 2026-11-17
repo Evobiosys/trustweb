@@ -5345,4 +5345,14 @@ export const S = {
     obsLastScan: (time: string) => `Last scan ${time}`,
     obsAutoHint: 'Rescans by itself when you come back to the app and every 5 minutes.',
   },
+  /* wave44c answers-44c */
+  a44cPair: {
+    showNew: 'Show a code for my other device',
+    newTitle: 'Link this new device',
+    newLead: 'On the device you already use open Settings > My devices > Scan a new device and point it at this code. It works once, for 10 minutes.',
+    scanNew: 'Scan a new device',
+    scanLead: 'Point the camera at the code the new device shows (or paste it).',
+    showNewLabel: 'Show this device\'s code for the other device to scan',
+    scanNewLabel: 'Scan a new device\'s code',
+  },
 } as const

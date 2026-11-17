@@ -43,5 +43,15 @@ export function syncTools(o: RecordToolsOptions): Tool[] {
       return { queued: true }
     },
   }
-  return [read, write, link]
+  /* wave44c answers-44c: the Signal-like direction (the new device shows, the device in use scans) */
+  const queue = (name: string, type: string, description: string): Tool => ({
+    name, description, inputSchema: schema({}),
+    run: () => {
+      announce(o.file, { at: now().toISOString(), kind: 'action', tool: name, summary: `${type} {}`, action: { type, args: {} } })
+      return { queued: true }
+    },
+  })
+  const showNew = queue('sync_pair_show_new', 'sync-pair-show-new', 'Queue "Show a code for my other device" on the open TrustWeb preview (a new device): it shows its own pairing QR for the device already in use to scan. Returns {queued:true}.')
+  const scan = queue('sync_pair_scan', 'sync-pair-scan', 'Queue "Scan a new device" on the open TrustWeb preview (the device already in use): it opens the camera for the code the new device shows, then asks to confirm. Returns {queued:true}.')
+  return [read, write, link, showNew, scan]
 }

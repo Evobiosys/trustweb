@@ -3,7 +3,7 @@
 import type { Actions } from './actions'
 import { S } from './strings'
 
-export interface SyncActionHost { syncAll(): Promise<number>; /** Wave 44c: the Link a device sheet (QR and link). */ showLink(): void }
+export interface SyncActionHost { syncAll(): Promise<number>; /** Wave 44c: the Link a device sheet (QR and link). */ showLink(): void; /** answers-44c: the new device shows its code (Signal-like). */ showNewCode(): void; /** answers-44c: the trusted device scans a new device's code. */ scanNew(): void }
 
 export function defineSyncActions(reg: Actions, host: SyncActionHost): void {
   reg.define({
@@ -20,5 +20,14 @@ export function defineSyncActions(reg: Actions, host: SyncActionHost): void {
     label: () => S.syncSeamless.pairLinkLabel,
     apply: () => host.showLink(),
     undoable: false,
+  })
+  /* wave44c answers-44c */
+  reg.define({
+    type: 'sync-pair-show-new', doc: 'On a new device: shows its own pairing code (QR) for the device already in use to scan (Signal-like).', shape: '{}',
+    parse: () => ({}), label: () => S.a44cPair.showNewLabel, apply: () => host.showNewCode(), undoable: false,
+  })
+  reg.define({
+    type: 'sync-pair-scan', doc: 'On the device already in use: opens the camera to scan the code a new device shows, then asks to confirm.', shape: '{}',
+    parse: () => ({}), label: () => S.a44cPair.scanNewLabel, apply: () => host.scanNew(), undoable: false,
   })
 }

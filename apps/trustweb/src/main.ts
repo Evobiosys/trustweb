@@ -2989,6 +2989,7 @@ function screenStart(): Node[] {
     !invite && !demo && deviceSyncEligible()
       ? el('button', { class: 'btn btn-ghost btn-sm', 'data-link-from-start': '1', onclick: () => { devices.start(); devices.open() } }, [S.dvLinkIt])
       : null,
+    !invite && !demo && deviceSyncEligible() ? el('button', { class: 'btn btn-ghost btn-sm', 'data-show-new-code': '1', onclick: () => devices.showNewCode() }, [S.a44cPair.showNew]) : null, // wave44c answers-44c
     el('p', { class: 'foot' }, [S.startFoot]),
   ])]
 }
