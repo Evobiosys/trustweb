@@ -31,7 +31,7 @@ export interface AllToolsOptions extends RecordToolsOptions {
 }
 
 /** Tools that change the preview registry, not the record: no card in the preview. */
-const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send', /* wave44 */ 'dashboard_open'])
+const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send', /* wave44 */ 'dashboard_open', /* wave44c home-default */ 'home_open_request'])
 
 export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] {
   const build = (write: boolean): Tool[] => [

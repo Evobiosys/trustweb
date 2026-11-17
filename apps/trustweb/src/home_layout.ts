@@ -6,12 +6,12 @@
  */
 export const HOME_COLS = ['left', 'center', 'right'] as const
 export type HomeCol = (typeof HOME_COLS)[number]
-/** asksToMe + connects = what others want of me; asksSent + invites = what I asked or offered. */
-export const HOME_TILES = ['asksToMe', 'connects', 'web', 'asksSent', 'invites'] as const
+/** asksToMe + connects = what others want of me; asksSent + invites = what I asked or offered; requests (wave 44c) = the full list of all of them. */
+export const HOME_TILES = ['asksToMe', 'connects', 'web', 'asksSent', 'invites', 'requests'] as const
 export type HomeTile = (typeof HOME_TILES)[number]
 export type HomeLayout = Record<HomeCol, HomeTile[]>
 
-export const defaultLayout = (): HomeLayout => ({ left: ['asksToMe', 'connects'], center: ['web'], right: ['asksSent', 'invites'] })
+export const defaultLayout = (): HomeLayout => ({ left: ['asksToMe', 'connects', 'requests'], center: ['web'], right: ['asksSent', 'invites'] })
 
 const isTile = (v: unknown): v is HomeTile => (HOME_TILES as readonly unknown[]).includes(v)
 const isCol = (v: unknown): v is HomeCol => (HOME_COLS as readonly unknown[]).includes(v)

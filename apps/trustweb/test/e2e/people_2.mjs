@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 28b people-2 proof (headless, dev only): People page zones. PORT=5441 SHOTS=<dir> EXE=<chromium> PW=<playwright-core index.mjs> node people_2.mjs */
 const { chromium } = await import(process.env.PW ?? 'playwright-core')
-const b = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const b = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 const ck = (n, c) => console.log((c ? 'PASS ' : 'FAIL ') + n)
 const pp = (id, name, ring) => ({ id, name, context: '', ring, metAt: 1, lines: [] })
 for (const [tag, vp, touch] of [['390', { width: 390, height: 844 }, true], ['1440', { width: 1440, height: 900 }, false]]) {

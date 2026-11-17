@@ -2,7 +2,8 @@
 /** Wave 44 steer-event-visibility-2 proof (headless, stock dev server): PORT=5301 PW=<playwright-core index.js> EXE=<chromium> node event_alerts.mjs. Settings > Notifications "Alert me about new events in my communities". Synthetic record only. */
 const pw = await import(process.env.PW ?? 'playwright-core'); const chromium = (pw.default ?? pw).chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5301}/`
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const record = { v: 1, me: { id: 'me1', displayName: 'Jakob' }, peers: [], log: [], inventory: [], people: [] }

@@ -5219,4 +5219,17 @@ export const S = {
     card: (scope: string) => `Send a ${scope === 'line' ? 'line' : 'block'} of a resource to a chat`,
   },
   verdictNote: { ph: 'note (optional), sent with Needs work', aria: 'Note for this verdict' },
+  /* wave44c home-default */
+  homeDefault: {
+    requests: 'Existing requests',
+    requestsAria: 'Open all existing requests',
+    openAll: 'See all',
+    openRequest: 'Open request',
+    toMe: 'Asked of you',
+    connects: 'Want to connect',
+    sent: 'You asked',
+    invites: 'Your invitations',
+    none: 'No open requests.',
+    thumbAria: 'Your web, small',
+  },
 } as const

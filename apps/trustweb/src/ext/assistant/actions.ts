@@ -20,6 +20,8 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'event-envelope-send': 'event_envelope_send',
   // Wave 44 home-dashboard: opening a Dashboard has its own tool
   'dashboard-open': 'dashboard_open',
+  // Wave 44c home-default: opening one request as its card
+  'home-open-request': 'home_open_request',
   /* wave44 answers-44b: a shared block sent to a chat is resource_share via:'chat' */
   'resource-share-chat': 'resource_share',
 }
