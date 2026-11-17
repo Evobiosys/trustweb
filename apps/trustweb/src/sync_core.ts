@@ -208,6 +208,13 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
   return { ...rest, transcript: [] }
 }
 
+/** review-44c: a tombstone as it travels: the same device-local fields stay home as for the live item (syncEvent, withoutImage). */
+function syncTrash(t: TrashEntry): TrashEntry {
+  if (t.kind === 'event') return { ...t, item: syncEvent(t.item as unknown as TwEvent) }
+  if (t.kind === 'resource') return { ...t, item: withoutImage(t.item as unknown as InventoryItem) }
+  return t
+}
+
 type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare' | 'trash'> & { me?: { displayName: string }; peers?: Peer[]; chats?: ChatBook }
 
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
@@ -220,7 +227,7 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
     ...(s.tasks ?? []).map((x): [string, unknown] => [KEY_PREFIX.task + x.id, x]),
     ...(s.invitations ?? []).map((x): [string, unknown] => [KEY_PREFIX.invitation + x.id, x]),
-    ...(s.trash ?? []).map((x): [string, unknown] => [trashKey(x), x]), // wave44c answers-44c (A4)
+    ...(s.trash ?? []).map((x): [string, unknown] => [trashKey(x), syncTrash(x)]), // wave44c answers-44c (A4); review-44c: hashed as it travels
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
     ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
@@ -258,7 +265,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     events: (s.events ?? []).map(syncEvent),
     ...(s.tasks?.length ? { tasks: s.tasks } : {}),
     ...(s.invitations?.length ? { invitations: s.invitations } : {}),
-    ...(s.trash?.length ? { trash: s.trash } : {}),
+    ...(s.trash?.length ? { trash: s.trash.map(syncTrash) } : {}),
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
     settings: settingsOf(s),
@@ -365,6 +372,8 @@ const isTask = (e: unknown): e is TwTask => isObj(e) && ['id', 'title'].every((k
 const isInvitation = (e: unknown): e is Invitation => isObj(e) && e.kind === 'invitation' && typeof e.id === 'string' && typeof e.status === 'string'
 const isEvent = (e: unknown): e is TwEvent => isObj(e) && ['id', 'name', 'from', 'where'].every((k) => typeof e[k] === 'string')
   && typeof e.createdAt === 'number' && typeof e.attended === 'boolean'
+/** review-44c: a tombstone's item is checked like the live list of its kind (a restore puts it there). */
+const trashItemOk = (t: TrashEntry): boolean => (t.kind === 'event' ? isEvent(t.item) : t.kind === 'task' ? isTask(t.item) : t.kind === 'invitation' ? isInvitation(t.item) : isObj(t.item))
 
 /**
  * The untrusted-input boundary: a decrypted bundle that is not exactly this shape is nothing. Versions 1 to 3 are read; a v2 field that is
@@ -386,7 +395,7 @@ export function parseBundle(v: unknown): SyncBundle | null {
   if (!by || !from || !sameAs || !channels || !isList(v.events) || !v.events.every(isEvent) || !isObj(v.chats)) return null
   if (v.tasks !== undefined && !(isList(v.tasks) && v.tasks.every(isTask))) return null
   if (v.invitations !== undefined && !(Array.isArray(v.invitations) && v.invitations.every(isInvitation))) return null
-  if (v.trash !== undefined && !(Array.isArray(v.trash) && v.trash.length <= AT_MAX && v.trash.every(isTrashEntry))) return null
+  if (v.trash !== undefined && !(Array.isArray(v.trash) && v.trash.length <= AT_MAX && v.trash.every((t) => isTrashEntry(t) && trashItemOk(t)))) return null
   out.by = by
   if (Object.keys(from).length) out.from = from
   if (isObj(v.hp)) {
@@ -397,7 +406,7 @@ export function parseBundle(v: unknown): SyncBundle | null {
   out.events = (v.events as TwEvent[]).map(syncEvent)
   if (v.tasks) out.tasks = v.tasks as TwTask[]
   if (v.invitations) out.invitations = v.invitations as Invitation[]
-  if (v.trash) out.trash = v.trash as TrashEntry[]
+  if (v.trash) out.trash = (v.trash as TrashEntry[]).map(syncTrash)
   out.chats = sanitizeChatBook(v.chats)
   const settings = parseSettings(v.settings)
   if (settings) out.settings = settings
