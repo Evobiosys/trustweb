@@ -19,11 +19,11 @@ describe('switches', () => {
 
 describe('community menu (B33)', () => {
   it('lists Home, Spaces, Events, Docs, Chat, Ask for Support in that order, Ask last of the six', () => {
-    expect(MENU_ORDER.slice(0, 6)).toEqual(['home', 'spaces', 'events', 'docs', 'chat', 'ask'])
-    expect(menuItems({}, 'iyg').slice(0, 6)).toEqual(['home', 'spaces', 'events', 'docs', 'chat', 'ask'])
+    expect(MENU_ORDER.slice(0, 8)).toEqual(['home', 'spaces', 'events', 'docs', 'resources', 'references', 'chat', 'ask'])
+    expect(menuItems({}, 'iyg').slice(0, 8)).toEqual(['home', 'spaces', 'events', 'docs', 'resources', 'references', 'chat', 'ask'])
   })
   it('Timeline and Members follow as menu items; the settings can take any away', () => {
-    expect(menuItems({}, 'iyg')).toEqual(['home', 'spaces', 'events', 'docs', 'chat', 'ask', 'timeline', 'members'])
+    expect(menuItems({}, 'iyg')).toEqual(['home', 'spaces', 'events', 'docs', 'resources', 'references', 'chat', 'ask', 'timeline', 'members'])
     expect(menuItems({ meta: { iyg: { kind: 'informal', organizers: [], nav: ['home', 'chat'], ask: false } } }, 'iyg')).toEqual(['home', 'chat'])
   })
   it('NAV carries the timeline', () => { expect(NAV).toContain('timeline') })
