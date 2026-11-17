@@ -62,6 +62,8 @@ async function run(label, viewport, touch) {
     if (!(await page.locator('[data-people-import]').first().isVisible())) { if (!(await page.locator('[data-settings-advanced-all]').evaluate((d) => d.open).catch(() => true))) await page.locator('[data-settings-advanced-all] > summary').click().catch(() => {}); await wait(300) }
     if (!(await page.locator('[data-people-import]').first().isVisible())) { await hit(page.locator('summary', { hasText: 'Your contacts' }).first()); await wait(300) }
     await hit(page.locator('[data-people-import]').first()); await wait(500)
+    // review-44c: wave 44 steer-settings-sync folds the import sources behind an Advanced expander (sync_visibility_view.ts [data-sync-advanced]); red on base 85191dbcde
+    await page.locator('[data-sync-advanced]').last().evaluate((d) => { d.open = true }).catch(() => {}); await wait(300)
   }
 
   await page.goto(`http://127.0.0.1:${PORT}/`); await wait(1200)

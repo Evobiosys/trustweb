@@ -4,11 +4,13 @@
  *  Personal: first screen = the rings, first tab "Web" opens the rings, Home sits in ⋮, Settings > Home "Open Home first" off.
  *  Community: first tab "Home", the one next to it "Web"; Web opens the rings even with Home pinned for the personal view.
  */
+import { quietKeepCopy } from './rings_first.mjs'
 const pw = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5481}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
 const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+quietKeepCopy(browser) // review-44c: the Keep-a-copy offer sheet covered the controls (red on base 85191dbcde)
 let failed = false
 const check = (name, cond, info = '') => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + info}`); if (!cond) failed = true }
 const person = (id, name, ring, fields) => ({ id, name, ring, lines: [], context: '', metAt: 1, fields, peerId: `peer-${id}` })

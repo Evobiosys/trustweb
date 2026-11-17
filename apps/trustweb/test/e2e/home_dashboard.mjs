@@ -6,11 +6,13 @@
  *  C. Dashboard: reachable from Home; "Live now" flashes once on open, then stays static; Refresh replays it once.
  *  D. Managed or unmanaged shows only inside the Dashboard's Settings, never on the card.
  */
+import { quietKeepCopy } from './rings_first.mjs'
 const pw = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5445}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
 const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+quietKeepCopy(browser) // review-44c: the Keep-a-copy offer sheet covered the controls (red on base 85191dbcde)
 let failed = false
 const check = (name, cond, info = '') => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + info}`); if (!cond) failed = true }
 const record = () => ({

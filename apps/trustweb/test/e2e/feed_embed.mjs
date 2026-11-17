@@ -9,7 +9,8 @@ const browser = ringsFirst(await chromium.launch({ headless: true, executablePat
 let failed = false
 const check = (name, cond, info = '') => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + info}`); if (!cond) failed = true }
 const KEY = 'trustweb.v1.me'
-const record = { v: 1, me: { id: 'me1', displayName: 'Tester' }, peers: [], log: [], inventory: [], people: [], events: [{ id: 'e1', name: 'Winter IYG', from: '2099-01-01', where: 'Wien', createdAt: 1, attended: true }] }
+// review-44c: Feed is no longer a stock bottom-bar tab (bottom_bar.ts FEED_IN_BAR=false at base 85191dbcde): the record pins it, as feed_ext.mjs does
+const record = { v: 1, uiBar: { order: ['web', 'chat', 'feed', 'events', 'inventory'], orderVersion: 2 }, me: { id: 'me1', displayName: 'Tester' }, peers: [], log: [], inventory: [], people: [], events: [{ id: 'e1', name: 'Winter IYG', from: '2099-01-01', where: 'Wien', createdAt: 1, attended: true }] }
 const hit = (a, b) => !(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y)
 const MASTO = 'https://mastodon.social/@alice/111222333'
 const BSKY = 'https://bsky.app/profile/ann.bsky.social/post/3kabc'
