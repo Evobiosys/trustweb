@@ -2,6 +2,7 @@
 /** Wave 44c sync-seamless: delivery acks (A1), schema hold (A2), forwarding + stable sync id (A3), pairing link (A5). Two or three stock devices over a fake relay. */
 import { AUTO_RETRY_MS, AUTO_TTL_MS, createSyncLink } from '../../src/sync_link.ts'
 import { SCHEMA_VERSION } from '../../src/schema_version.ts'
+import { HOP_MAX, deltaOf, parseBundle, refreshStamps, syncIdOf } from '../../src/sync_core.ts'
 
 const person = (id, name, over = {}) => ({ id, name, context: '', ring: 'friend', metAt: 1, lines: [], ...over })
 const state = (over = {}) => ({ v: 1, me: { name: 'J' }, people: [], peers: [], inventory: [], log: [], meetings: [], ...over })
@@ -175,5 +176,92 @@ describe('A2 schema hold + banner', () => {
     still.api.stop()
     const gone = await device(h, 'Phone', old.st, { auto: () => true, storage: store })
     expect(gone.api.held().items).toBe(0)
+  })
+})
+
+describe('A3 sync-forward + sync id', () => {
+  const rounds = async (ds, n = 4) => { for (let i = 0; i < n; i++) { for (const d of ds) { d.tick(1000); await d.api.autoTick() } await settle() } }
+
+  it('the stamp id of a device comes from its sync DID: short, stable, unique, independent of the name', () => {
+    const did = (c) => 'did:peer:2.Vz6Mk' + c.repeat(44) + '.Ez6LS' + c.repeat(44) + '.SeyJ0' + 'x'.repeat(150)
+    expect(syncIdOf(did('a'))).toBe(syncIdOf(did('a')))
+    expect(syncIdOf(did('a'))).not.toBe(syncIdOf(did('b')))
+    expect(syncIdOf(did('a')).length).toBeLessThanOrEqual(20)
+  })
+
+  it('a delta also holds what arrived from other devices (not back to the one it came from), and stops after HOP_MAX hops', () => {
+    const s = state({ people: [person('a', 'Ada'), person('b', 'Bo'), person('c', 'Cy')] })
+    const st = refreshStamps(s, {}, 100, 'B')
+    st['p:a'] = { ...st['p:a'], at: 50, by: 'A', rx: 200, hp: 1 }
+    st['p:b'] = { ...st['p:b'], at: 50, by: 'C', rx: 200, hp: 1 }
+    st['p:c'] = { ...st['p:c'], at: 50, by: 'A', rx: 200, hp: HOP_MAX }
+    const d = deltaOf(s, st, 150, 'B', ['C'])
+    expect(d.people.map((p) => p.id)).toEqual(['a'])
+    expect(d.hp).toEqual({ 'p:a': 1 })
+    expect(parseBundle(JSON.parse(JSON.stringify(d))).hp).toEqual({ 'p:a': 1 })
+  })
+
+  it('three devices, two pairings: a change on either end reaches the other (and the middle)', async () => {
+    const h = hub()
+    const mac = await device(h, 'Mac', state({ people: [person('a', 'Ada')] }), { auto: () => true })
+    const phone = await device(h, 'Phone', state(), { auto: () => true })
+    const tab = await device(h, 'Tablet', state(), { auto: () => true })
+    await paired(h, mac, phone)
+    await paired(h, phone, tab)
+    await rounds([mac, phone, tab])
+    expect(tab.st.people.map((p) => p.id)).toEqual(['a'])
+    tab.st.people.push(person('z', 'Zed'))
+    await rounds([mac, phone, tab], 5)
+    expect(mac.st.people.map((p) => p.id).sort()).toEqual(['a', 'z'])
+    mac.st.people[0].name = 'Ada L'
+    await rounds([mac, phone, tab], 5)
+    expect(tab.st.people.find((p) => p.id === 'a').name).toBe('Ada L')
+  })
+
+  it('two devices with the same name: a change from one reaches the other through the Mac and is not echoed to its origin', async () => {
+    const h = hub()
+    const mac = await device(h, 'Mac', state(), { auto: () => true })
+    const one = await device(h, 'Phone', state(), { auto: () => true, storage: mem() })
+    const two = await device(h, 'Phone', state(), { auto: () => true, storage: mem() })
+    await paired(h, mac, one)
+    await paired(h, mac, two)
+    await rounds([mac, one, two])
+    const before = one.box.merged.length
+    one.st.people.push(person('n', 'Nia'))
+    await rounds([mac, one, two], 5)
+    expect(two.st.people.map((p) => p.id)).toEqual(['n'])
+    expect(one.box.merged.length).toBe(before) // nothing came back to its origin
+  })
+
+  it('a ring of three pairings converges and then goes quiet (no loop)', async () => {
+    const h = hub()
+    const mac = await device(h, 'Mac', state({ people: [person('a', 'Ada')] }), { auto: () => true })
+    const phone = await device(h, 'Phone', state(), { auto: () => true })
+    const tab = await device(h, 'Tablet', state(), { auto: () => true })
+    await paired(h, mac, phone); await paired(h, phone, tab); await paired(h, tab, mac)
+    await rounds([mac, phone, tab], 4)
+    mac.st.people.push(person('b', 'Bo'))
+    await rounds([mac, phone, tab], 5)
+    expect(tab.st.people.map((p) => p.id).sort()).toEqual(['a', 'b'])
+    await rounds([mac, phone, tab], 2)
+    const quiet = h.wires.length
+    await rounds([mac, phone, tab], 3)
+    expect(h.wires.length).toBe(quiet)
+  })
+
+  it('stamps of an earlier build (the device NAME in `by`) move to the sync id at start; the data stays', async () => {
+    const h = hub()
+    const store = mem()
+    const first = await device(h, 'Mac', state({ people: [person('a', 'Ada')] }), { auto: () => true, storage: store })
+    await first.api.autoTick()
+    const raw = JSON.parse(store.getItem('trustweb.sync.v1.Mac'))
+    raw.stamps = { 'p:a': { h: 'x', at: 5, by: 'Mac', from: 'Mac' } }
+    store.setItem('trustweb.sync.v1.Mac', JSON.stringify(raw))
+    first.api.stop()
+    const again = await device(h, 'Mac', first.st, { auto: () => true, storage: store })
+    const moved = JSON.parse(store.getItem('trustweb.sync.v1.Mac')).stamps['p:a']
+    expect(moved.by).not.toBe('Mac')
+    expect(moved.from).toBe(moved.by)
+    expect(again.st.people).toHaveLength(1)
   })
 })

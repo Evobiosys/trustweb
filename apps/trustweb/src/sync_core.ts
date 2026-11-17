@@ -44,6 +44,7 @@ import { alive } from './deleted_people'
 import { ALSO_DIDS_MAX } from './device_alias'
 
 /** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
+export const HOP_MAX = 3
 export const SYNC_VERSION = 3
 /** A sync message older than this is ignored on arrival (the relay may hold it longer; see sync_link.ts). */
 export const SYNC_TTL_MS = 10 * 60_000
@@ -92,7 +93,8 @@ export function settingsOf(s: object): Record<string, unknown> {
 
 export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'invitation' | 'channel' | 'sameAs' | 'chat' | 'name' | 'peer'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
-export type Stamps = Record<string, { h: string; at: number; by: string; from?: string }>
+/** `rx`/`hp` (wave 44c): when this device took the entity from another one, and over how many devices it has come (0 = made where it was last edited); only such entities are forwarded, up to HOP_MAX. */
+export type Stamps = Record<string, { h: string; at: number; by: string; from?: string; rx?: number; hp?: number }>
 
 export interface SyncBundle {
   v: number
@@ -107,6 +109,8 @@ export interface SyncBundle {
   by?: Record<string, string>
   /** Entity key -> the device that first brought it in (Stamps.from), so the origin survives a hop through a third device. Optional: an older device sends none. */
   from?: Record<string, string>
+  /** Wave 44c: entity key -> devices the entity has already passed over (absent = 0); forwarding stops at HOP_MAX. */
+  hp?: Record<string, number>
   channels?: { mine: ChannelMap; share: ShareSettings }
   events?: TwEvent[]
   /** Wave 24: optional, sent only when I have tasks; a device without the field leaves mine untouched. */
@@ -242,6 +246,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     at: Object.fromEntries(entries.map(([k, x]) => [k, x.at])),
     by: Object.fromEntries(entries.map(([k, x]) => [k, x.by])),
     ...(entries.some(([, x]) => x.from) ? { from: Object.fromEntries(entries.flatMap(([k, x]) => (x.from ? [[k, x.from]] : []))) } : {}),
+    ...(entries.some(([, x]) => x.hp) ? { hp: Object.fromEntries(entries.flatMap(([k, x]) => (x.hp ? [[k, x.hp]] : []))) } : {}),
     channels: { mine: s.myChannels ?? {}, share: s.contactShare ?? {} },
     events: (s.events ?? []).map(syncEvent),
     ...(s.tasks?.length ? { tasks: s.tasks } : {}),
@@ -256,12 +261,14 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
 }
 
 /**
- * Wave 43c: the automatic sync's delta: only the entities whose stamp THIS device set after `since` (what arrived from another device keeps that
- * device's name in `by`, so it is never echoed back). `since` 0 = the full bundle. Null when nothing changed. Codes travel with the full bundle only.
+ * Wave 43c: the automatic sync's delta: the entities whose stamp THIS device set after `since`. Wave 44c: also what arrived from another device after `since`
+ * (`rx`), so a third device pairs with one device only: not back to a device in `skip` (the receiver's sync id and, for an older build, its name) and not past HOP_MAX
+ * devices. `since` 0 = the full bundle. Null when nothing changed. Codes travel with the full bundle only.
  */
-export function deltaOf(s: AppState, stamps: Stamps, since: number, device: string): SyncBundle | null {
+export function deltaOf(s: AppState, stamps: Stamps, since: number, device: string, skip: readonly string[] = []): SyncBundle | null {
   if (!since) return bundleOf(s, stamps)
-  const keys = new Set(Object.entries(stamps).filter(([, x]) => x.by === device && x.at > since).map(([k]) => k))
+  const due = (x: Stamps[string]): boolean => (x.by === device ? x.at > since : !skip.includes(x.by) && (x.rx ?? 0) > since && (x.hp ?? 0) < HOP_MAX)
+  const keys = new Set(Object.entries(stamps).filter(([, x]) => due(x)).map(([k]) => k))
   if (!keys.size) return null
   const full = bundleOf(s, stamps, false)
   const pick = <T>(prefix: string, list: T[], id: (x: T) => string): T[] => list.filter((x) => keys.has(prefix + id(x)))
@@ -281,7 +288,7 @@ export function deltaOf(s: AppState, stamps: Stamps, since: number, device: stri
     channels: channels ? full.channels : { mine: {}, share: {} },
     ...(full.sameAs ? { sameAs: full.sameAs } : {}),
     ...(keys.has('n:me') && s.me?.displayName ? { displayName: s.me.displayName } : {}),
-    at: sub(full.at), by: sub(full.by), ...(full.from ? { from: sub(full.from) } : {}),
+    at: sub(full.at), by: sub(full.by), ...(full.from ? { from: sub(full.from) } : {}), ...(full.hp ? { hp: sub(full.hp) } : {}),
   }
 }
 
@@ -372,6 +379,10 @@ export function parseBundle(v: unknown): SyncBundle | null {
   if (v.invitations !== undefined && !(Array.isArray(v.invitations) && v.invitations.every(isInvitation))) return null
   out.by = by
   if (Object.keys(from).length) out.from = from
+  if (isObj(v.hp)) {
+    const hp = Object.entries(v.hp).filter(([k, n]) => k.length <= 120 && Number.isInteger(n) && (n as number) >= 0 && (n as number) <= HOP_MAX)
+    if (hp.length) out.hp = Object.fromEntries(hp) as Record<string, number>
+  }
   out.channels = channels
   out.events = (v.events as TwEvent[]).map(syncEvent)
   if (v.tasks) out.tasks = v.tasks as TwTask[]
@@ -461,16 +472,18 @@ function remapBundle(b: SyncBundle, map: Record<string, string> | undefined): Sy
   const at: Record<string, number> = {}
   const by: Record<string, string> = {}
   const from: Record<string, string> = {}
+  const hp: Record<string, number> = {}
   for (const [k, n] of Object.entries(b.at)) {
     const key = k.startsWith(KEY_PREFIX.person) ? KEY_PREFIX.person + id(k.slice(2)) : k
     if (at[key] === undefined || n > at[key]) {
       at[key] = n
       if (b.by?.[k] !== undefined) by[key] = b.by[k]
       if (b.from?.[k] !== undefined) from[key] = b.from[k]
+      if (b.hp?.[k] !== undefined) hp[key] = b.hp[k]
     }
   }
   return {
-    ...b, at, by, from,
+    ...b, at, by, from, ...(b.hp ? { hp } : {}),
     people: b.people.map((p) => (id(p.id) === p.id ? p : { ...p, id: id(p.id) })),
     meetings: b.meetings.map((m) => (m.personId && id(m.personId) !== m.personId ? { ...m, personId: id(m.personId) } : m)),
   }
@@ -666,11 +679,18 @@ export function stampsAfterMerge(s: AppState, before: Stamps, incoming: SyncBund
     const at = theirs.at[key]
     if (at === undefined) continue
     const from = before[key]?.from ?? theirs.from?.[key] ?? theirName
-    if (theirHash.get(key) === hashOf(e)) fresh[key] = { h: hashOf(e), at, by: theirs.by?.[key] ?? theirName, from }
+    if (theirHash.get(key) === hashOf(e)) {
+      // Wave 44c: what this merge changed here is taken over from that device: it may go on to a third one (rx, one more hop).
+      const took = before[key]?.h !== hashOf(e) ? { rx: now, hp: (theirs.hp?.[key] ?? 0) + 1 } : { ...(before[key]?.rx !== undefined ? { rx: before[key].rx } : {}), ...(before[key]?.hp !== undefined ? { hp: before[key].hp } : {}) }
+      fresh[key] = { h: hashOf(e), at, by: theirs.by?.[key] ?? theirName, from, ...took }
+    }
     else fresh[key] = { ...fresh[key], from }
   }
   return fresh
 }
+
+/** Wave 44c: the stable id of a device in stamps (`by`, `from`): from its sync DID, never its editable name. */
+export const syncIdOf = (did: string): string => 'd:' + (did.split('.')[1] ?? did).slice(-12)
 
 /** The conflicts of a merge, kept in the record (newest first, at most REVIEW_MAX) until the owner dismisses them; meetings without their large parts. */
 export function recordReview(s: AppState, conflicts: Conflict[]): void {

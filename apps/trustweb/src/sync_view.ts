@@ -559,14 +559,16 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     else devicesSheet()
   }
 
+  /** A stamp's device as a name: its sync id maps to the device's name (the name is a label only, wave 44c). */
+  const who = (by: string | undefined): string => (by ? link.nameOf(by) : '?')
   function conflictRow(c: Conflict): HTMLElement {
     const keptTheirs = c.kept === 'theirs'
     const [kept, other] = keptTheirs ? [c.theirs, c.mine] : [c.mine, c.theirs]
     return el('div', { class: 'verse', 'data-conflict': c.id }, [
       el('h3', {}, [c.kind === 'channel' ? S.dvChannelLink(S.chLabel[c.id as Channel]) : c.label]),
       c.mineAt === undefined ? null : el('p', { class: 'meta' }, [keptTheirs
-        ? S.dvKeptLine(c.theirsBy ?? '?', h.when(c.theirsAt ?? 0), c.mineBy ?? '?', h.when(c.mineAt))
-        : S.dvKeptLine(c.mineBy ?? '?', h.when(c.mineAt), c.theirsBy ?? '?', h.when(c.theirsAt ?? 0))]),
+        ? S.dvKeptLine(who(c.theirsBy), h.when(c.theirsAt ?? 0), who(c.mineBy), h.when(c.mineAt))
+        : S.dvKeptLine(who(c.mineBy), h.when(c.mineAt), who(c.theirsBy), h.when(c.theirsAt ?? 0))]),
       el('p', {}, [`✓ ${summary(c, kept)}`]),
       el('p', {}, [summary(c, other)]),
     ])

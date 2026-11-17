@@ -23,7 +23,7 @@ import type { RelayChannel } from '../../demo/src/relay'
 import { deriveEcdhPairKey, fromB64u, open, randomBytes, randomId, seal, toB64u } from '../../demo/src/crypto'
 import type { AppState } from './model'
 import { SCHEMA_VERSION, assertReadable } from './schema_version'
-import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, countsOf, deltaOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
+import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, syncIdOf, countsOf, deltaOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
 import type { Counts, MergeResult, Stamps, SyncBundle } from './sync_core'
 import { mergeCodes, withoutCodes } from './sync_code'
 import type { CodeMerge } from './sync_code'
@@ -174,6 +174,8 @@ export function createSyncLink(d: SyncLinkDeps) {
   const au = (): { au?: number } => (autoVersion ? { au: autoVersion } : {})
   const schemaV = d.schemaVersion ?? SCHEMA_VERSION
   const sv = (): { sv: number } => ({ sv: schemaV })
+  /** Wave 44c: this device in stamps: its sync id (from the sync DID), never the editable name. */
+  const me = (): string => syncIdOf(identity.did)
   let held: Held[] = []
   /** Wave 44c: the first round after a start greets every pairing once (its hello carries this build's schema, so a sender that held back sends again). */
   let greeted = false
@@ -231,6 +233,10 @@ export function createSyncLink(d: SyncLinkDeps) {
     saveHeld()
     d.onChange()
   }
+  /** Wave 44c: what a delta for this pairing must not carry back: its own entities, by sync id and (an earlier build) by name. */
+  const skipOf = (p: Pairing): string[] => [syncIdOf(p.did), p.name]
+  /** Wave 44c: a name for a stamp's `by` (Review merge): this device, a linked one, else what the stamp says (an earlier build's name). */
+  const nameOf = (by: string): string => (by === me() ? d.deviceName() : store.pairings.find((p) => syncIdOf(p.did) === by)?.name ?? by)
   /** Wave 44c: the other device reports its schema; a rise means it was updated, so it gets everything again at once. */
   function noteSchema(p: Pairing, v: unknown): void {
     if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v === p.sv) return
@@ -320,14 +326,13 @@ export function createSyncLink(d: SyncLinkDeps) {
     const s = d.state()
     if (snap) await d.snapshot(`before sync from ${p.name}`, file)
     const t = now()
-    const me = d.deviceName()
-    const before = refreshStamps(s, store.stamps, t, me)
+    const before = refreshStamps(s, store.stamps, t, me())
     // A pairing this device does not share with takes no code and no display name from the other side either (F2, D3).
     const view = p.shareCode === false ? withoutCodes(bundle) : bundle
     const res = mergeBundle(s, before, view, p.lastSyncAt)
     if (view.connectCode) res.codes = mergeCodes(s, view, p.did)
     recordReview(s, res.conflicts)
-    store.stamps = stampsAfterMerge(s, before, view, t, me, p.name)
+    store.stamps = stampsAfterMerge(s, before, view, t, me(), syncIdOf(p.did))
     p.lastSyncAt = t
     persist()
     d.save()
@@ -350,7 +355,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     adoptBundle(next, view)
     for (const k of Object.keys(s)) if (!(k in next)) delete (s as unknown as Record<string, unknown>)[k]
     Object.assign(s, next)
-    store.stamps = stampsAfterMerge(s, store.stamps, view, t, d.deviceName(), p.name)
+    store.stamps = stampsAfterMerge(s, store.stamps, view, t, me(), syncIdOf(p.did))
     p.lastSyncAt = t
     persist()
     d.save()
@@ -379,7 +384,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     if (d.auto?.() !== true || d.canSend?.() === false || !store.pairings.length) return
     const s = d.state()
     const t = now()
-    store.stamps = refreshStamps(s, store.stamps, t, d.deviceName())
+    store.stamps = refreshStamps(s, store.stamps, t, me())
     let changed = false
     const greet = !greeted
     greeted = true
@@ -390,8 +395,8 @@ export function createSyncLink(d: SyncLinkDeps) {
       const acks = (p.au ?? 0) >= ACK_VERSION
       // Wave 44c: past the relay horizon the held wires are gone: start over with the full record (changes since the last ack no longer suffice).
       if (acks && p.autoPendingAt !== undefined && t - p.autoPendingAt > AUTO_TTL_MS) { p.autoSentAt = 0; delete p.autoPendingAt; delete p.autoTries; delete p.autoTryAt; delete p.autoLastTo; changed = true }
-      if (acks && p.autoTryAt !== undefined && t < p.autoTryAt && !deltaOf(s, store.stamps, p.autoLastTo ?? 0, d.deviceName())) continue
-      const delta = deltaOf(s, store.stamps, p.autoSentAt ?? 0, d.deviceName())
+      if (acks && p.autoTryAt !== undefined && t < p.autoTryAt && !deltaOf(s, store.stamps, p.autoLastTo ?? 0, me(), skipOf(p))) continue
+      const delta = deltaOf(s, store.stamps, p.autoSentAt ?? 0, me(), skipOf(p))
       if (!delta) continue
       const full = !p.autoSentAt
       const bundle = full && p.shareCode === false ? bundleOf(s, store.stamps, false) : delta
@@ -409,7 +414,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     const s = d.state()
     // Once the code went out, a dead secret means "sync with the other device", never a new code (F3).
     if (p.shareCode !== false && s.connectCode && s.connectCode.owner !== 'other' && !s.connectCode.shared) { s.connectCode = { ...s.connectCode, shared: true }; d.save() }
-    store.stamps = refreshStamps(s, store.stamps, now(), d.deviceName())
+    store.stamps = refreshStamps(s, store.stamps, now(), me())
     persist()
     await sendPieces(p, bundleOf(s, store.stamps, p.shareCode !== false), reply, a)
   }
@@ -482,6 +487,8 @@ export function createSyncLink(d: SyncLinkDeps) {
       store = load()
       identity = deserializeIdentity(store.identity)
       held = loadHeld()
+      // Wave 44c: stamps of an earlier build name this device by its name; from now on by its sync id.
+      for (const e of Object.values(store.stamps)) { if (e.by === d.deviceName()) e.by = me(); if (e.from === d.deviceName()) e.from = me() }
       persist()
       // True = this wire was ours and is consumed, so the relay acks it. Anything else stays un-acked and comes again on the next
       // drain; before this returned false for every wire, so the "Receive from <phone>?" sheet reopened on each reconnect.
@@ -541,6 +548,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     /** Wave 43c: what Settings > My devices and MCP sync_status show: linked devices and the last sync with any of them, either way (0: never). */
     status: (): { devices: number; lastAt: number; unacked: number } => ({ devices: store.pairings.length, lastAt: Math.max(0, ...store.pairings.map((p) => Math.max(p.lastSyncAt, p.autoSentAt ?? 0))), unacked: store.pairings.filter((p) => p.autoPendingAt !== undefined).length }),
     /** Wave 44c: what waits for an update of this device (the banner, MCP sync_status). */
+    nameOf,
     held: (): { items: number; from: string[] } => ({ items: held.reduce((n, x) => n + x.items, 0), from: [...new Set(held.map((x) => x.name))] }),
     stop: (): void => channel.close(),
   }
