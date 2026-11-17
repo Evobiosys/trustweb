@@ -16,6 +16,8 @@ export interface ResourceViewsCtx {
   /** The usual list row (audience, switch, remove) of an unprotected resource in the List view. */
   row: (i: InventoryItem) => Node
   open: (id: string) => void
+  /** Wave 44c: the item's tag chips (a tap filters by that tag); null = none. */
+  tagRow?: (i: InventoryItem) => Node | null
   record: (i: InventoryItem) => void
   /** B20: starts a protected recording (opens its link) without showing the link. */
   play: (url: string) => void
@@ -88,7 +90,7 @@ export function resourceViews(c: ResourceViewsCtx): Node[] {
     RESOURCE_KINDS.map((k: ResourceKind) => el('option', { value: k, ...(kindOf(i) === k ? { selected: '' } : {}) }, [S.resViews.kind[k]])))
   const rowFor = (i: InventoryItem): Node => isProtected(i, c.tags)
     ? protectedRow(i)
-    : el('div', { class: 'rv-item', 'data-rv-item': i.id }, [view === 'list' ? c.row(i) : compact(i), el('div', { class: 'rv-meta' }, [kindSelect(i)]), suggestion(i)])
+    : el('div', { class: 'rv-item', 'data-rv-item': i.id }, [view === 'list' ? c.row(i) : compact(i), c.tagRow?.(i) ?? null, el('div', { class: 'rv-meta' }, [kindSelect(i)]), suggestion(i)])
 
   const section = (key: string, title: string, list: readonly InventoryItem[]): Node => el('section', { class: 'rv-section', 'data-rv-section': key }, [el('h3', {}, [title]), ...list.map(rowFor)])
   let body: Node[]

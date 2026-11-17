@@ -37,10 +37,10 @@ describe('community settings', () => {
     expect(d.resources).toHaveLength(1)
   })
 
-  it('nav lists the seven items in order, minus the ones switched off', () => {
-    expect(NAV).toEqual(['home', 'spaces', 'events', 'members', 'docs', 'chat', 'timeline'])
+  it('nav lists the nine items in order, minus the ones switched off', () => {
+    expect(NAV).toEqual(['home', 'spaces', 'events', 'members', 'docs', 'resources', 'references', 'chat', 'timeline'])   // wave44c: Resources and References
     expect(navItems({})).toEqual(NAV)
-    expect(navItems({ navOff: ['events', 'chat'] })).toEqual(['home', 'spaces', 'members', 'docs', 'timeline'])
+    expect(navItems({ navOff: ['events', 'chat'] })).toEqual(['home', 'spaces', 'members', 'docs', 'resources', 'references', 'timeline'])
   })
 
   it('the community tag: own choice first, else the rings community tag, else the first community tag', () => {
