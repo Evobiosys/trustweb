@@ -5351,6 +5351,7 @@ const devices = createSyncView({
   editLink: () => openLinkChange(linkHooks),
   afterSyncNow: () => void pollNotesRelay(),
   tellDevices: (dids) => { if (state) void net.tellDevices(dids) }, // wave43c sync-devices
+  reload: () => void reloadNow(), // wave44c sync-seamless
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */

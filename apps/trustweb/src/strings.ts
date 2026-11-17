@@ -5219,4 +5219,15 @@ export const S = {
     card: (scope: string) => `Send a ${scope === 'line' ? 'line' : 'block'} of a resource to a chat`,
   },
   verdictNote: { ph: 'note (optional), sent with Needs work', aria: 'Note for this verdict' },
+  /* wave44c sync-seamless */
+  syncSeamless: {
+    heldBanner: (n: number) => `Update the app to see ${n === 1 ? '1 newer item' : `${n} newer items`}`,
+    heldUpdate: 'Update',
+    tanaComputerOnly: 'Tana connects on your computer; phones receive it by device sync.',
+    tanaRemember: 'Remember on this computer',
+    tanaRememberHint: 'Off: the token is kept for this visit only.',
+    obsLastScan: (time: string) => `Last scan ${time}`,
+    obsAutoHint: 'Rescans by itself when you come back to the app and every 5 minutes.',
+    pairOpened: 'Opened from a link: check the 4 characters match, then confirm.',
+  },
 } as const

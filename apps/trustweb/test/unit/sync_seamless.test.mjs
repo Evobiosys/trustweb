@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44c sync-seamless: delivery acks (A1), schema hold (A2), forwarding + stable sync id (A3), pairing link (A5). Two or three stock devices over a fake relay. */
 import { AUTO_RETRY_MS, AUTO_TTL_MS, createSyncLink } from '../../src/sync_link.ts'
+import { SCHEMA_VERSION } from '../../src/schema_version.ts'
 
 const person = (id, name, over = {}) => ({ id, name, context: '', ring: 'friend', metAt: 1, lines: [], ...over })
 const state = (over = {}) => ({ v: 1, me: { name: 'J' }, people: [], peers: [], inventory: [], log: [], meetings: [], ...over })
@@ -121,5 +122,58 @@ describe('A1 sync-ack', () => {
     await both(h, mac, old)
     await mac.api.autoTick()
     expect(mac.api.pairings()[0].autoSentAt).toBeGreaterThan(0)
+  })
+})
+
+describe('A2 schema hold + banner', () => {
+  const OLD = SCHEMA_VERSION - 1
+
+  it('a device on an older schema holds newer pieces (not dropped), acknowledges them, counts them for the banner, and applies them after the update', async () => {
+    const h = hub()
+    const store = mem()
+    const mac = await device(h, 'Mac', state({ people: [person('a', 'Ada'), person('c', 'Cy')] }), { auto: () => true })
+    const old = await device(h, 'Phone', state(), { auto: () => true, schemaVersion: OLD, storage: store })
+    await paired(h, mac, old)
+    await mac.api.autoTick()
+    await until(() => old.api.held().items === 2)
+    expect(old.st.people).toHaveLength(0)
+    expect(old.api.held().from).toEqual(['Mac'])
+    await until(() => mac.api.status().unacked === 0)
+    old.api.stop()
+    const updated = await device(h, 'Phone', old.st, { auto: () => true, storage: store })
+    await until(() => updated.st.people.length === 2)
+    expect(updated.api.held().items).toBe(0)
+  })
+
+  it('pieces held by a device whose Auto sync is off are not held and not acknowledged; the sender re-sends once the peer reports the new version', async () => {
+    const h = hub()
+    const store = mem()
+    const mac = await device(h, 'Mac', state({ people: [person('a', 'Ada')] }), { auto: () => true })
+    const old = await device(h, 'Phone', state(), { auto: () => false, schemaVersion: OLD, storage: store })
+    await paired(h, mac, old)
+    await mac.api.autoTick(); await settle()
+    expect(old.api.held().items).toBe(0)
+    expect(mac.api.status().unacked).toBe(1)
+    old.api.stop()
+    const updated = await device(h, 'Phone', old.st, { auto: () => true, storage: store })
+    await updated.api.autoTick() // greets: its hello names the new schema
+    await until(() => updated.st.people.length === 1) // no tick on the Mac and no backoff wait: the report alone triggers the re-send
+  })
+
+  it('a held set whose pairing is gone is dropped; one still newer than this build stays held', async () => {
+    const h = hub()
+    const store = mem()
+    const mac = await device(h, 'Mac', state({ people: [person('a', 'Ada')] }), { auto: () => true })
+    const old = await device(h, 'Phone', state(), { auto: () => true, schemaVersion: OLD, storage: store })
+    await paired(h, mac, old)
+    await mac.api.autoTick()
+    await until(() => old.api.held().items === 1)
+    old.api.stop()
+    const still = await device(h, 'Phone', old.st, { auto: () => true, schemaVersion: OLD, storage: store })
+    expect(still.api.held().items).toBe(1)
+    still.api.unlink(still.api.pairings()[0].did)
+    still.api.stop()
+    const gone = await device(h, 'Phone', old.st, { auto: () => true, storage: store })
+    expect(gone.api.held().items).toBe(0)
   })
 })
