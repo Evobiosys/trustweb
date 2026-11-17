@@ -15,6 +15,7 @@ import { seenThroughTools } from './seen_through_tools.ts' // wave44c seen-throu
 import { homeTools } from './home_tools.ts'
 import { profilePageTools } from './profile_page_tools.ts'
 import { feedSourcesTools } from './feed_sources_tools.ts' // wave44 feed-sources
+import { feedExtTools } from './feed_ext_tools.ts' // wave44c feed-ext
 import { handshakeTools } from './handshake_tools.ts'
 import { importTools } from './import_tools.ts'
 import { inviteTools } from './invite_tools.ts'
@@ -47,6 +48,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave44 handshake-crypto */ ...handshakeTools(o),
     /* wave44 steer-invite-link */ ...inviteTools({ ...o, write }),
     /* wave44b profile-page */ ...profilePageTools({ ...o, write }),
+    /* wave44c feed-ext */ ...feedExtTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

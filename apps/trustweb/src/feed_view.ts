@@ -23,6 +23,7 @@ import { getPublicKey, hexToBytes } from '../../demo/src/nostr_lib'
 import { loadColourTags } from './colour_tags'
 import { algoOf, filterBySources, FEED_EXTERNAL_PUBLISH_ENABLED, PUBLISH_DEFAULT, PUBLISH_TARGETS, publicReadAllowed, rankPosts, setPublishTarget, SOURCES, sourceIdOf, sourceOn } from './feed_sources_page'   // wave 44 feed-sources
 import { createSourcesView } from './feed_sources_view'
+import { createExtFeed } from './feed_ext_view'   // wave44c feed-ext
 import { isTrusted } from './trust_mode'
 import { fetchFeedText, FetchProblem, handleText, safeRemoteUrl, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
 import type { RemoteStatus } from './fediverse'
@@ -61,6 +62,8 @@ export interface FeedViewHooks {
   openSharePage: (itemId: string) => void
   /** Wave 43: show the Feed screen (an event's Feed row opens it filtered to the event's tag). */
   openFeed: () => void
+  /** wave44c feed-ext: shows an extension module's view ("Open in Phanpy"). */
+  openView?: (id: string) => void
 }
 
 export interface FeedView {
@@ -72,6 +75,8 @@ export interface FeedView {
   settingsGroup(): HTMLElement[]
   /** On a person's sheet: their Mastodon or Pixelfed address, and whether the Feed shows their public posts. */
   personRow(p: Person): HTMLElement
+  /** wave44c feed-ext: on a person's card: follow their Bluesky, Threads or web site (Bridgy Fed) in the Feed. */
+  personExt(p: Person): HTMLElement
   /** On an item's sheet: its picture, and "Share to...". */
   itemExtras(item: InventoryItem): HTMLElement
   /** An item's picture was removed with the item, or the phone was reset. */
@@ -94,7 +99,9 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   const inbound = new Map<string, { at: number; posts: Post[] }>()
   const joined = new Set<string>()
   /* wave44 feed-sources: the Sources page, and "Only <source>" (one source id, in memory). */
-  const sourcesPage = createSourcesView(h)
+  /* wave44c feed-ext: followed Bluesky / PeerTube / Threads / Bridgy accounts, their Sources section, Settings > Feed > Extensions. */
+  const ext = createExtFeed({ ...h, allowLocal })
+  const sourcesPage = createSourcesView({ ...h, extra: () => [ext.sourcesSection()] })
   const onlySource: { id?: string } = {}
 
   const settings = (): FeedSettings => {
@@ -420,7 +427,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     const tags = loadColourTags()
     const groups = groupsOf(h.state(), tags)
     const readPublic = publicReadAllowed(settings())   // wave 44: "Never read public content" fetches nothing
-    const all = buildFeed(h.state(), [...(readPublic ? [...remoteFor(), ...mastodonFor(eventOfTag(sel.tag)), ...followedPosts()] : []), ...groupPosts(h.state(), tags), ...relayPosts(groups), ...embedPosts(h.state().feedEmbeds, imagesOn())]).filter((p) => isTimelinePost(p) === timeline)
+    const all = buildFeed(h.state(), [...(readPublic ? [...remoteFor(), ...mastodonFor(eventOfTag(sel.tag)), ...followedPosts(), ...ext.posts(imagesOn())] : []), ...groupPosts(h.state(), tags), ...relayPosts(groups), ...embedPosts(h.state().feedEmbeds, imagesOn())]).filter((p) => isTimelinePost(p) === timeline)
     if (sel.group && !groups.some((g) => g.id === sel.group)) delete sel.group
     const metas = h.state().feed?.groupMeta ?? {}
     if (sel.channel && !metas[sel.group ?? '']?.channels?.some((c) => c.id === sel.channel)) delete sel.channel
@@ -443,6 +450,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         ...sources.map((src) => chip(`${S.feedSrc[src]} ${counts[src]}`, sel.source === src, { 'data-feed-src': src }, () => pick(sel.source === src ? undefined : src))),
         timeline ? null : el('button', { class: 'btn btn-electric btn-sm', 'data-feed-post': '1', onclick: () => postSheet(groups) }, [S.feedPostGroup]),
         timeline ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-feed-sources': '1', onclick: () => sourcesPage.open() }, [S.w44sources.open]),
+        timeline ? null : ext.phanpyButton(),
       ]),
       timeline || !sourceIds.size ? null : el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.w44sources.onlyLabel }, SOURCES.filter((d) => sourceIds.has(d.id) && sourceOn(settings(), d.id)).map((d) => chip(S.w44sources.only(S.w44sources.name[d.id] ?? d.id), onlySource.id === d.id, { 'data-feed-only': d.id }, () => { if (onlySource.id === d.id) delete onlySource.id; else onlySource.id = d.id; h.redrawFeed() }))),
       sel.source === FeedSource.Group && groups.length
@@ -455,6 +463,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         ? el('p', { class: 'meta', 'data-feed-governance': metas[sel.group]?.governance ?? 'open' }, [S.feedGov[metas[sel.group]?.governance ?? 'open']])
         : null,
       ...problems(),
+      ...(timeline ? [] : ext.problems()),
       ...mastodonProblem(tagEvent),
       posts.length
         ? el('div', { class: 'posts' }, posts.map((p) => postEl(p, !timeline)))
@@ -612,6 +621,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       ]) : null,
       on ? el('div', { class: 'feed-groups' }, [el('h4', { class: 'eyebrow' }, [S.feedGroupSetTitle]), ...groupsOf(s, loadColourTags()).map((g) => groupRow(g))]) : null,
       on && remoteOn() ? toggle(S.fedImages, S.fedImagesHint, imagesOn(), 'data-feed-images', () => { settings().images = !imagesOn(); h.save(); h.settings() }) : null,
+      ...(on ? ext.settingsRows() : []),
     ].filter((n): n is HTMLElement => n !== null)
   }
 
@@ -725,5 +735,5 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     return box
   }
 
-  return { body, eventRow, showEvent, settingsGroup, personRow, itemExtras, dropImage: (id) => { void h.images.remove(id) } }
+  return { body, eventRow, showEvent, settingsGroup, personRow, personExt: ext.personRow, itemExtras, dropImage: (id) => { void h.images.remove(id) } }
 }

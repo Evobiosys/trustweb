@@ -12,6 +12,7 @@
 import type { IntroInbox, IntroPending, IntroQueued } from './bubble_connect'
 import type { AssistantCfg } from './ext/assistant/providers'
 import type { AlgoCfg, SourceCfg } from './feed_sources_page'
+import type { ExtFollow } from './feed_ext_sources'   // wave44c feed-ext
 import type { HideReportEntry } from './hide_reports'
 import type { InboxItem } from './notify_inbox'
 import type { StatedRelation } from './relations_model'
@@ -1655,6 +1656,8 @@ export interface FeedSettings {
   noPublicRead?: boolean
   /** Where the composer posts by default (feed_sources_page.ts PUBLISH_TARGETS); absent: fediverse. */
   publishTarget?: string
+  /** wave44c feed-ext (feed_ext_sources.ts): followed Bluesky / PeerTube / Threads / Bridgy Fed accounts. Absent: none. No schema bump. */
+  extFollows?: ExtFollow[]
 }
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */

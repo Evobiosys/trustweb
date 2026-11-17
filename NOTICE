@@ -31,3 +31,10 @@ building on this work outside a copyleft/commons frame, and to have that
 conversation directly rather than not knowing it's happening.
 
 Kontakt: connect@japossert.com
+
+## Third-party software reached from the app
+
+Phanpy (https://github.com/cheeaun/phanpy), a Mastodon client, MIT licence,
+Copyright (c) Chee Aun. The optional Phanpy extension (off by default) shows
+the user's own Phanpy address in a sandboxed frame; no Phanpy code is
+bundled with TrustWeb.

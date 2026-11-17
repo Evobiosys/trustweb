@@ -1,0 +1,45 @@
+{
+  "feed": [
+    {
+      "post": {
+        "uri": "at://did:plc:testalice234567/app.bsky.feed.post/3kaaa111",
+        "cid": "bafyreia",
+        "author": { "did": "did:plc:testalice234567", "handle": "alice.test.bsky.social", "displayName": "Alice Test", "labels": [] },
+        "record": { "$type": "app.bsky.feed.post", "createdAt": "2026-11-16T09:00:00.000Z", "text": "Seed swap on Saturday ‮ at the garden", "langs": ["en"] },
+        "embed": { "$type": "app.bsky.embed.external#view", "external": { "uri": "https://garden.example.org/swap", "title": "Seed swap", "description": "Bring seeds", "thumb": "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:testalice234567/bafkrei@jpeg" } },
+        "replyCount": 2, "repostCount": 1, "likeCount": 5, "indexedAt": "2026-11-16T09:00:01.000Z", "labels": []
+      }
+    },
+    {
+      "post": {
+        "uri": "at://did:plc:testbob2345678/app.bsky.feed.post/3kbbb222",
+        "cid": "bafyreib",
+        "author": { "did": "did:plc:testbob2345678", "handle": "bob.test.bsky.social", "displayName": "", "labels": [] },
+        "record": { "$type": "app.bsky.feed.post", "createdAt": "2026-11-15T08:00:00.000Z", "text": "Photos from the walk" },
+        "embed": { "$type": "app.bsky.embed.images#view", "images": [ { "thumb": "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:testbob2345678/bafkreb@jpeg", "fullsize": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:testbob2345678/bafkreb@jpeg", "alt": "A path" } ] },
+        "indexedAt": "2026-11-15T08:00:01.000Z", "labels": []
+      },
+      "reason": { "$type": "app.bsky.feed.defs#reasonRepost", "by": { "did": "did:plc:testalice234567", "handle": "alice.test.bsky.social", "displayName": "Alice Test" }, "indexedAt": "2026-11-16T07:00:00.000Z" }
+    },
+    {
+      "post": {
+        "uri": "at://did:plc:testcara234567/app.bsky.feed.post/3kccc333",
+        "cid": "bafyreic",
+        "author": { "did": "did:plc:testcara234567", "handle": "cara.test.bsky.social", "displayName": "Cara", "labels": [ { "val": "!no-unauthenticated", "src": "did:plc:testcara234567" } ] },
+        "record": { "$type": "app.bsky.feed.post", "createdAt": "2026-11-14T08:00:00.000Z", "text": "Only for logged-in readers" },
+        "indexedAt": "2026-11-14T08:00:01.000Z", "labels": []
+      }
+    },
+    { "post": { "uri": "at://did:plc:testalice234567/app.bsky.feed.post/3kddd444", "author": { "handle": "alice.test.bsky.social" }, "record": { "createdAt": "2026-11-13T08:00:00.000Z", "text": "" } } },
+    { "post": "garbage" },
+    {
+      "post": {
+        "uri": "at://did:plc:testalice234567/app.bsky.feed.post/3keee555",
+        "author": { "did": "did:plc:testalice234567", "handle": "alice.test.bsky.social", "displayName": "Alice Test" },
+        "record": { "createdAt": "2026-11-12T08:00:00.000Z", "text": "A video" },
+        "embed": { "$type": "app.bsky.embed.video#view", "thumbnail": "https://video.bsky.app/watch/did/thumbnail.jpg", "playlist": "https://video.bsky.app/watch/did/playlist.m3u8" }
+      }
+    }
+  ],
+  "cursor": "2026-11-12T08:00:00.000Z"
+}
