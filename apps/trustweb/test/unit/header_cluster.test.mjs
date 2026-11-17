@@ -7,7 +7,7 @@ const SCREENS = ['web', 'chat', 'people', 'events', 'inventory', 'feed', 'timeli
 
 describe('header_cluster', () => {
   it('names the top right once: eye, search, QR, settings, then the AI sparkle', () => {
-    expect([...HEADER_RIGHT]).toEqual(['views', 'search', 'qr', 'settings', 'ai'])
+    expect([...HEADER_RIGHT]).toEqual(['views', 'switch', 'search', 'qr', 'settings', 'ai']) // answers-44c: chat switch in the eye slot
   })
   it('keeps that order on every screen; only the screen-less controls drop out', () => {
     for (const s of SCREENS) {
@@ -19,8 +19,8 @@ describe('header_cluster', () => {
     expect(headerRight('events', false)).toEqual(['views', 'search', 'qr', 'settings'])
     expect(headerRight('feed', false)).toEqual(['qr', 'settings'])
   })
-  it('puts the chat switch and the pins after the title, never in the right set', () => {
-    expect(headerAfterTitle('chat')).toEqual(['switch', 'pins'])
+  it('puts the pins after the title, never in the right set', () => {
+    expect(headerAfterTitle('chat')).toEqual(['pins']) // answers-44c
     expect(headerAfterTitle('web')).toEqual(['pins'])
     for (const s of SCREENS) for (const c of headerAfterTitle(s)) expect(HEADER_RIGHT.includes(c), `${s}:${c}`).toBe(false)
     for (const s of ['feed', 'ask', 'timeline']) expect(headerAfterTitle(s)).toEqual([])

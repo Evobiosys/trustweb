@@ -2073,9 +2073,10 @@ function mountHeaderControls(): void {
   })
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
-  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
+  const chatComm = screen === Screen.Chat ? host.querySelector('.hdr-left [data-chat-communities]') : null // wave44c answers-44c: the community toggle rides with the switch, top right
+  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch, chatComm], pins, qr: [qr], settings: [gear] }
   const nodes = (ids: readonly string[]): Node[] => ids.flatMap((c) => parts[c] ?? []).filter((n): n is Node => n !== null)
-  // Wave 44c header-cluster: one row. Top right: eye, search, QR, settings (the AI sparkle is mounted after); the chat switch and the pins follow the title.
+  // Wave 44c header-cluster: one row. Top right: eye (chat: its switch), search, QR, settings (the AI sparkle is mounted after); the pins follow the title.
   right.replaceChildren(...nodes(headerRight(screen, false)))
   host.querySelector('.hdr-left h2')?.after(...nodes(headerAfterTitle(screen)))
   const drop = screen === Screen.Events || screen === Screen.Inventory || screen === Screen.Notes ? screenViewDrop() : screen === Screen.People ? viewDrop(completeMode ? 'complete' : 'people') : null

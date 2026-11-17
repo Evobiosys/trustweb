@@ -20,7 +20,7 @@ try {
     await page.goto(URL); await page.waitForTimeout(1200)
     await page.evaluate((r) => localStorage.setItem('trustweb.v1.me', JSON.stringify(r)), REC)
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(900)
-    const right = () => page.locator('.hdr .hdr-right > *:visible').evaluateAll((ns) => ns.map((n) => (n.matches('[data-settings-gear]') ? 'settings' : n.matches('[data-ai-button]') ? 'ai' : n.matches('.status-pill') || n.querySelector('.status-pill') ? 'qr' : n.matches('.view-menu-btn, [data-view-menu], .view-switch') ? 'eye' : n.querySelector('.view-menu-btn') ? 'eye' : n.matches('.web-search-btn') ? 'search' : n.getAttribute('aria-label') ?? '?')))
+    const right = () => page.locator('.hdr .hdr-right > *:visible').evaluateAll((ns) => ns.map((n) => (n.matches('[data-settings-gear]') ? 'settings' : n.matches('[data-ai-button]') ? 'ai' : n.matches('.status-pill') || n.querySelector('.status-pill') ? 'qr' : n.matches('.view-menu-btn, [data-view-menu], .view-switch') ? 'eye' : n.querySelector('.view-menu-btn') ? 'eye' : n.matches('.web-search-btn') ? 'search' : n.matches('[data-chat-switch]') ? 'switch' : n.matches('[data-chat-communities]') ? 'communities' : n.getAttribute('aria-label') ?? '?')))
     const probe = async (name) => {
       const labels = await right()
       const core = labels.filter((l) => ORDER.includes(l))
@@ -34,7 +34,8 @@ try {
       check(`${w}: ${name}: no overlap, none off-screen, one row`, !clash && boxes.every((b) => b.x >= 0 && b.x + b.width <= w + 1) && Math.max(...boxes.map((b) => b.y)) - Math.min(...boxes.map((b) => b.y)) < 30, JSON.stringify(boxes))
       const order = await page.locator('.hdr-left > *').evaluateAll((ns) => ns.map((n) => (n.tagName === 'H2' ? 'title' : n.hasAttribute('data-chat-switch') ? 'switch' : n.hasAttribute('data-open-requests') ? 'inbox' : n.hasAttribute('data-notify-bell') ? 'bell' : '?')))
       const t = order.indexOf('title')
-      check(`${w}: ${name}: switch/pins follow the title, inbox and bell after`, t >= 0 && order.indexOf('inbox') > t && (order.indexOf('switch') < 0 || (order.indexOf('switch') === t + 1 && order.indexOf('switch') < order.indexOf('inbox'))), JSON.stringify(order))
+      check(`${w}: ${name}: inbox and bell follow the title; no chat switch on the left (answers-44c)`, t >= 0 && order.indexOf('inbox') > t && order.indexOf('switch') < 0 && (await page.locator('.hdr-left [data-chat-switch], .hdr-left [data-chat-communities]').count()) === 0, JSON.stringify(order))
+      if (name === 'Chat') check(`${w}: Chat: switch top right in the eye slot (first on the right) ${JSON.stringify(labels)}`, labels[0] === 'switch' || labels[0] === 'communities', JSON.stringify(labels))
     }
     for (const [id, name] of SCREENS) {
       await page.locator(`[data-go="${id}"]`).first().click().catch(async () => { await page.evaluate((i) => (document.querySelector(`[data-go="${i}"]`))?.click(), id) })

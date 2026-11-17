@@ -14,15 +14,15 @@ export function headerControls(screen: string): HeaderControl[] | undefined {
 }
 
 /** Wave 44c header-cluster: the top right is one ordered set on every screen, left to right: the eye, search, QR, settings, the AI sparkle (when its extension is on). A screen without eye or search leaves just those out. */
-export const HEADER_RIGHT = ['views', 'search', 'qr', 'settings', 'ai'] as const
+export const HEADER_RIGHT = ['views', 'switch', 'search', 'qr', 'settings', 'ai'] as const // wave44c answers-44c: the chat switch is back in the eye's slot (Jakob 20:22)
 export const headerRight = (screen: string, aiOn: boolean): readonly (typeof HEADER_RIGHT)[number][] =>
   HEADER_RIGHT.filter((c) => (c === 'ai' ? aiOn : c === 'qr' || c === 'settings' || (headerControls(screen) ?? []).includes(c)))
 
 /** Wave 44 steer-header-logo: the top left is the same on every header, left to right: the logo (a back arrow on a sub-page), the title, the inbox, the notification bell. */
 export const HEADER_LEFT = ['logo', 'title', 'inbox', 'bell'] as const
 
-/** Wave 44c: the controls that sit right after the title in the left cluster (the chat switch, the pins); there is no tools row. */
-export const headerAfterTitle = (screen: string): HeaderControl[] => (headerControls(screen) ?? []).filter((c) => c === 'switch' || c === 'pins')
+/** Wave 44c: the controls that sit right after the title in the left cluster (the pins; answers-44c: the chat switch went back top right); there is no tools row. */
+export const headerAfterTitle = (screen: string): HeaderControl[] => (headerControls(screen) ?? []).filter((c) => c === 'pins')
 
 /** Wave 33: the settings gear sits in the header of every screen but Start (Meet, Review, Place, hand-over included). */
 export const showsSettingsGear = (screen: string): boolean => screen !== 'start'
