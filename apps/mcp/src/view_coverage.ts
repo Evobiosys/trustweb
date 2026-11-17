@@ -117,7 +117,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'relations_view.ts': ['relations_list', 'app_action'],
   'requests_list_view.ts': ['requests_list', 'home_open_request'],
   'resource_outline_view.ts': ['resources_list', 'resource_block_add', 'resource_block_edit', 'resource_block_move', 'resource_block_remove', 'resource_block_collapse'],
-  'resource_scope_view.ts': ['resources_list', 'resource_mark_opened'],
+  'resource_scope_view.ts': ['resources_list', 'resource_mark_opened', 'resource_add'],
   'resource_views_view.ts': ['resources_list', 'resource_set_kind', 'resource_set_physical'],
   'scope_editor_view.ts': ['trusted_only_set', 'trust_override_set'],
   'seen_through_view.ts': ['people_seen_through_list', 'event_introduce_person'],

@@ -8233,7 +8233,7 @@ function screenInventory(): Node[] {
   if (scope) {
     return [
       header(S.w44cr.title(scope.label)),
-      el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', emoji: emojiOn(s), open: itemSheet, save, render })),
+      el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', emoji: emojiOn(s), nameOf: (id) => s.people.find((p) => p.id === id)?.name, newId: () => randomId(8), open: itemSheet, save, render })),
     ]
   }
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })

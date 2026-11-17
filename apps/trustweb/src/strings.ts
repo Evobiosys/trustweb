@@ -5377,5 +5377,8 @@ export const S = {
     emojiHint: 'Picked from the words of the title (no AI): Winter gets a snowflake.',
     askAnswerLabel: 'Answer an incoming ask',
     chatSendLabel: 'Send a chat message',
+    addResource: '+ Add resource',
+    sharedBy: (name: string, age: string) => `shared by ${name} · ${age}`,
+    me: 'me',
   },
 } as const

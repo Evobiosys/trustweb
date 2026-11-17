@@ -7,8 +7,10 @@
  * invitations, meetings (text only: contact channels and keys are never returned); chat_send queues 'chat-send'.
  */
 import type { HeldAsk } from '../../trustweb/src/model.ts'
+import { addScoped, type Scope } from '../../trustweb/src/resource_scope.ts'
+import { eventTagLabel, eventTagSlug } from '../../trustweb/src/event_tag.ts'
 import { announce } from './events.ts'
-import { findPerson, load, needText, schema, S, type Person, type Rec, type RecordToolsOptions } from './record_tools.ts'
+import { commitTo, findPerson, load, needText, schema, S, type Person, type Rec, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
@@ -149,6 +151,29 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
         if (text.length > 4000) throw new Error('text is too long')
         queue('chat_send', 'chat-send', { person: p.id, text })
         return { queued: true, person: p.id }
+      },
+    },
+    {
+      name: 'resource_add', description: 'Add a resource as the "+ Add resource" row does: into a community (its tag id; only that community sees it) or an event (id or exact name; tagged event_<slug>), else into my plain list. reference:true makes it a reference.',
+      inputSchema: schema({ title: S('the resource'), community: S('community tag id'), event: S('event id or exact name'), reference: { type: 'boolean', description: 'a reference (References page)' } }, ['title']),
+      run: (a) => {
+        const title = needText(a.title, 'title')
+        let made: unknown = null
+        commitTo(o.file, now, (r) => {
+          const inv = (Array.isArray(r.inventory) ? r.inventory : (r.inventory = [])) as never[]
+          const id = `mcp${now().getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+          const page = a.reference === true ? 'references' as const : 'resources' as const
+          const source = { kind: 'typed' } as never // Provenance.Typed (model.ts enum; not loadable under plain node)
+          let sc: Scope | null = null
+          if (typeof a.event === 'string' && a.event.trim()) {
+            const e = findEvent(r, a.event)
+            const n = (e as { tagName?: string }).tagName ?? e.name
+            sc = { kind: 'event', id: e.id, label: eventTagLabel(n), tagIds: [eventTagSlug(n)] }
+          } else if (typeof a.community === 'string' && a.community.trim()) sc = { kind: 'community', id: a.community.trim().slice(0, 80), label: a.community.trim() }
+          if (sc) made = addScoped(inv, sc, page, title, id, now().getTime(), source)
+          else { made = { id, text: title.slice(0, 120), audience: 'fof', included: true, createdAt: now().getTime(), source, ...(page === 'references' ? { kind: 'reference' } : {}) }; inv.push(made as never) }
+        })
+        return made
       },
     },
   ]
