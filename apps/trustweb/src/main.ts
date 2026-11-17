@@ -357,6 +357,7 @@ import { eventDropItem } from './event_drop'
 import { eventPlanSection } from './event_plan_view'
 import { defineEventActions } from './event_actions'
 import { defineSyncActions } from './sync_actions' // wave43c sync-devices
+import { openPairLink } from './sync_pair_link' // wave44c sync-seamless
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
 import type { LinkedEvent } from './event_link'
@@ -5396,6 +5397,7 @@ const devices = createSyncView({
   editLink: () => openLinkChange(linkHooks),
   afterSyncNow: () => void pollNotesRelay(),
   tellDevices: (dids) => { if (state) void net.tellDevices(dids) }, // wave43c sync-devices
+  reload: () => void reloadNow(), // wave44c sync-seamless
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -8836,7 +8838,7 @@ if (state && !state.testOf?.handedOverAt) {
     if (transcription.anyConsent() || transcriptionChoice(st()) === TranscriptionChoice.Server || readHosting(st())?.on === true) void swiss.probe()
     hosting.boot()
   }
-  if (connectEligible()) devices.start()
+  if (connectEligible()) { devices.start(); openPairLink(bootHash, devices) } // wave44c sync-seamless
   packs.checkLate()
   // Resume the approve step after a reload while a phone still waits.
   const pending = demoAccounts().find((t) => t.pending)

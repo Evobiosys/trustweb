@@ -8,21 +8,21 @@ import { announce } from './events.ts'
 import { load, schema, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
 
-type Status = { devices: number; lastAt: number }
+type Status = { devices: number; lastAt: number; unacked: number; held: number }
 const statusOf = (r: Record<string, unknown>): Status | null => {
   const s = r.syncStatus as Partial<Status> | undefined
-  return s && typeof s.devices === 'number' && typeof s.lastAt === 'number' ? { devices: s.devices, lastAt: s.lastAt } : null
+  return s && typeof s.devices === 'number' && typeof s.lastAt === 'number' ? { devices: s.devices, lastAt: s.lastAt, unacked: s.unacked ?? 0, held: s.held ?? 0 } : null
 }
 
 export function syncTools(o: RecordToolsOptions): Tool[] {
   const now = o.now ?? (() => new Date())
   const read: Tool = {
-    name: 'sync_status', description: 'Device sync: how many of my devices are linked, when the last sync with any of them was (ISO time or null) and whether Auto sync is on.',
+    name: 'sync_status', description: 'Device sync: how many of my devices are linked, when the last sync with any of them was (ISO time or null), whether Auto sync is on, how many linked devices still owe an acknowledgement of my last send (unacked) and how many newer items wait for an update of this device (held).',
     inputSchema: schema({}),
     run: () => {
       const r = load(o.file) as Record<string, unknown>
       const s = statusOf(r)
-      return { devices: s?.devices ?? 0, lastAt: s?.lastAt ? new Date(s.lastAt).toISOString() : null, auto: r.syncAutoOff !== true }
+      return { devices: s?.devices ?? 0, lastAt: s?.lastAt ? new Date(s.lastAt).toISOString() : null, auto: r.syncAutoOff !== true, unacked: s?.unacked ?? 0, held: s?.held ?? 0 }
     },
   }
   if (!o.write) return [read]
@@ -35,5 +35,13 @@ export function syncTools(o: RecordToolsOptions): Tool[] {
       return { queued: true, devices }
     },
   }
-  return [read, write]
+  const link: Tool = {
+    name: 'sync_pair_link', description: 'Queue "Link a device" for the open TrustWeb preview: it shows the QR and the link (a phone camera app opens TrustWeb from it and asks to confirm). Returns {queued:true}.',
+    inputSchema: schema({}),
+    run: () => {
+      announce(o.file, { at: now().toISOString(), kind: 'action', tool: 'sync_pair_link', summary: 'sync-pair-link {}', action: { type: 'sync-pair-link', args: {} } })
+      return { queued: true }
+    },
+  }
+  return [read, write, link]
 }

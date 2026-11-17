@@ -46,7 +46,7 @@ describe('settings MCP tools', () => {
   it('settings_sync_capabilities returns both flags and the placement per device; the vault flag is false on a phone', () => {
     const { by } = fixture(false)
     expect(by.settings_sync_capabilities.run({})).toEqual({ device: 'desktop', localVault: true, tana: true, placement: { obsidian: 'main', tana: 'main' } })
-    expect(by.settings_sync_capabilities.run({ device: 'phone' })).toEqual({ device: 'phone', localVault: false, tana: true, placement: { obsidian: 'advanced', tana: 'advanced' } })
+    expect(by.settings_sync_capabilities.run({ device: 'phone' })).toEqual({ device: 'phone', localVault: false, tana: false, placement: { obsidian: 'advanced', tana: 'advanced' } })
     expect(by.settings_sync_capabilities.run({ device: 'tauri' }).localVault).toBe(true)
     expect(() => by.settings_sync_capabilities.run({ device: 'fridge' })).toThrow(/device/)
   })

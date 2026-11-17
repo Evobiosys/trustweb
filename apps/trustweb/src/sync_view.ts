@@ -35,7 +35,7 @@ import { S } from './strings'
 import { setDeviceNameSource } from './device_name'
 import { readSyncMode, shouldSend, writeSyncMode } from './sync_mode'
 import { readRelayOn, writeRelayOn } from './notes_relay'
-import { dedupeByPeerId } from './sync_core'
+import { dedupeByPeerId, pairLink } from './sync_core'
 
 export interface SyncViewHooks {
   persona: string
@@ -71,6 +71,8 @@ export interface SyncViewHooks {
   adopted: (device: string, diff: Differences) => void
   /** Wave 43c (device_alias.ts): tell my connections the asking DIDs of my other linked devices (net.ts tellDevices); never throws. */
   tellDevices?: (dids: string[]) => void
+  /** Wave 44c: the Update button of the held-items banner (the app's own reload); absent = a plain page reload. */
+  reload?: () => void
 }
 
 export interface SyncView {
@@ -80,6 +82,10 @@ export interface SyncView {
   start(): void
   /** The My devices sheet. */
   open(): void
+  /** Wave 44c: opened from a pairing link: joins with the code and shows the confirm sheet (a bad or used code says so in the code box). */
+  joinLink(code: string): Promise<void>
+  /** Wave 44c (MCP sync_pair_link): the Link a device sheet with its QR and link. */
+  showLink(): void
   /** The "Same person as..." picker on a person's card. */
   samePersonPicker(personId: string): void
   /** The "Which one do you keep?" sheet for two persons; `aId` is the preselected one to keep (Enter), `bId` the duplicate. */
@@ -89,7 +95,7 @@ export interface SyncView {
   /** Wave 43c: Sync now with every linked device (the recovery path; MCP sync_now). Resolves with how many were started. */
   syncAll(): Promise<number>
   /** Wave 43c: linked devices, the last sync, and whether Auto sync is on (MCP sync_status reads the record's copy). */
-  status(): { devices: number; lastAt: number; auto: boolean }
+  status(): { devices: number; lastAt: number; auto: boolean; unacked: number; held: number }
   /** review-fixes-43c: a connection was just made here: one round soon (KICK_MS), not at the next tick, so my other devices show it within seconds. */
   kick(): void
 }
@@ -154,14 +160,15 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   /** Wave 43c: Auto sync is on unless this device's record says off (syncAutoOff, never synced). No record yet: off. */
   const autoOn = (): boolean => { const s = h.peek(); return !!s && !s.syncAutoOff }
-  const status = (): { devices: number; lastAt: number; auto: boolean } => (started ? { ...link.status(), auto: autoOn() } : { devices: 0, lastAt: 0, auto: autoOn() })
+  const status = (): { devices: number; lastAt: number; auto: boolean; unacked: number; held: number } => (started ? { ...link.status(), auto: autoOn(), held: link.held().items } : { devices: 0, lastAt: 0, auto: autoOn(), unacked: 0, held: 0 })
   /** Keeps the record's copy of the status current (MCP sync_status reads it); saves only on a change. */
   function noteStatus(): void {
     const s = h.peek()
     if (!s || !started) return
-    const { devices, lastAt } = link.status()
-    if (s.syncStatus?.devices === devices && s.syncStatus.lastAt === lastAt) return
-    s.syncStatus = { devices, lastAt }
+    const { devices, lastAt, unacked } = link.status()
+    const held = link.held().items
+    if (s.syncStatus?.devices === devices && s.syncStatus.lastAt === lastAt && s.syncStatus.unacked === unacked && s.syncStatus.held === held) return
+    s.syncStatus = { devices, lastAt, unacked, held }
     h.save()
   }
   /** One round: send my changes, tell my connections about my other devices, note the status. */
@@ -184,6 +191,10 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     const st = status()
     const on = st.auto
     return el('div', { class: 'sync-status', 'data-sync-status': String(st.devices) }, [
+      st.held ? el('div', { class: 'warn', role: 'status', 'data-sync-held': String(st.held) }, [
+        S.syncSeamless.heldBanner(st.held), ' ',
+        el('button', { class: 'btn btn-electric btn-sm', 'data-sync-held-update': '1', onclick: () => (h.reload ?? (() => location.reload()))() }, [S.syncSeamless.heldUpdate]),
+      ]) : null,
       el('p', { class: 'meta', 'data-sync-status-line': '1' }, [st.devices ? S.syncDev.inSync(st.devices, st.lastAt ? h.when(st.lastAt) : S.syncDev.neverYet) : S.syncDev.noDevices]),
       el('button', {
         class: 'chip' + (on ? ' on' : ' tw-off'), type: 'button', 'aria-pressed': String(on), 'data-sync-auto': on ? 'on' : 'off', title: S.syncDev.autoHint,
@@ -438,16 +449,17 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   async function linkSheet(): Promise<void> {
     const code = await link.offerCode()
+    const pair = pairLink(code)
     const qr = el('div', { class: 'qr-box' })
     open('devices-link', [
       el('h3', {}, [S.dvLinkTitle]),
       el('p', { class: 'meta' }, [S.dvLinkLead]),
       qr,
-      el('code', { class: 'recovery-key', 'data-device-code': '1' }, [code]),
+      el('code', { class: 'recovery-key', 'data-device-code': '1', 'data-pair-link': pair }, [code]),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void navigator.clipboard?.writeText(code).then(() => h.toast(S.dvCodeCopied), () => { /* selectable text above */ }) } }, [S.dvCodeCopy]),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: devicesSheet }, [S.dvCancel]),
     ])
-    void renderQr(qr, code).catch(() => { /* the text code still works */ })
+    void renderQr(qr, pair).catch(() => { /* the text code still works */ })
   }
 
   function enterSheet(): void {
@@ -552,14 +564,16 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     else devicesSheet()
   }
 
+  /** A stamp's device as a name: its sync id maps to the device's name (the name is a label only, wave 44c). */
+  const who = (by: string | undefined): string => (by ? link.nameOf(by) : '?')
   function conflictRow(c: Conflict): HTMLElement {
     const keptTheirs = c.kept === 'theirs'
     const [kept, other] = keptTheirs ? [c.theirs, c.mine] : [c.mine, c.theirs]
     return el('div', { class: 'verse', 'data-conflict': c.id }, [
       el('h3', {}, [c.kind === 'channel' ? S.dvChannelLink(S.chLabel[c.id as Channel]) : c.label]),
       c.mineAt === undefined ? null : el('p', { class: 'meta' }, [keptTheirs
-        ? S.dvKeptLine(c.theirsBy ?? '?', h.when(c.theirsAt ?? 0), c.mineBy ?? '?', h.when(c.mineAt))
-        : S.dvKeptLine(c.mineBy ?? '?', h.when(c.mineAt), c.theirsBy ?? '?', h.when(c.theirsAt ?? 0))]),
+        ? S.dvKeptLine(who(c.theirsBy), h.when(c.theirsAt ?? 0), who(c.mineBy), h.when(c.mineAt))
+        : S.dvKeptLine(who(c.mineBy), h.when(c.mineAt), who(c.theirsBy), h.when(c.theirsAt ?? 0))]),
       el('p', {}, [`✓ ${summary(c, kept)}`]),
       el('p', {}, [summary(c, other)]),
     ])
@@ -652,6 +666,13 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     if (deps && h.peek()?.connectCode) void refreshAll(deps).then(() => { if (showing()) devicesSheet() })
   }
 
+  async function joinLink(code: string): Promise<void> {
+    start()
+    const r = await link.join(code).catch(() => null)
+    if (r) confirmSheet(r)
+    else { enterSheet(); h.toast(S.dvBadCode) }
+  }
+
   let kickTimer: ReturnType<typeof setTimeout> | undefined
   function start(): void {
     if (started) return
@@ -676,6 +697,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     },
     start,
     open: openDevices,
+    joinLink,
+    showLink: () => { start(); void linkSheet() },
     samePersonPicker,
     mergeSheet: (aId, bId) => samePersonSheet(aId, bId, h.closeSheet),
     mergeNow: (keepId, dropId) => { void mergeNow(keepId, dropId) },
