@@ -7,6 +7,7 @@ import { relayNeeded } from './notes_relay'
 import { annotate, canAnnotate, editBlock, forward, newNote, noteShareLink, provenanceLine, serializeOutline, type NoteBlock, type NoteBy, type NotePerm, type SharedNote } from './notes_outline'
 import { suggest, type Candidate } from './share_page'
 import { S } from './strings'
+import { draftable } from './drafts_dom'
 
 export interface SharedNotesHooks {
   me: NoteBy
@@ -50,17 +51,20 @@ export function sharedNotesSection(p: Person, h: SharedNotesHooks): HTMLElement 
   const newForm = (): HTMLElement => {
     const title = el('input', { class: 'field', maxlength: '120', placeholder: S.noteTitlePh, 'aria-label': S.noteTitlePh, 'data-note-title': '' }) as HTMLInputElement
     const text = el('textarea', { class: 'field', rows: '6', placeholder: S.noteTextPh, 'aria-label': S.noteTextPh, 'data-note-text': '' }) as HTMLTextAreaElement
-    return el('div', { class: 'note-form' }, [
+    const box = el('div', { class: 'note-form' }, [
       title, text,
       el('button', { class: 'btn btn-electric btn-sm', 'data-note-save': '', onclick: () => {
         const n = newNote({ title: title.value || S.noteUntitled, text: text.value, by: h.me, at: Date.now() })
         if (!n.blocks.length) return
         p.sharedNotes = [...notes(), n]
+        kept.clear()   // wave44c event-autosave
         form = null
         h.save()
         draw()
       } }, [S.noteSave]),
     ])
+    const kept = draftable(box, 'shared-note', p.id)
+    return box
   }
 
   const blockRow = (n: SharedNote, b: NoteBlock): HTMLElement => {

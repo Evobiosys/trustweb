@@ -2300,3 +2300,6 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .hdr{flex-wrap:nowrap}
 .hdr-left > :is(h2){flex:0 1 auto}
 .hdr-left > :not(h2){flex-shrink:0}
+/* wave44c event-autosave */
+.draft-note{margin:4px 0; font-size:.85em; opacity:.75}
+.draft-note .btn{padding:0 6px; min-height:0}

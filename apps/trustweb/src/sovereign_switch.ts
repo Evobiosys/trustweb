@@ -79,7 +79,8 @@ Everything this device holds of your TrustWeb record, as files you own.
 Nothing was sent anywhere to make this file.
 `
 
-export function exportFiles(s: AppState, now: number): ZipFile[] {
+export function exportFiles(rec: AppState, now: number): ZipFile[] {
+  const s: AppState = { ...rec, drafts: undefined }   // wave44c event-autosave: drafts never leave this device
   const all = nodes(s)
   let seq = 0
   const log = all.flatMap(({ kind, list }) => list.map((node) => JSON.stringify({ seq: ++seq, ts: now, op: 'create_node', kind, node }))).join('\n')

@@ -37,6 +37,7 @@ import { ICONS } from './icons'
 import { provenanceChip } from './provenance_view'
 import { askPersist } from './storage_persist'
 import { S } from './strings'
+import { draftable } from './drafts_dom'
 
 export interface FeedViewHooks {
   state: () => AppState
@@ -353,16 +354,18 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   }
 
   /** One text sheet: a quote of what it answers (optional), the box, one button. */
-  function textSheet(title: string, quote: string | null, ph: string, start: string, button: string, go: (text: string) => boolean, attr: string): void {
+  function textSheet(title: string, quote: string | null, ph: string, start: string, button: string, go: (text: string) => boolean, attr: string, draftOf?: string): void {
     const text = el('textarea', { class: 'field', rows: '3', placeholder: ph, 'aria-label': ph, [attr]: '1' }) as HTMLTextAreaElement
     text.value = start
-    h.openSheet([el('h3', {}, [title]), quote ? el('blockquote', { class: 'shared-notes' }, [quote.slice(0, 300)]) : null, text,
-      el('button', { class: 'btn btn-electric', [`${attr}-send`]: '1', onclick: () => { if (go(text.value)) h.closeSheet(); else text.focus() } }, [button])])
+    const box = el('div', {}, [text])
+    const kept = draftOf ? draftable(box, 'feed-reply', draftOf) : null   // wave44c event-autosave: a reply is kept until sent
+    h.openSheet([el('h3', {}, [title]), quote ? el('blockquote', { class: 'shared-notes' }, [quote.slice(0, 300)]) : null, box,
+      el('button', { class: 'btn btn-electric', [`${attr}-send`]: '1', onclick: () => { if (go(text.value)) { kept?.clear(); h.closeSheet() } else text.focus() } }, [button])])
     setTimeout(() => text.focus(), 0)
   }
 
   function replySheet(post: Post): void {
-    textSheet(S.feedReplyTitle, post.text, S.feedReplyPh, '', S.feedComposeSend, (text) => writePost(text, { replyTo: post.id, replyText: post.text, eventId: eventOfTag(post.tag)?.id }), 'data-feed-reply-text')
+    textSheet(S.feedReplyTitle, post.text, S.feedReplyPh, '', S.feedComposeSend, (text) => writePost(text, { replyTo: post.id, replyText: post.text, eventId: eventOfTag(post.tag)?.id }), 'data-feed-reply-text', post.id)
   }
 
   function editSheet(post: Post): void {
@@ -391,7 +394,9 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     const text = el('textarea', { class: 'field', rows: '2', placeholder: S.feedComposePh, 'aria-label': S.feedComposePh, 'data-feed-compose': '1' }) as HTMLTextAreaElement
     const embed = el('button', { class: 'btn btn-ghost btn-sm', hidden: true, 'data-feed-embed': '1', onclick: () => { void embedLink(text, embed) } }, [S.feedEmbed.button]) as HTMLButtonElement
     text.addEventListener('input', () => { embed.hidden = !parsePostLink(text.value) })   // a lone link: offer to embed it (wave 44)
-    return el('div', { class: 'feed-compose' }, [text, embed, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) text.value = ''; else text.focus() } }, [S.feedComposeSend]), publishTarget()])
+    const box = el('div', { class: 'feed-compose' }, [text, embed, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) { text.value = ''; kept.clear() } else text.focus() } }, [S.feedComposeSend]), publishTarget()])
+    const kept = draftable(box, 'feed', eventId ?? 'mine')   // wave44c event-autosave
+    return box
   }
 
   /** Wave 44 feed-embed: the pasted link of one post becomes a post in the Feed; the one GET happens only on this press. */
@@ -502,6 +507,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     let type: PostType = 'discussion'
     let hops = 0
     const text = el('textarea', { class: 'field', rows: '3', placeholder: S.feedPostPh, 'aria-label': S.feedPostPh, 'data-feed-text': '1' }) as HTMLTextAreaElement
+    const textBox = el('div', {}, [text])
+    const kept = draftable(textBox, 'feed-group', 'new')   // wave44c event-autosave
     const mark = (b: Element, on: boolean): void => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)) }
     const types = POST_TYPES.map((ty) => el('button', { class: 'chip' + (ty === type ? ' on' : ''), 'aria-pressed': String(ty === type), 'data-feed-type': ty, onclick: () => { type = ty; types.forEach((b, i) => mark(b, POST_TYPES[i] === ty)) } }, [S.feedType[ty]]))
     const hopBtns = [0, 1, 2].map((n) => el('button', { class: 'chip' + (n === hops ? ' on' : ''), 'aria-pressed': String(n === hops), 'data-feed-hops': String(n), onclick: () => { hops = n; hopBtns.forEach((b, i) => mark(b, i === n)) } }, [S.feedHops[n]]))
@@ -514,13 +521,14 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       const chosenTargets: Target[] = targets.filter((t) => picked.has(key(t))).map((t) => ({ group: t.group, channel: t.channel }))
       const { posts, events } = addGroupPosts(s, chosenTargets, text.value, type, Date.now(), loadColourTags(), ensureNostrKey(s), { hops, meta: metas })
       if (!posts.length) { text.focus(); return }
+      kept.clear()   // wave44c event-autosave
       h.save(); h.closeSheet(); chosen.source = FeedSource.Group; chosen.group = posts.length === 1 ? posts[0].group : undefined; if (!chosen.group) delete chosen.group
       delete chosen.channel
       h.redrawFeed(); h.toast(S.feedPosted)
       const urls = s.feed?.relays ?? []
       if (urls.length) void sendOut(posts, events, urls)
     }
-    h.openSheet([el('h3', {}, [S.feedPost]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedTypeLabel }, types), el('p', { class: 'meta' }, [S.feedGroupsPick]), ...rows, el('p', { class: 'meta' }, [S.feedHopsLabel]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedHopsLabel }, hopBtns), text, el('p', { class: 'meta' }, [S.feedPostHint]), el('button', { class: 'btn btn-electric', 'data-feed-send': '1', onclick: send }, [S.feedPostSend])])
+    h.openSheet([el('h3', {}, [S.feedPost]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedTypeLabel }, types), el('p', { class: 'meta' }, [S.feedGroupsPick]), ...rows, el('p', { class: 'meta' }, [S.feedHopsLabel]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedHopsLabel }, hopBtns), textBox, el('p', { class: 'meta' }, [S.feedPostHint]), el('button', { class: 'btn btn-electric', 'data-feed-send': '1', onclick: send }, [S.feedPostSend])])
     setTimeout(() => text.focus(), 0)
   }
 

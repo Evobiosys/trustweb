@@ -80,6 +80,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'syncAutoOff', 'syncStatus',
   // wave 43c social-hosting: the name listing is of THIS device's key; hosted records, the lookup cache and waiting intents are this phone's
   'discoverable', 'discoverOpen', 'hosted', 'nameCache', 'intentsIn',
+  /* wave44c event-autosave */ 'drafts',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */

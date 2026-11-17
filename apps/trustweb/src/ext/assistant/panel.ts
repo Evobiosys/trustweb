@@ -25,6 +25,7 @@ import { streamChain, streamChat, type ChatMessage } from './chat_stream'
 import { lookupQuestion, quickLook, type LookTarget } from './person_context'
 import { aiRowName, mentionedPeople, parseAssistantReply, systemPrompt, visibleText } from './protocol'
 import { applyModel, chainOf, ChainError, parseCommand, PRESET, PROVIDER_IDS, THINKING, TIER_MODEL, type AssistantCfg, type Provider, type ProviderId, type Thinking } from './providers'
+import { draftable } from '../../drafts_dom'
 
 const WATCH_KEY = 'tw-assistant-watch'
 /** The one attribute the layout reads (styles.css): set while the panel shows at 900 px and wider, removed on every way out. */
@@ -63,7 +64,9 @@ export function createPanel(ctx: TwCtx) {
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!busy) send() } })
   const head = el('header', { class: 'head' })
   const gearHost = el('div', { 'data-assistant-gearhost': '' })
-  wrap.append(head, gearHost, log, foot, el('div', { class: 'composer' }, [input, sendBtn]))
+  const composer = el('div', { class: 'composer' }, [input, sendBtn])
+  wrap.append(head, gearHost, log, foot, composer)
+  const kept = draftable(composer, 'assistant', 'panel')   // wave44c event-autosave
   root.append(el('style', {}, [css]), wrap)
   approval.onChange(() => draw())
 
@@ -261,6 +264,7 @@ export function createPanel(ctx: TwCtx) {
     const text = input.value.trim()
     if (!text) return
     input.value = ''
+    kept.clear()
     reviewOpen = false
     if (command(text)) return
     msgs.push({ role: 'user', text })

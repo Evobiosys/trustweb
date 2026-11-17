@@ -460,6 +460,9 @@ export interface EventEnvelope {
   announce?: true
   /** Wave 44 steer-open-space: the schedule of an online open space (instead of `want` / `link`): `open` = the sender, a host, says the event is an open space; `acts` are checked by the receiver (open_space.ts). */
   os?: { id: string; open?: true; acts: unknown[] }
+  /** Wave 44c event-autosave: the guest's answer to the host (yes = "I will attend"), and the host's conference links, sent only after a yes. */
+  rsvp?: { id: string; yes: boolean }
+  conf?: { id: string; links: { provider: 'kmeet' | 'zoom' | 'jitsi' | 'custom'; url: string }[] }
 }
 // ----- END TrustWeb wave 43c -----
 

@@ -14,6 +14,7 @@ import type { TwCtx } from '../tw_registry'
 import communityCss from '../community-mighty/community.css?inline'
 import css from './feed.css?inline'
 import { MODULE_ID, ZONES_OFFERED, buildTimeline, composePost, firstLink, linkCard, parseFeed, parsePreview, type FeedData, type LinkCard, type TimelineItem } from './feed_model'
+import { draftable } from '../../drafts_dom'
 
 export const readFeed = (s: AppState): FeedData => parseFeed(s.extData?.[MODULE_ID])
 
@@ -86,13 +87,16 @@ export function mountFeed(hostEl: HTMLElement, ctx: TwCtx): () => void {
       if (!how) return
       ui.draft = ''
       ui.note = ''
+      kept.clear()   // wave44c event-autosave
       writeFeed(ctx, d)
       draw()
     }
-    composeBox.replaceChildren(text, preview, el('div', { class: 'opts' }, [
+    const form = el('div', {}, [text, preview, el('div', { class: 'opts' }, [
       el('label', { class: 'meta' }, [t.who, ' ', to]),
       el('button', { class: 'lnk strong', type: 'button', 'data-feed-post': '', onclick: post }, [t.post]),
-    ]), ...(ui.note ? [el('p', { class: 'note' }, [ui.note])] : []))
+    ]), ...(ui.note ? [el('p', { class: 'note' }, [ui.note])] : [])])
+    const kept = draftable(form, 'feed', 'ext')
+    composeBox.replaceChildren(form)
   }
 
   function postCard(p: TimelineItem): HTMLElement {

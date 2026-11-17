@@ -25,6 +25,7 @@ import type { InviteEntry, InviteSettings } from './invite_policy'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
+import type { Draft } from './drafts'
 import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -447,6 +448,10 @@ export interface TwEvent {
   repeat?: Repeat
   /** Wave 44: conference links next to the place (kMeet, Zoom, Jitsi, custom). Local only. */
   conference?: ConferenceLink[]
+  /** Wave 44c event-autosave: the event link said the host has a conference link; it is revealed (sealed, event_conference.ts) once I accept. */
+  confHidden?: true
+  /** Wave 44c: the host's list of peers who accepted and got the conference link (a change goes to them). Local only. */
+  confTo?: string[]
   /** Wave 44: a kDrive (https) attachment link. Local only. */
   attachment?: string
   /** Wave 44: the calendar it sits in (event_draft.ts calendarOf); absent = My events, or Shared with me for an event from a link. */
@@ -1261,6 +1266,8 @@ export interface AppState {
   atEvent?: { eventId: string; since: number; bell?: boolean }
   /** Wave 44 event-editor: events not saved yet (event_draft.ts). THIS DEVICE ONLY, never in an ask or a link. */
   eventDrafts?: EventDraft[]
+  /** Wave 44c event-autosave: every editor's draft (drafts.ts), key editor:target. THIS DEVICE ONLY: never synced, exported or asked. */
+  drafts?: Record<string, Draft>
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
   calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */

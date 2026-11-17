@@ -2,6 +2,7 @@
 /** Wave 37 (co-notes-link): the group chat under a co-note. The members are the note's participants; their chips (in the editor's "With" row) open a 1:1 chat. DOM only. */
 import { el } from '../../../../demo/src/ui/dom'
 import { S } from '../../strings'
+import { draftable } from '../../drafts_dom'
 import type { CoCtx } from './co_editor'
 
 const S_ = S.coLink
@@ -21,6 +22,7 @@ export function chatPanel(c: CoCtx, id: string, draft: { text: string }): HTMLEl
     if (!text || !chat) return
     draft.text = ''
     input.value = ''
+    kept?.clear()   // wave44c event-autosave
     void chat.say(id, text).then(() => list.replaceChildren(...rows()))
   }
   const rows = (): Node[] => {
@@ -30,10 +32,12 @@ export function chatPanel(c: CoCtx, id: string, draft: { text: string }): HTMLEl
       : [el('p', { class: 'meta' }, [others.length ? S_.chatEmpty : S_.chatAlone])]
   }
   const list = el('div', { class: 'co-msgs', 'data-co-msgs': '', 'aria-live': 'polite' }, rows())
+  const sendRow = others.length ? el('div', { class: 'co-chat-send' }, [input, el('button', { class: 'btn btn-ghost btn-sm', 'data-co-chat-send': '', onclick: send }, [S_.chatSend])]) : null
+  const kept = sendRow ? draftable(sendRow, 'co-chat', id) : null
   return el('div', { class: 'co-chat', 'data-co-chat': id }, [
     el('h4', { class: 'eyebrow' }, [S_.chatTitle]),
     list,
-    others.length ? el('div', { class: 'co-chat-send' }, [input, el('button', { class: 'btn btn-ghost btn-sm', 'data-co-chat-send': '', onclick: send }, [S_.chatSend])]) : null,
+    sendRow,
     el('p', { class: 'meta', 'data-co-chat-honest': '' }, [S_.chatHonest]),
   ])
 }
