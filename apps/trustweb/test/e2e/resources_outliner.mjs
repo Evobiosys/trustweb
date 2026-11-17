@@ -20,7 +20,7 @@ try {
     const errors = []
     page.on('pageerror', (e) => errors.push(String(e)))
     await page.goto(URL); await page.waitForTimeout(1500)
-    await page.evaluate((r) => localStorage.setItem('trustweb.v1.me', r), record)
+    await page.evaluate((r) => { localStorage.setItem('trustweb.ui.keepcopy.offered', '1'); localStorage.setItem('trustweb.v1.me', r) }, record)
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(600)
     await page.locator('[data-go="inventory"]').first().click(); await page.waitForTimeout(500)
     check(`${name}: protected row has Record and Play`, (await page.locator('[data-rv-record="r2"]').count()) === 1 && (await page.locator('[data-rv-play="r2"]').count()) === 1)

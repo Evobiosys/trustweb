@@ -25,7 +25,7 @@ try {
     page.on('pageerror', (e) => errors.push(String(e.stack ?? e).split('\n').slice(0, 3).join(' <- ')))
     await page.goto(URL); await page.waitForTimeout(1200)
     const seed = (reach) => page.evaluate(([ppl, peers, r]) => {
-      localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Tester' }, people: ppl, peers, log: [], inventory: [], events: [], askAudience: { add: [], exclude: ['person:p-di'] }, ...(r ? { askReach: r } : {}) }))
+      localStorage.setItem('trustweb.ui.keepcopy.offered', '1'); localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Tester' }, people: ppl, peers, log: [], inventory: [], events: [], askAudience: { add: [], exclude: ['person:p-di'] }, ...(r ? { askReach: r } : {}) }))
     }, [PEOPLE, PEOPLE.map((p) => peer(p.peerId, p.name)), reach])
     const openAsk = async () => {
       await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(900)
