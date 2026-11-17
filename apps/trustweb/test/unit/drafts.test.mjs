@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44c event-autosave (eta): the generic draft store, its 10 MB cap, the 500 ms autosave, and that drafts stay on this device. Fake data only. */
-import { DRAFT_MAX_BYTES, DRAFT_DEBOUNCE_MS, createAutosave, discardDraft, draftKey, draftSize, getDraft, listDrafts, putDraft, withoutDrafts } from '../../src/drafts.ts'
+import { DRAFT_MAX_BYTES, DRAFT_STORE_MAX_BYTES, DRAFT_DEBOUNCE_MS, createAutosave, discardDraft, draftKey, draftSize, getDraft, listDrafts, putDraft, withoutDrafts } from '../../src/drafts.ts'
 import { SYNC_EXCLUDED, bundleOf, settingsOf } from '../../src/sync_core.ts'
 import { exportFiles } from '../../src/sovereign_switch.ts'
 import { askSources } from '../../src/cascade.ts'
@@ -31,7 +31,10 @@ describe('the draft store', () => {
     expect(getDraft(s, 'feed', 'new').value).toEqual({ text: 'short' })
     const exact = 'y'.repeat(DRAFT_MAX_BYTES - 2) // with its two quotes: exactly the cap
     expect(draftSize(exact)).toBe(DRAFT_MAX_BYTES)
-    expect(putDraft(s, 'feed', 'big', exact, 3)).toBe('saved')
+    // review-44c R3: the record (one localStorage value, ~5 MB) cannot hold a 10 MB draft; all drafts together stay under DRAFT_STORE_MAX_BYTES
+    expect(putDraft(s, 'feed', 'big', exact, 3)).toBe('too-big')
+    const fits = 'z'.repeat(DRAFT_STORE_MAX_BYTES - 2 - draftSize({ text: 'short' }))
+    expect(putDraft(s, 'feed', 'big', fits, 4)).toBe('saved')
   })
   it('an empty state drops the draft', () => {
     const s = rec()

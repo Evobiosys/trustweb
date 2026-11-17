@@ -10,6 +10,12 @@ import type { AppState } from './model.ts'
 /** A state larger than this (UTF-8 bytes of its JSON form) is not kept; the editor says so quietly. */
 export const DRAFT_MAX_BYTES = 10 * 1024 * 1024
 export const DRAFT_DEBOUNCE_MS = 500
+/**
+ * review-44c: drafts live inside the record, and the record is one localStorage value (about 5 MB per site in every browser). All drafts together stay
+ * under this, so a big draft can never stop the record itself from saving (store.ts would then keep every change in memory only). A draft that does not
+ * fit says so like one over DRAFT_MAX_BYTES; the earlier draft stays.
+ */
+export const DRAFT_STORE_MAX_BYTES = 2 * 1024 * 1024
 
 export interface Draft { editor: string; target: string; value: unknown; updatedAt: number; size: number }
 export type DraftOutcome = 'saved' | 'too-big' | 'empty'
@@ -34,7 +40,8 @@ export function discardDraft(s: Rec, key: string): boolean {
 export function putDraft<T>(s: Rec, editor: string, target: string, value: T, now: number, isEmpty?: (v: T) => boolean): DraftOutcome {
   if (isEmpty?.(value)) { discardDraft(s, draftKey(editor, target)); return 'empty' }
   const size = draftSize(value)
-  if (size > DRAFT_MAX_BYTES) return 'too-big'
+  const others = Object.entries(s.drafts ?? {}).reduce((n, [k, d]) => (k === draftKey(editor, target) ? n : n + d.size), 0)
+  if (size > DRAFT_MAX_BYTES || others + size > DRAFT_STORE_MAX_BYTES) return 'too-big'
   s.drafts = { ...s.drafts, [draftKey(editor, target)]: { editor, target, value: structuredClone(value), updatedAt: now, size } }
   return 'saved'
 }
