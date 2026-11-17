@@ -74,10 +74,10 @@ describe('dashboard_open', () => {
 describe('Settings > Home', () => {
   it('home.start reads and writes uiViews.webDefault', () => {
     const r = {}
-    expect(readSetting(r, 'home.start')).toBe(true)   // wave44c: Home is the default
-    writeSetting(r, 'home.start', false)
-    expect(r.uiViews.webDefault).toBe('rings')
+    expect(readSetting(r, 'home.start')).toBe(false)   // answers-44c: personal view opens the web; Home is opt-in
     writeSetting(r, 'home.start', true)
+    expect(r.uiViews.webDefault).toBe('home')
+    writeSetting(r, 'home.start', false)
     expect(r.uiViews).toBeUndefined()
   })
 })

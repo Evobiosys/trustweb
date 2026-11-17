@@ -5,8 +5,8 @@ import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultO
 const names = { rings: 'Web', network: 'Network', map: 'Map', people: 'People' }
 
 describe('web_default_view', () => {
-  it('without a pin the Web tab keeps "Web" and opens Home (wave44c)', () => {
-    expect(webDefaultOf({})).toBe('home')
+  it('without a pin the Web tab keeps "Web" and opens the rings (answers-44c)', () => {
+    expect(webDefaultOf({})).toBe('rings')
     expect(webTabLabel({}, names)).toBe('Web')
   })
   it('a pinned view names the tab', () => {

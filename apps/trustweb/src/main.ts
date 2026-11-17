@@ -169,7 +169,7 @@ import { circlesView } from './circles_view'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerAfterTitle, headerPins, headerRight, qrTarget, showsSettingsGear, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
-import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel, webViewAfterDefault } from './web_default_view'
+import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultOf, webTabLabel, webTabTarget, webViewAfterDefault } from './web_default_view'
 import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
@@ -1344,7 +1344,7 @@ function barOpen(id: BarId): void {
   if (mod) { openExtView(mod); return }
   switch (id) {
     case 'web': if (webTabAction(webPage) === 'leave-page') { cardExpanded = false; webPage = null } // wave 37: Web from a card lands on the main Web view
-      if (state && webDefaultOf(state) !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
+      if (state && webTabTarget(state, modeShell.now() === 'community') !== 'rings') chooseView(webDefaultOf(state) as ViewKey); else tabTap(Screen.Web); break
     case 'events': openEvents(state?.coGuest?.eventId); break
     case 'ask': openQuery(); break
     case 'network': case 'people': case 'map': chooseView(id); break
@@ -1357,7 +1357,7 @@ function barOpen(id: BarId): void {
 function barButton(id: BarId, primary: boolean, halo = false): HTMLElement {
   if (id === 'record' && primary) return recordButton()
   const view = viewOfBar(id)
-  const name = id === 'web' && state ? webTabLabel(state, S.viewNames, CONTACTS_TAB_LABEL ? S.tabLabel.desk : undefined) : barName(id) // wave 35: the Web tab carries the pinned default view's name
+  const name = id === 'web' && state ? (modeShell.now() === 'community' ? S.mode.web : webTabLabel(state, S.viewNames, CONTACTS_TAB_LABEL ? S.tabLabel.desk : undefined)) : barName(id) // answers-44c: the community view's second tab reads Web // wave 35: the Web tab carries the pinned default view's name
   const mod = modOfBar(id)
   const b = tabButton(id, id === 'web' ? name : view || mod ? barName(id) : S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : view ? viewGlyph[view] ?? 'web' : mod ? twRegistry.views().find((v) => v.id === mod)?.icon ?? 'users' : TAB_ICON[id], () => tapBar(id))
   b.setAttribute('aria-label', name)

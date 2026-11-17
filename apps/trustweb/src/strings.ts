@@ -3620,7 +3620,7 @@ export const S = {
     desc: 'A community view: posts, spaces, events, members, shared resources and a chat pane.',
     menu: 'Menu',
     closeMenu: 'Close menu',
-    nav: { home: 'Dashboard', spaces: 'Spaces', events: 'Events', members: 'Members', docs: 'Docs', resources: 'Resources', references: 'References', chat: 'Chat', timeline: 'Timeline' } as Record<string, string>,
+    nav: { home: 'Home', spaces: 'Spaces', events: 'Events', members: 'Members', docs: 'Docs', resources: 'Resources', references: 'References', chat: 'Chat', timeline: 'Timeline' } as Record<string, string>,
     you: 'You',
     composePh: 'Write something for your community',
     composeTo: 'Post to',

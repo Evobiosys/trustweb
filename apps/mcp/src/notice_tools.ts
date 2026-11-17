@@ -20,7 +20,7 @@ export function noticeTools(o: { file: string; write: boolean }): Tool[] {
       name: 'notices_list', description: 'The one notice layer: how many notices show at once, its kinds top to bottom, and how many "Wants to connect" rows wait in the record.',
       inputSchema: none, run: () => ({ cap: NOTICE_CAP, kinds: [...NOTICE_KINDS], waiting: { wants: load().wantsToConnect?.length ?? 0 } }),
     },
-    { name: 'web_default_view_get', description: 'The view the Web (Contacts) tab opens: Home unless another is pinned.', inputSchema: none, run: () => ({ view: load().uiViews?.webDefault || 'home' }) },
+    { name: 'web_default_view_get', description: 'The view the Web (Contacts) tab opens in the personal view: the rings unless another (e.g. home) is pinned.', inputSchema: none, run: () => ({ view: load().uiViews?.webDefault || 'rings' }) },
   ]
   const write: Tool[] = [{
     name: 'web_default_view_set', description: `Pin the default view of Web (Contacts): ${VIEWS.join(', ')}; rings opens the rings first, home (the default) the Home board.`,

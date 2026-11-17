@@ -25,9 +25,10 @@ const s = {
 }
 
 describe('Home first for everyone', () => {
-  it('a record without a pin opens Home; only an explicit rings choice opens the rings', () => {
-    expect(webDefaultOf({})).toBe('home')
-    expect(webDefaultOf({ uiViews: {} })).toBe('home')
+  it('a record without a pin opens the rings (answers-44c: personal Web = web); Home when chosen', () => {
+    expect(webDefaultOf({})).toBe('rings')
+    expect(webDefaultOf({ uiViews: {} })).toBe('rings')
+    expect(webDefaultOf({ uiViews: { webDefault: 'home' } })).toBe('home')
     expect(webDefaultOf({ uiViews: { webDefault: 'rings' } })).toBe('rings')
     expect(webDefaultOf({ uiViews: { webDefault: 'network' } })).toBe('network')
   })
@@ -39,23 +40,23 @@ describe('Home first for everyone', () => {
     expect(webTabLabel({}, { rings: 'Web', home: 'Home' })).toBe('Web')
     expect(webTabLabel({ uiViews: { webDefault: 'home' } }, { rings: 'Web', home: 'Home' })).toBe('Web')
   })
-  it('a migrated v3 record without a pin opens Home; one that pinned another view keeps it', () => {
+  it('a migrated v3 record without a pin opens the rings (answers-44c); one that pinned another view keeps it', () => {
     const a = { schemaVersion: 3, people: [] }
     migrate(a)
     expect(a.schemaVersion).toBe(SCHEMA_VERSION)
-    expect(webDefaultOf(a)).toBe('home')
+    expect(webDefaultOf(a)).toBe('rings')
     const b = { schemaVersion: 3, people: [], uiViews: { webDefault: 'network' } }
     migrate(b)
     expect(webDefaultOf(b)).toBe('network')
   })
-  it('Settings > Home: on by default, off = rings first, on again = home', () => {
+  it('Settings > Home: off by default (answers-44c), on = home first, off again = rings', () => {
     const r = {}
-    expect(readSetting(r, 'home.start')).toBe(true)
-    writeSetting(r, 'home.start', false)
-    expect(r.uiViews.webDefault).toBe('rings')
     expect(readSetting(r, 'home.start')).toBe(false)
     writeSetting(r, 'home.start', true)
+    expect(r.uiViews.webDefault).toBe('home')
     expect(readSetting(r, 'home.start')).toBe(true)
+    writeSetting(r, 'home.start', false)
+    expect(readSetting(r, 'home.start')).toBe(false)
     expect(r.uiViews).toBeUndefined()
     const p = { uiViews: { webDefault: 'network' } }
     writeSetting(p, 'home.start', true)
@@ -124,11 +125,11 @@ describe('MCP parity: requests_list, home_open_request', () => {
     defineHomeActions(reg, { openDashboard: () => {}, openRequest: (id) => opened.push(id) })
     expect(reg.specs().map((x) => x.type)).toContain('home-open-request')
   })
-  it('web_default_view_get says home for a fresh record; rings is stored', () => {
+  it('web_default_view_get says rings for a fresh record (answers-44c); home is stored', () => {
     const f = fixture()
-    expect(f.by.web_default_view_get.run({})).toEqual({ view: 'home' })
-    f.by.web_default_view_set.run({ view: 'rings' })
-    expect(JSON.parse(readFileSync(f.file, 'utf8')).uiViews).toEqual({ webDefault: 'rings' })
     expect(f.by.web_default_view_get.run({})).toEqual({ view: 'rings' })
+    f.by.web_default_view_set.run({ view: 'home' })
+    expect(JSON.parse(readFileSync(f.file, 'utf8')).uiViews).toEqual({ webDefault: 'home' })
+    expect(f.by.web_default_view_get.run({})).toEqual({ view: 'home' })
   })
 })

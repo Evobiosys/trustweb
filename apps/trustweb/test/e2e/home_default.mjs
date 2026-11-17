@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * wave44c home-default (headless, stock dev server, synthetic records): PORT=5472 SHOTS=<dir> EXE=<chromium> PLAYWRIGHT_PACKAGE=<index.mjs> node home_default.mjs
- *  A. first screen = Home for a record without a pin, and for a migrated v3 record; the rings thumbnail sits in the Web tile.
+ *  A. first screen = the rings without a pin (answers-44c); Home for a record with Home first on, and for a migrated v3 one; the rings thumbnail sits in the Web tile.
  *  B. a request row opens its ask card / connect card on the Web; the Web tile opens the rings.
  *  C. the Existing requests tile: left column bottom, no overlap, See all lists the groups, a row there opens the card.
  *  D. Settings > Home switch off = rings first after a reload.
@@ -20,6 +20,7 @@ const record = (extra = {}) => ({
   wantsToConnect: [{ peerId: 'z9', name: 'Cy Neu', at: Date.now() }],
   sentAsks: [{ id: 's1', text: 'Who can lend a drill?', at: Date.now(), to: [] }],
   invitesSent: 2,
+  uiViews: { webDefault: 'home' }, // answers-44c: Home first is opt-in in the personal view (Settings > Home)
   ...extra,
 })
 const overlap = (a, b) => a.x < b.x + b.width - 1 && b.x < a.x + a.width - 1 && a.y < b.y + b.height - 1 && b.y < a.y + a.height - 1
@@ -39,6 +40,11 @@ async function open(w, h, rec) {
 try {
   for (const [w, h] of [[360, 780], [1280, 900]]) {
     // ---- A. first screen
+    {
+      const { ctx, page } = await open(w, h, record({ uiViews: undefined }))
+      check(`${w}: A. a record without a pin opens the rings (answers-44c)`, (await page.locator('.rings-zoom').count()) === 1 && (await page.locator('[data-home-board]').count()) === 0)
+      await ctx.close()
+    }
     for (const [label, rec] of [['fresh record', record()], ['migrated v3 record', record({ schemaVersion: 3 })]]) {
       const { ctx, page } = await open(w, h, rec)
       check(`${w}: A. ${label}: first screen is Home`, (await page.locator('[data-home-board]').count()) === 1 && (await page.locator('.rings-zoom').count()) === 0)

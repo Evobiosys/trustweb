@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Wave 35: the view pinned as the default of the Web tab (AppState.uiViews.webDefault, a view_menu ViewKey; absent = Home since wave 44c).
+ * Wave 35: the view pinned as the default of the Web tab (AppState.uiViews.webDefault, a view_menu ViewKey; absent = the rings; wave 44c answers-44c).
  * The Web tab opens it and carries its name. Advanced mode = the Advanced pin is on. Pure, no DOM.
  */
 import { headerPins } from './header_controls'
@@ -8,8 +8,8 @@ import { headerPins } from './header_controls'
 export interface UiViews { webDefault?: string }
 interface ViewsState { uiViews?: UiViews; uiPins?: { views: string[]; header?: string[] } }
 
-/** Wave 44c home-default: Home is the first screen for everyone; only an explicit `rings` (Settings > Home off, or the rings pinned) opens the rings. */
-export const webDefaultOf = (s: ViewsState): string => s.uiViews?.webDefault || 'home'
+/** Wave 44c answers-44c (Jakob 20:22): the personal Web tab is the web again; Home only when chosen (Settings > Home "Open Home first"). The community view leads with its Home tab. */
+export const webDefaultOf = (s: ViewsState): string => s.uiViews?.webDefault || 'rings'
 
 /** Wave 43c: false = the bottom-bar tab keeps "Web" (Settings texts say Contacts); true = the rings tab reads "Contacts". Jakob decides. */
 export const CONTACTS_TAB_LABEL = false
@@ -26,7 +26,7 @@ export const shownAtOnce = (view: string): boolean => view === 'rings' || view =
 /** review-fixes-43c: the Web view to remember after a new default (eye-menu pin AND the Settings select), or null when it opens as a page on the next tap. */
 export const webViewAfterDefault = (view: string): string | null => (shownAtOnce(view) ? view : null)
 
-/** The next `uiViews`: the rings are stored too (wave 44c: absent = Home). */
+/** The next `uiViews`: the rings are stored too (absent = the rings as well). */
 export function setWebDefault(views: UiViews | undefined, id: string): UiViews {
   return { ...views, webDefault: id }
 }
@@ -34,3 +34,7 @@ export function setWebDefault(views: UiViews | undefined, id: string): UiViews {
 export function isAdvanced(s: ViewsState): boolean {
   return headerPins(s.uiPins?.header).includes('advanced') || !!s.uiPins?.views.includes('advanced')
 }
+
+/* wave44c answers-44c */
+/** What the Web tab opens: in the community view always the web (its Home is the tab before it); in the personal view the pinned default. */
+export const webTabTarget = (s: ViewsState, community: boolean): string => (community ? 'rings' : webDefaultOf(s))
