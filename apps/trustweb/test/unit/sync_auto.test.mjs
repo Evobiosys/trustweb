@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 43c sync-devices: connections travel, duplicate cards by peerId become one, deltas, tombstones, and the automatic sync over a fake relay. */
 import { SYNC_EXCLUDED, bundleOf, deltaOf, dedupeByPeerId, mergeBundle, parseBundle, refreshStamps } from '../../src/sync_core.ts'
-import { AUTO_TTL_MS, createSyncLink } from '../../src/sync_link.ts'
+import { AUTO_TTL_MS, AUTO_VERSION, createSyncLink } from '../../src/sync_link.ts'
 
 const line = (id, text = id) => ({ id, text, tag: 'note', audience: 'close', status: 'current', notedAt: 1, checkedAt: 1 })
 const person = (id, name, over = {}) => ({ id, name, context: '', ring: 'friend', metAt: 1, lines: [], ...over })
@@ -168,7 +168,7 @@ describe('automatic sync', () => {
     await paired(h, mac, phone)
     // the joiner learns the other's auto support from hello/ready
     await mac.api.autoTick(); await phone.api.autoTick()
-    await until(() => mac.api.pairings()[0].au === 1 && phone.api.pairings()[0].au === 1)
+    await until(() => mac.api.pairings()[0].au === AUTO_VERSION && phone.api.pairings()[0].au === AUTO_VERSION)
     await mac.api.autoTick()
     await until(() => phone.st.people.length === 2)
     expect(phone.st.peers.map((p) => p.did)).toEqual([DID('a')])
@@ -192,7 +192,7 @@ describe('automatic sync', () => {
     const phone = await device(h, 'Phone', state(), { auto: () => true })
     await paired(h, mac, phone)
     await mac.api.autoTick(); await phone.api.autoTick()
-    await until(() => mac.api.pairings()[0].au === 1)
+    await until(() => mac.api.pairings()[0].au === AUTO_VERSION)
     await mac.api.autoTick()
     await until(() => phone.st.people.length === 1)
     mac.tick(5000)
@@ -209,7 +209,7 @@ describe('automatic sync', () => {
     const phone = await device(h, 'Phone', state(), { auto: () => on })
     await paired(h, mac, phone)
     await mac.api.autoTick()
-    await until(() => mac.api.pairings()[0].au === 1)
+    await until(() => mac.api.pairings()[0].au === AUTO_VERSION)
     await mac.api.autoTick()
     await new Promise((r) => setTimeout(r, 80))
     expect(phone.st.people).toHaveLength(0)
