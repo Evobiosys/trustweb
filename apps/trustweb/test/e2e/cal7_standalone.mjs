@@ -32,7 +32,7 @@ try {
   await page.locator('[data-go="inventory"]').tap(); await page.waitForTimeout(300)
   await page.locator('.scroll.pad').dispatchEvent('drop', { dataTransfer: dt })
   await page.waitForTimeout(300)
-  check('drop adds the item, undo notice shown', (await page.locator('.inv-text').first().innerText()).startsWith('Forum') && (await page.locator('[data-undo-event]').count()) === 1)
+  check('drop adds the item, undo notice shown', (await page.locator('.inv-text').first().innerText()).includes('Forum') /* answers-44d: the title emoji comes first */ && (await page.locator('[data-undo-event]').count()) === 1)
   await page.screenshot({ path: `${SHOTS}/cal7-dropped.png` })
   await page.locator('[data-undo-event]').tap(); await page.waitForTimeout(200)
   check('undo removes it', (await page.locator('.inv-text').count()) === 0)

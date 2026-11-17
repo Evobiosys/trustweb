@@ -360,6 +360,7 @@ import { eventDropItem } from './event_drop'
 import { eventPlanSection } from './event_plan_view'
 import { defineEventActions } from './event_actions'
 import { defineSyncActions } from './sync_actions' // wave43c sync-devices
+import { emojiOn, emojiSwitchRow, emojiTitle } from './title_emoji_view' // answers-44d
 import { openPairLink } from './sync_pair_link' // wave44c sync-seamless
 import { sendHit } from './org_hits'
 import { loadPublic } from './org_public'
@@ -1967,7 +1968,7 @@ function screenQr(plain = false): void {
 function eventQr(ev: TwEvent, plain = false, host = false): void {
   eventEnv.shown(ev.id)
   // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy). Wave 43: the host link when the page's host toggle is on (the QR follows the link).
-  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : revealedBy(eventsBy(), ev)) }), plain)
+  void qrPage((link) => ({ kind: 'event', link, title: emojiTitle(ev.name, emojiOn(st())), eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : revealedBy(eventsBy(), ev)) }), plain)
 }
 
 /** The tag's code carries the tag and the public usernames of the people who carry it (never those who asked to be asked first). */
@@ -3185,7 +3186,7 @@ function webPageScreen(page: WebPage): Node[] {
 
 /** Wave 31: what we know of a person's resources, in the same list as My Resources (whose = theirs). */
 function peerItemList(personId: string): HTMLElement {
-  const rows = peerItems(st(), personId).map((i) => ({ id: String(i.at) + i.title, title: i.title, chips: [i.category, i.source === 'self' ? null : i.source], at: i.at }))
+  const rows = peerItems(st(), personId).map((i) => ({ id: String(i.at) + i.title, title: i.title, emoji: emojiOn(st()), chips: [i.category, i.source === 'self' ? null : i.source], at: i.at }))
   return rows.length ? resourceList('theirs', rows, Date.now()) : el('p', { class: 'meta' }, [S.cardInventoryNone])
 }
 
@@ -6056,7 +6057,7 @@ function maybeOpenPendingEvent(): void {
   }
   openSheet([
     logoSlot,
-    el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
+    el('h2', {}, [S.eventLinkJoinTitle(emojiTitle(ev.name, emojiOn(st())), eventWhen(ev), ev.where)]),
     ev.by ? el('p', { class: 'meta', 'data-event-invited-by': '' }, [S.eventInvitedBy(ev.by.name)]) : null,
     ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,
     ev.srv ? el('p', { class: 'meta', 'data-org-counts-note': '' }, [S.evOrgCounts]) : null,
@@ -8095,6 +8096,7 @@ function settingsSheet(): void {
     advancedBlock([
     viewRow(),
     themeRow(),
+    emojiSwitchRow(s, () => { save(); settingsSheet() }), // answers-44d
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
@@ -8207,7 +8209,7 @@ autoBackup = backup
 function outlinerItems(s: AppState): Node[] {
   const rows = el('div', { class: 'zoom-rows-host' })
   const draw = (): void => rows.replaceChildren(resourceList('mine', itemRows(s.inventory, resQuery, resSort).map((i) => ({
-    id: i.id, title: i.text, at: i.createdAt, onOpen: () => itemSheet(i.id),
+    id: i.id, title: i.text, at: i.createdAt, emoji: emojiOn(s), onOpen: () => itemSheet(i.id),
     chips: [S.audienceLabel[i.audience], i.included ? null : S.zoomOff, i.tagAudience?.length ? S.zoomTags(i.tagAudience.length) : null],
   })), Date.now()))
   const input = el('input', { class: 'field', type: 'search', placeholder: S.zoomSearchPh, 'aria-label': S.zoomSearchPh, value: resQuery, oninput: (e: Event) => { resQuery = (e.target as HTMLInputElement).value; draw() } })
@@ -8229,7 +8231,7 @@ function screenInventory(): Node[] {
   if (scope) {
     return [
       header(S.w44cr.title(scope.label)),
-      el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', open: itemSheet, save, render })),
+      el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', emoji: emojiOn(s), open: itemSheet, save, render })),
     ]
   }
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
@@ -8254,7 +8256,7 @@ function screenInventory(): Node[] {
   const invRow = (item: InventoryItem): HTMLElement => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
     el('div', { class: 'inv-main' }, [
       el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
-        item.text, isDemoItem(s, item.id) ? dummyChip() : null,
+        emojiTitle(item.text, emojiOn(s)), isDemoItem(s, item.id) ? dummyChip() : null,
         recentChip(item.createdAt, Date.now()),
         provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
       ]),

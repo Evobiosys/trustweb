@@ -142,6 +142,8 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
       if (u && !/^https:\/\/[^/\s]+$/.test(u)) throw new Error(`the public address must be an https origin without a path, not "${u}"`)
       if (u) r.profileOrigin = u; else delete r.profileOrigin
     } },
+  /* wave44c answers-44d */
+  sparse('ui.titleEmoji', 'general', 'Emoji before titles', 'titleEmojiOff', true, true, 'Settings > Appearance: an emoji picked from the title (no AI) before event and resource titles.'),
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),
   pin('qr-only', 'Pin the QR only button to the toolbar', 'A button beneath Settings.'),

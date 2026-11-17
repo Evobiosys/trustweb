@@ -5371,4 +5371,9 @@ export const S = {
     heldLatest: 'No newer version is published yet: the items wait here and appear once it is.',
     introduceLabel: 'Introduce a person at an event to the people there',
   },
+  /* wave44c answers-44d */
+  a44d: {
+    emojiSwitch: 'Emoji before titles',
+    emojiHint: 'Picked from the words of the title (no AI): Winter gets a snowflake.',
+  },
 } as const

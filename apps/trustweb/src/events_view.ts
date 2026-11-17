@@ -25,6 +25,7 @@ import { invitationEventRows } from './invitations'
 import { ICONS } from './icons'
 import { S } from './strings'
 import { attendChanged, conferenceLine } from './event_conference'
+import { emojiOn, emojiTitle, titleEmoji } from './title_emoji' // answers-44d
 
 export interface EventsViewHooks {
   state: () => AppState
@@ -108,7 +109,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   function row(ev: TwEvent): HTMLElement {
     const n = attendees(h.state(), ev.id).length
     return el('button', { class: 'prow', 'data-event': ev.id, onclick: () => show({ kind: 'page', id: ev.id }) }, [
-      el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [[whenLabel(ev), ev.where, S.eventsPeople(n)].filter(Boolean).join(' · ')])]),
+      el('span', { class: 'who' }, [el('b', {}, [emojiTitle(ev.name, emojiOn(h.state()))]), el('i', {}, [[whenLabel(ev), ev.where, S.eventsPeople(n)].filter(Boolean).join(' · ')])]),
     ])
   }
 
@@ -512,6 +513,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
     // review-fixes-43: the event name in the header is a line of the page too (P1): nothing to expand, so a press edits; a long press / right click edits with the name focused.
     const nameLine = title.querySelector('h2')
+    const emoji = emojiOn(h.state()) ? titleEmoji(ev.name) : ''   // answers-44d: prepended at render, the name stays the name
+    if (nameLine && emoji) nameLine.prepend(el('span', { class: 'title-emoji', 'aria-hidden': 'true', 'data-title-emoji': emoji }, [`${emoji} `]))
     if (nameLine) { nameLine.setAttribute('data-event-name-line', ''); nameLine.setAttribute('role', 'button'); nameLine.tabIndex = 0; editable(nameLine, ev, 'name') }
     // P4: the tag as this device calls it (tagLabel: the tag name, else the event name), the same text the Web filter and the Feed show.
     const tag = tagLabel(ev)

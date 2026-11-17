@@ -25,6 +25,8 @@ export interface ScopedCtx {
   open: (id: string) => void
   save: () => void
   render: () => void
+  /** answers-44d: the title emoji is on (title_emoji.ts emojiOn). */
+  emoji?: boolean
 }
 
 /** The chips of one item; a tap hands its tag id and label to `pick`. Null when it carries no tag. */
@@ -38,7 +40,7 @@ export function scopedResources(c: ScopedCtx): Node[] {
   const now = Date.now()
   const p = partitionScope(forPage(c.items, c.page), c.scope)
   const list = (key: string, rows: readonly InventoryItem[]): Node => el('div', { 'data-rs-list': key }, [resourceList('mine', rows.map((i) => ({
-    id: i.id, title: i.text, at: i.createdAt, chips: itemTags(i, c.tags, c.events, EVENT_TAG).map((t) => t.label),
+    id: i.id, title: i.text, at: i.createdAt, emoji: c.emoji, chips: itemTags(i, c.tags, c.events, EVENT_TAG).map((t) => t.label),
     onOpen: () => { if (markOpened(c.items, i.id, Date.now())) c.save(); c.open(i.id) },
   })), now)])
   const section = (key: string, title: string, rows: readonly InventoryItem[], badge = false): Node | null => rows.length === 0 && key !== 'shared' ? null : el('section', { class: 'rv-section', 'data-rs-section': key }, [

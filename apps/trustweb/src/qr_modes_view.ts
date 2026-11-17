@@ -46,5 +46,5 @@ export function openQrPage(d: QrPageDeps, ctx: QrContext, note?: string): void {
     ])))
   }
   draw()
-  d.open(S.qrPageTitle, [el('div', { class: 'scroll pad' }, [qr, ctx.kind === 'person' ? el('h3', { 'data-qr-title': '' }, [S.w44pp.connectWith(ctx.name)]) : null, words, note ? el('p', { class: 'meta', 'data-qr-note': '' }, [note]) : null, toggles])], 'qr-modes')
+  d.open(S.qrPageTitle, [el('div', { class: 'scroll pad' }, [qr, ctx.kind === 'person' ? el('h3', { 'data-qr-title': '' }, [S.w44pp.connectWith(ctx.name)]) : ctx.kind === 'event' && ctx.title ? el('h3', { 'data-qr-title': 'event' }, [ctx.title]) : null, words, note ? el('p', { class: 'meta', 'data-qr-note': '' }, [note]) : null, toggles])], 'qr-modes')
 }
