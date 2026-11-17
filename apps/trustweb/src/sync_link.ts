@@ -503,12 +503,17 @@ export function createSyncLink(d: SyncLinkDeps) {
       return pairingCode(identity.did, secret)
     },
     /** The device that scanned or typed the code: sends itself, and returns what to confirm (null: not a code). */
-    async join(code: string): Promise<PairRequest | null> {
+    async join(code: string, opts?: { defer?: boolean }): Promise<PairRequest | null> {
       const c = parsePairingCode(code)
       if (!c) return null
-      await connected
-      await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), ...ask(), ...au(), ...sv(), exp: stamp() }))
-      return request(c.did, 'Other device')
+      const pair = async (): Promise<void> => {
+        await connected
+        await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), ...ask(), ...au(), ...sv(), exp: stamp() }))
+      }
+      if (!opts?.defer) { await pair(); return request(c.did, 'Other device') }
+      // review-44c (A5): a pairing LINK can come from anyone; this device's name and asking DID go out only once the person confirms here.
+      const r = await request(c.did, 'Other device')
+      return { ...r, confirm: (o) => { r.confirm(o); void pair().catch(() => d.onLog('The other device could not be reached: open the link again')) } }
     },
     /** The per-pairing tick "Shares my username" (D1). */
     setShare(did: string, on: boolean): void {

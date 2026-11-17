@@ -36,6 +36,7 @@ import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
 import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view' // wave44c seen-through
+import { defineSeenActions } from './seen_through_actions' // review-44c
 import { audienceFilterView } from './audience_filter'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
@@ -5402,7 +5403,7 @@ const devices = createSyncView({
   editLink: () => openLinkChange(linkHooks),
   afterSyncNow: () => void pollNotesRelay(),
   tellDevices: (dids) => { if (state) void net.tellDevices(dids) }, // wave43c sync-devices
-  reload: () => void reloadNow(), // wave44c sync-seamless
+  reload: () => void runUpdateNow(S.review44c.heldLatest), // wave44c sync-seamless; review-44c: the one Update logic (service worker, release check), not a bare reload
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -5697,6 +5698,7 @@ defineEventActions(appActions, {
 })
 defineSyncActions(appActions, devices) // wave43c sync-devices
 defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
+defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),
@@ -8164,7 +8166,8 @@ function showUpdateBothPhones(): void {
     el('button', { class: 'btn btn-ghost btn-sm', 'data-send-update-link': '1', onclick: () => void sendUpdateLink() }, [T.sendLink]),
   ], HANDSHAKE_NOTICE_MS)
 }
-async function runUpdateNow(): Promise<void> {
+/** review-44c: also the held-items banner's Update (sync_view.ts); `latest` = what it says when no newer version exists. */
+async function runUpdateNow(latest: string = S.w44cUpdate.latest): Promise<void> {
   const outcome = await updateNow({
     registration: async () => navigator.serviceWorker?.getRegistration(),
     newerRelease: async () => (await updates.check()) === UpdateResult.Newer,
@@ -8172,7 +8175,7 @@ async function runUpdateNow(): Promise<void> {
     android: isAndroidAgent(navigator.userAgent),
     openInstallPage: () => { window.open(APK_URL, '_blank', 'noopener') },
   })
-  if (outcome === 'latest') toast(S.w44cUpdate.latest)
+  if (outcome === 'latest') toast(latest)
 }
 async function sendUpdateLink(): Promise<void> {
   const text = S.w44cUpdate.shareText + LIVE_SERVER
@@ -8849,6 +8852,6 @@ if (state && !state.testOf?.handedOverAt) {
   // Resume the approve step after a reload while a phone still waits.
   const pending = demoAccounts().find((t) => t.pending)
   if (pending) showAllowCard(pending)
-}
+} else if (!state && deviceSyncEligible()) { devices.start(); openPairLink(bootHash, devices) } // review-44c: a new phone (no record yet) opened from the pair link joins too
 // Wave 42 push-popup: a notification missed before this open.
 void missedPopup.check()

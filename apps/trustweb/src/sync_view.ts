@@ -499,11 +499,13 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     if (scan) camera()
   }
 
-  function confirmSheet(r: PairRequest): void {
+  /** `fromLink` (review-44c): opened from a pairing link, which anyone can send: says plainly what Confirm hands over. */
+  function confirmSheet(r: PairRequest, fromLink = false): void {
     const share = el('input', { type: 'checkbox', id: 'dv-share-code', checked: true, 'data-share-code': '1' }) as HTMLInputElement
     open('devices-confirm', [
       el('h3', {}, [S.dvConfirmTitle]),
       el('p', { class: 'meta' }, [S.dvConfirmLead(r.name)]),
+      fromLink ? el('p', { class: 'warn', 'data-pair-link-warn': '1' }, [S.review44c.linkWarn]) : null,
       el('code', { class: 'recovery-key', 'data-fingerprint': r.fp }, [r.fp]),
       el('label', { class: 'consent' }, [share, el('span', {}, [S.unShareTick])]),
       el('button', { class: 'btn btn-electric', 'data-pair-confirm': '1', onclick: () => { if (!h.peek()) { h.state(); h.changed() } r.confirm({ shareCode: share.checked }); h.toast(S.dvLinked(r.name)); devicesSheet() } }, [S.dvConfirm]), // answers-44c: a new device without a record makes its empty one, so Auto sync brings the other device's record
@@ -679,8 +681,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   async function joinLink(code: string): Promise<void> {
     start()
-    const r = await link.join(code).catch(() => null)
-    if (r) confirmSheet(r)
+    const r = await link.join(code, { defer: true }).catch(() => null) // review-44c: nothing is sent before Confirm
+    if (r) confirmSheet(r, true)
     else { enterSheet(); h.toast(S.dvBadCode) }
   }
 

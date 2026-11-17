@@ -60,6 +60,17 @@ export function createSeenThrough(io: SeenIo) {
     ])])
   }
 
+  /** review-44c: one introduction (the button below, and the action seen-introduce / MCP event_introduce_person): only a host, only someone at the event. */
+  async function introducePerson(eventId: string, personId: string): Promise<void> {
+    const s = io.st()
+    const ev = (s.events ?? []).find((e) => e.id === eventId)
+    const p = s.people.find((x) => x.id === personId && x.deleted_at === undefined && !x.via)
+    if (!ev || !p || !isEventHost(ev, s.me.displayName, s.people) || !attendees(s, ev.id).some((x) => x.id === p.id)) return
+    const shown = p.peerId ? await io.askShow(p.peerId, ev.name, T.showEventText(ev.name)) : false
+    await io.introduce(ev.id, p.name, shown)
+    io.toast(shown ? T.introducedNamed(p.name) : T.introducedNameless(p.name))
+  }
+
   /** The host's section on the event page: pick a person here and introduce them; the name goes only with their own yes. */
   function eventSection(ev: TwEvent): Node[] {
     const s = io.st()
@@ -68,18 +79,14 @@ export function createSeenThrough(io: SeenIo) {
     if (!people.length) return []
     const pick = el('select', { class: 'field', 'aria-label': T.pickAria, 'data-seen-pick': '' }, people.map((p) => el('option', { value: p.id }, [p.name]))) as HTMLSelectElement
     const go = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-seen-introduce': '', onclick: async () => {
-      const p = io.st().people.find((x) => x.id === pick.value)
-      if (!p) return
       go.disabled = true
-      const shown = p.peerId ? await io.askShow(p.peerId, ev.name, T.showEventText(ev.name)) : false
-      await io.introduce(ev.id, p.name, shown)
+      await introducePerson(ev.id, pick.value)
       go.disabled = false
-      io.toast(shown ? T.introducedNamed(p.name) : T.introducedNameless(p.name))
     } }, [T.introduce]) as HTMLButtonElement
     return [el('div', { class: 'seen-intro', 'data-seen-intro': ev.id }, [el('h3', {}, [T.introduceTitle]), el('small', { class: 'hint' }, [T.introduceHint]), pick, go])]
   }
 
-  return { open, eventSection }
+  return { open, eventSection, introducePerson }
 }
 
 /** The yes / no card of a show ask (a friend asks whether the person further out may see me). */

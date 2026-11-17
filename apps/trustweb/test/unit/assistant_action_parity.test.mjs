@@ -6,6 +6,7 @@ import { defineEventActions } from '../../src/event_actions.ts'
 import { defineSyncActions } from '../../src/sync_actions.ts'
 import { defineHomeActions } from '../../src/home_actions.ts'
 import { defineResourceShareActions } from '../../src/resource_share_send.ts'
+import { defineSeenActions } from '../../src/seen_through_actions.ts' // review-44c
 import { ACTION_MCP, mcpToolFor } from '../../src/ext/assistant/actions.ts'
 import { allTools } from '../../../mcp/src/tools.ts'
 
@@ -16,6 +17,7 @@ defineEventActions(reg, host)
 defineSyncActions(reg, host) // wave43c sync-devices
 defineHomeActions(reg, host) // wave44 home-dashboard   // main.ts defines both on the one registry
 defineResourceShareActions(reg, host) // wave44 answers-44b
+defineSeenActions(reg, host) // review-44c: seen-introduce
 
 describe('registry <-> MCP parity', () => {
   const tools = allTools({ file: '/nonexistent', write: true }).map((t) => t.name)

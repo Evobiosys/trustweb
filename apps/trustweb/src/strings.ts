@@ -5251,7 +5251,7 @@ export const S = {
   /* wave44c event-autosave */
   evConf44c: { hidden: 'Revealed once you accept', asked: 'Asked the host for the link; it shows here once their phone answers.' },
   drafts44c: {
-    restored: 'Draft restored', discard: 'Discard', tooBig: 'Not saved as a draft: over 10 MB.',
+    restored: 'Draft restored', discard: 'Discard', tooBig: 'Not saved as a draft: too large to keep on this device (over 10 MB, or all drafts together over 2 MB).',
     title: 'Drafts', hint: 'What you typed and did not send or save yet. Only on this phone: never synced, exported or asked.',
     none: 'No drafts.', size: (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`),
     discardAria: (what: string) => `Discard the draft ${what}`,
@@ -5364,5 +5364,11 @@ export const S = {
     restored: (what: string) => `Restored ${what}`,
     empty: 'Nothing deleted in the last 30 days.',
     restoreLabel: 'Restore a deleted item',
+  },
+  /* wave44c review-44c */
+  review44c: {
+    linkWarn: 'Only confirm if this link came from another device of yours: that device then gets everything in TrustWeb on this one.',
+    heldLatest: 'No newer version is published yet: the items wait here and appear once it is.',
+    introduceLabel: 'Introduce a person at an event to the people there',
   },
 } as const

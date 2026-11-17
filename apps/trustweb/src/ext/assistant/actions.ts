@@ -24,6 +24,8 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'dashboard-open': 'dashboard_open',
   // Wave 44c home-default: opening one request as its card
   'home-open-request': 'home_open_request',
+  // review-44c: the host's introduction at an event (seen_through_actions.ts)
+  'seen-introduce': 'event_introduce_person',
   /* wave44 answers-44b: a shared block sent to a chat is resource_share via:'chat' */
   'resource-share-chat': 'resource_share',
 }

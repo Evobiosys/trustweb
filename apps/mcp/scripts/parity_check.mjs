@@ -12,7 +12,7 @@ import { SETTINGS_REGISTRY } from '../../trustweb/src/settings_registry.ts'
 import { allTools } from '../src/tools.ts'
 
 /** Every file that defines registry actions (main.ts calls each define* on the one registry). */
-const ACTION_FILES = ['app_actions.ts', 'event_actions.ts', 'sync_actions.ts', 'home_actions.ts', 'resource_share_send.ts' /* wave44 answers-44b */].map((f) => fileURLToPath(new URL(`../../trustweb/src/${f}`, import.meta.url)))
+const ACTION_FILES = ['app_actions.ts', 'event_actions.ts', 'sync_actions.ts', 'home_actions.ts', 'resource_share_send.ts' /* wave44 answers-44b */, 'seen_through_actions.ts' /* review-44c */].map((f) => fileURLToPath(new URL(`../../trustweb/src/${f}`, import.meta.url)))
 
 export function parityReport() {
   const actions = ACTION_FILES.flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/reg\.define(?:<[^\n]*?>)?\(\{\s*type: '([a-z-]+)'/g)].map((m) => m[1]))
