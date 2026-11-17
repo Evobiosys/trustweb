@@ -27,20 +27,26 @@ export function mountPreviewPhone(seed: Seed, deps: Deps): void {
   document.body.append(pill, sheet)
 
   const say = (text: string): void => { msg.textContent = text; msg.hidden = !text }
-  const press = (key: string, v: 'merge' | 'needs-work'): void => {
+  const press = (key: string, v: 'merge' | 'needs-work', note?: string): void => {
     const before = features
     const next = phonePress(features, key, v)
-    features = next.features; render()
-    postVerdict(deps.fetchFn, key, next.verdict).then(() => { say('') }, (e: Error) => { features = before; render(); say(T.failed(e.message)) })
+    const sent = next.verdict ? note || undefined : undefined
+    // answers-44b: the note belongs to this verdict (the CLI keeps it with it, drops it without one)
+    features = next.features.map((f) => { if (f.key !== key) return f; const { note: _old, ...rest } = f; return sent ? { ...rest, note: sent } : rest }); render()
+    postVerdict(deps.fetchFn, key, next.verdict, sent).then(() => { say('') }, (e: Error) => { features = before; render(); say(T.failed(e.message)) })
   }
   const row = (r: PhoneRow): HTMLElement => {
     const btn = (v: 'merge' | 'needs-work', label: string): HTMLButtonElement => {
       const on = r.verdict === v
       const b = h('button', { type: 'button', className: 'twpp-v' + (on ? ' on' : ' tw-off'), textContent: (on ? '✓ ' : '') + label })
       b.setAttribute('aria-pressed', String(on))
-      b.onclick = () => { press(r.key, v) }
+      b.onclick = () => { press(r.key, v, v === 'needs-work' ? noteBox.value.trim() : undefined) }
       return b
     }
+    // wave44 answers-44b: an optional note (P7: small, greyed) that Needs work sends; the stored one shows.
+    const noteBox = h('textarea', { className: 'twpp-note', rows: 1, placeholder: S.verdictNote.ph, value: features.find((f) => f.key === r.key)?.note ?? '' })
+    noteBox.setAttribute('aria-label', S.verdictNote.aria)
+    noteBox.dataset.twppNote = r.key
     const note = h('button', { type: 'button', className: 'twpp-v', textContent: T.note })
     note.onclick = () => { void deps.copy(noteText(seed.id, features.find((f) => f.key === r.key)!)).then(() => { say(T.noteCopied) }) }
     const article = h('article', { className: 'twpp-row' })
@@ -49,6 +55,7 @@ export function mountPreviewPhone(seed: Seed, deps: Deps): void {
       h('div', { className: 'twpp-t' }, h('span', { className: 'twpp-state', title: r.loaded ? T.loaded : T.notLoaded, textContent: r.loaded ? '☑' : '☐' }), h('b', {}, r.title)),
       ...(r.where ? [h('p', { className: 'twpp-where' }, `${T.where}: ${r.where}`)] : []),
       ...(r.steps.length ? [h('details', {}, h('summary', {}, T.steps), h('ol', {}, ...r.steps.map((s) => h('li', {}, s))))] : []),
+      noteBox,
       h('div', { className: 'twpp-btns' }, btn('merge', T.like), btn('needs-work', T.needsWork), note))
     return article
   }

@@ -25,7 +25,7 @@ const [id, cmd, ...a] = process.argv.slice(2)
 fs.appendFileSync(${JSON.stringify(logFile)}, [cmd, ...a].join(' ') + '\\n')
 const reg = JSON.parse(fs.readFileSync(${JSON.stringify(registry)}, 'utf8'))
 const row = (k) => reg.features.find((f) => f.key === k)
-if (cmd === 'verdict') { row(a[0]).verdict = a[1] === 'clear' ? null : a[1]; if (a[1] === 'merge') row(a[0]).checked = true; if (a[1] === 'needs-work') row(a[0]).checked = false }
+if (cmd === 'verdict') { row(a[0]).verdict = a[1] === 'clear' ? null : a[1]; if (a[1] === 'merge') row(a[0]).checked = true; if (a[1] === 'needs-work') row(a[0]).checked = false; if (a[2] === '--note') row(a[0]).note = a[3]; else delete row(a[0]).note }
 fs.writeFileSync(${JSON.stringify(registry)}, JSON.stringify(reg))
 `)
 chmodSync(bin, 0o755)
@@ -81,9 +81,11 @@ try {
   await until(() => calls().includes('verdict b merge'))
   c.ok('like reaches the CLI as verdict merge', calls().includes('verdict b merge'), calls())
   c.ok('like shows pressed and loads the row', (await page.locator('.twpp-row').nth(1).getByRole('button', { name: /Like/ }).getAttribute('aria-pressed')) === 'true' && (await page.locator('.twpp-row').nth(1).locator('.twpp-state').textContent()) === '☑')
+  // wave44 answers-44b: the optional note goes with Needs work
+  await page.locator('.twpp-row').first().locator('[data-twpp-note]').fill('hides the Add button')
   await page.locator('.twpp-row').first().getByRole('button', { name: /Needs work/ }).click()
   await until(() => calls().includes('verdict a needs-work'))
-  c.ok('needs work reaches the CLI', calls().includes('verdict a needs-work'), calls())
+  c.ok('needs work reaches the CLI with the note', calls().includes('verdict a needs-work --note hides the Add button'), calls())
   await page.locator('.twpp-row').nth(1).getByRole('button', { name: /Like/ }).click()
   await until(() => calls().includes('verdict b clear'))
   c.ok('the same press again clears', calls().includes('verdict b clear'), calls())
@@ -102,6 +104,9 @@ try {
   page = await ctx.newPage()
   await page.goto(base); await page.waitForSelector('.twp header', { timeout: 20_000 })
   c.ok('wide shell: no pill, the Mac panel stays', (await page.locator('.twpp-pill').count()) === 0 && (await page.locator('.twp').isVisible()))
+  await page.locator('.twp .loadhead').click(); await sleep(300)
+  c.ok('the Mac panel shows the verdict note', (await page.locator('.twp .twp-note').allTextContents()).includes('📝 hides the Add button'))
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/answers-44b-note-1280.png` })
   await ctx.close()
 } finally {
   await browser?.close()

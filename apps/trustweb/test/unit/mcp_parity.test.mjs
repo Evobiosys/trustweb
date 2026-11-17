@@ -11,6 +11,8 @@ import { createActions } from '../../src/actions.ts'
 import { defineAppActions } from '../../src/app_actions.ts'
 import { defineEventActions } from '../../src/event_actions.ts'
 import { defineSyncActions } from '../../src/sync_actions.ts'
+import { defineHomeActions } from '../../src/home_actions.ts'
+import { defineResourceShareActions } from '../../src/resource_share_send.ts'
 import { ACTION_MCP, APP_ACTION_TYPES } from '../../src/ext/assistant/actions.ts'
 import { MCP_TOOLS } from '../../src/ext/mcp-local/mcp_config.ts'
 import { SETTINGS_REGISTRY, writeSetting } from '../../src/settings_registry.ts'
@@ -23,6 +25,8 @@ const reg = createActions()
 defineAppActions(reg, host)
 defineEventActions(reg, host)
 defineSyncActions(reg, host) // wave43c sync-devices
+defineHomeActions(reg, host) // wave44 home-dashboard
+defineResourceShareActions(reg, host) // wave44 answers-44b
 
 const P = (id, name, over = {}) => ({ id, name, context: '', ring: 'friend', metAt: 0, lines: [], ...over })
 function fixture(write = true) {

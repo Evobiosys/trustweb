@@ -4,7 +4,7 @@ import { MERGE_DONE } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; flag?: string; merged?: boolean; verdict?: Verdict; updated?: boolean; approvedRef?: string; changedFrom?: string; walkOk?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; flag?: string; merged?: boolean; verdict?: Verdict; updated?: boolean; approvedRef?: string; changedFrom?: string; walkOk?: boolean; /** wave44 answers-44b: the owner's note on this verdict (`verdict ... --note`). */ note?: string }
 export type Verdict = 'merge' | 'needs-work' | null
 /** The registry's compat record (written by preview_compat.mjs): the base and row refs it was computed for, each row alone, every pair and the full set merged in a scratch tree. */
 export interface Compat { at?: string; state: 'running' | 'ok' | 'conflict'; baseSha?: string; refs?: Record<string, string | null>; singles?: Record<string, string>; pairs?: Record<string, string>; full?: string }
@@ -669,3 +669,6 @@ export function popoutStep(_s: PopoutState, m: PopoutMsg, now: number): PopoutSt
 }
 /** The inline panel stays hidden while a pop-out beat is fresh; a window that died without "close" gives the panel back after POPOUT_STALE_MS. */
 export const popoutHides = (s: PopoutState, now: number): boolean => s.open && now - s.last < POPOUT_STALE_MS
+
+/* wave44 answers-44b: the note line the Mac panel shows under a row (the phone sheet's needs-work text). */
+export const verdictNote = (f: Pick<PreviewFeature, 'note'>): string | null => (f.note ? `📝 ${f.note}` : null)

@@ -25,9 +25,9 @@ export function phonePress(features: PreviewFeature[], key: string, v: 'merge' |
 type Json = { error?: string }
 type FetchFn = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status?: number; json: () => Promise<unknown> }>
 
-/** POST /__tw/preview/verdict, the route dev_preview.ts uses; null clears the verdict (the route maps it to the CLI's `clear`). */
-export async function postVerdict(fetchFn: FetchFn, feature: string, verdict: Verdict): Promise<void> {
-  const r = await fetchFn('/__tw/preview/verdict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature, verdict }) })
+/** POST /__tw/preview/verdict, the route dev_preview.ts uses; null clears the verdict (the route maps it to the CLI's `clear`). `note` (answers-44b): the owner's text with it. */
+export async function postVerdict(fetchFn: FetchFn, feature: string, verdict: Verdict, note?: string): Promise<void> {
+  const r = await fetchFn('/__tw/preview/verdict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature, verdict, ...(note ? { note } : {}) }) })
   if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as Json).error ?? 'HTTP ' + String(r.status))
 }
 

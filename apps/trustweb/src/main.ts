@@ -180,6 +180,7 @@ import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import { resourceViews } from './resource_views_view'
 import { outlineView } from './resource_outline_view'
 import { refToken } from './resource_blocks'
+import { defineResourceShareActions, resourceShare } from './resource_share_send' // wave44 answers-44b
 import { canShareOn } from './resource_views'
 import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
@@ -3836,7 +3837,7 @@ function itemSheet(itemId: string): void {
     ...provenanceStateView(item),
     outlineView({
       item, newId: () => randomId(8), save, canShare: canShareOn(item, loadColourTags()),
-      share: (p) => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(p.text)}&ref=${refToken(p.ref)}` })) },
+      share: resourceShare(resShareHost),
     }),
     feed.itemExtras(item),
     // Review 43b (B17): a protected resource offers no way to pass it on (canShareOn).
@@ -5639,6 +5640,13 @@ defineEventActions(appActions, {
 })
 defineSyncActions(appActions, devices) // wave43c sync-devices
 defineHomeActions(appActions, { openDashboard }) // wave44 home-dashboard
+/* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
+const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
+  state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),
+  sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) },
+  link: (p) => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(p.text)}&ref=${refToken(p.ref)}` })) },
+}
+defineResourceShareActions(appActions, resShareHost)
 // Wave 42 mcp-parity: what an agent does through MCP shows as a card in a personal preview (mcp_live.ts); a stock preview and a build never start it.
 if (!solo && liveDevActive()) startMcpLive({
   fetch: (...a) => fetch(...a), actions: appActions, direct: () => st().mcpApplyDirectly === true, toast,

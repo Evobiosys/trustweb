@@ -170,3 +170,13 @@ export function jobQueue(exec) {
     },
   }
 }
+
+/* wave44 answers-44b: POST /__tw/preview/verdict {feature, verdict, note?} -> the `preview <id> verdict` arguments, or null (bad request). The note
+ * (the phone sheet's needs-work text, MCP preview_verdict) is one line of text up to 500 characters; an empty one is no note. */
+export const VERDICT_NOTE_MAX = 500
+export function verdictArgs(b, keys) {
+  if (typeof b?.feature !== 'string' || !keys.includes(b.feature) || ![null, 'merge', 'needs-work', 'changes'].includes(b.verdict)) return null
+  if (b.note !== undefined && (typeof b.note !== 'string' || b.note.length > VERDICT_NOTE_MAX)) return null
+  const note = (b.note ?? '').replace(/\s+/g, ' ').trim()
+  return ['verdict', b.feature, b.verdict ?? 'clear', ...(note ? ['--note', note] : [])]
+}

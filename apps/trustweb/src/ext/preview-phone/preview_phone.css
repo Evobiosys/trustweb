@@ -20,3 +20,6 @@ html.twpp-on .twp{display:none!important}
 .twpp-v.tw-off{text-decoration:line-through}
 /* the Approve-wave box (dev_feature.ts) sits bottom right above the bar: the pill takes the left, the open sheet takes the whole bottom */
 html.twpp-open .twf-ok{display:none!important}
+/* wave44 answers-44b: the optional verdict note (P7: small, greyed until typed in) */
+.twpp-note{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:4px 6px;min-height:32px;border:1px dashed #7a6a8c;border-radius:6px;background:none;color:#fff;font:12px system-ui,sans-serif;resize:vertical}
+.twpp-note::placeholder{color:#7a6a8c;font-size:11px}

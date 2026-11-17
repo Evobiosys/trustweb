@@ -4,8 +4,11 @@
  * what a share of a block or a line would carry. Review-44 added remove (the outliner's Backspace on an empty leaf), collapse (its bullet) and import (its Paste).
  */
 import { randomBytes } from 'node:crypto'
-import { addBlock, countBlocks, editBlock, locate, markdownToBlocks, moveBlock, MOVES, removeBlock, shareProjection, SHARE_SCOPES, toggleCollapsed } from '../../trustweb/src/resource_blocks.ts'
-import type { MoveHow, ShareScope } from '../../trustweb/src/resource_blocks.ts'
+import { addBlock, countBlocks, editBlock, locate, markdownToBlocks, moveBlock, MOVES, removeBlock, shareProjection, shareRefTag, SHARE_SCOPES, SHARE_VIA, toggleCollapsed } from '../../trustweb/src/resource_blocks.ts'
+import type { MoveHow, ShareScope, ShareVia } from '../../trustweb/src/resource_blocks.ts'
+import { addSocialPost } from '../../trustweb/src/feed_social.ts'
+import type { AppState } from '../../trustweb/src/model.ts'
+import { announce } from './events.ts'
 import type { InventoryItem } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
 import type { ResourceToolsEnv } from './resource_tools.ts'
@@ -21,14 +24,34 @@ function itemOf(items: InventoryItem[] | undefined, id: string): InventoryItem {
   return i
 }
 
-export function resourceBlockTools(e: ResourceToolsEnv): { read: Tool[]; write: Tool[] } {
+/** wave44 answers-44b: resource_share via chat / feed writes (a Feed post, an approval card), so it needs writes on, the record file and a person lookup. */
+export interface ResourceBlockToolsEnv extends ResourceToolsEnv { write?: boolean; file?: string; now?: () => Date; person?: (r: Obj, who: unknown) => { id: string; name: string; peerId?: string } }
+
+export function resourceBlockTools(e: ResourceBlockToolsEnv): { read: Tool[]; write: Tool[] } {
   const read: Tool[] = [{
-    name: 'resource_share', description: `What a share of one block of a resource carries: scope block = the block with its whole subtree, line = that one line only. Returns the text, the counts and the back-reference (resource id + block id); nothing is sent. A protected resource has no share.`,
-    inputSchema: schema({ id: S('resource id'), blockId: S('block id'), scope: S(SHARE_SCOPES.join(' or ')) }, ['id', 'blockId', 'scope']),
+    name: 'resource_share', description: `Share one block of a resource: scope block = the block with its whole subtree, line = that one line only. via link (default) returns the text, the counts and the back-reference (resource id + block id) and sends nothing; via feed posts exactly that text to my Feed tagged ref:<resource>.<block> (kept on this phone, like feed_post); via chat sends it with the ref line to one connected person (peer = person id or exact name), queued as an approval card for the open preview. chat and feed need writes on. A protected resource has no share.`,
+    inputSchema: schema({ id: S('resource id'), blockId: S('block id'), scope: S(SHARE_SCOPES.join(' or ')), via: S(SHARE_VIA.join(', ') + '; default link'), peer: S('via chat: the person (id or exact name)') }, ['id', 'blockId', 'scope']),
     run: (a) => {
-      const item = itemOf(e.load().inventory, str(a.id))
+      const via = (str(a.via) || 'link') as ShareVia
+      if (!SHARE_VIA.includes(via)) throw new Error(`via must be one of ${SHARE_VIA.join(', ')}`)
+      if (via !== 'link' && !e.write) throw new Error(`via ${via} needs write access (writes are off)`)
+      const r = e.load()
+      const item = itemOf(r.inventory as InventoryItem[] | undefined, str(a.id))
       if (item.protected) throw new Error('a protected resource cannot be shared')
-      return shareProjection(item, str(a.blockId), str(a.scope) as ShareScope)
+      const p = shareProjection(item, str(a.blockId), str(a.scope) as ShareScope)
+      if (via === 'link') return { ...p, via }
+      const now = (e.now ?? (() => new Date()))()
+      if (via === 'feed') {
+        e.commit((rec) => { if (!addSocialPost(rec as unknown as AppState, p.text, now.getTime(), { tag: shareRefTag(p.ref) })) throw new Error('nothing to post') })
+        return { ...p, via, posted: true }
+      }
+      if (!str(a.peer).trim()) throw new Error('peer is required for via chat')
+      if (!e.person || !e.file) throw new Error('chat is not available here')
+      const who = e.person(r, a.peer)
+      if (!who.peerId) throw new Error(`${who.name} is not connected`)
+      const args = { id: item.id, blockId: p.ref.blockId, scope: p.scope, person: who.id }
+      announce(e.file, { at: now.toISOString(), kind: 'action', tool: 'resource_share', summary: `resource-share-chat ${item.id}.${p.ref.blockId}`, action: { type: 'resource-share-chat', args } })
+      return { ...p, via, queued: true, person: who.id }
     },
   }]
   const write: Tool[] = [
@@ -51,7 +74,7 @@ export function resourceBlockTools(e: ResourceToolsEnv): { read: Tool[]; write: 
       run: (a) => { e.commit((r) => { editBlock(itemOf(r.inventory, str(a.id)).blocks ?? [], str(a.blockId), str(a.text)) }); return { id: str(a.id), blockId: str(a.blockId) } },
     },
     {
-      name: 'resource_block_move', description: `Move a block: ${MOVES.join(', ')} (indent = under the block above, outdent = out of its parent). moved:false when it cannot move that way.`,
+      name: 'resource_block_move', description: `Move a block: ${MOVES.join(', ')} (indent = under the block above, outdent = out of its parent, the following siblings become its children like Logseq). moved:false when it cannot move that way.`,
       inputSchema: schema({ id: S('resource id'), blockId: S('block id'), how: S(MOVES.join(', ')) }, ['id', 'blockId', 'how']),
       run: (a) => {
         const how = str(a.how)

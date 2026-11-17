@@ -5210,4 +5210,13 @@ export const S = {
     created: (who: string, circle: string) => `New circle ${circle} with ${who}.`,
     undo: 'Tap to undo',
   },
+  /* wave44 answers-44b */
+  resShare: {
+    chat: 'Send to chat', feed: 'Post to feed',
+    pickTitle: 'Send to whom?', nobody: 'Nobody connected yet. Connect with someone first, or share the link.',
+    sent: (name: string) => `Sent to ${name}`, notSent: 'Too long for one chat message (500 characters). Share only this line, or the link.',
+    posted: 'Posted to your Feed',
+    card: (scope: string) => `Send a ${scope === 'line' ? 'line' : 'block'} of a resource to a chat`,
+  },
+  verdictNote: { ph: 'note (optional), sent with Needs work', aria: 'Note for this verdict' },
 } as const
