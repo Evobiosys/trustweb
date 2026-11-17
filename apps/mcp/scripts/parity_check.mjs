@@ -10,25 +10,30 @@ import { fileURLToPath } from 'node:url'
 import { ACTION_MCP } from '../../trustweb/src/ext/assistant/actions.ts'
 import { SETTINGS_REGISTRY } from '../../trustweb/src/settings_registry.ts'
 import { allTools } from '../src/tools.ts'
+import { viewCoverage, viewFiles } from '../src/view_coverage.ts' // answers-44d
 
 /** Every file that defines registry actions (main.ts calls each define* on the one registry). */
-const ACTION_FILES = ['app_actions.ts', 'event_actions.ts', 'sync_actions.ts', 'home_actions.ts', 'resource_share_send.ts' /* wave44 answers-44b */, 'seen_through_actions.ts' /* review-44c */].map((f) => fileURLToPath(new URL(`../../trustweb/src/${f}`, import.meta.url)))
+const ACTION_FILES = ['app_actions.ts', 'event_actions.ts', 'sync_actions.ts', 'home_actions.ts', 'resource_share_send.ts' /* wave44 answers-44b */, 'seen_through_actions.ts' /* review-44c */, 'a44d_actions.ts' /* answers-44d */].map((f) => fileURLToPath(new URL(`../../trustweb/src/${f}`, import.meta.url)))
 
 export function parityReport() {
   const actions = ACTION_FILES.flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/reg\.define(?:<[^\n]*?>)?\(\{\s*type: '([a-z-]+)'/g)].map((m) => m[1]))
   const tools = allTools({ file: '/nonexistent', write: true }).map((t) => t.name)
+  const views = viewFiles(fileURLToPath(new URL('../../trustweb/src/', import.meta.url)))
   const missing = [
     ...actions.filter((a) => !tools.includes(ACTION_MCP[a])).map((a) => `action ${a}`),
     ...SETTINGS_REGISTRY.filter((s) => s.type !== 'action' && !(s.get && s.set)).map((s) => `setting ${s.id}`),
     ...['settings_list', 'settings_get', 'settings_set'].filter((t) => !tools.includes(t)).map((t) => `tool ${t}`),
+    /* answers-44d: every view of the app names the tools that reach it (apps/mcp/src/view_coverage.ts) */
+    ...viewCoverage(views, tools),
   ]
-  return { actions, settings: SETTINGS_REGISTRY.map((s) => s.id), tools, missing }
+  return { actions, settings: SETTINGS_REGISTRY.map((s) => s.id), tools, views: views.length, missing }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const r = parityReport()
   console.log(`actions ${r.actions.length}: ${r.actions.map((a) => `${a}->${ACTION_MCP[a] ?? '?'}`).join(', ')}`)
   console.log(`settings ${r.settings.length}: all reachable through settings_list/get/set (screen entries open via app_action open)`)
+  console.log(`views ${r.views}: each mapped to its tools (apps/mcp/src/view_coverage.ts)`)
   console.log(`tools ${r.tools.length}: ${r.tools.join(', ')}`)
   console.log(r.missing.length ? `MISSING: ${r.missing.join('; ')}` : 'parity ok')
   process.exit(r.missing.length ? 1 : 0)

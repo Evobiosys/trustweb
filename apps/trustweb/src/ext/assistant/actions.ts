@@ -28,6 +28,8 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'seen-introduce': 'event_introduce_person',
   /* wave44 answers-44b: a shared block sent to a chat is resource_share via:'chat' */
   'resource-share-chat': 'resource_share',
+  /* wave44c answers-44d: queued for the open app (a44d_actions.ts) */
+  'ask-answer': 'ask_answer', 'chat-send': 'chat_send',
 }
 
 /** The actions `app_action` accepts (derived, so a new entry above needs no second edit). */

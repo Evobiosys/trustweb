@@ -106,6 +106,10 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'trash_list', write: false }, { name: 'trash_restore', write: true },
   /* wave44c review-44c */
   { name: 'event_introduce_person', write: true },
+  /* wave44c answers-44d */
+  { name: 'asks_incoming_list', write: false }, { name: 'events_list', write: false }, { name: 'event_get', write: false }, { name: 'chats_list', write: false }, { name: 'chat_read', write: false },
+  { name: 'groups_list', write: false }, { name: 'relations_list', write: false }, { name: 'tasks_list', write: false }, { name: 'invitations_list', write: false }, { name: 'meetings_list', write: false },
+  { name: 'ask_answer', write: true }, { name: 'chat_send', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

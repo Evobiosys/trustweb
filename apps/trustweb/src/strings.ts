@@ -5375,5 +5375,7 @@ export const S = {
   a44d: {
     emojiSwitch: 'Emoji before titles',
     emojiHint: 'Picked from the words of the title (no AI): Winter gets a snowflake.',
+    askAnswerLabel: 'Answer an incoming ask',
+    chatSendLabel: 'Send a chat message',
   },
 } as const

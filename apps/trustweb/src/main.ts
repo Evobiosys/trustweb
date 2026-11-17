@@ -37,6 +37,7 @@ import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
 import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view' // wave44c seen-through
 import { defineSeenActions } from './seen_through_actions' // review-44c
+import { defineA44dActions } from './a44d_actions' // answers-44d
 import { audienceFilterView } from './audience_filter'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
@@ -5700,6 +5701,7 @@ defineEventActions(appActions, {
 defineSyncActions(appActions, devices) // wave43c sync-devices
 defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
 defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
+defineA44dActions(appActions, { answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),
@@ -8683,6 +8685,22 @@ function askEyebrow(a: IncomingAsk): string {
 /** Wave 6h: would a yes now reach the asker as "answered later" (after the moment of an ask that carried its window)? */
 function yesIsLate(a: IncomingAsk): boolean {
   return a.lateMode && (a.arrivedLate || Date.now() >= a.deadline)
+}
+
+/** answers-44d (MCP ask_answer): brings that ask's card up (queued, or held from an earlier visit) and answers it through decide(), as a tap would. */
+async function answerAskById(qid: string, share: boolean, note?: string, who?: string): Promise<boolean> {
+  if (askShowing?.qid !== qid && !askQueue.some((a) => a.qid === qid)) await net.presentHeld(qid)
+  if (askShowing?.qid !== qid) {
+    const i = askQueue.findIndex((a) => a.qid === qid)
+    if (i < 0) return false
+    const [a] = askQueue.splice(i, 1)
+    if (askShowing && askDecision === null) askQueue.unshift(askShowing)
+    askShowing = a
+    askDecision = null
+    renderAsk()
+  }
+  decide(share, note, who)
+  return true
 }
 
 function decide(share: boolean, note?: string, who?: string): void {
