@@ -5380,5 +5380,7 @@ export const S = {
     addResource: '+ Add resource',
     sharedBy: (name: string, age: string) => `shared by ${name} · ${age}`,
     me: 'me',
+    tanaStays: 'Token stays on this computer only.',
+    tanaGrants: 'It is the Tana app\'s local API token: it can read (and write) your Tana workspace through the Tana app on this computer; TrustWeb only reads people with it. Never synced to your other devices, never in a backup, an export or an MCP answer.',
   },
 } as const

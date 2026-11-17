@@ -44,6 +44,7 @@ import { alive } from './deleted_people'
 import { ALSO_DIDS_MAX } from './device_alias'
 import { isTrashEntry, mergeTrash, trashKey } from './trash' // wave44c answers-44c (A4)
 import type { TrashEntry } from './trash'
+import { scrubSecrets } from './secret_scrub' // wave44c answers-44d: no Tana secret leaves this device
 
 /** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const HOP_MAX = 3
@@ -251,7 +252,7 @@ export function refreshStamps(s: AppState, prev: Stamps, now: number, device: st
 
 export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBundle {
   const entries = Object.entries(stamps)
-  return {
+  return scrubSecrets({
     v: SYNC_VERSION,
     schemaVersion: SCHEMA_VERSION,
     people: s.people.map(withoutPersonImage),
@@ -272,7 +273,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     ...codesForBundle(s, shareCode),
     ...(shareCode && s.me?.displayName ? { displayName: s.me.displayName } : {}),
     peers: travelling(s.peers).map(syncPeer),
-  }
+  })
 }
 
 /**

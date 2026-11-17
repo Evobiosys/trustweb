@@ -72,6 +72,7 @@ export function tanaPullBlock(h: Pick<ServicesHooks, 'state' | 'save' | 'toast' 
       el('p', { class: 'meta', 'data-tana-pull-hint': '' }, [T.tanaPullHint]),
       el('label', { class: 'grp-field' }, [el('span', { class: 'chips-lbl' }, [T.tanaTokenLabel]), token]),
       el('p', { class: 'meta' }, [T.tanaTokenHint]),
+      el('p', { class: 'meta', 'data-tana-token-scope': '' }, [el('b', {}, [S.a44d.tanaStays]), ' ', S.a44d.tanaGrants]),   // answers-44d
       el('label', { class: 'consent', title: W.tanaRememberHint }, [remember, el('span', {}, [W.tanaRemember])]),
       el('div', { class: 'cur-bar' }, [el('button', { class: 'btn btn-ghost', 'data-tana-preview': '', ...(busy ? { disabled: '' } : {}), onclick: () => void preview() }, [T.tanaPullPreview])]),
       busy ? el('p', { class: 'meta', role: 'status', 'data-tana-busy': '' }, [busy]) : null,
