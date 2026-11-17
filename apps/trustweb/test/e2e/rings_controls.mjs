@@ -2,7 +2,8 @@
 /** Wave 33 rings-controls proof (headless): PORT=5461 EXE=<chromium> PW=<playwright-core index.mjs> node rings_controls.mjs. Synthetic record. */
 const { chromium } = await import(process.env.PW ?? 'playwright-core')
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5461}/`
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 try {

@@ -21,7 +21,8 @@ const ck = (n, c, d = '') => { if (!c) failures++; console.log((c ? 'PASS ' : 'F
 
 async function run(label, viewport, touch) {
   console.log(`--- ${label} ${viewport.width}px`)
-  const b = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+  const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+  const b = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
   const ctx = await b.newContext({ viewport, deviceScaleFactor: 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' })
   const page = await ctx.newPage()
   const errs = []

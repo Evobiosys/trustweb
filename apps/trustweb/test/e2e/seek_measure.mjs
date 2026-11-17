@@ -164,7 +164,8 @@ function withDurationBytes(b, ms) {
 const expectedHz = (t) => 300 + 20 * (Math.floor((t % PERIOD_S) * 2) % 26)
 
 async function run(engineName, engine, chromiumLong) {
-  const browser = await engine.launch({ headless: true, args: engineName === 'chromium' ? ['--autoplay-policy=no-user-gesture-required'] : [] })
+  const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+  const browser = ringsFirst(await engine.launch({ headless: true, args: engineName === 'chromium' ? ['--autoplay-policy=no-user-gesture-required'] : [] }))
   const lines = []
   let longOut = null
   try {

@@ -2288,3 +2288,10 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .rs-badge{display:inline-block; margin-left:8px; min-width:20px; padding:0 6px; border-radius:999px; background:rgba(128,128,128,.28); font-size:12px; line-height:20px; text-align:center; vertical-align:middle}
 .cal-chip.rs-tag{border:0; font:inherit; font-size:11.5px; cursor:pointer; text-decoration:underline}
 .rs-tags{margin:2px 0 6px}
+/* wave44c home-default */
+.home-thumb-btn{background:none; border:0; padding:0; cursor:pointer; line-height:0}
+.home-thumb{display:block; max-width:100%}
+.home-req{text-align:left; background:none; border:0; padding:2px 0; font:inherit; cursor:pointer; text-decoration:underline; color:inherit}
+.home-focus{outline:2px solid var(--electric); outline-offset:2px}
+.requests-list{padding:12px; display:flex; flex-direction:column; gap:10px}
+.requests-list .req-group h3{margin:6px 0 4px}

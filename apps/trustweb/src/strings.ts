@@ -5228,4 +5228,17 @@ export const S = {
     none: 'Nothing here yet.', generalCount: (n: number) => `${n} more`,
     tagFilter: (label: string) => `Show only ${label}`,
   },
+  /* wave44c home-default */
+  homeDefault: {
+    requests: 'Existing requests',
+    requestsAria: 'Open all existing requests',
+    openAll: 'See all',
+    openRequest: 'Open request',
+    toMe: 'Asked of you',
+    connects: 'Want to connect',
+    sent: 'You asked',
+    invites: 'Your invitations',
+    none: 'No open requests.',
+    thumbAria: 'Your web, small',
+  },
 } as const

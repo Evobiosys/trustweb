@@ -7,7 +7,8 @@ const RINGS = ['closest', 'close', 'friend', 'acquaintance']
 const names = ['Anna Huber', 'Ben Gruber', 'Clara Moser', 'David Lang', 'Eva Berger']
 const people = RINGS.flatMap((ring, r) => names.slice(0, Number(process.env.N ?? 5)).map((n, i) => ({ id: `${ring}${i}`, name: `${n} ${r}`, context: '', ring, metAt: 1, lines: [] })))
 const REC = { v: 1, me: { id: 'me1', displayName: 'Jakob' }, peers: [], log: [], people }
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 for (const [w, h, mobile] of [[390, 844, true], [1440, 900, false]]) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: mobile ? 3 : 1 })

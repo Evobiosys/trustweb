@@ -39,7 +39,7 @@ try {
     check(`${w}: A. the Web tab opens the Home board`, (await page.locator('[data-home-board]').count()) === 1)
     const inCol = async (col) => page.locator(`[data-home-col="${col}"] [data-home-tile]`).evaluateAll((n) => n.map((x) => x.getAttribute('data-home-tile')))
     check(`${w}: A. Web in the centre`, JSON.stringify(await inCol('center')) === '["web"]')
-    check(`${w}: A. others' requests left`, JSON.stringify(await inCol('left')) === '["asksToMe","connects"]')
+    check(`${w}: A. others' requests left`, JSON.stringify(await inCol('left')) === '["asksToMe","connects","requests"]')   // wave44c: Existing requests at the bottom
     check(`${w}: A. my requests right`, JSON.stringify(await inCol('right')) === '["asksSent","invites"]')
     check(`${w}: A. the ask to me shows its text`, (await page.locator('[data-home-tile="asksToMe"]').innerText()).includes('ladder'))
     const boxes = await page.locator('[data-home-tile]').evaluateAll((n) => n.map((x) => { const b = x.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height } }))

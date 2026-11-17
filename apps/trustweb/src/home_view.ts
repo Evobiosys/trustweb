@@ -7,6 +7,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { HOME_COLS, layoutOf, moveTile, setHomeLayout, type HomeCol, type HomeTile } from './home_layout'
 import { tileData } from './home_data'
+import { ringsThumbEl } from './home_thumb'
 import type { AppState } from './model'
 import { S } from './strings'
 
@@ -16,22 +17,26 @@ export interface HomeDeps {
   redraw: () => void
   openWeb: () => void
   openDashboard: () => void
+  /** wave44c home-default: a request row opens its ask / connect card on the Web; See all opens the Existing requests list. */
+  openRequest: (id: string) => void
+  openRequests: () => void
 }
 
 const HOLD_MS = 500
 const SLOP = 6
-const NAMES: Record<HomeTile, string> = { asksToMe: S.home.asksToMe, connects: S.home.connects, web: S.home.web, asksSent: S.home.asksSent, invites: S.home.invites }
+const NAMES: Record<HomeTile, string> = { asksToMe: S.home.asksToMe, connects: S.home.connects, web: S.home.web, asksSent: S.home.asksSent, invites: S.home.invites, requests: S.homeDefault.requests }
 
 function tileBody(d: HomeDeps, id: HomeTile): Node[] {
   const s = d.st()
   if (id === 'web') {
     const n = s.people.filter((p) => !p.deleted_at).length
-    return [el('b', {}, [S.home.web]), el('span', { class: 'meta' }, [S.home.webPeople(n)]), el('button', { class: 'btn', type: 'button', 'data-home-web': '', onclick: () => d.openWeb() }, [S.home.webOpen])]
+    return [el('b', {}, [S.home.web]), el('button', { class: 'home-thumb-btn', type: 'button', 'data-home-web-thumb': '', 'aria-label': S.homeDefault.thumbAria, onclick: () => d.openWeb() }, [ringsThumbEl(s.people.filter((p) => !p.deleted_at))]), el('span', { class: 'meta' }, [S.home.webPeople(n)]), el('button', { class: 'btn', type: 'button', 'data-home-web': '', onclick: () => d.openWeb() }, [S.home.webOpen])]
   }
   const data = tileData(s, id)
   const head = el('div', { class: 'home-tile-head' }, [el('b', {}, [NAMES[id]]), el('span', { class: 'meta' }, [id === 'invites' ? S.home.invitesCount(data.count) : S.home.count(data.count)])])
   if (id === 'invites') return [head]
-  return [head, data.rows.length ? el('ul', { class: 'home-rows' }, data.rows.map((r) => el('li', {}, [r.text]))) : el('p', { class: 'meta' }, [S.home.nothing])]
+  return [head, data.rows.length ? el('ul', { class: 'home-rows' }, data.rows.map((r) => el('li', {}, [el('button', { class: 'lnk home-req', type: 'button', 'data-home-request': r.id, onclick: () => d.openRequest(r.id) }, [r.text])]))) : el('p', { class: 'meta' }, [S.home.nothing]),
+    ...(id === 'requests' ? [el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-home-requests-all': '', 'aria-label': S.homeDefault.requestsAria, onclick: () => d.openRequests() }, [S.homeDefault.openAll])] : [])]
 }
 
 export function createHomeBoard(d: HomeDeps): HTMLElement {

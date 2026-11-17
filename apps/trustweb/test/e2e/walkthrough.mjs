@@ -19,7 +19,8 @@ const ok = (name, cond, detail = '') => {
 async function main() {
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
   const engine = (pw.chromium ? pw : pw.default).chromium
-  const browser = await engine.launch({ headless: true })
+  const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+  const browser = ringsFirst(await engine.launch({ headless: true }))
   try {
     const page = await (await browser.newContext({ viewport: { width: 1200, height: 1000 } })).newPage()
     const errors = []

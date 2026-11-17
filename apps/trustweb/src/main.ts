@@ -159,6 +159,8 @@ import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings
 import { dismissOnOutside } from './key_press'
 import { groupsView } from './groups_view'
 import { createHomeBoard } from './home_view' // wave44 home-dashboard
+import { findRequest } from './home_data' // wave44c home-default
+import { requestsListView } from './requests_list_view'
 import { createDashboard, dashboardOpened } from './dashboard_view'
 import { defineHomeActions } from './home_actions'
 import { resetLayout } from './home_layout'
@@ -759,7 +761,9 @@ async function refreshPush(): Promise<void> {
 // UI state
 // ---------------------------------------------------------------------------
 
-let screen: Screen = state ? Screen.Web : Screen.Start
+/** Wave 44c home-default: Home is the first screen for everyone (only an explicit rings choice opens the rings first). */
+function firstScreen(): Screen { return state && webDefaultOf(state) === 'home' ? Screen.Home : Screen.Web }
+let screen: Screen = state ? firstScreen() : Screen.Start
 let relayStatus: RelayStatus = 'connecting'
 let draft: Draft = freshDraft()
 let review: Review | null = null
@@ -1444,7 +1448,7 @@ function webDefaultLine(s: AppState, changed: () => void): HTMLElement {
       if (now) try { window.localStorage.setItem(WEB_VIEW_KEY, now) } catch { /* not remembered */ }
       changed()
     },
-  }, viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: undefined }).map((i) => el('option', { value: i.view, ...(i.view === now ? { selected: '' } : {}) }, [S.viewNames[i.view]])))
+  }, [{ view: 'home' as ViewKey }, ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: undefined })].map((i) => el('option', { value: i.view, ...(i.view === now ? { selected: '' } : {}) }, [S.viewNames[i.view]])))
   return el('div', { class: 'web-default-line' }, [el('span', { class: 'meta' }, [S.webDefaultLabel + ':']), select])
 }
 
@@ -1695,6 +1699,22 @@ function openHome(): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.Home)
 }
+/** Wave 44c home-default: a request tile row opens that ask / connect card on the Web (my own asks have no card: they open the list). */
+function openRequest(id: string): void {
+  const r = findRequest(st(), id)
+  if (!r) return
+  closeSheet()
+  if (r.kind === 'sent') { openRequests(); return }
+  if (webPage) { cardExpanded = false; webPage = null }
+  peoplePage = false
+  go(Screen.Web)
+  if (r.kind === 'held') { void net.presentHeld(id); return }
+  const target = r.kind === 'connect' ? document.querySelector<HTMLElement>(`[data-want="${CSS.escape(id)}"]`) : cardStackEl
+  target?.classList.add('home-focus')
+  target?.scrollIntoView?.({ block: 'center' })
+}
+/** The Existing requests tile's full list (Past asks + pending connects + invites). */
+function openRequests(): void { openSheet([requestsListView(st(), openRequest)]) }
 function openDashboard(affiliation?: string): void {
   if (affiliation) dashboardId = affiliation
   closeSheet()
@@ -1707,8 +1727,8 @@ function openDashboard(affiliation?: string): void {
 }
 function screenHome(): Node[] {
   return [
-    header(S.home.title, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [createHomeBoard({ st, save, redraw: render, openWeb: () => { webViewNow = 'rings'; chooseView('rings') }, openDashboard: () => openDashboard() })]),
+    header(S.home.title, peoplePage ? { back: () => history.back() } : {}),   // wave44c: Home as the first screen has nothing to go back to
+    el('div', { class: 'scroll pad' }, [createHomeBoard({ st, save, redraw: render, openWeb: () => { webViewNow = 'rings'; chooseView('rings') }, openDashboard: () => openDashboard(), openRequest, openRequests })]),
   ]
 }
 function screenDashboard(): Node[] {
@@ -2901,7 +2921,7 @@ function screenStart(): Node[] {
       s.demoOffered = true
       save()
     }
-    screen = Screen.Web
+    screen = firstScreen()
     render()
     if (solo) showDemoFriends()
     else offerApkHint(offerDemoContent)
@@ -5359,7 +5379,7 @@ const devices = createSyncView({
 function stateForSync(): AppState {
   if (!state) {
     createMe(S.dvDefaultName)
-    screen = Screen.Web
+    screen = firstScreen()
     void net.start().then(announceLink)
   }
   return st()
@@ -5642,7 +5662,7 @@ defineEventActions(appActions, {
   sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
 })
 defineSyncActions(appActions, devices) // wave43c sync-devices
-defineHomeActions(appActions, { openDashboard }) // wave44 home-dashboard
+defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),
