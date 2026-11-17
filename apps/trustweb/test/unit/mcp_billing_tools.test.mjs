@@ -79,7 +79,8 @@ describe('server wiring', () => {
     writeFileSync(file, JSON.stringify({ v: 1, people: [] }))
     const child = spawn(process.execPath, [path.resolve('../mcp/src/server.ts')], { env: { ...process.env, TW_RECORD: file, TW_MCP_WRITE: '1' } })
     const lines = []
-    child.stdout.on('data', (d) => lines.push(...String(d).split('\n').filter(Boolean)))
+    let buf = ''
+    child.stdout.on('data', (d) => { buf += String(d); const parts = buf.split('\n'); buf = parts.pop(); lines.push(...parts.filter(Boolean)) })
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) + '\n')
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'billing_plans', arguments: {} } }) + '\n')
     for (let i = 0; i < 100 && lines.length < 2; i += 1) await new Promise((r) => setTimeout(r, 50))
