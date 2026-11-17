@@ -95,6 +95,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'requests_list', write: false }, { name: 'home_open_request', write: true },
   /* wave44c event-autosave */
   { name: 'drafts_list', write: false }, { name: 'draft_discard', write: true },
+  /* wave44c seen-through */
+  { name: 'people_seen_through_list', write: false },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

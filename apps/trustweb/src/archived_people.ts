@@ -18,4 +18,5 @@ export function restorePerson(p: Pick<Person, 'ring' | 'prevRing'>): void {
 }
 
 /** Archived, not deleted: a deleted person waits in Recently deleted (deleted_people.ts), not here. */
-export const archivedPeople = <P extends Pick<Person, 'ring' | 'deleted_at'>>(people: readonly P[]): P[] => people.filter((p) => isArchived(p) && !isDeleted(p))
+/** Wave 44c seen-through: people I see only through a friend (Person.via) are not archived ones. */
+export const archivedPeople = <P extends Pick<Person, 'ring' | 'deleted_at'> & Partial<Pick<Person, 'via'>>>(people: readonly P[]): P[] => people.filter((p) => isArchived(p) && !isDeleted(p) && !p.via)

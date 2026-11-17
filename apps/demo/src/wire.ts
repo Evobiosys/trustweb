@@ -88,9 +88,9 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   // Wave 44: kind 'know' stands alone (no target).
   if ('kind' in o || 'target' in o) {
     if (o.kind === 'know') { if ('target' in o) return null }
-    else if (o.kind !== 'intro' || !isNonEmptyString(o.target) || o.target.length > 80) return null
+    else if ((o.kind !== 'intro' && o.kind !== 'show') || !isNonEmptyString(o.target) || o.target.length > 80) return null
   }
-  const intro = o.kind === 'intro' && isNonEmptyString(o.target) ? { kind: 'intro' as const, target: o.target } : o.kind === 'know' ? { kind: 'know' as const } : undefined
+  const intro = (o.kind === 'intro' || o.kind === 'show') && isNonEmptyString(o.target) ? { kind: o.kind as 'intro' | 'show', target: o.target } : o.kind === 'know' ? { kind: 'know' as const } : undefined
   // Wave 44: askedNames, 1..ASKED_NAMES_MAX display names (the same strictness: present-and-malformed rejects the envelope).
   if ('askedNames' in o && !(Array.isArray(o.askedNames) && o.askedNames.length >= 1 && o.askedNames.length <= 50 && o.askedNames.every((n) => isNonEmptyString(n) && n.length <= 80))) return null
   const askedNames = Array.isArray(o.askedNames) ? { askedNames: o.askedNames as string[] } : undefined
@@ -160,6 +160,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   const hasLink = 'link' in o
   if ('os' in o) return hasWant || hasLink ? null : parseOpenSpace(o.os)
   if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
+  if ('seen' in o) return hasWant || hasLink ? null : parseSeen(o.seen) // wave44c seen-through
   if (hasWant === hasLink) return null
   if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
   if (!isNonEmptyString(o.link) || o.link.length > EVENT_LINK_MAX) return null
@@ -201,6 +202,15 @@ function parseReveal(o: Record<string, unknown>): EventEnvelope | null {
   return { v: WIRE_VERSION, t: 'event', conf: { id: v.id, links } }
 }
 // ----- END TrustWeb wave44c event-autosave -----
+/* wave44c seen-through */
+/** An event id, the consent flag, and a name only with a yes (1..VIA_NAME_MAX); a name without a yes rejects the envelope. */
+function parseSeen(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  if (typeof x.id !== 'string' || !QID_RE.test(x.id) || typeof x.shown !== 'boolean') return null
+  if ('who' in x && (!x.shown || !isNonEmptyString(x.who) || x.who.length > VIA_NAME_MAX)) return null
+  return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}) } }
+}
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----
 type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door' | 'answerWindowMs'>

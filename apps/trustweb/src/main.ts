@@ -35,6 +35,7 @@ import { COLOUR_TAGS_EVENT, loadColourTags, memberTagsOf, saveColourTags, tagsOf
 import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { introForm, setIntroTarget } from './intro_ask_view'
+import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view' // wave44c seen-through
 import { audienceFilterView } from './audience_filter'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
@@ -5484,7 +5485,7 @@ const bubble = createBubbleConnect({ st, save, render, openSheet, closeSheet, to
   myLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, renderQr, copy: (t) => copyLink(t, S.meetCopied), profileOption: () => Boolean(st().qrProfileOption) })
 const web = createWebView({
   st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi,
-  curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), introduce: solo ? null : bubble.introduce, dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
+  curatorPerson, openEvent: (id) => { eventsView.open(id); go(Screen.Events) }, openSeen: (id) => seenThrough.open(id), mergeSheet: solo ? null : (a, b) => devices.mergeSheet(a, b), mergeNow: solo ? null : (k, d) => devices.mergeNow(k, d), introduce: solo ? null : bubble.introduce, dummyChip, avatar, pictured, ownPictureUrl: () => ownPictureUrl, demoPhone, changeRing, ripple, tagFilter: () => tagFilter, currentLayout, openSheet, closeSheet, solo, removePerson: deletePerson,
 })
 /** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
 const eventEnv = createEventEnvelopes<Peer>({
@@ -5496,6 +5497,7 @@ const eventEnv = createEventEnvelopes<Peer>({
 announceDue = () => { eventEnv.announceDue() }
 setDraftHost({ state: st, save })   // wave44c event-autosave
 restoreRecordDraft()
+const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown) => eventEnv.introduce(id, who, shown) }) // wave44c seen-through
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
@@ -5510,7 +5512,7 @@ const eventsView = createEventsView({
   askSupport: () => supportSheet(supportIo),
   feedRow: (ev) => feed.eventRow(ev),
   plan: (ev) => [...eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }), ...openSpaceSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), push: (e) => { void eventEnv.pushOpenSpace(e) }, noteFor: (e, a) => coNotes?.activityNote?.(e, a) ?? null })],
-  extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
+  extra: (ev) => [...[cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []), ...seenThrough.eventSection(ev)],
   openInvitation: (i) => invitationSheet(invitationIo(), i),
   rsvp: (ev) => { void eventEnv.rsvp(ev) }, saved: (ev) => { void eventEnv.pushConference(ev) },   // wave44c event-autosave
 })
@@ -8607,11 +8609,13 @@ function renderAsk(): void {
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       fitLine(a),
-      a.know && decided === null
-        ? el('div', {}, [...knowCard((note) => decide(true, note), () => decide(false), a.qid), a.askedNames ? askedWhoLine(a.askedNames) : null])
+      a.show && decided === null
+        ? showAskCard({ show: a.show, fromName: a.fromName }, () => decide(true), () => decide(false))
+        : a.know && decided === null
+        ? el('div', {}, [...knowCard((note, who) => decide(true, note, who), () => decide(false), knowWhoBox(st().people), a.qid), a.askedNames ? askedWhoLine(a.askedNames) : null])
         : a.intro && decided === null
         ? introCard({ by: a.fromName, target: a.intro }, {
-            introduce: () => { decide(true); showNextAsk(); introduceHandoff({ by: a.fromName, target: a.intro! }) },
+            introduce: () => { decide(true, undefined, a.intro); showNextAsk(); introduceHandoff({ by: a.fromName, target: a.intro! }) },
             notNow: showNextAsk,
             decline: () => decide(false),
           })
@@ -8666,13 +8670,13 @@ function yesIsLate(a: IncomingAsk): boolean {
   return a.lateMode && (a.arrivedLate || Date.now() >= a.deadline)
 }
 
-function decide(share: boolean, note?: string): void {
+function decide(share: boolean, note?: string, who?: string): void {
   const a = askShowing
   if (!a || askDecision !== null) return
   askDecidedLate = yesIsLate(a)
   askDecision = share
   renderAsk()
-  void a.decide(share, note)
+  void a.decide(share, note, who)
 }
 
 // ---------------------------------------------------------------------------
