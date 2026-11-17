@@ -6,6 +6,7 @@
  *   R3 event-autosave: drafts live inside the record (one localStorage key): their sum stays under DRAFT_STORE_MAX_BYTES, so a draft never stops the record saving.
  *   R4 seen-through: the host's "Introduce to the people here" is reachable through the MCP (D-P02).
  *   R5 sync-seamless/header-cluster: one update button logic (the held banner runs Update now, not a bare reload); a new phone opening a pair link joins.
+ *   R7 seen-through: a host's introduction goes to the people at the event, never back to the person introduced.
  *   R6 event-autosave x feed: embedding a post empties the composer AND its draft (else the redraw restores the link; e2e feed_embed).
  */
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
@@ -14,6 +15,7 @@ import path from 'node:path'
 import { createSyncLink } from '../../src/sync_link.ts'
 import { bundleOf, parseBundle, refreshStamps } from '../../src/sync_core.ts'
 import { trashItems } from '../../src/trash.ts'
+import { createEventEnvelopes } from '../../src/event_envelope.ts'
 import { DRAFT_STORE_MAX_BYTES, putDraft } from '../../src/drafts.ts'
 import { createActions } from '../../src/actions.ts'
 import { defineSeenActions } from '../../src/seen_through_actions.ts'
@@ -169,5 +171,18 @@ describe('R6 feed composer: an embedded link leaves no draft behind', () => {
     const src = readFileSync(new URL('../../src/feed_view.ts', import.meta.url), 'utf8')
     expect(src).toMatch(/async function embedLink\(text: HTMLTextAreaElement, button: HTMLButtonElement, clearDraft: \(\) => void\)/)
     expect(src).toMatch(/text\.value = ''; clearDraft\(\); button\.hidden = true/)
+  })
+})
+
+describe('R7 seen-through: an introduction never reaches the person introduced', () => {
+  it('introduce(..., skip) sends to every other recipient', async () => {
+    const ev = { id: 'e1', name: 'Picnic', from: '2026-12-01', where: 'Park', createdAt: 1, attended: true }
+    const sent = []
+    const env = createEventEnvelopes({
+      state: () => ({ me: { displayName: 'Host' }, people: [], events: [ev] }), recipients: () => [{ id: 'peer-omar' }, { id: 'peer-lena' }],
+      save: () => {}, now: () => 1, link: () => '', send: async (peer, e) => { sent.push([peer.id, e.seen]) }, pending: () => null, setPending: () => {}, changed: () => {}, later: () => {},
+    })
+    await env.introduce('e1', 'Omar', true, 'peer-omar')
+    expect(sent).toEqual([['peer-lena', { id: 'e1', shown: true, who: 'Omar' }]])
   })
 })

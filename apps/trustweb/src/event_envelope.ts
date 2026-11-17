@@ -212,11 +212,12 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       EVENT_WANT_RETRY_MS.forEach((ms) => host.later(() => { void ask() }, ms))
     },
     /** Wave 44c seen-through: a host introduces a person to the people at this event; the name only with that person's yes. */
-    async introduce(id: string, who: string, shown: boolean): Promise<void> {
+    /** review-44c: `skip` = the peer id of the person introduced (they are at the event too; nothing goes back to them). */
+    async introduce(id: string, who: string, shown: boolean, skip?: string): Promise<void> {
       const ev = held(id)
       if (!ev) return
       const env: EventEnvelope = { v: 1, t: 'event', seen: { id, shown, ...(shown ? { who: who.trim().slice(0, 40) } : {}) } }
-      for (const peer of host.recipients?.(ev) ?? []) await host.send(peer, env).catch(() => undefined)
+      for (const peer of host.recipients?.(ev) ?? []) if (peer.id !== skip) await host.send(peer, env).catch(() => undefined)
     },
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {

@@ -23,7 +23,7 @@ export interface SeenIo {
   /** net.ts askShow: does that connected person agree to be shown to `seer`? */
   askShow(peerId: string, seer: string, text: string): Promise<boolean>
   /** event_envelope.ts introduce: the introduction to the people at the event. */
-  introduce(eventId: string, who: string, shown: boolean): Promise<void>
+  introduce(eventId: string, who: string, shown: boolean, skip?: string): Promise<void>
 }
 
 /** What "Ask <friend> to introduce" asks for: the name, or (nameless) the ask or the event it came from. */
@@ -67,7 +67,7 @@ export function createSeenThrough(io: SeenIo) {
     const p = s.people.find((x) => x.id === personId && x.deleted_at === undefined && !x.via)
     if (!ev || !p || !isEventHost(ev, s.me.displayName, s.people) || !attendees(s, ev.id).some((x) => x.id === p.id)) return
     const shown = p.peerId ? await io.askShow(p.peerId, ev.name, T.showEventText(ev.name)) : false
-    await io.introduce(ev.id, p.name, shown)
+    await io.introduce(ev.id, p.name, shown, p.peerId)
     io.toast(shown ? T.introducedNamed(p.name) : T.introducedNameless(p.name))
   }
 

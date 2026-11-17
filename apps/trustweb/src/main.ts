@@ -5506,7 +5506,7 @@ const eventEnv = createEventEnvelopes<Peer>({
 announceDue = () => { eventEnv.announceDue() }
 setDraftHost({ state: st, save })   // wave44c event-autosave
 restoreRecordDraft()
-const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown) => eventEnv.introduce(id, who, shown) }) // wave44c seen-through
+const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown, skip) => eventEnv.introduce(id, who, shown, skip) }) // wave44c seen-through
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
