@@ -103,6 +103,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'sync_pair_link', write: true },
   /* wave44c answers-44c */
   { name: 'sync_pair_show_new', write: true }, { name: 'sync_pair_scan', write: true },
+  { name: 'trash_list', write: false }, { name: 'trash_restore', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

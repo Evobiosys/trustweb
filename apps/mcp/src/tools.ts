@@ -24,6 +24,7 @@ import { previewTools } from './preview_tools.ts'
 import type { Tool } from './protocol.ts'
 import { recordTools, type RecordToolsOptions } from './record_tools.ts'
 import { syncTools } from './sync_tools.ts'
+import { trashTools } from './trash_tools.ts' // wave44c answers-44c
 
 export interface AllToolsOptions extends RecordToolsOptions {
   /** The server the app talks to (billing tools). Default https://app.trustweb.one. */
@@ -49,6 +50,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave44 steer-invite-link */ ...inviteTools({ ...o, write }),
     /* wave44b profile-page */ ...profilePageTools({ ...o, write }),
     /* wave44c feed-ext */ ...feedExtTools({ ...o, write }),
+    /* wave44c answers-44c */ ...trashTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

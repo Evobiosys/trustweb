@@ -27,6 +27,7 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
 import type { Draft } from './drafts'
+import type { TrashEntry } from './trash' // wave44c answers-44c
 import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -1274,6 +1275,8 @@ export interface AppState {
   eventDrafts?: EventDraft[]
   /** Wave 44c event-autosave: every editor's draft (drafts.ts), key editor:target. THIS DEVICE ONLY: never synced, exported or asked. */
   drafts?: Record<string, Draft>
+  /** Wave 44c answers-44c (A4): deleted events, resources, tasks, meetings and invitations for 30 days (trash.ts); travels to my devices as tombstones. Absent = none. */
+  trash?: TrashEntry[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
   calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 33 (invitations.ts): the Resources section "Invited to", its add/edit and paste sheets, and the Invitations line on a person card. DOM and words only; main.ts passes the app in. */
+import { trashItems } from './trash' // wave44c answers-44c (A4)
 import { el } from '../../demo/src/ui/dom'
 import type { AppState, Invitation, Person } from './model'
 import { INVITATION_STATUSES, groupByPlace, invitationsOfHost, newInvitation, parseInvitationList } from './invitations'
@@ -79,7 +80,7 @@ export function invitationSheet(io: InvitationIo, existing?: Invitation, preset?
     form,
     error,
     el('button', { class: 'btn btn-electric wide', 'data-invitation-save': '', onclick: save }, [S.invitedSave]),
-    existing ? el('button', { class: 'btn btn-ghost btn-sm', 'data-invitation-remove': existing.id, onclick: () => { s.invitations = (s.invitations ?? []).filter((i) => i.id !== existing.id); io.save(); io.closeSheet(); io.render() } }, [S.invitedRemove]) : null,
+    existing ? el('button', { class: 'btn btn-ghost btn-sm', 'data-invitation-remove': existing.id, onclick: () => { trashItems(s, 'invitation', [existing.id], Date.now()); io.save(); io.closeSheet(); io.render() } }, [S.invitedRemove]) : null,
   ])
 }
 

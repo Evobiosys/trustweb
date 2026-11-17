@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Calendar tasks view (wave 24, cal3): the Tasks list, the add/edit panel, agenda rows, reminders, "Remind me" on an item. Feature shape after tasks.org; no code taken. */
+import { restoreTrashed, trashItems } from '../../trash' // wave44c answers-44c (A4)
 import { el } from '../../../../demo/src/ui/dom'
 import { todayIso } from '../../events'
 import type { InventoryItem, TwTask } from '../../model'
@@ -72,9 +73,9 @@ export function createTasks(h: ExtHooks, showTasks: () => void): {
     const remove = (): void => {
       if (!task) return
       const gone = tasks().filter((x) => x.id === task.id || x.parentId === task.id)
-      h.state().tasks = tasks().filter((x) => !gone.includes(x))
+      trashItems(h.state(), 'task', gone.map((x) => x.id), Date.now()) // answers-44c: tombstones that travel to my devices
       editing = null; h.save(); h.redraw()
-      h.undo(S.cal.taskDeleted(task.title), () => { h.state().tasks = [...tasks(), ...gone]; h.save(); h.redraw() })
+      h.undo(S.cal.taskDeleted(task.title), () => { for (const x of gone) restoreTrashed(h.state(), 'task', x.id); h.save(); h.redraw() })
     }
     return el('div', { class: 'cal-task-panel', 'data-task-panel': '' }, [
       el('h3', {}, [task ? S.cal.editTask : S.cal.addTask]),

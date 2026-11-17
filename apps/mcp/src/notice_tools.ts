@@ -23,7 +23,7 @@ export function noticeTools(o: { file: string; write: boolean }): Tool[] {
     { name: 'web_default_view_get', description: 'The view the Web (Contacts) tab opens in the personal view: the rings unless another (e.g. home) is pinned.', inputSchema: none, run: () => ({ view: load().uiViews?.webDefault || 'rings' }) },
   ]
   const write: Tool[] = [{
-    name: 'web_default_view_set', description: `Pin the default view of Web (Contacts): ${VIEWS.join(', ')}; rings opens the rings first, home (the default) the Home board.`,
+    name: 'web_default_view_set', description: `Pin the default view of Web (Contacts): ${VIEWS.join(', ')}; rings (the default) opens the rings first, home the Home board.`,
     inputSchema: { type: 'object', properties: { view: { type: 'string', enum: VIEWS } }, required: ['view'], additionalProperties: false },
     run: (a) => {
       if (typeof a.view !== 'string' || !VIEWS.includes(a.view)) throw new Error(`view must be one of ${VIEWS.join(', ')}`)

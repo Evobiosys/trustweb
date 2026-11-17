@@ -42,6 +42,8 @@ import { pinnedFrom } from './membranes_five'
 import { SCHEMA_VERSION } from './schema_version'
 import { alive } from './deleted_people'
 import { ALSO_DIDS_MAX } from './device_alias'
+import { isTrashEntry, mergeTrash, trashKey } from './trash' // wave44c answers-44c (A4)
+import type { TrashEntry } from './trash'
 
 /** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const HOP_MAX = 3
@@ -82,6 +84,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // wave 43c social-hosting: the name listing is of THIS device's key; hosted records, the lookup cache and waiting intents are this phone's
   'discoverable', 'discoverOpen', 'hosted', 'nameCache', 'intentsIn',
   /* wave44c event-autosave */ 'drafts',
+  /* wave44c answers-44c: tombstones travel as their own entities (x:<kind>:<id>) */ 'trash',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */
@@ -129,6 +132,8 @@ export interface SyncBundle {
   displayName?: string
   /** Wave 43c: my connections (syncPeer: without what only one device knows), so a person connected on one device can be messaged on the other. */
   peers?: Peer[]
+  /** Wave 44c answers-44c (A4): deleted events, resources, tasks, meetings, invitations (trash.ts); an older build ignores the field. */
+  trash?: TrashEntry[]
 }
 
 export interface Conflict {
@@ -203,7 +208,7 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
   return { ...rest, transcript: [] }
 }
 
-type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare'> & { me?: { displayName: string }; peers?: Peer[]; chats?: ChatBook }
+type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare' | 'trash'> & { me?: { displayName: string }; peers?: Peer[]; chats?: ChatBook }
 
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
@@ -215,6 +220,7 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
     ...(s.tasks ?? []).map((x): [string, unknown] => [KEY_PREFIX.task + x.id, x]),
     ...(s.invitations ?? []).map((x): [string, unknown] => [KEY_PREFIX.invitation + x.id, x]),
+    ...(s.trash ?? []).map((x): [string, unknown] => [trashKey(x), x]), // wave44c answers-44c (A4)
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
     ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
@@ -224,7 +230,7 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
   ]
 }
 
-const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, invitations: b.invitations, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined, peers: b.peers, chats: b.chats })
+const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, invitations: b.invitations, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined, peers: b.peers, chats: b.chats, trash: b.trash })
 
 /** The stamps after looking at the record now: unchanged entities keep theirs, new or edited ones get `now` and this device's name. Gone ones drop out. */
 export function refreshStamps(s: AppState, prev: Stamps, now: number, device: string): Stamps {
@@ -252,6 +258,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     events: (s.events ?? []).map(syncEvent),
     ...(s.tasks?.length ? { tasks: s.tasks } : {}),
     ...(s.invitations?.length ? { invitations: s.invitations } : {}),
+    ...(s.trash?.length ? { trash: s.trash } : {}),
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
     settings: settingsOf(s),
@@ -283,6 +290,7 @@ export function deltaOf(s: AppState, stamps: Stamps, since: number, device: stri
     events: pick(KEY_PREFIX.event, full.events ?? [], (x) => x.id),
     ...(full.tasks ? { tasks: pick(KEY_PREFIX.task, full.tasks, (x) => x.id) } : {}),
     ...(full.invitations ? { invitations: pick(KEY_PREFIX.invitation, full.invitations, (x) => x.id) } : {}),
+    ...(full.trash ? { trash: full.trash.filter((x) => keys.has(trashKey(x))) } : {}),
     peers: (full.peers ?? []).filter((x) => keys.has(peerKey(x.did))),
     chats: Object.fromEntries(Object.entries(full.chats ?? {}).filter(([id]) => keys.has(CHAT_PREFIX + id))),
     settings: Object.fromEntries(Object.entries(full.settings ?? {}).filter(([k]) => keys.has(SETTING_PREFIX + k))),
@@ -378,6 +386,7 @@ export function parseBundle(v: unknown): SyncBundle | null {
   if (!by || !from || !sameAs || !channels || !isList(v.events) || !v.events.every(isEvent) || !isObj(v.chats)) return null
   if (v.tasks !== undefined && !(isList(v.tasks) && v.tasks.every(isTask))) return null
   if (v.invitations !== undefined && !(Array.isArray(v.invitations) && v.invitations.every(isInvitation))) return null
+  if (v.trash !== undefined && !(Array.isArray(v.trash) && v.trash.length <= AT_MAX && v.trash.every(isTrashEntry))) return null
   out.by = by
   if (Object.keys(from).length) out.from = from
   if (isObj(v.hp)) {
@@ -388,6 +397,7 @@ export function parseBundle(v: unknown): SyncBundle | null {
   out.events = (v.events as TwEvent[]).map(syncEvent)
   if (v.tasks) out.tasks = v.tasks as TwTask[]
   if (v.invitations) out.invitations = v.invitations as Invitation[]
+  if (v.trash) out.trash = v.trash as TrashEntry[]
   out.chats = sanitizeChatBook(v.chats)
   const settings = parseSettings(v.settings)
   if (settings) out.settings = settings
@@ -580,13 +590,18 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (sameAs) mine.sameAs = sameAs
   const theirs = remapBundle(incoming, sameAs)
   const c: Ctx = { myAt: myStamps, theirs, since, res }
+  // Wave 44c answers-44c (A4): tombstones first: their newer delete takes my copy away, my newer delete keeps their older copy out.
+  const tomb = mergeTrash(mine, theirs.trash ?? [], { event: theirs.events ?? [], resource: theirs.inventory, task: theirs.tasks ?? [], meeting: theirs.meetings, invitation: theirs.invitations ?? [] },
+    (k, id) => KEY_PREFIX[k] + id, (k) => myStamps[k]?.at ?? 0, (k) => theirs.at[k] ?? 0)
+  res.updated += tomb.changed
+  const live = tomb.lists as { event: TwEvent[]; resource: InventoryItem[]; task: TwTask[]; meeting: PastMeeting[]; invitation: Invitation[] }
   mine.people = mergeList('person', mine.people, theirs.people.map(withoutPersonImage), c, (p) => p.name, uniteKeepingDelete)
-  mine.inventory = mergeList('resource', mine.inventory, theirs.inventory.map(withoutImage), c, (x) => x.text, fillMissing)
-  mine.meetings = mergeList('meeting', mine.meetings ?? [], theirs.meetings, c, (x) => x.about, fillMissing)
-  if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)
+  mine.inventory = mergeList('resource', mine.inventory, live.resource.map(withoutImage), c, (x) => x.text, fillMissing)
+  mine.meetings = mergeList('meeting', mine.meetings ?? [], live.meeting, c, (x) => x.about, fillMissing)
+  if (live.event.length) mine.events = mergeList('event', mine.events ?? [], live.event, c, (x) => x.name, fillMissing)
   // A task is edited whole (ticking removes `done`): the newer version wins as it is, nothing is filled in from the older.
-  if (theirs.tasks?.length) mine.tasks = mergeList('task', mine.tasks ?? [], theirs.tasks, c, (x) => x.title, (winner) => winner)
-  if (theirs.invitations?.length) mine.invitations = mergeList('invitation', mine.invitations ?? [], theirs.invitations, c, (x) => x.event ?? x.place ?? x.id, (winner) => winner)
+  if (live.task.length) mine.tasks = mergeList('task', mine.tasks ?? [], live.task, c, (x) => x.title, (winner) => winner)
+  if (live.invitation.length) mine.invitations = mergeList('invitation', mine.invitations ?? [], live.invitation, c, (x) => x.event ?? x.place ?? x.id, (winner) => winner)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
   if (theirs.peers?.length) mergePeers(mine, theirs.peers, c)

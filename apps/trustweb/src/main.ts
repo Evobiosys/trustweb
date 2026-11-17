@@ -312,6 +312,8 @@ import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_t
 import { communityOf, communityTags, isArchived, zoneFor } from './trustzones'
 import { archivedPeopleView } from './archived_people_view'
 import { purgeDue, recentlyDeleted } from './deleted_people'
+import { purgeTrash, trashItems } from './trash' // wave44c answers-44c (A4)
+import { trashRows } from './trash_view' // wave44c answers-44c (A4)
 import { trustZonesGroup, zoneSidebar } from './trustzones_view'
 import { ringShown } from './rings_filter'
 import { ownProfilePage } from './own_profile_view'
@@ -4285,6 +4287,7 @@ function archiveRow(p: Person): HTMLElement {
 /** Wave 36: people deleted more than 30 days ago go for good (deleted_people.ts); the Recently deleted list was their only way back. */
 function purgeDeleted(): void {
   if (!state) return
+  if (purgeTrash(state, Date.now())) save() // wave44c answers-44c: tombstones of other kinds go after 30 days too
   const due = new Set(purgeDue(state, Date.now()))
   if (!due.size) return
   state.people = state.people.filter((x) => !due.has(x.id))
@@ -7941,6 +7944,7 @@ function settingsSheet(): void {
     ],
     general: [
     settingsSection('drafts', S.drafts44c.title, draftsSettingsRows(s, save, settingsSheet)),   // wave44c event-autosave
+    settingsSection('trash', S.a44cTrash.title, trashRows(s, { save, redraw: () => { render(); settingsSheet() }, toast })),   // wave44c answers-44c (A4)
     settingsSection('you', S.setSecYou, [
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
@@ -8257,7 +8261,7 @@ function screenInventory(): Node[] {
       ]),
     ]),
     el('div', { class: 'inv-side' }, [
-      el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']),
+      el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { trashItems(s, 'resource', [item.id], Date.now()); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']), // answers-44c: tombstone, restorable (text) from Settings > Recently deleted
       onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
     ]),
   ])

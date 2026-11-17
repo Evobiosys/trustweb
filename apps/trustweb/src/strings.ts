@@ -5355,4 +5355,14 @@ export const S = {
     showNewLabel: 'Show this device\'s code for the other device to scan',
     scanNewLabel: 'Scan a new device\'s code',
   },
+  a44cTrash: {
+    title: 'Recently deleted',
+    hint: 'Deleted events, resources, tasks, meetings and invitations stay here for 30 days on all your linked devices, then they go for good. Deleted people are under Web > Recently deleted.',
+    kinds: { event: 'Event', resource: 'Resource', task: 'Task', meeting: 'Meeting', invitation: 'Invitation' } as Record<string, string>,
+    daysLeft: (n: number) => (n === 1 ? '1 day left' : `${n} days left`),
+    restore: 'Restore',
+    restored: (what: string) => `Restored ${what}`,
+    empty: 'Nothing deleted in the last 30 days.',
+    restoreLabel: 'Restore a deleted item',
+  },
 } as const
