@@ -24,6 +24,7 @@ import type { AppState, Invitation, Person, TwEvent } from './model'
 import { invitationEventRows } from './invitations'
 import { ICONS } from './icons'
 import { S } from './strings'
+import { attendChanged, conferenceLine } from './event_conference'
 
 export interface EventsViewHooks {
   state: () => AppState
@@ -60,6 +61,9 @@ export interface EventsViewHooks {
   askSupport?: () => void
   /** Wave 43 web-focus-filter: show the Web with only this event's people. */
   focusWeb?: (ev: TwEvent) => void
+  /** Wave 44c event-autosave: my answer ("I will attend" or not) goes to the hosts; a saved event's conference link to the guests who accepted. */
+  rsvp?: (ev: TwEvent) => void
+  saved?: (ev: TwEvent) => void
 }
 
 export interface EventsView {
@@ -493,7 +497,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const people = listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true)   // wave 44 steer-event-visibility: discoverable / off people stay out of the open list
     const attended = el('button', {
       class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
-      onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
+      onclick: () => { ev.attended = !ev.attended; if (attendChanged(h.state(), ev)) h.rsvp?.(ev); h.save(); h.redraw() },
     }, [rsvpTense(ev, Date.now()) === 'future' ? S.ev44.willAttend : S.eventsAttended])   // wave 44 (item 13)
     // review-fixes-43: one switch for this event's notifications; it also covers the "I'm here now" bell (a muted bell of older records shows as off, switching on clears it).
     const st = h.state()
@@ -518,6 +522,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       tagChip,
       sinceLine(ev),
       ev.where ? editable(el('p', { 'data-event-where': '' }, [ev.where]), ev, 'where') : null,
+      conferenceLine(ev),   // wave44c event-autosave: under Location
       rolesSection(h, ev),
       techLine(ev),
       ev.themes ? editable(el('div', { class: 'chips', 'data-event-themes': '' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))), ev, 'themes') : null,
@@ -556,7 +561,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         const draft = v.draftId ? draftsOf(h.state()).find((d) => d.id === v.draftId) : undefined
         editor ??= createEventEditor(h, {
           ...(ev ? { existing: ev } : draft?.eventId ? { existing: find(draft.eventId) } : {}), ...(draft ? { draft } : {}), ...(v.from ? { presetFrom: v.from } : {}), ...(v.community ? { presetCommunity: v.community } : {}), ...(v.focus ? { focus: v.focus } : {}),
-          done: (id) => show({ kind: 'page', id }),
+          done: (id) => { const saved = find(id); if (saved) h.saved?.(saved); show({ kind: 'page', id }) },
           // Left without saving: back to the event, else to the plain list, where a saved draft now waits (the calendar would hide it).
           leave: () => { if (ev) show({ kind: 'page', id: ev.id }); else { show({ kind: 'list' }); plain = true; h.redraw() } },
         })

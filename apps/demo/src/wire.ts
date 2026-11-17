@@ -159,6 +159,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   const hasWant = 'want' in o
   const hasLink = 'link' in o
   if ('os' in o) return hasWant || hasLink ? null : parseOpenSpace(o.os)
+  if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
   if (hasWant === hasLink) return null
   if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
   if (!isNonEmptyString(o.link) || o.link.length > EVENT_LINK_MAX) return null
@@ -177,6 +178,29 @@ function parseOpenSpace(v: unknown): EventEnvelope | null {
   return { v: WIRE_VERSION, t: 'event', os: { id: os.id, ...(os.open === true ? { open: true as const } : {}), acts: os.acts } }
 }
 // ----- END TrustWeb wave 44 -----
+
+// ----- BEGIN TrustWeb wave44c event-autosave: rsvp + conference reveal (types.ts EventEnvelope.rsvp / .conf) -----
+const CONF_PROVIDERS = ['kmeet', 'zoom', 'jitsi', 'custom'] as const
+const CONF_LINKS_MAX = 8
+const CONF_URL_MAX = 2048
+const isHttps = (v: unknown): v is string => { if (typeof v !== 'string' || v.length > CONF_URL_MAX) return false; try { return new URL(v).protocol === 'https:' } catch { return false } }
+/** Exactly one of rsvp ({id, yes}) or conf ({id, at most 8 https links of a known provider}); anything else is null. */
+function parseReveal(o: Record<string, unknown>): EventEnvelope | null {
+  if (('rsvp' in o) === ('conf' in o)) return null
+  const v = (o.rsvp ?? o.conf) as Record<string, unknown> | null
+  if (typeof v !== 'object' || v === null || typeof v.id !== 'string' || !QID_RE.test(v.id)) return null
+  if ('rsvp' in o) return typeof v.yes === 'boolean' ? { v: WIRE_VERSION, t: 'event', rsvp: { id: v.id, yes: v.yes } } : null
+  if (!Array.isArray(v.links) || v.links.length > CONF_LINKS_MAX) return null
+  const links: NonNullable<EventEnvelope['conf']>['links'] = []
+  for (const l of v.links as unknown[]) {
+    const x = (typeof l === 'object' && l !== null ? l : {}) as Record<string, unknown>
+    const provider = CONF_PROVIDERS.find((p) => p === x.provider)
+    if (!provider || !isHttps(x.url)) return null
+    links.push({ provider, url: x.url })
+  }
+  return { v: WIRE_VERSION, t: 'event', conf: { id: v.id, links } }
+}
+// ----- END TrustWeb wave44c event-autosave -----
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----
 type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door' | 'answerWindowMs'>

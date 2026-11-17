@@ -25,6 +25,7 @@ import { noticeTools } from './notice_tools.ts'
 import { circlesTools } from './circles_tools.ts'
 import type { Tool } from './protocol.ts'
 import { settingsTools } from './settings_tools.ts'
+import { draftsTools } from './drafts_tools.ts' // wave44c event-autosave
 
 type Obj = Record<string, unknown>
 export interface Person extends Obj { id: string; name: string; ring: string; prevRing?: string; context?: string; fields?: Record<string, unknown>; generalNote?: string; lines?: { text: string; notedAt?: number }[]; deleted_at?: string }
@@ -307,5 +308,5 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
   const blocks = resourceBlockTools({ load: () => load(o.file) as never, commit: commit as never, /* wave44 answers-44b */ write: o.write, file: o.file, now, person: (r, who) => findPerson(r as Rec, who) })
   const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now, embedFetch: o.embedFetch })
   const notify = notifyTools({ load: () => load(o.file) as never, commit: commit as never, now })
-  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...blocks.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write, ...blocks.write] : []), ...barTools(o), ...webFilterTools(o), ...filterStateTools(o), ...noticeTools(o), ...circlesTools(o), ...askAudienceTools(o), ...askEscalationTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
+  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...blocks.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write, ...blocks.write] : []), ...barTools(o), ...webFilterTools(o), ...filterStateTools(o), ...noticeTools(o), ...circlesTools(o), ...askAudienceTools(o), ...askEscalationTools(o), ...settingsTools(o), ...socialTools(o), ...draftsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

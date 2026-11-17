@@ -2282,3 +2282,6 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 @media (min-width:700px){
   .circles-row{flex-wrap:wrap; overflow-x:visible; justify-content:flex-start; gap:28px; padding:26px 20px 20px; scroll-snap-type:none}
 }
+/* wave44c event-autosave */
+.draft-note{margin:4px 0; font-size:.85em; opacity:.75}
+.draft-note .btn{padding:0 6px; min-height:0}

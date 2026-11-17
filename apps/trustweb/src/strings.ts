@@ -5219,4 +5219,13 @@ export const S = {
     card: (scope: string) => `Send a ${scope === 'line' ? 'line' : 'block'} of a resource to a chat`,
   },
   verdictNote: { ph: 'note (optional), sent with Needs work', aria: 'Note for this verdict' },
+  /* wave44c event-autosave */
+  evConf44c: { hidden: 'Revealed once you accept', asked: 'Asked the host for the link; it shows here once their phone answers.' },
+  drafts44c: {
+    restored: 'Draft restored', discard: 'Discard', tooBig: 'Not saved as a draft: over 10 MB.',
+    title: 'Drafts', hint: 'What you typed and did not send or save yet. Only on this phone: never synced, exported or asked.',
+    none: 'No drafts.', size: (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`),
+    discardAria: (what: string) => `Discard the draft ${what}`,
+    editors: { ask: 'Ask', chat: 'Chat', 'co-chat': 'Note chat', event: 'Event', feed: 'Feed post', 'feed-reply': 'Feed reply', 'feed-group': 'Group post', community: 'Community post', 'community-new': 'New community', assistant: 'Assistant', geb: 'Thread', 'shared-note': 'Shared note', 'tag-new': 'New tag', 'send-unread': 'Message', 'know-note': 'Know-someone note', 'support-note': 'Support note', 'name-reason': 'Name request', 'outline-paste': 'Resource paste', record: 'Recording notes', 'past-line': 'Note line', invitation: 'Invitation', 'invitation-paste': 'Invitation list', 'add-person': 'Add person', 'co-import': 'Logseq import' } as Record<string, string>,
+  },
 } as const

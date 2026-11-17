@@ -21,6 +21,7 @@ import { todayIso } from './events'
 import { createPerson } from './tag_create'
 import type { AppState, TwEvent } from './model'
 import { S } from './strings'
+import { autosaveOf, restoredNotice } from './drafts_dom'
 
 export interface EditorHooks {
   state: () => AppState
@@ -63,7 +64,13 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
   /** 43-D7: technical support sees the guests but changes them only once a host lets them take over. A new event is mine. */
   const canApprove = (): boolean => !o.existing || mayApprove(o.existing, me(), h.state().people)
 
-  const redraw = (refocus?: string): void => { focusNext = refocus; h.redraw() }
+  /* wave44c event-autosave: every change is kept silently (drafts.ts, key event:<event, draft or new>); reopening offers it back */
+  const auto = autosaveOf('event', o.existing?.id ?? o.draft?.id ?? 'new', () => f, (v) => !isDirty(start, v))
+  const waiting = auto?.stored()
+  let restoredAt: number | undefined
+  if (waiting && isDirty(f, waiting.value as EditorFields)) { Object.assign(f, structuredClone(waiting.value as EditorFields)); restoredAt = waiting.updatedAt }
+  const discardRestored = (): void => { for (const k of Object.keys(f)) delete (f as unknown as Record<string, unknown>)[k]; Object.assign(f, structuredClone(start)); restoredAt = undefined; auto?.clear(); redraw() }
+  const redraw = (refocus?: string): void => { focusNext = refocus; auto?.changed(); h.redraw() }
   const label = (ref: string): string => roleLabels(h.state(), [ref])[0]
   const optional = (node: HTMLElement): HTMLElement => { node.classList.add('opt-min'); return node }
 
@@ -274,9 +281,9 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
         el('p', {}, [S.ev44.draftBody]),
         el('button', { class: 'btn btn-electric wide', type: 'button', 'data-draft-save': '', onclick: () => {
           draftId = saveDraft(h.state(), f, Date.now(), draftId ?? h.newId(), o.existing?.id)
-          h.save(); closeDialog(box); o.leave()
+          auto?.clear(); h.save(); closeDialog(box); o.leave()
         } }, [S.ev44.draftSave]),
-        el('button', { class: 'btn btn-ghost wide', type: 'button', 'data-draft-discard': '', onclick: () => { closeDialog(box); o.leave() } }, [S.ev44.draftDiscard]),
+        el('button', { class: 'btn btn-ghost wide', type: 'button', 'data-draft-discard': '', onclick: () => { auto?.clear(); closeDialog(box); o.leave() } }, [S.ev44.draftDiscard]),
         el('button', { class: 'btn btn-ghost wide', type: 'button', 'data-draft-keep': '', onclick: () => closeDialog(box) }, [S.ev44.draftKeep]),
       ]),
     ])
@@ -284,7 +291,7 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
     box.querySelector<HTMLButtonElement>('[data-draft-save]')?.focus()
   }
 
-  const tryLeave = (): void => { if (isDirty(start, f)) askDraft(); else o.leave() }
+  const tryLeave = (): void => { if (isDirty(start, f)) askDraft(); else { auto?.clear(); o.leave() } }
 
   function save(): void {
     const s = h.state()
@@ -293,13 +300,15 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
     rememberRooms(s, made.conference ?? [])
     s.events = [...(s.events ?? []).filter((e) => e.id !== made.id), made]
     if (draftId) dropDraft(s, draftId)
+    auto?.clear()
     h.save()
     o.done(made.id)
   }
 
   return {
     body: () => {
-      const view = [h.header(o.existing ? S.eventsEdit : S.eventsNew, { back: tryLeave }), el('div', { class: 'scroll ev-editor', 'data-event-editor': '' }, [
+      const scroll = el('div', { class: 'scroll ev-editor', 'data-event-editor': '' }, [
+        restoredAt !== undefined ? restoredNotice(discardRestored) : null,
         el('div', { class: 'ev-row', 'data-editor-row': 'name' }, [
           text('name', { class: 'field ev-name', placeholder: S.ev44.namePh, 'aria-label': S.ev44.namePh, 'data-editor-name': '' }),
           el('p', { class: 'meta opt-min' }, [S.ev44.nameCaption]),
@@ -315,7 +324,11 @@ export function createEventEditor(h: EditorHooks, o: EditorOpen): { body: () => 
         error ? el('p', { class: 'warn', 'data-event-error': '' }, [ERRORS[error]]) : null,
         el('button', { class: 'btn btn-electric wide', type: 'button', 'data-event-save': '', onclick: save }, [S.eventsSave]),
         el('button', { class: 'btn btn-ghost wide', type: 'button', 'data-event-cancel': '', onclick: tryLeave }, [S.eventsCancel]),
-      ])]
+      ])
+      scroll.addEventListener('input', (e) => { if (e.isTrusted && restoredAt !== undefined) { restoredAt = undefined; scroll.querySelector('[data-draft-restored]')?.remove() } auto?.changed() })
+      scroll.addEventListener('change', () => auto?.changed())
+      scroll.addEventListener('focusout', () => { if (auto?.pending()) auto.flush() })
+      const view = [h.header(o.existing ? S.eventsEdit : S.eventsNew, { back: tryLeave }), scroll]
       const sel = focusNext
       focusNext = undefined
       if (sel) setTimeout(() => document.querySelector<HTMLElement>(sel)?.focus())

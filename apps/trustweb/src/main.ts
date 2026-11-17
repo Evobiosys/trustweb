@@ -339,6 +339,7 @@ import { eventForLink } from './event_roles'
 import { addInviter, applyHostLink, attendees, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
 import { createEventEnvelopes } from './event_envelope'
+import { autosaveOf, draftable, draftsSettingsRows, restoredNotice, setDraftHost } from './drafts_dom' // wave44c event-autosave
 import { openSpaceSection } from './open_space_view'
 import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
@@ -820,6 +821,22 @@ function freshDraft(personId?: string): Draft {
 function newDraft(personId?: string): void {
   dropRecording()
   draft = freshDraft(personId)
+  recordRestored = false
+  recordDraft?.clear()   // wave44c event-autosave
+}
+
+/* wave44c event-autosave: what is typed while recording (who, where, notes, lines) is kept as a draft until it is saved or discarded; the audio is not. */
+let recordDraft: ReturnType<typeof autosaveOf> = null
+let recordRestored = false
+function restoreRecordDraft(): void {
+  recordDraft = autosaveOf('record', 'current', () => draft, () => !draftInProgress())
+  const d = state ? recordDraft?.stored() : undefined
+  if (d && !draftInProgress()) { draft = { ...freshDraft(), ...(d.value as Draft) }; recordRestored = true }
+}
+function recordTouched(nodes: Node[]): Node[] {
+  recordDraft?.changed()
+  for (const n of nodes) n.addEventListener('input', (e) => { if (e.isTrusted) recordRestored = false; recordDraft?.changed() })
+  return recordRestored ? [nodes[0], restoredNotice(() => { newDraft(); render() }), ...nodes.slice(1)] : nodes
 }
 
 // ---------------------------------------------------------------------------
@@ -2188,11 +2205,11 @@ function render(): void {
       case Screen.Start: return screenStart()
       case Screen.Web: return screenWeb()
       case Screen.Inventory: return screenInventory()
-      case Screen.Record: return screenRecord()
-      case Screen.Meeting: return screenMeeting()
+      case Screen.Record: return recordTouched(screenRecord())
+      case Screen.Meeting: return recordTouched(screenMeeting())
       case Screen.Meet: return screenMeet()
-      case Screen.Review: return screenReview()
-      case Screen.Place: return screenPlace()
+      case Screen.Review: return recordTouched(screenReview())
+      case Screen.Place: return recordTouched(screenPlace())
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
       case Screen.Timeline: return [header(S.timelineTitle), feed.body('timeline')]
@@ -3694,6 +3711,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
       if (out.type === 'stamp') codeStatus.setAttribute('data-connect-refused', out.reason) // the preview panel's marker
       return
     }
+    addKept.clear()   // wave44c event-autosave
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
     if (communityTag && addMember(st().people, out.person.id, communityTag)) { save(); twBus.emit('community-go', 'members') }
     render()
@@ -3716,6 +3734,7 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
     if (!n) { name.focus(); return }
     const s = st()
     s.people.push({ id: randomId(8), name: n.slice(0, 40), context: where.value.trim().slice(0, 80), ring: picked, metAt: Date.now(), lines: [], ...(communityTag ? { fields: { [communityTag]: 'true' } } : {}) })
+    addKept.clear()
     save()
     closeSheet()
     toast(S.savedToast(n, S.ringLabel[picked]))
@@ -3725,13 +3744,12 @@ function addPersonSheet(ring: Ring, presetHint = false, communityTag?: string): 
   const addBtn = el('button', { class: 'btn btn-electric', 'data-add-person': '', onclick: add }, [S.addSave])
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
   code.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
+  const addForm = el('div', {}, [name, where, el('label', { class: 'meta', for: 'add-code' }, [S.addCodeLabel]), code])
+  const addKept = draftable(addForm, 'add-person', communityTag ?? 'web')   // wave44c event-autosave
   openSheet([
     el('h3', {}, [S.addTitle]),
     el('p', { class: 'meta' }, [S.addLead]),
-    name,
-    where,
-    el('label', { class: 'meta', for: 'add-code' }, [S.addCodeLabel]),
-    code,
+    addForm,
     codeStatus,
     el('p', { class: 'meta' }, [S.addCodeHint]),
     radios,
@@ -4137,9 +4155,11 @@ function sendUnreadBox(p: Person): HTMLElement {
   const go = el('button', { class: 'btn btn-electric btn-sm', 'data-send-unread': p.id, onclick: () => {
     const peerId = p.peerId
     if (!peerId || !text.value.trim()) return
-    void submitText(chatIo(), peerId, text.value).then((ok) => { if (ok) { text.value = ''; toast(S.cardSendUnreadSent) } })
+    void submitText(chatIo(), peerId, text.value).then((ok) => { if (ok) { text.value = ''; draft.clear(); toast(S.cardSendUnreadSent) } })
   } }, [S.cardSendUnreadGo])
-  return el('details', { class: 'card-advanced', 'data-card-advanced': p.id }, [el('summary', {}, [S.cardChatAdvanced]), el('div', { class: 'card-compose' }, [el('p', { class: 'meta' }, [S.cardSendUnread]), text, go])])
+  const box = el('div', { class: 'card-compose' }, [el('p', { class: 'meta' }, [S.cardSendUnread]), text, go])
+  const draft = draftable(box, 'send-unread', p.id)   // wave44c event-autosave
+  return el('details', { class: 'card-advanced', 'data-card-advanced': p.id }, [el('summary', {}, [S.cardChatAdvanced]), box])
 }
 
 /** The Chat button (the Chat tab's icon), only for a person connected on TrustWeb; it opens the chat page (or the pinned / last-used service). Not connected: the messenger glyphs and the way to connect (an invitation I hold, else the link panel). */
@@ -4667,6 +4687,7 @@ function chatSheet(personId: string, open: StackOpen = {}): void {
     ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p), theirChannels: p.theirChannels }, S: chatStrings(),
     copy: (text) => copyLink(text, S.chatCopied), open: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
     isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo, onDraft: () => thoughtOf(p),
+    draftable: (root) => draftable(root, 'chat', p.id),   // wave44c event-autosave
   })
   openSheet([handle.el])
   if (p.peerId) openChat = { peerId: p.peerId, refresh: handle.refresh }
@@ -5445,12 +5466,14 @@ const web = createWebView({
 })
 /** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
 const eventEnv = createEventEnvelopes<Peer>({
-  state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
+  state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), peers: () => st().peers, pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
   link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
   members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
   recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
 })
 announceDue = () => { eventEnv.announceDue() }
+setDraftHost({ state: st, save })   // wave44c event-autosave
+restoreRecordDraft()
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
@@ -5467,6 +5490,7 @@ const eventsView = createEventsView({
   plan: (ev) => [...eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }), ...openSpaceSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), push: (e) => { void eventEnv.pushOpenSpace(e) }, noteFor: (e, a) => coNotes?.activityNote?.(e, a) ?? null })],
   extra: (ev) => [cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []),
   openInvitation: (i) => invitationSheet(invitationIo(), i),
+  rsvp: (ev) => { void eventEnv.rsvp(ev) }, saved: (ev) => { void eventEnv.pushConference(ev) },   // wave44c event-autosave
 })
 const extHooks: ExtHooks = {
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
@@ -7885,6 +7909,7 @@ function settingsSheet(): void {
     ]),
     ],
     general: [
+    settingsSection('drafts', S.drafts44c.title, draftsSettingsRows(s, save, settingsSheet)),   // wave44c event-autosave
     settingsSection('you', S.setSecYou, [
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
@@ -8299,6 +8324,7 @@ async function pickTogetherPlace(): Promise<void> {
  */
 async function sendFromDock(text: string): Promise<void> {
   if (!text.trim()) { toast(S.queryNeedText); return }
+  askDraft.clear()   // wave44c event-autosave
   const now = Date.now()
   const pending = togetherPending
   togetherPending = null
@@ -8386,6 +8412,9 @@ function resultsView(results: AskResult[], asked: { text: string; at: number }):
   ]))
 }
 
+/** Wave 44c event-autosave: the ask text is kept as a draft until it is sent. */
+let askDraft: { clear: () => void } = { clear: () => undefined }
+function askDraftBox(box: HTMLElement): HTMLElement { const wrap = el('div', { class: 'draft-wrap' }, [box]); askDraft = draftable(wrap, 'ask', 'new'); return wrap }
 function queryDock(s: AppState): HTMLElement {
   const box = el('textarea', { class: 'field', rows: '2', placeholder: S.queryPh, maxlength: '200', 'aria-label': S.queryTitle })
   box.value = queryText
@@ -8451,7 +8480,7 @@ function queryDock(s: AppState): HTMLElement {
       // Review 43b: a filter that reaches nobody says so (the ask would leave for no one).
       s.peers.length > 0 && allowedPeerIds(s, tagsNow)?.length === 0 ? el('p', { class: 'warn', 'data-aud-nobody': '' }, [S.askPage.nobody]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
-      box,
+      askDraftBox(box),
       run ? null : webHere.el,
       run ? null : el('div', { class: 'chips', 'data-together-place': '1' }, [
         togetherPlace
@@ -8523,7 +8552,7 @@ function renderAsk(): void {
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       fitLine(a),
       a.know && decided === null
-        ? el('div', {}, [...knowCard((note) => decide(true, note), () => decide(false)), a.askedNames ? askedWhoLine(a.askedNames) : null])
+        ? el('div', {}, [...knowCard((note) => decide(true, note), () => decide(false), a.qid), a.askedNames ? askedWhoLine(a.askedNames) : null])
         : a.intro && decided === null
         ? introCard({ by: a.fromName, target: a.intro }, {
             introduce: () => { decide(true); showNextAsk(); introduceHandoff({ by: a.fromName, target: a.intro! }) },

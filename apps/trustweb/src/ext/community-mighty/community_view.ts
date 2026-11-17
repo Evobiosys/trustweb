@@ -31,6 +31,7 @@ import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
 import { chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
 import css from './community.css?inline'
+import { draftable } from '../../drafts_dom'
 
 export const readData = (s: AppState): CommunityData => parseCommunity(s.extData?.[MODULE_ID])
 
@@ -94,10 +95,13 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const post = (): void => {
       const tags = loadColourTags()
       if (!addGroupPost(st(), `tag:${to.value}`, text.value, Date.now(), tags)) return
+      kept.clear()   // wave44c event-autosave
       ctx.bus.emit('save')
       draw()
     }
-    return el('div', { class: 'card compose' }, [text, el('div', { class: 'row' }, [el('label', { class: 'meta' }, [t.composeTo, ' ', to]), btn(t.post, post, { 'data-community-post': '' }, 'lnk strong')])])
+    const box = el('div', { class: 'card compose' }, [text, el('div', { class: 'row' }, [el('label', { class: 'meta' }, [t.composeTo, ' ', to]), btn(t.post, post, { 'data-community-post': '' }, 'lnk strong')])])
+    const kept = draftable(box, 'community', 'home')
+    return box
   }
 
   function postCard(p: ReturnType<typeof buildPosts>[number]): HTMLElement {
@@ -386,11 +390,14 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       el('option', { value: '' }, [ctx.strings.w44fc.subTop]),
       ...rows.map((r) => el('option', { value: r.id, ...(r.current ? { selected: '' } : {}) }, [ctx.strings.w44fc.subOf + ' ' + r.name])),
     ]) as HTMLSelectElement
+    const newRow = el('div', { class: 'row wrap switch-new' }, [name, group, kind, parent, btn(w.create, () => make(), { 'data-community-create': '' }, 'lnk strong')])
+    const made = draftable(newRow, 'community-new', 'new')
     const make = (): void => {
       const under = parent.value || undefined
       if (under && !canAddSub(data(), under)) { ui.more = rootOf(data(), under); draw(); return }   // above SUBCOMMUNITY_FREE_LIMIT: the request dialog
       const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind, (group as HTMLSelectElement).value === 'otherGroup' ? 'otherGroup' : undefined, under)
       if (!out) { name.focus(); return }
+      made.clear()   // wave44c event-autosave
       saveColourTags(out.tags as never)
       ui.switcher = false
       save(out.data)
@@ -409,7 +416,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
           }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${w.memberCount(r.members)}`])]),
         ])
       }),
-      el('div', { class: 'row wrap switch-new' }, [name, group, kind, parent, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
+      newRow,
       ui.more ? moreDialog(ui.more) : null,
     ])
   }
