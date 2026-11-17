@@ -5321,7 +5321,7 @@ export const S = {
     phanpyName: 'Phanpy (Mastodon client)',
     phanpyHint: 'Off by default. A Mastodon app by Cheeaun (MIT) inside TrustWeb; it signs in to your Mastodon itself, TrustWeb stores nothing of it.',
     phanpyUrl: 'Phanpy address',
-    phanpyUrlHint: 'Your own Phanpy, or phanpy.social.',
+    phanpyUrlHint: 'Empty = our copy on phanpy.trustweb.one. Or your own Phanpy, or phanpy.social.',
     phanpyBad: 'Needs an https address of another site.',
     bridgesName: 'Bridgy Fed and Threads follows',
     bridgesHint: 'Follow Bluesky people and web sites through Bridgy Fed, and Threads accounts that share to the fediverse.',

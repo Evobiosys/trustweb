@@ -102,7 +102,7 @@ export function feedExtTools(o: RecordToolsOptions): Tool[] {
       },
     },
     {
-      name: 'feed_extension_set', description: `Settings > Feed > Extensions: switch ${EXT_SWITCHES.join(' or ')} on or off (phanpy: the Phanpy Mastodon client view, off by default; ${BRIDGES_MODULE_ID}: Bridgy Fed and Threads follows, on by default), and set the Phanpy address (url, https; empty = phanpy.social). Only what is given changes.`,
+      name: 'feed_extension_set', description: `Settings > Feed > Extensions: switch ${EXT_SWITCHES.join(' or ')} on or off (phanpy: the Phanpy Mastodon client view, off by default; ${BRIDGES_MODULE_ID}: Bridgy Fed and Threads follows, on by default), and set the Phanpy address (url, https; empty = the self-hosted phanpy.trustweb.one; phanpy.social as a fallback). Only what is given changes.`,
       inputSchema: schema({ id: S(EXT_SWITCHES.join(' | ')), on: { type: 'boolean' }, url: S('phanpy only: your Phanpy address') }, ['id']),
       run: (a) => {
         const id = needText(a.id, 'id')

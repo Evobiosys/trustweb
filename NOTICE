@@ -35,6 +35,8 @@ Kontakt: connect@japossert.com
 ## Third-party software reached from the app
 
 Phanpy (https://github.com/cheeaun/phanpy), a Mastodon client, MIT licence,
-Copyright (c) Chee Aun. The optional Phanpy extension (off by default) shows
+Copyright (c) 2023-present, Lim Chee Aun. The optional Phanpy extension (off by default) shows
 the user's own Phanpy address in a sandboxed frame; no Phanpy code is
-bundled with TrustWeb.
+bundled with TrustWeb. The default address, https://phanpy.trustweb.one/,
+serves the unmodified release 2026.10.09.febb38d (phanpy-dist.tar.gz) as
+static files on its own origin, with Phanpy's MIT LICENSE beside it.

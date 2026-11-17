@@ -2,7 +2,7 @@
 /**
  * Wave 44c feed-ext (θ): Phanpy as an optional /extension. Off by default; while off its view code is not in the main bundle (the stub has no
  * static import of the body, and nothing the stub imports builds a frame); on, it registers its view; the address is the user's own Phanpy
- * (default phanpy.social), https, never this app's own origin.
+ * (default the self-hosted phanpy.trustweb.one since answers-44c), https, never this app's own origin.
  */
 import { readFileSync } from 'node:fs'
 import { createBus, createRegistry } from '../../src/ext/tw_registry.ts'
@@ -58,10 +58,10 @@ describe('address', () => {
     [' https://my.phanpy.example.org/client/ ', 'https://my.phanpy.example.org/client/'],
   ])('%j -> %j', (input, want) => { expect(parsePhanpyUrl(input, APP)).toBe(want) })
   it.each(['http://phanpy.social', 'https://localhost', 'https://user:pw@phanpy.social', 'javascript:alert(1)', 'https://app.trustweb.one/phanpy/', 'https://phanpy.social:8443/', ''])('refuses %j', (s) => { expect(parsePhanpyUrl(s, APP)).toBeNull() })
-  it('default phanpy.social; a stored address wins; empty clears; nothing stored at the default', () => {
+  it('default = the self-hosted copy (answers-44c); a stored address wins; empty clears; nothing stored at the default', () => {
     const s = {}
     expect(phanpyUrl(s)).toBe(PHANPY_DEFAULT_URL)
-    expect(PHANPY_DEFAULT_URL).toBe('https://phanpy.social/')
+    expect(PHANPY_DEFAULT_URL).toBe('https://phanpy.trustweb.one/')
     expect(setPhanpyUrl(s, 'my.phanpy.example.org', APP)).toBe('https://my.phanpy.example.org/')
     expect(phanpyUrl(s)).toBe('https://my.phanpy.example.org/')
     expect(s.extData.phanpy).toEqual({ url: 'https://my.phanpy.example.org/' })

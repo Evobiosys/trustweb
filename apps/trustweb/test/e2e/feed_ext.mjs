@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 44c feed-ext (θ ι κ): in the real app, local only, at 360x780 and 1280x900. The public networks are a stubbed server (Playwright routes
- * answer for public.api.bsky.app, a PeerTube instance and phanpy.social with the unit fixtures; every other outside request is counted and
+ * answer for public.api.bsky.app, a PeerTube instance and phanpy.trustweb.one (answers-44c) with the unit fixtures; every other outside request is counted and
  * must stay zero). Sources page: follow a Bluesky account and a PeerTube channel, their posts show in the Feed, Bridgy Fed builds the
  * bridged handle, "Never read public content" stops every read. Settings > Feed > Extensions: Phanpy off = no frame and no request to
  * Phanpy; on = "Open in Phanpy" mounts the sandboxed frame. The Meta row is struck through. A person's card offers "Follow via Bridgy Fed".
@@ -39,9 +39,9 @@ try {
   const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
   await a.context().route('https://public.api.bsky.app/**', (r) => { stubbed.bsky++; return r.fulfill({ status: 200, headers: cors, body: fx('bluesky_author_feed.json') }) })
   await a.context().route('https://tube.test.example.org/**', (r) => { stubbed.tube++; return r.fulfill({ status: 200, headers: cors, body: fx('peertube_account_videos.json') }) })
-  await a.context().route('https://phanpy.social/**', (r) => { stubbed.phanpy++; return r.fulfill({ status: 200, headers: { 'Content-Type': 'text/html' }, body: '<!doctype html><title>Phanpy stub</title><p>Phanpy stub</p>' }) })
+  await a.context().route('https://phanpy.trustweb.one/**', (r) => { stubbed.phanpy++; return r.fulfill({ status: 200, headers: { 'Content-Type': 'text/html' }, body: '<!doctype html><title>Phanpy stub</title><p>Phanpy stub</p>' }) })
   await a.context().route(/^https:\/\/(cdn\.bsky\.app|video\.bsky\.app)\//, (r) => r.abort())
-  a.on('request', (r) => { const u = r.url(); if (!u.startsWith('http://127.0.0.1') && !/^https:\/\/(public\.api\.bsky\.app|tube\.test\.example\.org|phanpy\.social)\//.test(u) && !u.startsWith('data:')) external.push(u) })
+  a.on('request', (r) => { const u = r.url(); if (!u.startsWith('http://127.0.0.1') && !/^https:\/\/(public\.api\.bsky\.app|tube\.test\.example\.org|phanpy\.trustweb\.one)\//.test(u) && !u.startsWith('data:')) external.push(u) })
   await startPhone(a, vite.base, 'Jakob')
   await a.evaluate(() => { const r = JSON.parse(localStorage.getItem('trustweb.v1.me')); r.feed = { on: true }; r.uiBar = { order: ['web', 'chat', 'feed', 'events', 'inventory'], orderVersion: 2 }; r.people = [...(r.people ?? []), { id: 'p2', name: 'Ben Test', ring: 'friend', lines: [], context: 'Fair', metAt: Date.now() - 86_400_000, theirProfile: { norms: [], at: Date.now(), website: 'https://ben.example.org' } }]; localStorage.setItem('trustweb.v1.me', JSON.stringify(r)) })
   await a.reload()
@@ -130,7 +130,7 @@ try {
   await a.locator('[data-ext-switch-phanpy]').click()
   await a.waitForTimeout(500)
   await unfold().catch(() => {})
-  c.ok('Phanpy on: stored, its address field shows (default phanpy.social)', await waitFor(async () => (await record(a)).twSettings?.extensions?.phanpy === true && await a.locator('[data-phanpy-url]').count() === 1) && await a.locator('[data-phanpy-url]').inputValue() === 'https://phanpy.social/')
+  c.ok('Phanpy on: stored, its address field shows (default phanpy.trustweb.one)', await waitFor(async () => (await record(a)).twSettings?.extensions?.phanpy === true && await a.locator('[data-phanpy-url]').count() === 1) && await a.locator('[data-phanpy-url]').inputValue() === 'https://phanpy.trustweb.one/')
   c.ok('no request to Phanpy by switching it on', stubbed.phanpy === 0)
   for (const vp of [{ width: 360, height: 780 }, { width: 1280, height: 900 }]) c.ok(`${vp.width}: no overlap among the Extensions rows`, await a.setViewportSize(vp).then(() => overlaps(a, '.sheet.on [data-feed-extensions], .sheet.on [data-ext-switch-phanpy], .sheet.on .ext-phanpy-url, .sheet.on [data-feed-open-phanpy], .sheet.on [data-ext-switch-bridges], .sheet.on [data-meta-portability]')).then((o) => o.length === 0))
   if (SHOTS) { await a.locator('[data-feed-extensions]').evaluate((n) => n.scrollIntoView()); await a.screenshot({ path: path.join(SHOTS, 'feed-ext-settings-1280x900.png') }) }
@@ -142,8 +142,8 @@ try {
   await a.locator('[data-feed-open-phanpy]').first().click()
   await a.locator('[data-phanpy-frame]').waitFor({ timeout: 8000 })
   const frame = a.locator('[data-phanpy-frame]')
-  c.ok('the frame is sandboxed, without referrer, on phanpy.social', (await frame.getAttribute('sandbox')) === 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox' && (await frame.getAttribute('referrerpolicy')) === 'no-referrer' && (await frame.getAttribute('src')) === 'https://phanpy.social/')
-  c.ok('the third-party note names the site and offers a new tab', /Third-party page: phanpy\.social/.test(await a.locator('[data-phanpy-note]').innerText()) && await a.locator('[data-phanpy-newtab][href="https://phanpy.social/"]').count() === 1)
+  c.ok('the frame is sandboxed, without referrer, on phanpy.trustweb.one', (await frame.getAttribute('sandbox')) === 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox' && (await frame.getAttribute('referrerpolicy')) === 'no-referrer' && (await frame.getAttribute('src')) === 'https://phanpy.trustweb.one/')
+  c.ok('the third-party note names the site and offers a new tab', /phanpy\.trustweb\.one/.test(await a.locator('[data-phanpy-note]').innerText()) && await a.locator('[data-phanpy-newtab][href="https://phanpy.trustweb.one/"]').count() === 1)
   c.ok('the frame loaded the (stubbed) Phanpy', await waitFor(async () => stubbed.phanpy > 0))
   for (const vp of [{ width: 360, height: 780 }, { width: 1280, height: 900 }]) {
     await a.setViewportSize(vp)

@@ -3,14 +3,21 @@
  * Wave 44c feed-ext (Jakob θ): Phanpy (MIT, github.com/cheeaun/phanpy) as an optional Mastodon client view. Pure, no DOM, no network
  * (apps/mcp loads it under plain node); in the main bundle with the stub (index.ts), the frame itself is in phanpy_body.ts.
  * Vendoring: the pinned release's dist is PHANPY_DIST_GZ_BYTES gzipped, above the 3 MB limit, and served from this app's own origin it would
- * share TrustWeb's storage; so the view frames the user's own Phanpy address (default phanpy.social), a third-party page on its own origin.
+ * share TrustWeb's storage; so the view frames the user's own Phanpy address (default: our self-hosted copy on phanpy.trustweb.one, answers-44c), a page on its own origin.
  * Phanpy logs in to the user's Mastodon instance by its own OAuth; TrustWeb stores only the address (extData.phanpy.url, absent = default).
  */
 export const MODULE_ID = 'phanpy'
-export const PHANPY_DEFAULT_URL = 'https://phanpy.social/'
+export const PHANPY_DEFAULT_URL = 'https://phanpy.trustweb.one/' // answers-44c: the self-hosted copy (PHANPY_DEFAULT_ORIGIN below)
 /** The release checked for this decision (GitHub releases/latest, 2026-11-17): phanpy-dist.tar.gz = 3,408,647 bytes. */
 export const PHANPY_PINNED_RELEASE = '2026.10.09.febb38d'
 export const PHANPY_DIST_GZ_BYTES = 3_408_647
+/* wave44c answers-44c */
+/** sha256 of phanpy-dist.tar.gz of PHANPY_PINNED_RELEASE (GitHub asset digest, verified on download 2026-11-17). */
+export const PHANPY_PINNED_SHA256 = '42a45f0df92ac10840f3064c46d60e34b2ab2029574ee4593062cfcc1663a9e0'
+/** Jakob 2026-11-17 20:22 "self-host on questhub": the pinned release as static files on its own origin (never app.trustweb.one: a framed
+ *  same-origin page would share TrustWeb's storage); deployed by trustweb-ops bin/tw_phanpy.sh. phanpy.social stays a fallback to type. */
+export const PHANPY_DEFAULT_ORIGIN = 'https://phanpy.trustweb.one'
+export const PHANPY_FALLBACK_URL = 'https://phanpy.social/'
 export const PHANPY_VENDOR_MAX_GZ = 3_000_000
 export const PHANPY_VENDORED = PHANPY_DIST_GZ_BYTES <= PHANPY_VENDOR_MAX_GZ
 /** Scripts and Phanpy's own storage on its own origin, its forms, and the login popup; no top navigation of TrustWeb. */
