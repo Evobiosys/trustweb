@@ -121,6 +121,18 @@ async function main() {
       ok(`4. ${name}: Update reloads into a newer version, or says none is published yet`, await page.evaluate((t) => window.__before === undefined || document.body.innerText.includes(t), LATEST))
       await page.waitForTimeout(1200)
     }
+    // 5. review-44c R1/F2: a phone that never ran TrustWeb (no record) opens the link: it joins and asks, and nothing reaches the laptop before its Confirm
+    await laptop.reload(); await laptop.waitForTimeout(1500) // step 4 leaves its sheet and toast open
+    await openDevices(laptop, 'laptop')
+    await laptop.locator('[data-link-device]').click()
+    const code2 = (await laptop.locator('[data-device-code]').innerText()).trim()
+    const fresh = await newPhone(browser, errors, { viewport: { width: 360, height: 780 } })
+    await fresh.goto(`${vite.base}#pair=${code2}`)
+    const asked = await fresh.locator('[data-pair-confirm]').waitFor({ timeout: 25_000 }).then(() => true, () => false)
+    ok('5. a phone without a record shows the confirm sheet from the link, with the warning', asked && await fresh.locator('[data-pair-link-warn]').isVisible())
+    await fresh.waitForTimeout(1500)
+    ok('5. the laptop shows no request before that phone confirms', !(await laptop.locator('[data-pair-confirm]').isVisible()))
+    await shot(fresh, 'fresh-link-360')
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } finally {
     await browser.close()
