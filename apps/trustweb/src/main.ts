@@ -3984,6 +3984,7 @@ function cardMore(p: Person): Node[] {
       birthdayRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
       thoughtRow({ save, redraw: render, tell: (q, text) => submitText(chatIo(), q.peerId!, text), log: logThought(p) }, p),
       obsidianLink(st(), p.fields?.obsidianNote), seenLine(st(), p.id), personShareRow(p), askAgainRow(p), pastAsksRow(pastAsksDeps, p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+      feedOn(st()) ? feed.personExt(p) : null,   // wave44c feed-ext
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
     timeline: () => [timelineSection(p)],
@@ -5671,6 +5672,7 @@ const feed = createFeedView({
   redrawFeed: () => { if (screen === Screen.Feed || screen === Screen.Timeline) render() },
   tabsChanged: () => { renderTabs(); if ((screen === Screen.Feed || screen === Screen.Timeline) && !feedOn(st())) screen = Screen.Web; render() },
   openFeed: () => go(Screen.Feed),
+  openView: openExtView,   // wave44c feed-ext
   settings: settingsSheet,
   openSharePage: (itemId) => pages.open(S.sharePageTitle, [sharePageBody({ state: st, save, toast, page: (title, body, mark) => pages.open(title, body, mark), close: () => history.back() }, itemId)], 'share-page'),
 })

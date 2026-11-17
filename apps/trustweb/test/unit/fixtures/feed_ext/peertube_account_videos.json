@@ -1,0 +1,28 @@
+{
+  "total": 41,
+  "data": [
+    {
+      "id": 7, "uuid": "0b2c1e30-1111-4222-8333-444455556666", "shortUUID": "abcDEF123xyz",
+      "url": "https://tube.test.example.org/w/abcDEF123xyz",
+      "name": "Composting basics", "description": "How we compost **at home**.", "duration": 600,
+      "publishedAt": "2026-11-10T12:00:00.000Z", "thumbnailPath": "/lazy-static/thumbnails/0b2c.jpg", "previewPath": "/lazy-static/previews/0b2c.jpg",
+      "embedPath": "/videos/embed/abcDEF123xyz", "isLive": false, "nsfw": false, "privacy": { "id": 1, "label": "Public" },
+      "account": { "id": 3, "name": "garden", "displayName": "Garden Collective", "host": "tube.test.example.org", "url": "https://tube.test.example.org/accounts/garden" }
+    },
+    {
+      "id": 8, "uuid": "1b2c1e30-1111-4222-8333-444455556666", "shortUUID": "nsfwNSFW1234",
+      "name": "Not shown", "description": "", "publishedAt": "2026-11-09T12:00:00.000Z", "nsfw": true,
+      "account": { "name": "garden", "displayName": "Garden Collective", "host": "tube.test.example.org" }
+    },
+    {
+      "id": 9, "uuid": "2b2c1e30-1111-4222-8333-444455556666", "shortUUID": "unlisted1234",
+      "name": "Unlisted", "publishedAt": "2026-11-08T12:00:00.000Z", "nsfw": false, "privacy": { "id": 2, "label": "Unlisted" },
+      "account": { "name": "garden", "host": "tube.test.example.org" }
+    },
+    {
+      "id": 10, "uuid": "3b2c1e30-1111-4222-8333-444455556666", "shortUUID": "noUrl1234567",
+      "name": "Mulch", "publishedAt": "2026-11-07T12:00:00.000Z", "nsfw": false, "thumbnailPath": "javascript:alert(1)",
+      "account": { "name": "garden", "displayName": "Garden Collective", "host": "tube.test.example.org" }
+    }
+  ]
+}

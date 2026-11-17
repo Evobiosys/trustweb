@@ -93,6 +93,8 @@ export interface Post {
   boostedBy?: string
   /** Wave 44 feed-embed: the domain of the link an embedded post came from. */
   linkHost?: string
+  /** wave44c feed-ext: the source id (feed_sources_page.ts SOURCES) a followed Bluesky / PeerTube / Threads / Bridgy post comes from. */
+  src?: string
 }
 
 /** At most this many posts. */

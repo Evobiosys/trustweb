@@ -89,6 +89,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'profile_link_check', write: true },
   /* wave44 steer-circles-view */
   { name: 'circles_layout', write: false },
+  /* wave44c feed-ext */
+  { name: 'feed_refresh', write: false }, { name: 'feed_post_read', write: false }, { name: 'feed_source_add', write: true }, { name: 'feed_source_remove', write: true }, { name: 'feed_extension_set', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
