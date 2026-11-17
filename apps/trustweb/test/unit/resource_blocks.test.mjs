@@ -41,6 +41,21 @@ describe('tree ops', () => {
     expect(moveBlock(t, 'b5', 'outdent')).toBe(true)
     expect(t.map((b) => b.id)).toEqual(['b1', 'b5'])
   })
+  it('Shift+Tab adopts the following siblings as children, like Logseq (answers-44b: was "siblings stay siblings")', () => {
+    const t = markdownToBlocks('- A\n  - A1\n  - A2\n    - A2a\n  - A3\n- B', ids())
+    expect(moveBlock(t, 'b2', 'outdent')).toBe(true)
+    expect(t.map((b) => b.text)).toEqual(['A', 'A1', 'B'])
+    expect(t[0].children).toEqual([])
+    expect(t[1].children.map((b) => b.text)).toEqual(['A2', 'A3'])
+    expect(t[1].children[0].children[0].text).toBe('A2a')
+  })
+  it('outdent appends adopted siblings after the block\'s own children and opens it', () => {
+    const t = markdownToBlocks('- A\n  - A1\n    - A1a\n  - A2', ids())
+    locate(t, 'b2').block.collapsed = true
+    expect(moveBlock(t, 'b2', 'outdent')).toBe(true)
+    expect(t[1].children.map((b) => b.text)).toEqual(['A1a', 'A2'])
+    expect(t[1].collapsed).toBeUndefined()
+  })
   it('refuses impossible moves', () => {
     const t = tree()
     expect(moveBlock(t, 'b1', 'indent')).toBe(false)

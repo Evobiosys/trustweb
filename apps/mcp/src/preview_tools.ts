@@ -7,7 +7,7 @@ import type { Tool } from './protocol.ts'
 
 export interface PreviewToolsOptions { url: string; write: boolean; fetch?: typeof fetch }
 type Obj = Record<string, unknown>
-interface Row { key: string; title: string; branch: string; requires: string[]; checked: boolean; verdict?: string | null; merged?: boolean }
+interface Row { key: string; title: string; branch: string; requires: string[]; checked: boolean; verdict?: string | null; merged?: boolean; note?: string }
 interface Reg { features: Row[]; assembled?: { error: string | null } | null; gate?: { action?: string } | null }
 
 const need = (v: unknown, what: string): string => { if (typeof v !== 'string' || !v.trim()) throw new Error(`${what} is required`); return v.trim() }
@@ -31,20 +31,21 @@ export function previewTools(o: PreviewToolsOptions): Tool[] {
       const p = await call('GET', '')
       const first = p.assembled?.error?.split('\n')[0]
       return {
-        rows: p.features.filter((f) => !f.merged).map((f) => ({ key: f.key, title: f.title, branch: f.branch, loaded: f.checked, state: state(f), requires: f.requires })),
+        rows: p.features.filter((f) => !f.merged).map((f) => ({ key: f.key, title: f.title, branch: f.branch, loaded: f.checked, state: state(f), requires: f.requires, ...(f.note ? { note: f.note } : {}) })),
         ...(first ? { conflict: { first, ...(p.gate?.action ? { action: p.gate.action } : {}) } } : {}),
       }
     },
   }
   const write: Tool[] = [
     {
-      name: 'preview_verdict', description: 'Set a review row\'s verdict: merge (approve), needs-work, or clear.',
-      inputSchema: schema({ key: { type: 'string', description: 'row key' }, verdict: { type: 'string', enum: ['merge', 'needs-work', 'clear'] } }, ['key', 'verdict']),
+      name: 'preview_verdict', description: 'Set a review row\'s verdict: merge (approve), needs-work, or clear; note (optional, up to 500 characters) is kept on the row with this verdict and shows in the panel.',
+      inputSchema: schema({ key: { type: 'string', description: 'row key' }, verdict: { type: 'string', enum: ['merge', 'needs-work', 'clear'] }, note: { type: 'string', description: 'the owner\'s note on this verdict' } }, ['key', 'verdict']),
       run: async (a) => {
         const key = need(a.key, 'key')
         if (a.verdict !== 'merge' && a.verdict !== 'needs-work' && a.verdict !== 'clear') throw new Error('verdict must be merge, needs-work or clear')
-        await call('POST', '/verdict', { feature: key, verdict: a.verdict === 'clear' ? null : a.verdict })
-        return { key, verdict: a.verdict }
+        const note = typeof a.note === 'string' && a.note.trim() ? a.note.trim() : undefined   // wave44 answers-44b
+        await call('POST', '/verdict', { feature: key, verdict: a.verdict === 'clear' ? null : a.verdict, ...(note ? { note } : {}) })
+        return { key, verdict: a.verdict, ...(note ? { note } : {}) }
       },
     },
     {

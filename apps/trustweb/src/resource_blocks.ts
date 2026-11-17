@@ -51,7 +51,8 @@ export function toggleCollapsed(blocks: ResBlock[], id: string): boolean {
 
 export function removeBlock(blocks: ResBlock[], id: string): void { const at = need(blocks, id); at.siblings.splice(at.index, 1) }
 
-/** Tab / Shift+Tab / move up / move down. False when the move is not possible (first block cannot indent, a top block cannot outdent, ends cannot move). */
+/** Tab / Shift+Tab / move up / move down. False when the move is not possible (first block cannot indent, a top block cannot outdent, ends cannot move).
+ *  Outdent adopts the following siblings as children (Logseq). */
 export function moveBlock(blocks: ResBlock[], id: string, how: MoveHow): boolean {
   const at = need(blocks, id)
   if (how === 'up' || how === 'down') {
@@ -71,7 +72,9 @@ export function moveBlock(blocks: ResBlock[], id: string, how: MoveHow): boolean
   if (!at.parent) return false
   const up = locate(blocks, at.parent.id)
   if (!up) return false
-  at.siblings.splice(at.index, 1)
+  // answers-44b (Logseq): the following siblings become the outdented block's last children.
+  const adopted = at.siblings.splice(at.index, at.siblings.length - at.index).slice(1)
+  if (adopted.length) { at.block.children.push(...adopted); delete at.block.collapsed }
   up.siblings.splice(up.index + 1, 0, at.block)
   return true
 }
@@ -127,3 +130,11 @@ export function shareProjection(item: Pick<InventoryItem, 'id' | 'blocks'>, bloc
 
 /** The back-reference as one URL-safe token for a share link. */
 export const refToken = (r: BlockShare['ref']): string => `${r.resourceId}.${r.blockId}`
+
+/* wave44 answers-44b: Send to chat / Post to feed (Jakob item 3). The copy = exactly the projection, plus its back-reference. */
+export type ShareVia = 'link' | 'chat' | 'feed'
+export const SHARE_VIA: readonly ShareVia[] = ['link', 'chat', 'feed']
+/** The back-reference as a tag: a Feed post's tag, a chat message's last line. */
+export const shareRefTag = (r: BlockShare['ref']): string => `ref:${refToken(r)}`
+/** The chat message: the projection, a blank line, the ref tag. */
+export const shareMessage = (p: Pick<BlockShare, 'text' | 'ref'>): string => `${p.text}\n\n${shareRefTag(p.ref)}`
