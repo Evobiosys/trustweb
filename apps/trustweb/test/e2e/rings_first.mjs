@@ -6,8 +6,12 @@
  */
 export function ringsFirst(browser) {
   const make = browser.newContext.bind(browser)
-  browser.newContext = async (...args) => {
-    const ctx = await make(...args)
+  browser.newContext = async (...args) => pinRings(await make(...args))
+  return browser
+}
+
+/** The same pin for one context made elsewhere (swiss_harness newPhone). */
+export async function pinRings(ctx) {
     await ctx.addInitScript(() => {
       const KEY = 'trustweb.v1.me'
       const set = Storage.prototype.setItem
@@ -19,6 +23,4 @@ export function ringsFirst(browser) {
       }
     })
     return ctx
-  }
-  return browser
 }

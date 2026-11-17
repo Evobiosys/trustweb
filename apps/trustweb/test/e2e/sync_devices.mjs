@@ -30,7 +30,11 @@ const until = async (fn, ms = 30_000) => {
   return null
 }
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `sync-devices-${name}.png`) }) }
-const tab = (page, name) => page.locator('nav.tabs button', { hasText: name }).click()
+const tab = async (page, name) => {
+  await page.locator('nav.tabs button', { hasText: name }).click()
+  // wave44c home-default: Web opens the Home board first; one tap on the rings thumbnail reaches the rings
+  if (name === 'Web') await page.locator('[data-home-web-thumb]').click({ timeout: 1500 }).catch(() => {})
+}
 const closeSheet = (page) => page.locator('.sheet.on .sheet-home').click().catch(() => {})
 
 async function openDevices(page) {
