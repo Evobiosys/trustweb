@@ -213,7 +213,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   /** "Identify a person": the shared picker (event_person_picker.ts); a pick tags the person with this event. */
   function picker(ev: TwEvent): HTMLElement {
     return el('div', {}, [el('h3', {}, [S.eventsIdentify]), eventPersonPicker(h, ev.id, {
-      exclude: [...listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true), ...attendees(h.state(), ev.id).filter((p) => !searchableAttendees([p], ev.id).length)].map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
+      exclude: [...listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true), ...attendees(h.state(), ev.id).filter((p) => !searchableAttendees([p], ev.id).length), ...h.state().people.filter((p) => p.via) /* wave44c seen-through: people I see only through a friend */].map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
       renderPerson: (p) => el('span', {}, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])]),
       decorate: (chip, p) => { contextPress(chip, () => h.curatorPerson(p.id)); dragPerson(chip, p) },
       onPick: (id) => { tagPerson(h.state(), id, ev.id); h.save(); h.redraw() },

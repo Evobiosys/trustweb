@@ -137,6 +137,8 @@ export interface WebViewDeps {
   curatorPerson(personId: string): void
   /** Wave 44: opens an event's page (the Web's "Tap the event"). */
   openEvent?(eventId: string): void
+  /** Wave 44c seen-through: a tap on a bubble outside the rings opens its card ("via Lena", Ask Lena to introduce). */
+  openSeen?(personId: string): void
   /** Opens the "Same person" sheet for two persons (the first is kept first, so Enter keeps it); null on a demo phone, where merging is off. */
   mergeSheet: ((aId: string, bId: string) => void) | null
   /** Wave 36: merges `dropId` into `keepId` (snapshot first); null where mergeSheet is. */
@@ -395,7 +397,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         const face = avatar(label.text || '?', slot.id)
         face.classList.add('unconnected')
         const b = el('button', { class: 'node beyond', 'data-beyond': slot.id, title: label.title, 'aria-label': label.text ? `${label.text}, ${label.title}` : label.title,
-          onclick: () => { if (!dragged && !slot.anonymous) openWebPage({ kind: 'card', id: slot.id }) } }, [face, label.text ? el('span', {}, [shortLabel(displayName(label.text).text)]) : null])
+          onclick: () => { if (dragged) return; if (deps.openSeen) deps.openSeen(slot.id); else if (!slot.anonymous) openWebPage({ kind: 'card', id: slot.id }) } }, [face, label.text ? el('span', {}, [shortLabel(displayName(label.text).text)]) : null])
         b.style.left = x + 'px'; b.style.top = y + 'px'
         const diameter = BEYOND_DOT * k
         b.style.setProperty('--d', diameter + 'px'); b.style.setProperty('--lbl', labelSize(diameter) + 'px')

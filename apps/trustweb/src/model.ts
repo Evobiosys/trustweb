@@ -484,6 +484,8 @@ export interface Person {
   via?: string
   /** Wave 44: either side asked to keep this second-hand person anonymous: drawn without a name. Local only. */
   anonymous?: boolean
+  /** Wave 44c seen-through (seen_through.ts): how I came to see this second-hand person: an event introduction, an intro ask, a resource ask; the ask text (the resource chip) and the event. Local only. */
+  seen?: { source: 'event' | 'intro' | 'ask'; at: number; resource?: string; event?: string }
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
   /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
@@ -876,6 +878,9 @@ export interface HeldAsk {
   /** Wave 44: the second round "Do you know someone who has this?" (QueryEnvelope kind 'know'); `note` is the tip the person typed with their yes. */
   know?: true
   note?: string
+  /** Wave 44c seen-through: a show ask (QueryEnvelope kind 'show'): the name of the person who would see me; `seen`: on a know / intro ask, the person I named and their own yes. */
+  show?: string
+  seen?: { who: string; shown: boolean }
   /** Wave 44: who the asker asked, when the asker placed this phone as Closest few or Close and left it on. */
   askedNames?: string[]
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring: when it was first asked. */

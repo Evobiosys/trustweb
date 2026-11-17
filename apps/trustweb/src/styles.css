@@ -2282,3 +2282,11 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 @media (min-width:700px){
   .circles-row{flex-wrap:wrap; overflow-x:visible; justify-content:flex-start; gap:28px; padding:26px 20px 20px; scroll-snap-type:none}
 }
+
+/* wave44c seen-through */
+.seen-who-wrap .field.seen-who{padding:3px 8px; font-size:12px; opacity:.6; border-style:dashed; margin:4px 0}
+.seen-who-wrap .field.seen-who:focus{opacity:1}
+.seen-card [data-seen-resource]{display:inline-block; margin:4px 0}
+.seen-intro{margin-top:12px; display:flex; flex-direction:column; gap:6px}
+.seen-intro select{max-width:100%}
+.seen-card .seen-prefill{font-style:italic; color:var(--ink-2); margin:6px 0 10px}

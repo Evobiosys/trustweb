@@ -17,6 +17,8 @@ import { addItem } from './notify_inbox'
 import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
 import { S } from './strings'
 import type { AppState, TwEvent } from './model'
+import { addSeenThrough } from './seen_through' // wave44c seen-through
+import { randomId } from '../../demo/src/crypto'
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -121,6 +123,18 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     return true
   }
 
+  /** Wave 44c seen-through: an introduction counts only from a host of an event I attend; the person sits outside my rings via that host. */
+  function onSeen(peer: P, seen: NonNullable<EventEnvelope['seen']>): boolean {
+    const ev = held(seen.id)
+    const st = host.state()
+    const who = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined && !p.via)
+    if (!ev || !ev.attended || !who || !isEventHost(ev, who.name, st.people)) return false
+    if (!addSeenThrough(st, { via: who.id, who: seen.who, shown: seen.shown, source: 'event', event: ev.id, now: host.now(), id: 'seen-' + randomId(10) })) return false
+    host.save()
+    host.changed()
+    return true
+  }
+
   return {
     /** The event QR of this event is on screen now. */
     shown(id: string, at: number = host.now()): void { shown = { id, at } },
@@ -156,8 +170,16 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       await ask()
       EVENT_WANT_RETRY_MS.forEach((ms) => host.later(() => { void ask() }, ms))
     },
+    /** Wave 44c seen-through: a host introduces a person to the people at this event; the name only with that person's yes. */
+    async introduce(id: string, who: string, shown: boolean): Promise<void> {
+      const ev = held(id)
+      if (!ev) return
+      const env: EventEnvelope = { v: 1, t: 'event', seen: { id, shown, ...(shown ? { who: who.trim().slice(0, 40) } : {}) } }
+      for (const peer of host.recipients?.(ev) ?? []) await host.send(peer, env).catch(() => undefined)
+    },
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
+      if (env.seen) return onSeen(peer, env.seen) ? 'filled' : 'ignored' // wave44c seen-through
       if (env.os) return (await onOpenSpace(peer, env.os)) ? 'filled' : 'ignored'
       if (env.want !== undefined) return (await giveTo(peer, env.want).catch(() => false)) ? 'answered' : 'ignored'
       const linked = env.link === undefined ? null : decodeEventLink(env.link.slice(Math.max(0, env.link.indexOf('#'))))

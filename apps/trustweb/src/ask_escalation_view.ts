@@ -63,9 +63,10 @@ export function showAskedRow(on: boolean, toggle: () => void): HTMLElement {
 }
 
 /** The body of an incoming second-round ask: a tip box instead of matches. */
-export function knowCard(onSend: (note: string) => void, onNo: () => void): HTMLElement[] {
+export function knowCard(onSend: (note: string, who?: string) => void, onNo: () => void, whoBox?: HTMLElement): (HTMLElement | null)[] {
   const note = el('textarea', { class: 'field know-note', rows: '2', maxlength: '200', placeholder: S.askKnow.notePh, 'aria-label': S.askKnow.noteAria, 'data-know-note': '' })
-  const give = el('button', { class: 'btn btn-mint', type: 'button', 'data-know-send': '', disabled: true, onclick: () => onSend(note.value) }, [S.askKnow.give])
+  // Wave 44c seen-through: the optional "who has it" box (seen_through_view.ts knowWhoBox): that person is asked first whether they may be shown.
+  const give = el('button', { class: 'btn btn-mint', type: 'button', 'data-know-send': '', disabled: true, onclick: () => onSend(note.value, whoBox?.querySelector('input')?.value.trim() || undefined) }, [S.askKnow.give])
   note.addEventListener('input', () => { give.disabled = !note.value.trim() })
-  return [el('p', { class: 'ask-lbl' }, [S.askKnow.ask]), note, give, el('button', { class: 'btn btn-ghost', type: 'button', 'data-know-no': '', onclick: onNo }, [S.askKnow.none])]
+  return [el('p', { class: 'ask-lbl' }, [S.askKnow.ask]), note, whoBox ?? null, give, el('button', { class: 'btn btn-ghost', type: 'button', 'data-know-no': '', onclick: onNo }, [S.askKnow.none])]
 }
