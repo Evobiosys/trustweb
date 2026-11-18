@@ -30,6 +30,8 @@ import { fetchAggregate, layoutShareAllowed, sendTileSet } from './community_ser
 import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
 import { chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
+import { scopeOf } from '../../resource_scope'
+import { EVENT_TAG, scopedResources } from '../../resource_scope_view'
 import css from './community.css?inline'
 
 export const readData = (s: AppState): CommunityData => parseCommunity(s.extData?.[MODULE_ID])
@@ -118,7 +120,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   }
 
   // ---- Home: the dashboard of tiles (wave 43b, B35/B36) ----------------------------------------------------------------
-  const TILE_GO: Record<TileId, NavId> = { events: 'events', spaces: 'spaces', docs: 'docs', members: 'members', resources: 'docs', timeline: 'timeline' }
+  const TILE_GO: Record<TileId, NavId> = { events: 'events', spaces: 'spaces', docs: 'docs', members: 'members', resources: 'resources', timeline: 'timeline' }
   function tileCount(tile: TileId, tag: string | null): number {
     const s = st()
     const tags = loadColourTags()
@@ -310,6 +312,16 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       others.length ? el('div', { class: 'row wrap' }, others.map((v) => btn(v.owner, () => save({ ...data(), mine: forkView(v, me()) }), { 'data-community-fork': v.owner }))) : el('p', { class: 'meta' }, [t.forkNone]),
       docsPane(embedEnv()),
     ]
+  }
+
+  /** Wave 44c community-resources: this community's resources / references (event mode: the event's), General folded. */
+  function scoped(page: 'resources' | 'references'): Kids {
+    const tags = loadColourTags()
+    const tag = tagNow()
+    const found = tags.find((x) => x.id === tag)
+    const scope = scopeOf(st(), tags, st().events ?? [], EVENT_TAG) ?? (found ? { kind: 'community' as const, id: found.id, label: found.label ?? found.id } : null)
+    if (!scope) return [el('p', { class: 'empty' }, [ctx.strings.w44cr.none])]
+    return scopedResources({ items: st().inventory, tags, events: st().events ?? [], scope, page, open: (id) => ctx.bus.emit('open-item', id), save: () => ctx.bus.emit('save'), render: draw })
   }
 
   /** The pane environment of the embeds module: this community's tag, redraw after a change, a note under the section. */
@@ -516,7 +528,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     if (gear) gear.innerHTML = ICONS.settings
     navEl.replaceWith(nav)
     navEl = nav
-    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'calendar' ? calendar(tag) : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : ui.nav === 'chat' ? chatPage() : ui.nav === 'timeline' ? timeline() : home()
+    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'calendar' ? calendar(tag) : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : ui.nav === 'resources' || ui.nav === 'references' ? scoped(ui.nav) : ui.nav === 'chat' ? chatPage() : ui.nav === 'timeline' ? timeline() : home()
     const main = el('main', { class: 'main' }, [...section, ui.note ? el('p', { class: 'note' }, [ui.note]) : null])
     mainEl.replaceWith(main)
     mainEl = main

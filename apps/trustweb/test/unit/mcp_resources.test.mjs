@@ -48,3 +48,39 @@ describe('resource tools', () => {
     expect(f.rec().inventory[0].recommendedBy).toBeUndefined()
   })
 })
+
+/* wave44c community-resources */
+function scoped() {
+  const dir = mkdtempSync(path.join(tmpdir(), 'tw-mcpcr-'))
+  const file = path.join(dir, 'record.json')
+  writeFileSync(file, JSON.stringify({
+    v: 1, people: [P('a', 'Ada Lovelace')], sameAs: {}, meetings: [],
+    extData: { 'community-mighty': { meta: { c1: { kind: 'informal', organizers: ['me'], name: 'Forum' } } } },
+    events: [{ id: 'e1', name: 'Camp', from: '2026-12-01', where: '', attended: false }],
+    inventory: [item('m', { tagAudience: ['c1'] }), item('n', { sharedBy: 'a', communityId: 'c1' }), item('g'), item('ev', { eventId: 'e1' })],
+  }))
+  const tools = recordTools({ file, write: true, now: () => new Date('2026-11-15T10:00:00Z') })
+  return { by: Object.fromEntries(tools.map((t) => [t.name, t])), rec: () => JSON.parse(readFileSync(file, 'utf8')) }
+}
+describe('resources_list scope and resource_mark_opened', () => {
+  it('community scope returns the three sections', () => {
+    const out = scoped().by.resources_list.run({ scope: 'community', community: 'c1' })
+    expect(out.title).toBe('Forum')
+    expect(out.sections).toEqual({ shared: ['m'], new: ['n'], general: ['g', 'ev'] })
+    expect(out.items.length).toBe(4)
+  })
+  it('event scope and the errors', () => {
+    const f = scoped()
+    expect(f.by.resources_list.run({ scope: 'event', event: 'e1' }).sections.shared).toEqual(['ev'])
+    expect(() => f.by.resources_list.run({ scope: 'community' })).toThrow(/community/)
+    expect(() => f.by.resources_list.run({ scope: 'zzz' })).toThrow(/scope/)
+    expect(scoped().by.resources_list.run({}).sections).toBeUndefined()
+  })
+  it('resource_mark_opened moves a received item out of New and needs writes on', () => {
+    const f = scoped()
+    expect(f.by.resource_mark_opened.run({ id: 'n' })).toMatchObject({ opened: true, changed: true })
+    expect(f.by.resources_list.run({ scope: 'community', community: 'c1' }).sections).toMatchObject({ shared: ['m', 'n'], new: [] })
+    expect(f.by.resource_mark_opened.run({ id: 'n' }).changed).toBe(false)
+    expect(() => f.by.resource_mark_opened.run({ id: 'zz' })).toThrow(/no resource/)
+  })
+})

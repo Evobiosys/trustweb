@@ -756,6 +756,8 @@ export interface InventoryItem {
   place?: string
   /** Wave 44b resources-outliner (resource_blocks.ts): the outline under this resource, a tree of blocks. Absent = none. */
   blocks?: ResBlock[]
+  /** Wave 44c community-resources: when I first opened a received (sharedBy) resource; absent = still new. */
+  openedAt?: number
 }
 
 /** One bullet of a resource's outline; shared as a whole subtree or as its line alone. */

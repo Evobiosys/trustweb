@@ -3620,7 +3620,7 @@ export const S = {
     desc: 'A community view: posts, spaces, events, members, shared resources and a chat pane.',
     menu: 'Menu',
     closeMenu: 'Close menu',
-    nav: { home: 'Dashboard', spaces: 'Spaces', events: 'Events', members: 'Members', docs: 'Docs', chat: 'Chat', timeline: 'Timeline' } as Record<string, string>,
+    nav: { home: 'Dashboard', spaces: 'Spaces', events: 'Events', members: 'Members', docs: 'Docs', resources: 'Resources', references: 'References', chat: 'Chat', timeline: 'Timeline' } as Record<string, string>,
     you: 'You',
     composePh: 'Write something for your community',
     composeTo: 'Post to',
@@ -3955,9 +3955,10 @@ export const S = {
       notifications_list: 'List the bell\'s notifications by section',
       notifications_mark_read: 'Mark all notifications read',
       /* wave44 steer-notify-dismiss */ notification_dismiss: 'Dismiss one notification',
-      resources_list: 'List your resources, filtered by kind, who shared them or community, in a list, outliner or by person',
+      resources_list: 'List your resources, filtered by kind, who shared them or community, in a list, outliner or by person; scope community or event adds the sections Shared by me, New and General',
       resource_set_kind: 'Say whether a resource is a book, publication, reference, recording or link',
       resource_set_suggester: 'Say who suggested a resource to you',
+      /* wave44c community-resources */ resource_mark_opened: 'Mark a resource shared with you as opened (it leaves the New section)',
       feed_list: 'Read the Feed',
       feed_post: 'Post to the Feed or an event\'s Feed',
       feed_edit: 'Change one of your Feed posts',
@@ -5219,4 +5220,12 @@ export const S = {
     card: (scope: string) => `Send a ${scope === 'line' ? 'line' : 'block'} of a resource to a chat`,
   },
   verdictNote: { ph: 'note (optional), sent with Needs work', aria: 'Note for this verdict' },
+  /* wave44c community-resources */
+  w44cr: {
+    title: (name: string) => `Resources of ${name}`,
+    refTitle: (name: string) => `References of ${name}`,
+    shared: 'Shared by me', fresh: 'New, shared with me', general: 'General',
+    none: 'Nothing here yet.', generalCount: (n: number) => `${n} more`,
+    tagFilter: (label: string) => `Show only ${label}`,
+  },
 } as const

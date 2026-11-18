@@ -298,6 +298,8 @@ import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { connectedPlaces } from './connected_places'
 import { resourceList, recentChip } from './resource_list'
+import { scopeOf, itemTags } from './resource_scope'
+import { EVENT_TAG, scopedResources, tagRow } from './resource_scope_view'
 import { addPeerItem, peerItems } from './peer_items'
 import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
 import { kindKey, visibleVia } from './zone_visibility'
@@ -5505,6 +5507,7 @@ const twBus = createBus()
 twBus.on('save', () => save())
 twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
 twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
+twBus.on('open-item', (id) => { if (typeof id === 'string') itemSheet(id) })   // wave44c community-resources
 twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[]; name: string }; offerContacts({ state: st, save, toast: (msg) => toast(msg), changed: render, pages }, x.contacts, x.name) })
 // wave 40 photo-rails: what a module may ask of the app (a notice, a page with Back, Back)
 twBus.on('toast', (msg) => { if (typeof msg === 'string') toast(msg) })
@@ -8137,6 +8140,14 @@ function screenInventory(): Node[] {
       el('div', { class: 'scroll pad', 'data-matches': '' }, matchesView(s, { status: matchStatus, nameOf: (id) => { const p = s.people.find((x) => x.id === id); return p ? displayName(p.name).text : null }, openPerson: openCardPage, newId: () => randomId(8), save, render })),
     ]
   }
+  /* wave44c community-resources: in community or event filter mode this page lists that scope's resources (Shared by me, New, General collapsed). */
+  const scope = scopeOf(s, loadColourTags(), s.events ?? [], EVENT_TAG)
+  if (scope) {
+    return [
+      header(S.w44cr.title(scope.label)),
+      el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', open: itemSheet, save, render })),
+    ]
+  }
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
   const add = (): void => {
     const v = input.value.trim()
@@ -8187,6 +8198,7 @@ function screenInventory(): Node[] {
       // Wave 43b resources-views: the view switcher, filters and the two sections; protected rows come from resource_views_view.ts.
       ...resourceViews({
         items: shown, people: s.people, tags: loadColourTags(), row: invRow, open: itemSheet, save, render,
+        tagRow: (i) => tagRow(i, loadColourTags(), s.events ?? [], (id, label) => { invOnly = { label: label.startsWith('#') ? label : '#' + label, ids: new Set(s.inventory.filter((x) => itemTags(x, loadColourTags(), s.events ?? [], EVENT_TAG).some((t) => t.id === id)).map((x) => x.id)) }; render() }),
         play: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
         record: (item) => { if (draftInProgress()) { toast(S.resViews.recordBusy); return }; newDraft(); draft.mode = RecordMode.Solo; draft.about = AboutKind.What; draft.name = item.text; draft.itemId = item.id; go(recordScreen()); void startSolo() },
       }),
