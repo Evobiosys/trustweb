@@ -5,6 +5,7 @@
  * kept with it (audio_store.ts) played from any line (audio_player.ts).
  * Moved out of main.ts, which keeps thin hooks only.
  */
+import { trashItems } from './trash' // wave44c answers-44c (A4)
 import { el } from '../../demo/src/ui/dom'
 import { AudioStore } from './audio_store'
 import type { StoredTake } from './audio_store'
@@ -162,7 +163,7 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
   async function remove(m: PastMeeting): Promise<void> {
     if (!confirm(S.pastDeleteConfirm)) return
     const s = h.state()
-    s.meetings = (s.meetings ?? []).filter((x) => x.id !== m.id)
+    trashItems(s, 'meeting', [m.id], Date.now()) // answers-44c: a tombstone that travels; the recording itself stays deleted
     h.save()
     await h.audio.remove(m.id)
     h.removed?.(m)

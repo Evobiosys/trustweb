@@ -8,6 +8,7 @@ import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
 import { eventOrganizers, isEventHost, joinEventCommunity, mayApprove, roleNames, sameName } from './event_roles'
 import { eventNotifies } from './event_notify'
+import { restoreTrashed, trashItems } from './trash' // wave44c answers-44c (A4)
 import { DEFAULT_INVITE_POLICY, NICK_FALLBACK, nameRevealOf, stamp, timesError } from './event_press'
 export { DEFAULT_INVITE_POLICY, DEFAULT_NAME_REVEAL, NICK_FALLBACK, EVENT_OFFERS_DEFAULT, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, eventOffersFeed, migrateNicknames, nameRevealOf, nickFor, nicknamesOf, offersOf, setEventTimes, setNicknames } from './event_press'
 export type { EventOffers, EventSettingsPatch, InvitePolicy, NameReveal } from './event_press'
@@ -188,12 +189,12 @@ export function deleteEvent(s: AppState, eventId: string): DeletedEvent | undefi
   if (!event) return undefined
   const tagged = attendees(s, eventId).map((p) => p.id)
   tagged.forEach((id) => untagPerson(s, id, eventId))
-  s.events = (s.events ?? []).filter((e) => e.id !== eventId)
+  trashItems(s, 'event', [eventId], Date.now()) // answers-44c: a 30-day tombstone that travels to my devices
   return { event, tagged }
 }
 
 export function restoreEvent(s: AppState, d: DeletedEvent): void {
-  s.events = [...(s.events ?? []), d.event]
+  if (!restoreTrashed(s, 'event', d.event.id)) s.events = [...(s.events ?? []), d.event]
   d.tagged.forEach((id) => tagPerson(s, id, d.event.id))
 }
 

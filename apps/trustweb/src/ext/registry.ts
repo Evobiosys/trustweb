@@ -19,6 +19,8 @@ import { module as eventsView } from './events'
 import { module as feedView } from './feed'
 import { module as communityMode } from './community_mode'
 import { module as obsidian } from './obsidian'
+import { module as phanpy } from './phanpy'   // wave44c feed-ext
+import { module as bridges } from './bridges'   // wave44c feed-ext
 import { S } from '../strings'
 import { createRegistry, type TwCtx, type TwModule } from './tw_registry'
 import type { TwSettings } from './profiles'
@@ -175,5 +177,5 @@ const part = (id: string, kind: TwModule['kind']): TwModule => ({ id, title: S.e
 ;[
   wrap(calendarModule, 'view'), wrap(coNotesModule, 'view'), wrap(gebModule, 'service'), wrap(matrixModule, 'service'), wrap(signalLinkModule, 'service'), wrap(whatsappModule, 'service'),
   part('events', 'view'), part('resources', 'view'), part('feed', 'view'), part('matches', 'view'), part('support-ask', 'service'), part('ai-button', 'service'),
-  communityMighty, mcpLocal, photos, feedView, eventsView, assistant, embeds, communityMode, obsidian,
+  communityMighty, mcpLocal, photos, feedView, eventsView, assistant, embeds, communityMode, obsidian, phanpy, bridges,
 ].forEach(registerModule)

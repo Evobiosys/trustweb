@@ -77,3 +77,21 @@ export function scopedList(items: readonly InventoryItem[], tags: readonly Tag[]
   const ids = (l: readonly InventoryItem[]): string[] => l.map((i) => i.id)
   return { title: sc.label, sections: { shared: ids(p.shared), new: ids(p.fresh), general: ids(p.general) } }
 }
+
+/* wave44c answers-44d */
+/** resource_edit.ts RESOURCE_TITLE_MAX (this file stays free of runtime imports). */
+const TITLE_MAX = 120
+/** The tag a new item of this scope carries: the community's tag, or the event's tag (event_<slug>). */
+export const scopeTag = (sc: Scope): string => (sc.kind === 'community' ? sc.id : sc.tagIds?.[0] ?? sc.id)
+
+/**
+ * "+ Add resource" of a scoped Resources / References view (and MCP resource_add): a typed item carrying the scope's tag, seen only by that tag
+ * (resource_edit.ts categoryAudience for a tag: rings closed, I9), a reference on the References page. Null for an empty title.
+ */
+export function addScoped(items: InventoryItem[], sc: Scope, page: Page, title: string, id: string, now: number, source: InventoryItem['source']): InventoryItem | null {
+  const text = title.trim().slice(0, TITLE_MAX)
+  if (!text) return null
+  const item = { id, text, audience: 'me', included: true, createdAt: now, source, tagAudience: [scopeTag(sc)], ...(page === 'references' ? { kind: 'reference' } : {}) } as InventoryItem
+  items.push(item)
+  return item
+}

@@ -23,7 +23,7 @@ import type { RelayChannel } from '../../demo/src/relay'
 import { deriveEcdhPairKey, fromB64u, open, randomBytes, randomId, seal, toB64u } from '../../demo/src/crypto'
 import type { AppState } from './model'
 import { SCHEMA_VERSION, assertReadable } from './schema_version'
-import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, countsOf, deltaOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
+import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, syncIdOf, countsOf, deltaOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
 import type { Counts, MergeResult, Stamps, SyncBundle } from './sync_core'
 import { mergeCodes, withoutCodes } from './sync_code'
 import type { CodeMerge } from './sync_code'
@@ -40,6 +40,13 @@ export interface Pairing {
   au?: number
   /** Wave 43c: the stamp time up to which this device's changes went to that device automatically (0/absent: the full record goes first). */
   autoSentAt?: number
+  /** Wave 44c: the first automatic send not yet acknowledged, how often it went out, and when the next try may go (backoff). Cleared by an ack. */
+  autoPendingAt?: number
+  autoTries?: number
+  autoTryAt?: number
+  autoLastTo?: number
+  /** Wave 44c: the schema version the other device announced (pair, hello, ready, ack); a rise means it was updated, so everything goes again. */
+  sv?: number
 }
 
 interface Store { identity: SerializedIdentityV1; pairings: Pairing[]; stamps: Stamps }
@@ -90,17 +97,30 @@ export interface SyncLinkDeps {
   onAutoMerged?: (from: Pairing, res: MergeResult) => void
   /** Overrides AUTO_VERSION (tests: 0 = an older build that announces none). */
   autoVersion?: number
+  /** Wave 44c: overrides the SCHEMA_VERSION this device reads and announces (tests: an older build). */
+  schemaVersion?: number
 }
 
 type Msg =
-  | { t: 'pair'; did: string; name: string; ask?: string; au?: number; exp: number }
-  | { t: 'hello' | 'ready'; sid: string; name: string; v?: number; ask?: string; au?: number; exp: number }
-  | { t: 'data'; sid: string; i: number; n: number; r: boolean; a?: 'take' | 'give'; auto?: true; d: string; name: string; exp: number }
+  | { t: 'pair'; did: string; name: string; ask?: string; au?: number; sv?: number; exp: number }
+  | { t: 'hello' | 'ready'; sid: string; name: string; v?: number; ask?: string; au?: number; sv?: number; exp: number }
+  | { t: 'data'; sid: string; i: number; n: number; r: boolean; a?: 'take' | 'give'; auto?: true; to?: number; d: string; name: string; exp: number }
+  | { t: 'ack'; sid: string; upTo: number; sv?: number; name: string; exp: number }
   | { t: 'want'; sid: string; name: string; exp: number }
 
 const MAX_PIECES = 200
 /** Wave 43c: the automatic sync this build speaks (announced as `au`). */
-export const AUTO_VERSION = 1
+export const AUTO_VERSION = 2
+/** Wave 44c: the first automatic-sync version that acknowledges what it merged (a device below it is sent to as before: the send counts). */
+export const ACK_VERSION = 2
+/** Wave 44c: an unacknowledged automatic send is tried again after this long, doubled each time up to AUTO_RETRY_MAX_MS. */
+export const AUTO_RETRY_MS = 30_000
+export const AUTO_RETRY_MAX_MS = 30 * 60_000
+/** Wave 44c: the most a device holds of pieces from a newer build (characters in this device's storage); a bigger set is not held and not acknowledged. */
+export const HELD_MAX_CHARS = 1_000_000
+
+/** Wave 44c: pieces of a newer build, kept raw (a newer build may know fields this one would drop) until this device is updated. */
+interface Held { did: string; name: string; at: number; items: number; raw: string }
 /** Wave 43c: an automatic piece is read for as long as the relay holds a wire (packages/transport MAX_HOLD_HORIZON_MS, 72 h), so a device that was off catches up. */
 export const AUTO_TTL_MS = 72 * 60 * 60_000
 /** Wave 43c: at most one snapshot per this long before automatic merges (each merge also keeps the loser in Review merge). */
@@ -144,7 +164,7 @@ export function createSyncLink(d: SyncLinkDeps) {
   const keys = new Map<string, CryptoKey>()
   /** sid -> called with the other device's SYNC_VERSION (a device older than the field sends none: 1). */
   const waiting = new Map<string, (v: number) => void>()
-  const partial = new Map<string, { n: number; parts: Uint8Array[]; got: number; reply: boolean; did: string; a?: 'take' | 'give'; auto?: true }>()
+  const partial = new Map<string, { n: number; parts: Uint8Array[]; got: number; reply: boolean; did: string; a?: 'take' | 'give'; auto?: true; to?: number }>()
   /** Devices whose record I asked for ("Take this device's state") and that has not come yet: did -> until when the ask holds (review wave 40). */
   const wanted = new Map<string, number>()
   /** Review wave 40: wants already answered or asked about (sid -> expiry): a relay replaying one never asks twice. */
@@ -152,6 +172,13 @@ export function createSyncLink(d: SyncLinkDeps) {
   let offer: { secret: string; key: CryptoKey; until: number } | null = null
   const autoVersion = d.autoVersion ?? AUTO_VERSION
   const au = (): { au?: number } => (autoVersion ? { au: autoVersion } : {})
+  const schemaV = d.schemaVersion ?? SCHEMA_VERSION
+  const sv = (): { sv: number } => ({ sv: schemaV })
+  /** Wave 44c: this device in stamps: its sync id (from the sync DID), never the editable name. */
+  const me = (): string => syncIdOf(identity.did)
+  let held: Held[] = []
+  /** Wave 44c: the first round after a start greets every pairing once (its hello carries this build's schema, so a sender that held back sends again). */
+  let greeted = false
   let lastAutoSnapshot: number | null = null
   /** Wave 43c: the first connect of the channel; the relay refuses a send of an identity it has not seen connect yet (401), so a send waits for it. */
   let connected: Promise<void> = Promise.resolve()
@@ -172,6 +199,54 @@ export function createSyncLink(d: SyncLinkDeps) {
     d.onChange()
   }
 
+  const heldKey = `${storeKey}.held`
+  function loadHeld(): Held[] {
+    try { const r = JSON.parse(storage().getItem(heldKey) ?? '[]') as unknown; return Array.isArray(r) ? (r as Held[]) : [] } catch { return [] }
+  }
+  /** False = the set did not fit (over HELD_MAX_CHARS or the storage refused): the caller does not acknowledge, so the sender keeps it. */
+  function saveHeld(): boolean {
+    try { storage().setItem(heldKey, JSON.stringify(held)); return true } catch { return false }
+  }
+  function hold(p: Pairing, bundle: SyncBundle, parts: Uint8Array[]): boolean {
+    const all = new Uint8Array(parts.reduce((n, x) => n + x.length, 0))
+    let at = 0
+    for (const x of parts) { all.set(x, at); at += x.length }
+    const raw = new TextDecoder().decode(all)
+    if (held.reduce((n, x) => n + x.raw.length, raw.length) > HELD_MAX_CHARS) return false
+    const c = countsOf(bundle)
+    held.push({ did: p.did, name: p.name, at: now(), items: c.people + c.resources + c.meetings + c.events + c.tasks, raw })
+    if (saveHeld()) return true
+    held.pop()
+    return false
+  }
+  /** After an update: every held set whose pairing still exists merges like an automatic piece set; one still newer than this build stays. */
+  async function applyHeld(): Promise<void> {
+    const keep: Held[] = []
+    for (const x of held) {
+      const p = store.pairings.find((y) => y.did === x.did)
+      if (!p) continue
+      const bundle = fromChunks([utf8(x.raw)])
+      if (!bundle || !(await autoApply(p, bundle, []))) keep.push(x)
+    }
+    if (keep.length === held.length) return
+    held = keep
+    saveHeld()
+    d.onChange()
+  }
+  /** Wave 44c: what a delta for this pairing must not carry back: its own entities, by sync id and (an earlier build) by name. */
+  const skipOf = (p: Pairing): string[] => [syncIdOf(p.did), p.name]
+  /** Wave 44c: a name for a stamp's `by` (Review merge): this device, a linked one, else what the stamp says (an earlier build's name). */
+  const nameOf = (by: string): string => (by === me() ? d.deviceName() : store.pairings.find((p) => syncIdOf(p.did) === by)?.name ?? by)
+  /** Wave 44c: the other device reports its schema; a rise means it was updated, so it gets everything again at once. */
+  function noteSchema(p: Pairing, v: unknown): void {
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v === p.sv) return
+    const rose = p.sv !== undefined && v > p.sv
+    p.sv = v
+    if (rose) { p.autoSentAt = 0; delete p.autoPendingAt; delete p.autoTries; delete p.autoTryAt; delete p.autoLastTo }
+    persist()
+    if (rose) void autoTick()
+  }
+
   async function pairKey(did: string): Promise<CryptoKey> {
     let k = keys.get(did)
     if (!k) { k = await pairKeyOf(ecdhSharedSecret(identity, did)); keys.set(did, k) }
@@ -182,13 +257,13 @@ export function createSyncLink(d: SyncLinkDeps) {
   const ask = (): { ask?: string } => { const a = d.askDid?.(); return askOk(a) ? { ask: a } : {} }
 
   /** The pairing request both sides show: the fingerprint of the shared secret, and what Confirm does. */
-  async function request(did: string, name: string, ask?: string, theirAu?: number): Promise<PairRequest> {
+  async function request(did: string, name: string, ask?: string, theirAu?: number, theirSv?: number): Promise<PairRequest> {
     const fp = await fingerprintOf(ecdhSharedSecret(identity, did))
     return {
       name, fp,
       confirm: (opts) => {
         store.pairings = [...store.pairings.filter((p) => p.did !== did), {
-          did, name, fp, linkedAt: now(), lastSyncAt: 0, ...(askOk(ask) ? { askDid: ask } : {}), ...(opts?.shareCode === false ? { shareCode: false } : {}), ...(auOk(theirAu) ? { au: theirAu } : {}),
+          did, name, fp, linkedAt: now(), lastSyncAt: 0, ...(askOk(ask) ? { askDid: ask } : {}), ...(opts?.shareCode === false ? { shareCode: false } : {}), ...(auOk(theirAu) ? { au: theirAu } : {}), ...(auOk(theirSv) ? { sv: theirSv } : {}),
         }]
         persist()
         d.onLog(`Linked ${name} (${fp})`)
@@ -202,7 +277,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     let acc = partial.get(m.sid)
     if (!acc) {
       for (const [sid, a] of partial) if (a.did === p.did) partial.delete(sid)
-      acc = { n: m.n, parts: [], got: 0, reply: m.r, did: p.did, ...(m.a === 'take' || m.a === 'give' ? { a: m.a } : {}), ...(m.auto === true && !m.a ? { auto: true as const } : {}) }
+      acc = { n: m.n, parts: [], got: 0, reply: m.r, did: p.did, ...(m.a === 'take' || m.a === 'give' ? { a: m.a } : {}), ...(m.auto === true && !m.a ? { auto: true as const, ...(typeof m.to === 'number' ? { to: m.to } : {}) } : {}) }
       partial.set(m.sid, acc)
     }
     if (acc.n !== m.n || acc.parts[m.i]) return
@@ -213,7 +288,11 @@ export function createSyncLink(d: SyncLinkDeps) {
     partial.delete(m.sid)
     const bundle = fromChunks(acc.parts)
     if (!bundle) { d.onLog(`Ignored a damaged record from ${p.name}`); return }
-    if (acc.auto) { await autoApply(p, bundle); return }
+    if (acc.auto) {
+      // Wave 44c: the sender hears of a merge only through this ack; an ignored or held piece set stays unacknowledged and comes again.
+      if (await autoApply(p, bundle, acc.parts) && acc.to !== undefined) await send(p.did, { t: 'ack', sid: m.sid, upTo: acc.to, ...sv(), name: d.deviceName(), exp: stamp() }).catch(() => {})
+      return
+    }
     const asked = (wanted.get(p.did) ?? 0) >= now()
     wanted.delete(p.did)
     const kind = acc.a === 'take' && asked ? 'take' : acc.a ? 'give' : null
@@ -225,13 +304,21 @@ export function createSyncLink(d: SyncLinkDeps) {
   }
 
   /** Wave 43c: an automatic piece set merges without asking when Auto sync is on here (snapshot at most hourly), and sends nothing back. */
-  async function autoApply(p: Pairing, bundle: SyncBundle): Promise<void> {
-    if (d.auto?.() !== true) { d.onLog(`Auto sync is off: left a change from ${p.name} for Sync now`); return }
-    if (bundle.schemaVersion !== undefined && bundle.schemaVersion > SCHEMA_VERSION) { d.onLog(`${p.name} runs a newer TrustWeb: update this device`); return }
+  async function autoApply(p: Pairing, bundle: SyncBundle, parts: Uint8Array[]): Promise<boolean> {
+    if (d.auto?.() !== true) { d.onLog(`Auto sync is off: left a change from ${p.name} for Sync now`); return false }
+    if (bundle.schemaVersion !== undefined && bundle.schemaVersion > schemaV) {
+      // Wave 44c: kept, not dropped: it merges after the update, and the banner says how many items wait.
+      if (!parts.length) return false
+      const ok = hold(p, bundle, parts)
+      d.onLog(ok ? `${p.name} runs a newer TrustWeb: kept its changes until this device is updated` : `${p.name} runs a newer TrustWeb: update this device`)
+      if (ok) d.onChange()
+      return ok
+    }
     const snap = lastAutoSnapshot === null || now() - lastAutoSnapshot >= AUTO_SNAPSHOT_MS
     if (snap) lastAutoSnapshot = now()
     const res = await accept(p, bundle, true, false, snap)
     d.onAutoMerged?.(p, res)
+    return true
   }
 
   async function accept(p: Pairing, bundle: SyncBundle, reply: boolean, file: boolean, snap = true): Promise<MergeResult> {
@@ -239,14 +326,13 @@ export function createSyncLink(d: SyncLinkDeps) {
     const s = d.state()
     if (snap) await d.snapshot(`before sync from ${p.name}`, file)
     const t = now()
-    const me = d.deviceName()
-    const before = refreshStamps(s, store.stamps, t, me)
+    const before = refreshStamps(s, store.stamps, t, me())
     // A pairing this device does not share with takes no code and no display name from the other side either (F2, D3).
     const view = p.shareCode === false ? withoutCodes(bundle) : bundle
     const res = mergeBundle(s, before, view, p.lastSyncAt)
     if (view.connectCode) res.codes = mergeCodes(s, view, p.did)
     recordReview(s, res.conflicts)
-    store.stamps = stampsAfterMerge(s, before, view, t, me, p.name)
+    store.stamps = stampsAfterMerge(s, before, view, t, me(), syncIdOf(p.did))
     p.lastSyncAt = t
     persist()
     d.save()
@@ -269,7 +355,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     adoptBundle(next, view)
     for (const k of Object.keys(s)) if (!(k in next)) delete (s as unknown as Record<string, unknown>)[k]
     Object.assign(s, next)
-    store.stamps = stampsAfterMerge(s, store.stamps, view, t, d.deviceName(), p.name)
+    store.stamps = stampsAfterMerge(s, store.stamps, view, t, me(), syncIdOf(p.did))
     p.lastSyncAt = t
     persist()
     d.save()
@@ -279,13 +365,13 @@ export function createSyncLink(d: SyncLinkDeps) {
   }
 
   /** Sends one bundle as sealed pieces; `auto` pieces live AUTO_TTL_MS and merge without a sheet on the other side. */
-  async function sendPieces(p: Pairing, bundle: SyncBundle, reply: boolean, a?: 'take' | 'give', auto = false): Promise<void> {
+  async function sendPieces(p: Pairing, bundle: SyncBundle, reply: boolean, a?: 'take' | 'give', auto = false, to?: number): Promise<void> {
     const pieces = toChunks(bundle)
     if (pieces.length > MAX_PIECES) { d.onLog(`The record is too large to send (${pieces.length} pieces, the most is ${MAX_PIECES})`); throw new Error('too large') }
     const sid = randomId(12)
     const exp = auto ? now() + AUTO_TTL_MS : stamp()
     for (let i = 0; i < pieces.length; i++) {
-      await send(p.did, { t: 'data', sid, i, n: pieces.length, r: reply, ...(a ? { a } : {}), ...(auto ? { auto: true as const } : {}), d: toB64u(pieces[i]), name: d.deviceName(), exp })
+      await send(p.did, { t: 'data', sid, i, n: pieces.length, r: reply, ...(a ? { a } : {}), ...(auto ? { auto: true as const } : {}), ...(to ? { to } : {}), d: toB64u(pieces[i]), name: d.deviceName(), exp })
       if (!auto) d.onLog(`Sending to ${p.name}: ${i + 1}/${pieces.length}`)
     }
   }
@@ -298,17 +384,25 @@ export function createSyncLink(d: SyncLinkDeps) {
     if (d.auto?.() !== true || d.canSend?.() === false || !store.pairings.length) return
     const s = d.state()
     const t = now()
-    store.stamps = refreshStamps(s, store.stamps, t, d.deviceName())
+    store.stamps = refreshStamps(s, store.stamps, t, me())
     let changed = false
+    const greet = !greeted
+    greeted = true
+    if (greet && held.length) await applyHeld()
     for (const p of store.pairings) {
-      if (!auOk(p.au)) { await send(p.did, { t: 'hello', sid: randomId(12), name: d.deviceName(), v: version, ...ask(), ...au(), exp: stamp() }).catch(() => {}); continue }
-      const delta = deltaOf(s, store.stamps, p.autoSentAt ?? 0, d.deviceName())
+      if (greet && auOk(p.au)) await send(p.did, { t: 'hello', sid: randomId(12), name: d.deviceName(), v: version, ...ask(), ...au(), ...sv(), exp: stamp() }).catch(() => {})
+      if (!auOk(p.au)) { await send(p.did, { t: 'hello', sid: randomId(12), name: d.deviceName(), v: version, ...ask(), ...au(), ...sv(), exp: stamp() }).catch(() => {}); continue }
+      const acks = (p.au ?? 0) >= ACK_VERSION
+      // Wave 44c: past the relay horizon the held wires are gone: start over with the full record (changes since the last ack no longer suffice).
+      if (acks && p.autoPendingAt !== undefined && t - p.autoPendingAt > AUTO_TTL_MS) { p.autoSentAt = 0; delete p.autoPendingAt; delete p.autoTries; delete p.autoTryAt; delete p.autoLastTo; changed = true }
+      if (acks && p.autoTryAt !== undefined && t < p.autoTryAt && !deltaOf(s, store.stamps, p.autoLastTo ?? 0, me(), skipOf(p))) continue
+      const delta = deltaOf(s, store.stamps, p.autoSentAt ?? 0, me(), skipOf(p))
       if (!delta) continue
       const full = !p.autoSentAt
       const bundle = full && p.shareCode === false ? bundleOf(s, store.stamps, false) : delta
       try {
-        await sendPieces(p, bundle, true, undefined, true)
-        p.autoSentAt = t
+        await sendPieces(p, bundle, true, undefined, true, acks ? t : undefined)
+        if (acks) { p.autoPendingAt ??= t; p.autoLastTo = t; p.autoTries = (p.autoTries ?? 0) + 1; p.autoTryAt = t + Math.min(AUTO_RETRY_MS * 2 ** (p.autoTries - 1), AUTO_RETRY_MAX_MS) } else p.autoSentAt = t
         changed = true
         d.onLog(`Sent ${full ? 'everything' : 'the changes'} to ${p.name}`)
       } catch { /* the relay is not reachable now: the next round sends the same changes */ }
@@ -320,7 +414,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     const s = d.state()
     // Once the code went out, a dead secret means "sync with the other device", never a new code (F3).
     if (p.shareCode !== false && s.connectCode && s.connectCode.owner !== 'other' && !s.connectCode.shared) { s.connectCode = { ...s.connectCode, shared: true }; d.save() }
-    store.stamps = refreshStamps(s, store.stamps, now(), d.deviceName())
+    store.stamps = refreshStamps(s, store.stamps, now(), me())
     persist()
     await sendPieces(p, bundleOf(s, store.stamps, p.shareCode !== false), reply, a)
   }
@@ -335,7 +429,7 @@ export function createSyncLink(d: SyncLinkDeps) {
       const timer = setTimeout(() => { waiting.delete(sid); resolve(null) }, d.handshakeMs ?? HANDSHAKE_MS)
       waiting.set(sid, (v) => { clearTimeout(timer); waiting.delete(sid); resolve(v) })
     })
-    await send(did, { t: 'hello', sid, name: d.deviceName(), v: version, ...ask(), ...au(), exp: stamp() })
+    await send(did, { t: 'hello', sid, name: d.deviceName(), v: version, ...ask(), ...au(), ...sv(), exp: stamp() })
     const v = await ready
     if (v === null) { d.onLog(`${p.name} did not answer: open TrustWeb there and try again`); throw new Error('offline') }
     if (v !== version) { d.onLog(`${p.name} runs an other version of TrustWeb: update it there`); throw new Error('version') }
@@ -351,9 +445,13 @@ export function createSyncLink(d: SyncLinkDeps) {
         if (m.name && m.name !== p.name) { p.name = m.name; persist() }
         if ((m.t === 'hello' || m.t === 'ready') && askOk(m.ask) && m.ask !== p.askDid) { p.askDid = m.ask; persist() }
         if ((m.t === 'hello' || m.t === 'ready') && auOk(m.au) && m.au !== p.au) { p.au = m.au; persist() }
-        if (m.t === 'hello') await send(fromDid, { t: 'ready', sid: m.sid, name: d.deviceName(), v: version, ...ask(), ...au(), exp: stamp() })
+        if (m.t === 'hello' || m.t === 'ready' || m.t === 'ack') noteSchema(p, m.sv)
+        if (m.t === 'hello') await send(fromDid, { t: 'ready', sid: m.sid, name: d.deviceName(), v: version, ...ask(), ...au(), ...sv(), exp: stamp() })
         else if (m.t === 'ready') waiting.get(m.sid)?.(m.v ?? 1)
         else if (m.t === 'data') await onData(p, m)
+        else if (m.t === 'ack') {
+          if (Number.isFinite(m.upTo)) { p.autoSentAt = Math.max(p.autoSentAt ?? 0, Math.min(m.upTo, now())); delete p.autoPendingAt; delete p.autoTries; delete p.autoTryAt; delete p.autoLastTo; persist() }
+        }
         else if (m.t === 'want') {
           for (const [sid, until] of seenWants) if (until < now()) seenWants.delete(sid)
           if (seenWants.has(m.sid)) return true
@@ -369,11 +467,17 @@ export function createSyncLink(d: SyncLinkDeps) {
       const m = await openMsg(offer.key, payload)
       if (m?.t === 'pair' && m.did === fromDid && now() <= m.exp) {
         offer = null
-        d.onPairRequest(await request(fromDid, m.name, m.ask, m.au))
+        d.onPairRequest(await request(fromDid, m.name, m.ask, m.au, m.sv))
         return true
       }
     }
     return false
+  }
+
+  /** Wave 43c: one round of the automatic sync at a time; never throws. */
+  function autoTick(): Promise<void> {
+    pushing ??= autoPushOnce().catch(() => { /* logged per pairing */ }).finally(() => { pushing = null })
+    return pushing
   }
 
   return {
@@ -382,11 +486,15 @@ export function createSyncLink(d: SyncLinkDeps) {
     async start(): Promise<void> {
       store = load()
       identity = deserializeIdentity(store.identity)
+      held = loadHeld()
+      // Wave 44c: stamps of an earlier build name this device by its name; from now on by its sync id.
+      for (const e of Object.values(store.stamps)) { if (e.by === d.deviceName()) e.by = me(); if (e.from === d.deviceName()) e.from = me() }
       persist()
       // True = this wire was ours and is consumed, so the relay acks it. Anything else stays un-acked and comes again on the next
       // drain; before this returned false for every wire, so the "Receive from <phone>?" sheet reopened on each reconnect.
       channel.onRawWire((from, payload) => handle(from, payload).catch(() => false))
       connected = channel.connect(identity).catch(() => { /* the channel keeps retrying; Sync now says "not on" until it is */ })
+      if (held.length) void applyHeld()
     },
     /** The code to show on the device that offers: its DID and a fresh one-time secret (valid 10 minutes, one use). */
     async offerCode(): Promise<string> {
@@ -395,12 +503,17 @@ export function createSyncLink(d: SyncLinkDeps) {
       return pairingCode(identity.did, secret)
     },
     /** The device that scanned or typed the code: sends itself, and returns what to confirm (null: not a code). */
-    async join(code: string): Promise<PairRequest | null> {
+    async join(code: string, opts?: { defer?: boolean }): Promise<PairRequest | null> {
       const c = parsePairingCode(code)
       if (!c) return null
-      await connected
-      await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), ...ask(), ...au(), exp: stamp() }))
-      return request(c.did, 'Other device')
+      const pair = async (): Promise<void> => {
+        await connected
+        await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), ...ask(), ...au(), ...sv(), exp: stamp() }))
+      }
+      if (!opts?.defer) { await pair(); return request(c.did, 'Other device') }
+      // review-44c (A5): a pairing LINK can come from anyone; this device's name and asking DID go out only once the person confirms here.
+      const r = await request(c.did, 'Other device')
+      return { ...r, confirm: (o) => { r.confirm(o); void pair().catch(() => d.onLog('The other device could not be reached: open the link again')) } }
     },
     /** The per-pairing tick "Shares my username" (D1). */
     setShare(did: string, on: boolean): void {
@@ -436,12 +549,12 @@ export function createSyncLink(d: SyncLinkDeps) {
       await sendBundle(await handshake(did), true, 'give')
     },
     /** Wave 43c: one round of the automatic sync (sync_view.ts runs it on a timer, on visibility and on start); never throws. */
-    autoTick(): Promise<void> {
-      pushing ??= autoPushOnce().catch(() => { /* logged per pairing */ }).finally(() => { pushing = null })
-      return pushing
-    },
+    autoTick,
     /** Wave 43c: what Settings > My devices and MCP sync_status show: linked devices and the last sync with any of them, either way (0: never). */
-    status: (): { devices: number; lastAt: number } => ({ devices: store.pairings.length, lastAt: Math.max(0, ...store.pairings.map((p) => Math.max(p.lastSyncAt, p.autoSentAt ?? 0))) }),
+    status: (): { devices: number; lastAt: number; unacked: number } => ({ devices: store.pairings.length, lastAt: Math.max(0, ...store.pairings.map((p) => Math.max(p.lastSyncAt, p.autoSentAt ?? 0))), unacked: store.pairings.filter((p) => p.autoPendingAt !== undefined).length }),
+    /** Wave 44c: what waits for an update of this device (the banner, MCP sync_status). */
+    nameOf,
+    held: (): { items: number; from: string[] } => ({ items: held.reduce((n, x) => n + x.items, 0), from: [...new Set(held.map((x) => x.name))] }),
     stop: (): void => channel.close(),
   }
 }

@@ -28,7 +28,7 @@ describe('home_layout_get / home_layout_set', () => {
   it('get is a read and shows the default; set needs writes on', () => {
     expect(Object.keys(fixture(false).by)).toContain('home_layout_get')
     expect(Object.keys(fixture(false).by)).not.toContain('home_layout_set')
-    expect(fixture().by.home_layout_get.run({})).toEqual({ left: ['asksToMe', 'connects'], center: ['web'], right: ['asksSent', 'invites'], isDefault: true })
+    expect(fixture().by.home_layout_get.run({})).toEqual({ left: ['asksToMe', 'connects', 'requests'], center: ['web'], right: ['asksSent', 'invites'], isDefault: true })
   })
   it('set moves a tile and stores it; reset drops it', () => {
     const f = fixture()
@@ -74,7 +74,7 @@ describe('dashboard_open', () => {
 describe('Settings > Home', () => {
   it('home.start reads and writes uiViews.webDefault', () => {
     const r = {}
-    expect(readSetting(r, 'home.start')).toBe(false)
+    expect(readSetting(r, 'home.start')).toBe(false)   // answers-44c: personal view opens the web; Home is opt-in
     writeSetting(r, 'home.start', true)
     expect(r.uiViews.webDefault).toBe('home')
     writeSetting(r, 'home.start', false)

@@ -105,10 +105,11 @@ export function setPublishTarget(f: FeedCfg, target: string): string {
   return target
 }
 
-export interface SourcePost { id: string; kind: string; at: number; text: string; personId?: string; news?: boolean }
+export interface SourcePost { id: string; kind: string; at: number; text: string; personId?: string; news?: boolean; /** wave44c feed-ext: set by the reader that knows its network. */ src?: string }
 
 /** The source a post was read from; web, answers and my own posts have none (they never pass a source filter). */
-export function sourceIdOf(p: Pick<SourcePost, 'kind' | 'news'>): string | undefined {
+export function sourceIdOf(p: Pick<SourcePost, 'kind' | 'news' | 'src'>): string | undefined {
+  if (p.src) return p.src   // wave44c feed-ext
   if (p.kind === 'remote') return 'mastodon'
   if (p.kind === 'follow') return p.news ? 'rss' : 'mastodon'
   if (p.kind === 'group') return 'nostr'

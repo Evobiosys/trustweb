@@ -6,6 +6,7 @@ import { threadRows } from '../../messenger_host_view'
 import { detectGeb } from '../../messenger_detect'
 import type { ExtHooks, MessengerSource } from '../registry'
 import { bridgeCall, clearPairing, consumePairingHash, loadPairing, parsePairingHash, savePairing, toThreadSummaries, type Pairing } from './bridge_client'
+import { draftable } from '../../drafts_dom'
 
 export const GEB_APP = 'https://app.consensu.al'
 
@@ -79,10 +80,12 @@ export function createGeb(h: ExtHooks): MessengerSource {
       const text = box.value
       void send(threadId, text).then((ok) => {
         h.toast(ok ? S.geb.sent : S.geb.sendFailed)
-        if (ok) { box.value = ''; load() }
+        if (ok) { box.value = ''; kept.clear(); load() }
       })
     } }, [S.geb.send])
-    h.page(S.geb.historyTitle(name), [list, box, btn, el('p', { class: 'meta', 'data-geb-sendhint': '' }, [S.geb.sendHint])], 'geb-thread')
+    const form = el('div', {}, [box, btn])
+    const kept = draftable(form, 'geb', threadId)   // wave44c event-autosave
+    h.page(S.geb.historyTitle(name), [list, form, el('p', { class: 'meta', 'data-geb-sendhint': '' }, [S.geb.sendHint])], 'geb-thread')
     load()
   }
 

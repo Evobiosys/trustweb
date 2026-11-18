@@ -1,0 +1,7 @@
+{
+  "id": 7, "uuid": "0b2c1e30-1111-4222-8333-444455556666", "shortUUID": "abcDEF123xyz",
+  "url": "https://tube.test.example.org/w/abcDEF123xyz",
+  "name": "Composting basics", "description": "How we compost at home. The full description, longer than the list's.",
+  "publishedAt": "2026-11-10T12:00:00.000Z", "thumbnailPath": "/lazy-static/thumbnails/0b2c.jpg", "nsfw": false, "privacy": { "id": 1 },
+  "account": { "name": "garden", "displayName": "Garden Collective", "host": "tube.test.example.org" }
+}

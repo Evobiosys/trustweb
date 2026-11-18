@@ -4,7 +4,8 @@ import { chromium } from 'playwright-core'
 
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5456}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 try {
@@ -31,7 +32,7 @@ try {
   await page.locator('[data-go="inventory"]').tap(); await page.waitForTimeout(300)
   await page.locator('.scroll.pad').dispatchEvent('drop', { dataTransfer: dt })
   await page.waitForTimeout(300)
-  check('drop adds the item, undo notice shown', (await page.locator('.inv-text').first().innerText()).startsWith('Forum') && (await page.locator('[data-undo-event]').count()) === 1)
+  check('drop adds the item, undo notice shown', (await page.locator('.inv-text').first().innerText()).includes('Forum') /* answers-44d: the title emoji comes first */ && (await page.locator('[data-undo-event]').count()) === 1)
   await page.screenshot({ path: `${SHOTS}/cal7-dropped.png` })
   await page.locator('[data-undo-event]').tap(); await page.waitForTimeout(200)
   check('undo removes it', (await page.locator('.inv-text').count()) === 0)

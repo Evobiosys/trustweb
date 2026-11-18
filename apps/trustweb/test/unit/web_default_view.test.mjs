@@ -5,7 +5,7 @@ import { CONTACTS_TAB_LABEL, isAdvanced, setWebDefault, shownAtOnce, webDefaultO
 const names = { rings: 'Web', network: 'Network', map: 'Map', people: 'People' }
 
 describe('web_default_view', () => {
-  it('without a pin the Web tab keeps "Web" and the rings', () => {
+  it('without a pin the Web tab keeps "Web" and opens the rings (answers-44c)', () => {
     expect(webDefaultOf({})).toBe('rings')
     expect(webTabLabel({}, names)).toBe('Web')
   })
@@ -17,9 +17,9 @@ describe('web_default_view', () => {
     expect(webTabLabel({ uiViews: { webDefault: 'rings' } }, names)).toBe('Web')
     expect(webTabLabel({ uiViews: { webDefault: 'zzz' } }, names)).toBe('Web')
   })
-  it('setWebDefault stores a view and drops the pin for the rings', () => {
+  it('setWebDefault stores a view, the rings too (wave44c: absent = Home)', () => {
     expect(setWebDefault(undefined, 'network')).toEqual({ webDefault: 'network' })
-    expect(setWebDefault({ webDefault: 'network' }, 'rings')).toBeUndefined()
+    expect(setWebDefault({ webDefault: 'network' }, 'rings')).toEqual({ webDefault: 'rings' })
   })
   it('the complete view can be the default of Web and names the tab', () => {
     expect(setWebDefault(undefined, 'complete')).toEqual({ webDefault: 'complete' })

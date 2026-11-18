@@ -2288,3 +2288,45 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .rs-badge{display:inline-block; margin-left:8px; min-width:20px; padding:0 6px; border-radius:999px; background:rgba(128,128,128,.28); font-size:12px; line-height:20px; text-align:center; vertical-align:middle}
 .cal-chip.rs-tag{border:0; font:inherit; font-size:11.5px; cursor:pointer; text-decoration:underline}
 .rs-tags{margin:2px 0 6px}
+/* wave44c home-default */
+.home-thumb-btn{background:none; border:0; padding:0; cursor:pointer; line-height:0}
+.home-thumb{display:block; max-width:100%}
+.home-req{text-align:left; background:none; border:0; padding:2px 0; font:inherit; cursor:pointer; text-decoration:underline; color:inherit}
+.home-focus{outline:2px solid var(--electric); outline-offset:2px}
+.requests-list{padding:12px; display:flex; flex-direction:column; gap:10px}
+.requests-list .req-group h3{margin:6px 0 4px}
+/* wave44c header-cluster: one header row again (eye, search, QR, settings top right; chat switch + pins after the title); title truncates first.
+   The wave44 header-layout `.hdr-tools` rules above stay as they were, unused now (never deleted). */
+.hdr{flex-wrap:nowrap}
+.hdr-left > :is(h2){flex:0 1 auto}
+.hdr-left > :not(h2){flex-shrink:0}
+/* wave44c event-autosave */
+.draft-note{margin:4px 0; font-size:.85em; opacity:.75}
+.draft-note .btn{padding:0 6px; min-height:0}
+/* wave44c seen-through */
+.seen-who-wrap .field.seen-who{padding:3px 8px; font-size:12px; opacity:.6; border-style:dashed; margin:4px 0}
+.seen-who-wrap .field.seen-who:focus{opacity:1}
+.seen-card [data-seen-resource]{display:inline-block; margin:4px 0}
+.seen-intro{margin-top:12px; display:flex; flex-direction:column; gap:6px}
+.seen-intro select{max-width:100%}
+.seen-card .seen-prefill{font-style:italic; color:var(--ink-2); margin:6px 0 10px}
+/* wave44c feed-ext */
+.phanpy-view{display:flex; flex-direction:column; gap:6px; min-height:0}
+.phanpy-frame{width:100%; height:70vh; min-height:360px; border:1px solid var(--line); border-radius:8px; background:#fff}
+.ext-follows .ch-row, .ext-person .ch-row{flex-wrap:wrap; gap:6px}
+/* wave44c answers-44c */
+.trash-row{display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:8px 12px; margin:6px 0; border-radius:14px; background:var(--card); font-size:13.5px}
+.trash-row > span{flex:1 0 100%; min-width:0; overflow-wrap:anywhere}
+.trash-row > em{flex:1 1 auto; white-space:nowrap; font-size:13px}
+.trash-row > button{flex:none; width:auto; margin:0; text-decoration:underline}
+
+/* wave44c answers-44d */
+.events-page .ev-mode-note{display:inline-flex; align-items:center; align-self:flex-start; width:auto; margin:6px 0 10px}
+.events-page .ev-cover{display:block; border-radius:12px; padding:10px 12px; margin:0 0 10px}
+.events-page .ev-cover .ev-what{margin:0 0 6px; font-weight:600}
+.events-page .ev-cover .event-share{margin:0}
+.events-page .ev-by-community{display:inline-block; width:auto; margin:0 0 6px; padding:2px 0}
+.events-page .ev-joining{margin:6px 0}
+.events-page .ev-who{margin-top:4px}
+.events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
+.rs-by{display:block; font-size:12.5px}

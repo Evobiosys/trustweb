@@ -91,6 +91,27 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'circles_layout', write: false },
   /* wave44c community-resources */
   { name: 'resource_mark_opened', write: true },
+  /* wave44c home-default */
+  { name: 'requests_list', write: false }, { name: 'home_open_request', write: true },
+  /* wave44c event-autosave */
+  { name: 'drafts_list', write: false }, { name: 'draft_discard', write: true },
+  /* wave44c seen-through */
+  { name: 'people_seen_through_list', write: false },
+  /* wave44c feed-ext */
+  { name: 'feed_refresh', write: false }, { name: 'feed_post_read', write: false }, { name: 'feed_source_add', write: true }, { name: 'feed_source_remove', write: true }, { name: 'feed_extension_set', write: true },
+  /* wave44c sync-seamless */
+  { name: 'sync_pair_link', write: true },
+  /* wave44c answers-44c */
+  { name: 'sync_pair_show_new', write: true }, { name: 'sync_pair_scan', write: true },
+  { name: 'trash_list', write: false }, { name: 'trash_restore', write: true },
+  /* wave44c review-44c */
+  { name: 'event_introduce_person', write: true },
+  /* wave44c answers-44d */
+  { name: 'asks_incoming_list', write: false }, { name: 'events_list', write: false }, { name: 'event_get', write: false }, { name: 'chats_list', write: false }, { name: 'chat_read', write: false },
+  { name: 'groups_list', write: false }, { name: 'relations_list', write: false }, { name: 'tasks_list', write: false }, { name: 'invitations_list', write: false }, { name: 'meetings_list', write: false },
+  { name: 'ask_answer', write: true }, { name: 'chat_send', write: true },
+  { name: 'resource_add', write: true },
+  { name: 'event_share_audience_set', write: true }, { name: 'community_intimate_set', write: true }, { name: 'event_chat_open', write: true }, { name: 'event_message_all', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

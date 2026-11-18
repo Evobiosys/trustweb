@@ -9,7 +9,7 @@ describe('default layout', () => {
   it('puts the Web in the big centre, others\' requests left (altruistic), mine right', () => {
     const l = defaultLayout()
     expect(l.center).toEqual(['web'])
-    expect(l.left).toEqual(['asksToMe', 'connects'])
+    expect(l.left).toEqual(['asksToMe', 'connects', 'requests'])   // wave44c: Existing requests at the bottom
     expect(l.right).toEqual(['asksSent', 'invites'])
   })
   it('holds every tile exactly once', () => { expect(all(defaultLayout()).sort()).toEqual([...HOME_TILES].sort()) })
@@ -21,7 +21,7 @@ describe('parseLayout repairs what it is given', () => {
   it('drops unknown tiles and duplicates, appends missing ones to their default column', () => {
     const l = parseLayout({ left: ['web', 'zzz', 'web'], center: [], right: ['asksSent'] })
     expect(all(l).sort()).toEqual([...HOME_TILES].sort())
-    expect(l.left).toEqual(['web', 'asksToMe', 'connects'])
+    expect(l.left).toEqual(['web', 'asksToMe', 'connects', 'requests'])
     expect(l.right).toEqual(['asksSent', 'invites'])
   })
 })
@@ -29,11 +29,11 @@ describe('parseLayout repairs what it is given', () => {
 describe('moveTile', () => {
   it('moves a tile to another column at an index; every tile stays once', () => {
     const l = moveTile(defaultLayout(), 'asksSent', 'left', 1)
-    expect(l.left).toEqual(['asksToMe', 'asksSent', 'connects'])
+    expect(l.left).toEqual(['asksToMe', 'asksSent', 'connects', 'requests'])
     expect(l.right).toEqual(['invites'])
     expect(all(l).sort()).toEqual([...HOME_TILES].sort())
   })
-  it('reorders inside a column', () => { expect(moveTile(defaultLayout(), 'connects', 'left', 0).left).toEqual(['connects', 'asksToMe']) })
+  it('reorders inside a column', () => { expect(moveTile(defaultLayout(), 'connects', 'left', 0).left).toEqual(['connects', 'asksToMe', 'requests']) })
   it('clamps the index and ignores an unknown tile', () => {
     expect(moveTile(defaultLayout(), 'web', 'right', 99).right).toEqual(['asksSent', 'invites', 'web'])
     expect(moveTile(defaultLayout(), 'nope', 'left', 0)).toEqual(defaultLayout())

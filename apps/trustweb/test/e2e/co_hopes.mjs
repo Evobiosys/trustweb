@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44 feed-hopes live proof (headless, stock data): PORT=5450 SHOTS=<dir> EXE=<chromium> PW=<playwright-core index.js> node co_hopes.mjs */
+import { quietKeepCopy } from './rings_first.mjs'
 const pw = await import(process.env.PW ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 
@@ -7,6 +8,7 @@ const PORT = process.env.PORT ?? 5450
 const URL = `http://127.0.0.1:${PORT}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
 const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+quietKeepCopy(browser) // review-44c: the Keep-a-copy offer sheet covered the controls (red on base 85191dbcde)
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const P = (id, name, did) => ({ id, name, context: '', ring: 1, metAt: 1, lines: [], did })

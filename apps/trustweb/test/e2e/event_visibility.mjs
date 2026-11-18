@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44 steer-event-visibility proof (headless, stock dev server): PORT=5301 SHOTS=<dir> PW=<playwright-core index.js> EXE=<chromium> node event_visibility.mjs. Synthetic record only. */
+import { quietKeepCopy } from './rings_first.mjs'
 const pw = await import(process.env.PW ?? 'playwright-core'); const chromium = (pw.default ?? pw).chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5301}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
 const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+quietKeepCopy(browser) // review-44c: the Keep-a-copy offer sheet covered the controls (red on base 85191dbcde)
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const day = (d) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10)

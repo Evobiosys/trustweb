@@ -131,9 +131,9 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
       if (bad) throw new Error(`a directory server must be an https address, not "${bad}"`)
       if (urls.length) r.directoryServers = urls; else delete r.directoryServers
     } },
-  { id: 'home.start', section: 'web', label: 'Open Home first', hint: 'The Web tab opens the Home tile board instead of the rings (Settings > Home).', type: 'boolean', default: false, simple: false,
+  { id: 'home.start', section: 'web', label: 'Open Home first', hint: 'The Web tab opens the Home tile board instead of the rings (Settings > Home). Off by default in the personal view (answers-44c).', type: 'boolean', default: false, simple: false,
     get: (r) => obj(r.uiViews).webDefault === 'home',
-    set: (r, v) => { const views = { ...obj(r.uiViews) }; if (v) views.webDefault = 'home'; else delete views.webDefault; if (Object.keys(views).length) r.uiViews = views; else delete r.uiViews } },
+    set: (r, v) => { const views = { ...obj(r.uiViews) }; if (v) views.webDefault = 'home'; else if (views.webDefault === 'home') delete views.webDefault; if (Object.keys(views).length) r.uiViews = views; else delete r.uiViews } },
   // answers-44a (Q7): the public address a profile link must point back to (rel="me"); MCP profile_link_check reads it, the app uses its own address.
   { id: 'profile.origin', section: 'general', label: 'Public address of this app', hint: 'For profile_link_check over MCP: the https address your linked pages point back to with rel="me". Empty = not set.', type: 'text', default: '', simple: false,
     get: (r) => (typeof r.profileOrigin === 'string' ? r.profileOrigin : ''),
@@ -142,6 +142,8 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
       if (u && !/^https:\/\/[^/\s]+$/.test(u)) throw new Error(`the public address must be an https origin without a path, not "${u}"`)
       if (u) r.profileOrigin = u; else delete r.profileOrigin
     } },
+  /* wave44c answers-44d */
+  sparse('ui.titleEmoji', 'general', 'Emoji before titles', 'titleEmojiOff', true, true, 'Settings > Appearance: an emoji picked from the title (no AI) before event and resource titles.'),
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),
   pin('qr-only', 'Pin the QR only button to the toolbar', 'A button beneath Settings.'),

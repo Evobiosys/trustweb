@@ -6,7 +6,8 @@
  */
 const { chromium } = await import(process.env.PW ?? 'playwright-core')
 const D = process.env.HOME + '/Desktop/trustweb-example-exports/', S = process.env.SHOTS
-const b = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const b = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' })
 const page = await ctx.newPage(); const errs = []; page.on('pageerror', (e) => errs.push(String(e))); page.on('dialog', (d) => d.accept())
 const ck = (n, c) => console.log((c ? 'PASS ' : 'FAIL ') + n)

@@ -4,7 +4,8 @@ const pw = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5447}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond, info = '') => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + info}`); if (!cond) failed = true }
 const KEY = 'trustweb.v1.me'
@@ -13,6 +14,7 @@ const record = {
   v: 1, me: { id: 'me1', displayName: 'Tester' }, peers: [], log: [], inventory: [],
   people: [{ id: 'p1', name: 'Ann Remote', context: '', ring: 'close', metAt: 1, lines: [], fediverse: { handle: 'ann@fedi.example.org', show: true, reach: 'api' } }],
   feed: { on: true, remote: true },
+  uiBar: { order: ['web', 'chat', 'feed', 'events', 'inventory'], orderVersion: 2 }, // review-44c: Feed is no longer a stock bottom-bar tab (bottom_bar.ts FEED_IN_BAR=false at base 85191dbcde): the record pins it, as feed_ext.mjs does
   events: [{ id: 'e1', name: 'Winter IYG', from: day(2), where: 'Wien', createdAt: 1, attended: true, offers: { feed: true } }],
 }
 const hit = (a, b) => !(a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 || a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5)

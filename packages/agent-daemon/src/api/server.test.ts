@@ -1,3 +1,4 @@
+import { createServer, type AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import type { Envelope } from "@resource-web/protocol";
@@ -102,11 +103,17 @@ async function bootConnectedPair(
   };
 }
 
-const BASE_PORT = 41500;
-let portCounter = 0;
-function nextPort(): number {
-  portCounter += 1;
-  return BASE_PORT + portCounter;
+/** ci-fix-44: an OS-assigned free port. The fixed 41500+n ports sat in Linux's ephemeral range
+ * (32768-60999), so an outgoing socket on the CI runner could hold one (EADDRINUSE, 2026-11-18). */
+function nextPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address() as AddressInfo;
+      probe.close(() => resolve(port));
+    });
+  });
 }
 
 describe("REST/WS server", () => {
@@ -118,7 +125,7 @@ describe("REST/WS server", () => {
   });
 
   it("GET /api/state returns the persona snapshot shape from docs/API.md", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -131,7 +138,7 @@ describe("REST/WS server", () => {
   });
 
   it("POST /api/steward classifies an ask and fans out a REQUEST, reflected in /api/state", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -149,7 +156,7 @@ describe("REST/WS server", () => {
   });
 
   it("rejects a malformed /api/consent request with 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -162,7 +169,7 @@ describe("REST/WS server", () => {
   });
 
   it("returns 404 for an unknown route", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/nope`);
@@ -170,7 +177,7 @@ describe("REST/WS server", () => {
   });
 
   it("GET /api/audit returns human-readable entries", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     await fetch(`http://127.0.0.1:${port}/api/steward`, {
@@ -186,7 +193,7 @@ describe("REST/WS server", () => {
   });
 
   it("broadcasts a state_changed WS event when an ask is sent via the steward endpoint", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -209,7 +216,7 @@ describe("REST/WS server", () => {
   });
 
   it("binds 127.0.0.1 only (not 0.0.0.0)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     // A request via the loopback IP must succeed; this at least proves the
@@ -231,7 +238,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ------------------------------------------------------------ CORS/OPTIONS --
 
   it("sets CORS headers on a normal 200 response", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/state`);
@@ -244,7 +251,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("sets CORS headers on error responses too (404, 400)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -262,7 +269,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("responds 204 with CORS headers to an OPTIONS preflight, no body", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/listings`, { method: "OPTIONS" });
@@ -273,7 +280,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("the OPTIONS preflight for POST /relay/send allows the v2 send-auth headers (aud, kid) and exposes Date", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/relay/send`, {
@@ -291,7 +298,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ------------------------------------------------------------------ trust --
 
   it("POST /api/trust adds an edge; GET /api/trust lists it; DELETE removes it", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -315,7 +322,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/trust rejects an invalid level with 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/trust`, {
@@ -327,7 +334,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/trust rejects a missing peer/display with 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/trust`, {
@@ -339,7 +346,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("DELETE /api/trust with no peer returns 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/trust`, { method: "DELETE" });
@@ -349,7 +356,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ------------------------------------------------------------------ notes --
 
   it("POST /api/notes creates a second_brain item and sends NO notification (D1.6)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server, store, transport } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -376,7 +383,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/notes rejects a missing owner with 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/notes`, {
@@ -390,7 +397,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // --------------------------------------------------------------- listings --
 
   it("POST /api/listings publishes; GET /api/listings shows it under mine; withdraw flips state", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -417,7 +424,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/listings/:id/withdraw on an unknown listing returns 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/listings/does-not-exist/withdraw`, { method: "POST" });
@@ -425,7 +432,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("GET /api/listings?public=1 returns ONLY active public-tier listings, with where_gated stripped", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -469,7 +476,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ------------------------------------------------------------------ card --
 
   it("GET /api/card returns peer_id/display/level_offer_default (no DID fields for mock transport)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/card`);
@@ -482,7 +489,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("GET /api/card surfaces relay_url (mediator origin) from cardExtra for a daemonless browser peer (Task 5)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, {
       cardExtra: {
         did: "did:peer:2.Ez6MkAnna",
@@ -504,8 +511,8 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ------------------------------------------------------------ threads/DM --
 
   it("POST /api/threads/:peer_id/message sends a DM; both sides' GET /api/threads reflect it", async () => {
-    const portA = nextPort();
-    const portB = nextPort();
+    const portA = await nextPort();
+    const portB = await nextPort();
     const { anna, ben } = await bootConnectedPair(portA, portB);
     cleanup = async () => {
       await anna.server.close();
@@ -533,7 +540,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/threads/:peer_id/message to a stranger (no trust edge) returns 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/threads/${encodeURIComponent("@stranger:wot.local")}/message`, {
@@ -547,8 +554,8 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ------------------------------------------------------------ borrow/loans --
 
   it("full borrow round trip: publish (Anna) -> borrow (Ben) -> approve/lend/return/complete (both sides via HTTP)", async () => {
-    const portA = nextPort();
-    const portB = nextPort();
+    const portA = await nextPort();
+    const portB = await nextPort();
     const { anna, ben } = await bootConnectedPair(portA, portB);
     cleanup = async () => {
       await anna.server.close();
@@ -604,7 +611,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/loans/:loan_id rejects an invalid state with 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/loans/whatever`, {
@@ -616,7 +623,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/borrow on an unknown listing returns 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/borrow`, {
@@ -630,7 +637,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // -------------------------------------------------------------------- WS --
 
   it("broadcasts listing/loan/dm WS events alongside state_changed", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -654,7 +661,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // --------------------------------------- Task 10 / finding 2: relay ingress --
 
   it("POST /relay/send bounds the body: an oversize wire is rejected 413 and never reaches ingress()", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const submitted: string[] = [];
     const relayServer = {
       ingress(rawWire: string): { routed: "accepted" | "rejected"; reason?: string } {
@@ -688,7 +695,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /relay/send returns the mediator's non-informative {routed:'accepted'} verbatim (no live/queued oracle)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const relayServer = {
       ingress(): { routed: "accepted" | "rejected"; reason?: string } {
         return { routed: "accepted" };
@@ -710,7 +717,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /relay/send hands the request headers to ingress() and maps a refusal's status (401 forged/unsigned)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const seen: Array<string | string[] | undefined> = [];
     const relayServer = {
       ingress(_rawWire: string, headers: Record<string, string | string[] | undefined>): { routed: "accepted" | "rejected"; reason?: string; status?: number } {
@@ -739,7 +746,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ----------------------------------- F5: DID key records (POST /relay/keys) --
 
   it("POST /relay/keys hands the raw body to keyRecord() and returns its status + body verbatim", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const bodies: string[] = [];
     const relayServer = {
       ingress(): { routed: "accepted" | "rejected"; reason?: string } {
@@ -768,7 +775,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /relay/keys bounds the body at 16 KiB: oversize -> 413 and keyRecord() never runs", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     let calls = 0;
     const relayServer = {
       ingress(): { routed: "accepted" | "rejected"; reason?: string } {
@@ -790,7 +797,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /relay/keys is 404 when this persona hosts no mediator", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/relay/keys`, { method: "POST", body: "{}" });
@@ -800,7 +807,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   // ------------------------------ Task 4 (D18/QR): inbound CONNECT consent --
 
   it("POST /api/connect/accept rejects a missing card_id / invalid level / unknown card with 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -813,7 +820,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   });
 
   it("POST /api/connect/decline rejects a missing card_id with 400", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -823,8 +830,8 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
 
   it("POST /api/connect/accept drives the route→daemon→edge path: both sides gain an edge, card → accepted", async () => {
     const bus = new InMemoryBus();
-    const portA = nextPort();
-    const portB = nextPort();
+    const portA = await nextPort();
+    const portB = await nextPort();
     // Edge-less pair on one bus (NOT bootConnectedPair, which seeds edges).
     const anna = await bootDaemon(portA, { personaName: "Anna", peerId: "@anna-agent:wot.local", bus });
     const ben = await bootDaemon(portB, { personaName: "Ben", peerId: "@ben-agent:wot.local", bus });
@@ -875,7 +882,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("with no authToken/corsAllowedOrigins configured: unauthenticated and wildcard CORS, exactly as before Finding 4", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port);
     cleanup = () => server.close();
 
@@ -892,7 +899,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("with authToken configured: rejects a missing or wrong Authorization header with 401", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, { authToken: "s3cret" });
     cleanup = () => server.close();
 
@@ -906,7 +913,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("with authToken configured: accepts the exact Bearer token", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, { authToken: "s3cret" });
     cleanup = () => server.close();
 
@@ -917,7 +924,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("with authToken configured: does not gate the CORS preflight itself", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, { authToken: "s3cret" });
     cleanup = () => server.close();
 
@@ -928,7 +935,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("with corsAllowedOrigins: 'localhost': reflects a localhost origin", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, { corsAllowedOrigins: "localhost" });
     cleanup = () => server.close();
 
@@ -940,7 +947,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("with corsAllowedOrigins: 'localhost': omits Allow-Origin for a non-localhost origin (browser blocks it)", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, { corsAllowedOrigins: "localhost" });
     cleanup = () => server.close();
 
@@ -954,7 +961,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("with corsAllowedOrigins as an explicit list: allows a listed origin and rejects an unlisted one", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, { corsAllowedOrigins: ["https://idea2.site", "https://evobiosys.org"] });
     cleanup = () => server.close();
 
@@ -966,7 +973,7 @@ describe("REST/WS server — Finding 4: opt-in auth + CORS allowlist", () => {
   });
 
   it("combining both: a listed origin still needs the right token", async () => {
-    const port = nextPort();
+    const port = await nextPort();
     const { server } = await bootDaemon(port, { authToken: "s3cret", corsAllowedOrigins: "localhost" });
     cleanup = () => server.close();
 

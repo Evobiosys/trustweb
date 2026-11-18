@@ -140,6 +140,17 @@ async function main() {
     ok('4. nothing added on the scanner', (await peersOf(cos2)).length === 0)
     ok('4. nothing sent to Annika', tap.slice(before).every((w) => w.to !== annDid))
     await shot(cos2, 'old-code')
+    // wave44c header-cluster (ε): the notice offers "Update now" and "Send update link" (stub registration + share sheet)
+    await cos2.evaluate(() => {
+      window.__upd = { updated: 0, shared: null }
+      Object.defineProperty(navigator.serviceWorker, 'getRegistration', { configurable: true, value: async () => ({ update: async () => { window.__upd.updated++ }, waiting: null }) })
+      navigator.share = async (d) => { window.__upd.shared = d.text }
+    })
+    ok('4. the notice has "Update now" and "Send update link"', (await cos2.locator('[data-update-now]:visible').count()) === 1 && (await cos2.locator('[data-send-update-link]:visible').count()) === 1)
+    await cos2.locator('[data-update-now]').click()
+    ok('4. Update now asks the service worker; a current phone says so', await until(async () => (await cos2.evaluate(() => window.__upd.updated)) === 1 && /already run the latest version/.test(await noticeText(cos2)), 10_000))
+    await cos2.locator('[data-send-update-link]').click().catch(() => {})
+    ok('4. Send update link opens the share sheet with app.trustweb.one', await until(async () => /app\.trustweb\.one/.test((await cos2.evaluate(() => window.__upd.shared)) ?? ''), 5_000))
 
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } finally {

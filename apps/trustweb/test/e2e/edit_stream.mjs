@@ -14,7 +14,8 @@ const [A, B] = [process.env.PORT_A ?? 5430, process.env.PORT_B ?? 5432]
 const LIVE = process.env.TW_DEV_LIVE
 const EDITS = path.join(path.dirname(LIVE), 'dev-edits.jsonl')
 const SHOTS = process.env.SHOTS ?? '/tmp'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond, evidence = '') => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${evidence ? `  [${evidence}]` : ''}`); if (!cond) failed = true }
 const open = async (port, viewport = { width: 1280, height: 900 }) => {

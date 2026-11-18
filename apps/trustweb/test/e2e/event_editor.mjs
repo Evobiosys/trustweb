@@ -9,7 +9,8 @@ const pw = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5444}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond, info) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + (info ?? '')}`); if (!cond) failed = true }
 const P = (id, name, ring, fields = {}) => ({ id, name, context: '', ring, metAt: 1, lines: [], fields })
@@ -40,7 +41,7 @@ try {
     await toEvents()
     await page.locator('[data-event-add]').click(); await page.waitForTimeout(300)
     const order = await page.locator('[data-event-editor] [data-editor-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-editor-row')))
-    check(`${w}: editor rows in the calendar order`, JSON.stringify(order) === JSON.stringify(['name', 'time', 'guests', 'location', 'description', 'more']), order.join(','))
+    check(`${w}: editor rows in the calendar order`, JSON.stringify(order) === JSON.stringify(['name', 'time', 'guests', 'location', 'description', 'assistant', 'more']), order.join(','))
     const ys = []
     for (const r of order) ys.push((await box(`[data-editor-row="${r}"]`))?.y ?? -1)
     check(`${w}: rows stack top to bottom`, ys.every((y, i) => i === 0 || y > ys[i - 1]), ys.join(','))

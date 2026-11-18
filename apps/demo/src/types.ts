@@ -315,7 +315,8 @@ export interface QueryEnvelope {
    * organisation or topic the asker wants an introduction to). Both optional and always together; `freeText` still carries the readable
    * request, so an older build (which ignores both fields) shows it as an ordinary ask. No schema bump.
    */
-  kind?: 'intro' | 'know'
+  kind?: 'intro' | 'know' | 'show'
+  /** Wave 44c seen-through: with kind 'show' the target is the name of the person who would see the receiver ("May Anna see you?"). */
   target?: string
   /**
    * Wave 44 steer-ask-escalation: `kind: 'know'` = the second round "Do you know someone who has this?" (no target; freeText is the original
@@ -460,6 +461,13 @@ export interface EventEnvelope {
   announce?: true
   /** Wave 44 steer-open-space: the schedule of an online open space (instead of `want` / `link`): `open` = the sender, a host, says the event is an open space; `acts` are checked by the receiver (open_space.ts). */
   os?: { id: string; open?: true; acts: unknown[] }
+  /** Wave 44c event-autosave: the guest's answer to the host (yes = "I will attend"), and the host's conference links, sent only after a yes. */
+  rsvp?: { id: string; yes: boolean }
+  conf?: { id: string; links: { provider: 'kmeet' | 'zoom' | 'jitsi' | 'custom'; url: string }[] }
+  /** Wave 44c seen-through: a host introduces a person at event `id` to its attendees; `who` (the name) only when that person's device said yes (`shown`). */
+  seen?: { id: string; shown: boolean; who?: string }
+  /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
+  joined?: { id: string }
 }
 // ----- END TrustWeb wave 43c -----
 
@@ -650,6 +658,10 @@ export interface SharedItem {
    * with apps/trustweb/src/hops.ts readVia.
    */
   via?: string[]
+  /** Wave 44c seen-through (apps/trustweb/src/seen_through.ts): this item names a person the answerer knows; `shown` = that person's own yes to be shown. */
+  shown?: boolean
+  /** Wave 44c seen-through: that person's name, only with `shown: true` (at most VIA_NAME_MAX characters). */
+  who?: string
 }
 
 // ---------------------------------------------------------------------------

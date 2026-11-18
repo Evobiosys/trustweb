@@ -66,7 +66,8 @@ describe('hide_from_crypto: the exclusion list as signed keyed tags', () => {
     expect(verifyAskExclusion({ ...blob, m: 4 }, ctx({ maxHops: 4 }))).toBe('tampered')
     expect(verifyAskExclusion(blob, ctx({ maxHops: 4 }))).toBe('tampered')
     expect(verifyAskExclusion(blob, ctx({ root: 'otherRoot99' }))).toBe('tampered')
-    expect(verifyAskExclusion({ ...blob, g: blob.g.slice(0, -2) + 'AA' }, ctx())).toBe('tampered')
+    // ci-fix-44: change the first char (R); the old `slice(0, -2) + 'AA'` zeroed S's top byte, already 0 in ~1 of 16 signatures (no-op tamper)
+    expect(verifyAskExclusion({ ...blob, g: (blob.g[0] === 'A' ? 'B' : 'A') + blob.g.slice(1) }, ctx())).toBe('tampered')
     // the direct contact receives it from the asker only
     expect(verifyAskExclusion(blob, ctx({ hop: 0, senderDid: friend.did }))).toBe('tampered')
     // a forwarder that signs its own empty list as "the asker" is caught by the next device (the asker is not the sender further out)

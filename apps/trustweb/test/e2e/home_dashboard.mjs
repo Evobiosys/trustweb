@@ -6,11 +6,13 @@
  *  C. Dashboard: reachable from Home; "Live now" flashes once on open, then stays static; Refresh replays it once.
  *  D. Managed or unmanaged shows only inside the Dashboard's Settings, never on the card.
  */
+import { quietKeepCopy } from './rings_first.mjs'
 const pw = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5445}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
 const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+quietKeepCopy(browser) // review-44c: the Keep-a-copy offer sheet covered the controls (red on base 85191dbcde)
 let failed = false
 const check = (name, cond, info = '') => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + info}`); if (!cond) failed = true }
 const record = () => ({
@@ -39,7 +41,7 @@ try {
     check(`${w}: A. the Web tab opens the Home board`, (await page.locator('[data-home-board]').count()) === 1)
     const inCol = async (col) => page.locator(`[data-home-col="${col}"] [data-home-tile]`).evaluateAll((n) => n.map((x) => x.getAttribute('data-home-tile')))
     check(`${w}: A. Web in the centre`, JSON.stringify(await inCol('center')) === '["web"]')
-    check(`${w}: A. others' requests left`, JSON.stringify(await inCol('left')) === '["asksToMe","connects"]')
+    check(`${w}: A. others' requests left`, JSON.stringify(await inCol('left')) === '["asksToMe","connects","requests"]')   // wave44c: Existing requests at the bottom
     check(`${w}: A. my requests right`, JSON.stringify(await inCol('right')) === '["asksSent","invites"]')
     check(`${w}: A. the ask to me shows its text`, (await page.locator('[data-home-tile="asksToMe"]').innerText()).includes('ladder'))
     const boxes = await page.locator('[data-home-tile]').evaluateAll((n) => n.map((x) => { const b = x.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height } }))

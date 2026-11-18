@@ -8,6 +8,7 @@ import type { AppState, Match, Person, TwEvent } from './model'
 import { eventTagLabel } from './event_tag'
 import { tagLabel } from './events'
 import { filterByChips } from './tag_filter'
+import { intimateEventChips } from './event_community' // answers-44d
 
 type UiEvents = Pick<AppState, 'uiRings'> & { events?: readonly TwEvent[] }
 
@@ -23,10 +24,13 @@ export function setEventFilter(s: Pick<AppState, 'uiRings'>, id: string | null):
 }
 
 /** The Web's `show` list with the event chip added while the mode is on (the chip filterByChips already understands). */
-export function eventModeShow(s: Pick<AppState, 'uiRings'>): string[] {
+export function eventModeShow(s: Pick<AppState, 'uiRings'> & Partial<Pick<AppState, 'people' | 'events' | 'extData'>>): string[] {
   const show = s.uiRings?.show ?? []
   const id = eventFilterOf(s)
-  return id && !show.includes(`event:${id}`) ? [...show, `event:${id}`] : [...show]
+  const out = id && !show.includes(`event:${id}`) ? [...show, `event:${id}`] : [...show]
+  // answers-44d: an intimate community's event shows the community's members too
+  for (const c of s.people ? intimateEventChips(s as Pick<AppState, 'people'> & typeof s) : []) if (!out.includes(c)) out.push(c)
+  return out
 }
 
 /** Chat, Resources and Ask: only the people connected with the event; mode off = the list as it is. */

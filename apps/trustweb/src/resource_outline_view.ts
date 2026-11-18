@@ -9,6 +9,8 @@ import type { InventoryItem, ResBlock } from './model'
 import { addBlock, countBlocks, editBlock, locate, markdownToBlocks, moveBlock, removeBlock, shareProjection, toggleCollapsed } from './resource_blocks'
 import type { BlockShare, MoveHow, ShareScope, ShareVia } from './resource_blocks'
 import { S } from './strings'
+import { DRAFT_DEBOUNCE_MS } from './drafts'
+import { draftable } from './drafts_dom'
 
 export interface OutlineCtx {
   item: InventoryItem
@@ -30,6 +32,9 @@ export function outlineView(c: OutlineCtx): HTMLElement {
   let sharing: BlockShare | null = null
   const blocks = (): ResBlock[] => (c.item.blocks ??= [])
   const change = (f: () => void): void => { f(); c.save(); draw() }
+  /* wave44c event-autosave: a line is kept 500 ms after typing stops, not only when it loses focus */
+  let typing: ReturnType<typeof setTimeout> | undefined
+  const keep = (id: string, v: string): void => { clearTimeout(typing); typing = setTimeout(() => { editBlock(blocks(), id, v); c.save() }, DRAFT_DEBOUNCE_MS) }
   const move = (id: string, how: MoveHow): void => { focusId = id; change(() => { moveBlock(blocks(), id, how) }) }
 
   const bullet = (b: ResBlock): HTMLElement => {
@@ -47,7 +52,8 @@ export function outlineView(c: OutlineCtx): HTMLElement {
     const input = el('input', {
       class: 'ol-text', 'data-ol-text': b.id, 'aria-label': S.resOutliner.lineAria, maxlength: '400', value: b.text,
       onfocus: () => { focusId = b.id },
-      onchange: (e: Event) => { editBlock(blocks(), b.id, (e.target as HTMLInputElement).value); c.save() },
+      onchange: (e: Event) => { clearTimeout(typing); editBlock(blocks(), b.id, (e.target as HTMLInputElement).value); c.save() },
+      oninput: (e: Event) => keep(b.id, (e.target as HTMLInputElement).value),
       onkeydown: (ev: Event) => {
         const e = ev as KeyboardEvent
         const v = (e.target as HTMLInputElement).value
@@ -92,11 +98,13 @@ export function outlineView(c: OutlineCtx): HTMLElement {
 
   const importBox = (): HTMLElement => {
     const area = el('textarea', { class: 'field ol-paste', 'data-ol-paste': '', rows: '4', placeholder: S.resOutliner.pastePh, 'aria-label': S.resOutliner.pasteAria })
-    return el('details', { class: 'ol-import' }, [
+    const box = el('details', { class: 'ol-import' }, [
       el('summary', {}, [S.resOutliner.pasteTitle]),
       area,
-      el('button', { class: 'btn btn-ghost btn-sm', 'data-ol-import': '', onclick: () => { const add = markdownToBlocks((area as HTMLTextAreaElement).value, c.newId); if (add.length) change(() => { blocks().push(...add) }) } }, [S.resOutliner.pasteGo]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-ol-import': '', onclick: () => { const add = markdownToBlocks((area as HTMLTextAreaElement).value, c.newId); if (add.length) { kept.clear(); change(() => { blocks().push(...add) }) } } }, [S.resOutliner.pasteGo]),
     ])
+    const kept = draftable(box, 'outline-paste', c.item.id)
+    return box
   }
 
   function draw(): void {

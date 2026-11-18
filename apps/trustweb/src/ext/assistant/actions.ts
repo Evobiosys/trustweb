@@ -16,12 +16,21 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'event-create': 'event_create', 'event-doc': 'app_action', 'event-role': 'app_action', 'event-resource': 'app_action',
   /* wave43c sync-devices (sync_actions.ts) */
   'sync-now': 'sync_now',
+  'sync-pair-link': 'sync_pair_link', // wave44c sync-seamless
+  'sync-pair-show-new': 'sync_pair_show_new', 'sync-pair-scan': 'sync_pair_scan', // wave44c answers-44c
   // Wave 43c connect-extras: the debug send of an event envelope has its own tool
   'event-envelope-send': 'event_envelope_send',
   // Wave 44 home-dashboard: opening a Dashboard has its own tool
   'dashboard-open': 'dashboard_open',
+  // Wave 44c home-default: opening one request as its card
+  'home-open-request': 'home_open_request',
+  // review-44c: the host's introduction at an event (seen_through_actions.ts)
+  'seen-introduce': 'event_introduce_person',
   /* wave44 answers-44b: a shared block sent to a chat is resource_share via:'chat' */
   'resource-share-chat': 'resource_share',
+  /* wave44c answers-44d: queued for the open app (a44d_actions.ts) */
+  'ask-answer': 'ask_answer', 'chat-send': 'chat_send',
+  'event-chat-open': 'event_chat_open', 'event-message-all': 'event_message_all',
 }
 
 /** The actions `app_action` accepts (derived, so a new entry above needs no second edit). */
