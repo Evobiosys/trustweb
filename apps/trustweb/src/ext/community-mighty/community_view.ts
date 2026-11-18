@@ -11,6 +11,7 @@ import { el } from '../../../../demo/src/ui/dom'
 import { addGroupPost } from '../../feed_sources'
 import type { AppState } from '../../model'
 import { randomId } from '../../../../demo/src/crypto' // answers-44d
+import { INTIMATE_MAX, isIntimate } from '../../event_community' // answers-44d
 import { hasColourTag, loadColourTags, saveColourTags } from '../../colour_tags'
 import { contextPress } from '../../context_press'
 import { strikeOff } from '../../bw_mode'
@@ -452,6 +453,9 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       ])]),
       el('p', { class: 'meta' }, [m.kind === 'managed' ? w.kindHintManaged : w.kindHintInformal]),
       pick(w.askToggle, { 'data-community-ask-toggle': '' }, m.ask === true, (on) => save(setSettings(data(), tag, { ask: on })), !can),
+      // answers-44d: intimate = everyone knows everyone (events list the members)
+      pick(ctx.strings.a44d.intimateToggle, { 'data-community-intimate-toggle': '' }, isIntimate(st(), tag), (on) => save({ ...data(), meta: { ...data().meta, [tag]: { ...metaOf(data(), tag), intimate: on } } }), !can),
+      el('p', { class: 'meta' }, [ctx.strings.a44d.intimateHint(INTIMATE_MAX)]),
       el('p', { class: 'chips-lbl' }, [w.leftColumn]),
       ...NAV.map((n) => pick(t.nav[n], { 'data-community-nav-toggle': n }, shown.includes(n), () => {
         const now = leftNav(data(), tag)

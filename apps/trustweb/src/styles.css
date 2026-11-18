@@ -2319,3 +2319,14 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .trash-row > span{flex:1 0 100%; min-width:0; overflow-wrap:anywhere}
 .trash-row > em{flex:1 1 auto; white-space:nowrap; font-size:13px}
 .trash-row > button{flex:none; width:auto; margin:0; text-decoration:underline}
+
+/* wave44c answers-44d */
+.events-page .ev-mode-note{display:inline-flex; align-items:center; align-self:flex-start; width:auto; margin:6px 0 10px}
+.events-page .ev-cover{display:block; border-radius:12px; padding:10px 12px; margin:0 0 10px}
+.events-page .ev-cover .ev-what{margin:0 0 6px; font-weight:600}
+.events-page .ev-cover .event-share{margin:0}
+.events-page .ev-by-community{display:inline-block; width:auto; margin:0 0 6px; padding:2px 0}
+.events-page .ev-joining{margin:6px 0}
+.events-page .ev-who{margin-top:4px}
+.events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
+.rs-by{display:block; font-size:12.5px}

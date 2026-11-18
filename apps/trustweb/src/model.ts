@@ -418,6 +418,8 @@ export interface TwEvent {
   hostDefaultAnswered?: true
   /** Wave 44: the host shares this event with the whole community (communityId, else community); absent = off. Local only. */
   shareCommunity?: true
+  /** answers-44d: a community event shared with "Choose later": joiners are not placed as community members (absent = they are; event_community.ts). */
+  shareAudience?: 'later'
   /** Wave 44: when the community was told about it (once). Local only. */
   announcedAt?: number
   /** Wave 44 steer-open-space: host flag "Everyone can see everyone" (small, intimate events): my default turns to show, discoverable people are listed. Travels in the event link. */

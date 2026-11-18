@@ -11,6 +11,9 @@ export interface A44dActionHost {
   /** False when the ask is no longer open on this device. */
   answerAsk(qid: string, yes: boolean, note?: string, who?: string): boolean | Promise<boolean>
   sendChat(personId: string, text: string): Promise<boolean>
+  /** Item 4: the event's Message everyone composer; sending to everyone at it (how many it reached). */
+  openEventChat(eventId: string): void
+  messageAll(eventId: string, text: string): Promise<number>
 }
 
 export function defineA44dActions(reg: Actions, host: A44dActionHost): void {
@@ -27,6 +30,21 @@ export function defineA44dActions(reg: Actions, host: A44dActionHost): void {
     parse: (a) => ({ person: str(a, 'person', 120) as string, text: str(a, 'text', 4000) as string }),
     label: () => S.a44d.chatSendLabel,
     apply: (a) => { void host.sendChat(a.person, a.text) },
+    undoable: false,
+  })
+  /* item 4: the event chat (Message everyone) */
+  reg.define({
+    type: 'event-chat-open', doc: 'Opens Message everyone of an event (the composer whose text goes to every connected person at it).', shape: '{"event": event id or name}',
+    parse: (a) => ({ event: str(a, 'event', 120) as string }),
+    label: () => S.a44d.chatOpenLabel,
+    apply: (a) => host.openEventChat(a.event),
+    undoable: false,
+  })
+  reg.define({
+    type: 'event-message-all', doc: 'Sends one message into the chat with every connected person at an event (the people joining and the hosts).', shape: '{"event": event id or name, "text": message}',
+    parse: (a) => ({ event: str(a, 'event', 120) as string, text: str(a, 'text', 2000) as string }),
+    label: () => S.a44d.messageAllLabel,
+    apply: (a) => { void host.messageAll(a.event, a.text) },
     undoable: false,
   })
 }

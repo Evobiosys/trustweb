@@ -111,6 +111,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'groups_list', write: false }, { name: 'relations_list', write: false }, { name: 'tasks_list', write: false }, { name: 'invitations_list', write: false }, { name: 'meetings_list', write: false },
   { name: 'ask_answer', write: true }, { name: 'chat_send', write: true },
   { name: 'resource_add', write: true },
+  { name: 'event_share_audience_set', write: true }, { name: 'community_intimate_set', write: true }, { name: 'event_chat_open', write: true }, { name: 'event_message_all', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

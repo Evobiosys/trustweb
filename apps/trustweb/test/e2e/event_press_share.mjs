@@ -87,7 +87,7 @@ try {
   // 4 name reveal: nickname by long press
   await hold(page, '[data-event-reveal-seg]')
   check('long press on the name segment reaches Nickname', (await evOf(page)).nameReveal === 'nick' && (await page.locator('[data-event-name-reveal="nick"][aria-pressed="true"]').count()) === 1)
-  await page.locator('[data-event-nickname]').fill('Jaki'); await page.locator('.events-page').tap({ position: { x: 352, y: 3 } }); await page.waitForTimeout(200)
+  await page.locator('[data-event-nickname]').fill('Jaki'); await page.locator('[data-event-nickname]').evaluate((n) => n.blur())   // answers-44d: the share row moved to the bottom, the field now sits where the tap went; await page.waitForTimeout(200)
   check('the nickname is saved on me', (await stored(page)).me.nickname === 'Jaki')
 
   // 5 advanced: offers and invite policy

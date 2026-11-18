@@ -466,6 +466,8 @@ export interface EventEnvelope {
   conf?: { id: string; links: { provider: 'kmeet' | 'zoom' | 'jitsi' | 'custom'; url: string }[] }
   /** Wave 44c seen-through: a host introduces a person at event `id` to its attendees; `who` (the name) only when that person's device said yes (`shown`). */
   seen?: { id: string; shown: boolean; who?: string }
+  /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
+  joined?: { id: string }
 }
 // ----- END TrustWeb wave 43c -----
 

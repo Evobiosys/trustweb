@@ -9,6 +9,7 @@
 import type { HeldAsk } from '../../trustweb/src/model.ts'
 import { addScoped, type Scope } from '../../trustweb/src/resource_scope.ts'
 import { eventTagLabel, eventTagSlug } from '../../trustweb/src/event_tag.ts'
+import { parseCommunity, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import { announce } from './events.ts'
 import { commitTo, findPerson, load, needText, schema, S, type Person, type Rec, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
@@ -27,7 +28,7 @@ const openAsks = (r: Rec, now: number): HeldAsk[] => list<HeldAsk>(r.heldAsks)
   .filter((h) => h && typeof h.qid === 'string' && typeof h.receivedAt === 'number' && now - h.receivedAt <= KEEP_MS && h.yesAt === undefined && Array.isArray(h.matches))
   .sort((a, b) => a.receivedAt - b.receivedAt)
 
-interface Ev extends Obj { id: string; name: string; from?: string; where?: string; hosts?: string[]; communityId?: string; community?: string; roles?: unknown; resources?: { text: string }[]; conditions?: string; themes?: string[] }
+interface Ev extends Obj { id: string; name: string; from?: string; where?: string; hosts?: string[]; communityId?: string; community?: string; shareAudience?: 'later'; roles?: unknown; resources?: { text: string }[]; conditions?: string; themes?: string[] }
 const events = (r: Rec): Ev[] => list<Ev>(r.events)
 const attendeesOf = (r: Rec, id: string): Person[] => r.people.filter((p) => list<string>(p.events).includes(id) && p.deleted_at === undefined)
 function findEvent(r: Rec, q: unknown): Ev {
@@ -35,6 +36,24 @@ function findEvent(r: Rec, q: unknown): Ev {
   const e = events(r).find((x) => x.id === key) ?? events(r).find((x) => x.name.toLowerCase() === key.toLowerCase())
   if (!e) throw new Error(`no event "${key}"`)
   return e
+}
+
+/* item 4 (event_community.ts rules; that module is not loadable under plain node: the model's enums) */
+const INTIMATE_MAX = 30
+const holds = (p: Person, tag: string): boolean => String(p.fields?.[tag]) === 'true' && p.deleted_at === undefined && !p.via
+const communityOf = (e: Ev): string | null => e.communityId || e.community || null
+function intimate(r: Rec, tag: string): boolean {
+  const flag = parseCommunity((r.extData as Obj | undefined)?.['community-mighty']).meta?.[tag]?.intimate
+  return typeof flag === 'boolean' ? flag : r.people.filter((p) => holds(p, tag)).length <= INTIMATE_MAX
+}
+function pageTop(r: Rec, e: Ev): Obj {
+  const hosts = (e.hosts?.length ? e.hosts : (e.organizers as string[] | undefined) ?? []).map(String)
+  const hostSet = new Set(hosts.map((n) => n.trim().toLowerCase()))
+  const joining = attendeesOf(r, e.id).filter((p) => !p.via && !hostSet.has(p.name.trim().toLowerCase()))
+  const tag = communityOf(e)
+  const close = tag ? intimate(r, tag) : false
+  const members = tag && close ? r.people.filter((p) => holds(p, tag) && !joining.includes(p)).map((p) => p.name) : []
+  return { hostedBy: hosts, joining: joining.map((p) => p.name), intimate: close, communityMembers: members, shareAudience: tag ? (e.shareAudience === 'later' ? 'later' : 'community') : null }
 }
 
 interface Msg { dir: string; text: string; at: number }
@@ -63,7 +82,7 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
       run: (a) => {
         const r = load(o.file)
         const e = findEvent(r, a.event)
-        return { id: e.id, name: e.name, from: e.from ?? '', to: e.to ?? null, where: e.where ?? '', hosts: e.hosts ?? [], community: e.communityId ?? e.community ?? null,
+        return { id: e.id, name: e.name, from: e.from ?? '', to: e.to ?? null, where: e.where ?? '', hosts: e.hosts ?? [], community: communityOf(e), ...pageTop(r, e),
           attendees: attendeesOf(r, e.id).map((p) => ({ id: p.id, name: p.name })), roles: e.roles ?? [], resources: (e.resources ?? []).map((x) => x.text), conditions: e.conditions ?? '', themes: e.themes ?? [] }
       },
     },
@@ -151,6 +170,47 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
         if (text.length > 4000) throw new Error('text is too long')
         queue('chat_send', 'chat-send', { person: p.id, text })
         return { queued: true, person: p.id }
+      },
+    },
+    {
+      name: 'event_share_audience_set', description: 'A community event: who people joining through its link become: community (acquainted community members, the default) or later (Choose later: they are only tagged with the event).',
+      inputSchema: schema({ event: S('event id or exact name'), audience: S('community | later') }, ['event', 'audience']),
+      run: (a) => {
+        if (a.audience !== 'community' && a.audience !== 'later') throw new Error('audience must be community or later')
+        let out: Obj = {}
+        commitTo(o.file, now, (r) => {
+          const e = findEvent(r, a.event)
+          if (!communityOf(e)) throw new Error(`"${e.name}" is not a community event (it keeps the personal default)`)
+          if (a.audience === 'later') e.shareAudience = 'later'; else delete e.shareAudience
+          out = { id: e.id, shareAudience: a.audience }
+        })
+        return out
+      },
+    },
+    {
+      name: 'community_intimate_set', description: `Mark a community intimate (everyone knows everyone: its events list the members, and the Web in event mode shows them) or not. Default by size: up to ${INTIMATE_MAX} members.`,
+      inputSchema: schema({ community: S('community tag id'), intimate: { type: 'boolean', description: 'true = intimate' } }, ['community', 'intimate']),
+      run: (a) => {
+        const tag = needText(a.community, 'community')
+        if (typeof a.intimate !== 'boolean') throw new Error('intimate must be true or false')
+        commitTo(o.file, now, (r) => { r.extData = { ...(r.extData as Obj | undefined), 'community-mighty': withMeta(parseCommunity((r.extData as Obj | undefined)?.['community-mighty']), tag, { intimate: a.intimate as boolean }) } })
+        return { id: tag, intimate: a.intimate }
+      },
+    },
+    {
+      name: 'event_chat_open', description: 'Open "Message everyone" of an event on the open TrustWeb app (the composer whose text goes to every connected person at it). Queued.',
+      inputSchema: schema({ event: S('event id or exact name') }, ['event']),
+      run: (a) => { const e = findEvent(load(o.file), a.event); queue('event_chat_open', 'event-chat-open', { event: e.id }); return { queued: true, event: e.id } },
+    },
+    {
+      name: 'event_message_all', description: 'Send one message into the chat with every connected person at an event (the people joining and the hosts). Queued for the open TrustWeb app.',
+      inputSchema: schema({ event: S('event id or exact name'), text: S('the message') }, ['event', 'text']),
+      run: (a) => {
+        const e = findEvent(load(o.file), a.event)
+        const text = needText(a.text, 'text')
+        if (text.length > 2000) throw new Error('text is too long')
+        queue('event_message_all', 'event-message-all', { event: e.id, text })
+        return { queued: true, event: e.id }
       },
     },
     {

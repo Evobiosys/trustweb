@@ -26,6 +26,7 @@ import { ICONS } from './icons'
 import { S } from './strings'
 import { attendChanged, conferenceLine } from './event_conference'
 import { emojiOn, emojiTitle, titleEmoji } from './title_emoji' // answers-44d
+import { eventTop, shareAudienceRow } from './event_page_top_view' // answers-44d
 
 export interface EventsViewHooks {
   state: () => AppState
@@ -65,7 +66,16 @@ export interface EventsViewHooks {
   /** Wave 44c event-autosave: my answer ("I will attend" or not) goes to the hosts; a saved event's conference link to the guests who accepted. */
   rsvp?: (ev: TwEvent) => void
   saved?: (ev: TwEvent) => void
+  /** answers-44d: the community's name; open that community; the Community view is chosen for a community event; Message everyone; the event's Resources. */
+  communityName?: (tag: string) => string
+  openCommunity?: (tag: string) => void
+  communityView?: (tag: string) => void
+  messageAll?: (ev: TwEvent) => void
+  eventResources?: (ev: TwEvent) => void
 }
+
+/** answers-44d (memo: "Invite a new person" made the screen jump up): the event page keeps its scroll position across redraws. */
+let pageScroll = { id: '', top: 0 }
 
 export interface EventsView {
   /** The screen's children, for render(). */
@@ -103,7 +113,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   let revealOpen = false
   /** Wave 44: the open editor keeps what was typed across redraws; a change of view ends it. */
   let editor: { body: () => Node[] } | undefined
-  const show = (v: View): void => { view = v; editor = undefined; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; sinceOpen = false; timesOpen = false; notifyHint = false; revealOpen = false; h.redraw() }
+  const show = (v: View): void => { view = v; pageScroll = { id: '', top: 0 }; editor = undefined; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; sinceOpen = false; timesOpen = false; notifyHint = false; revealOpen = false; h.redraw() }
   const find = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
 
   function row(ev: TwEvent): HTMLElement {
@@ -269,16 +279,17 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   }
 
   /** Wave 43: the share row, two icons side by side; the QR carries the link the toggle now shows. */
-  function shareRow(ev: TwEvent): HTMLElement {
+  function shareRow(ev: TwEvent, top = false): HTMLElement {
     const T = S.w43press
     const icon = (glyph: string, label: string, attr: string, onclick: () => void): HTMLElement => {
       const g = el('span', { class: 'share-glyph', 'aria-hidden': 'true' }, glyph.startsWith('<svg') ? [] : [glyph])
       if (glyph.startsWith('<svg')) g.innerHTML = glyph   // wave 44 steer-people-picker-4: the QR is the app's own SVG symbol, not a text character
       return el('button', { class: 'btn btn-ghost', type: 'button', 'aria-label': label, title: label, [attr]: '', onclick }, [g, ' ', el('u', {}, [label === S.eventLinkShare ? T.shareLink : T.shareQr])])
     }
-    return el('div', { class: 'chips event-share', 'data-event-share-row': '' }, [
-      icon(T.iconLink, S.eventLinkShare, 'data-event-share', () => copyShown(ev)),
-      h.showQr ? icon(ICONS.qr, S.eventQrShare, 'data-event-qr', () => h.showQr?.(ev, hostLink)) : null,
+    // answers-44d: the same icons a second time at the top (own attributes: one control per selector)
+    return el('div', { class: 'chips event-share', [top ? 'data-event-share-top-row' : 'data-event-share-row']: '' }, [
+      icon(T.iconLink, S.eventLinkShare, top ? 'data-event-share-top' : 'data-event-share', () => copyShown(ev)),
+      h.showQr ? icon(ICONS.qr, S.eventQrShare, top ? 'data-event-qr-top' : 'data-event-qr', () => h.showQr?.(ev, hostLink)) : null,
     ])
   }
 
@@ -520,7 +531,10 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const tag = tagLabel(ev)
     const tagChip = el('button', { class: 'chip event-tag-chip', type: 'button', 'data-event-tag-chip': tag, 'aria-label': S.eventsTagChipAria(eventTagLabel(tag)), onclick: () => h.copyLink(eventTagSlug(tag), S.eventsTagCopied) }, [eventTagLabel(tag)])
     contextPress(tagChip, () => show({ kind: 'form', id: ev.id }))
-    return [title, el('div', { class: 'scroll events-page' }, [
+    const ctag = communityOfEvent(ev)
+    if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
+    const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, eventResources: h.eventResources, openPerson: h.curatorPerson }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),
@@ -535,10 +549,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.() }, [S.w43press.askSupport]) : null,
       el('div', { class: 'chips' }, [attended, notify, eventModeToggle({ state: h.state, save: h.save, redraw: h.redraw }, ev.id)]),
       notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,
-      shareRow(ev),
-      hostToggle(ev),
-      linkPreview(),
-      el('p', { class: 'meta' }, [S.eventLinkHint]),
       nameReveal(ev),
       el('div', { class: 'ev-people-head' }, [el('h3', {}, [S.eventsAssociated(tagLabel(ev))]), webFocusButton(ev)]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
@@ -548,7 +558,12 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       advanced(ev),
       el('button', { class: 'btn btn-ghost wide', 'data-event-edit': '', onclick: () => show({ kind: 'form', id: ev.id }) }, [S.eventsEdit]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-delete': '', onclick: () => remove(ev) }, [S.eventsDelete]),
-    ])]
+      // answers-44d (memo 4): the share controls at the very bottom too (and at the top, in the cover)
+      el('div', { class: 'ev-share-bottom', 'data-event-share-bottom': '' }, [shareRow(ev), shareAudienceRow(ev, h), hostToggle(ev), linkPreview(), el('p', { class: 'meta' }, [S.eventLinkHint])]),
+    ])
+    if (pageScroll.id === ev.id && pageScroll.top > 0) { const top = pageScroll.top; queueMicrotask(() => { scroller.scrollTop = top }); requestAnimationFrame(() => { if (scroller.scrollTop !== top) scroller.scrollTop = top }) }
+    else pageScroll = { id: ev.id, top: 0 }
+    return [title, scroller]
   }
 
   return {

@@ -20,6 +20,7 @@ import type { AppState, TwEvent } from './model'
 import { namedHost } from './event_conference'
 import { addSeenThrough } from './seen_through' // wave44c seen-through
 import { randomId } from '../../demo/src/crypto'
+import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -166,7 +167,29 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     return true
   }
 
+  /* wave44c answers-44d: an accepted invitation. The inviter / a host marks the guest joined; a host of an intimate community's event introduces them to the others there (accepting such an invitation says so in the join sheet). */
+  async function onJoined(peer: P, j: NonNullable<EventEnvelope['joined']>): Promise<boolean> {
+    const st = host.state()
+    const ev = held(j.id)
+    if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, j.id)) return false
+    host.save()
+    host.changed()
+    const tag = communityOfEvent(ev)
+    const who = st.people.find((p) => p.peerId === peer.id)
+    if (who && tag && isEventHost(ev, st.me.displayName, st.people) && isIntimate(st as Pick<AppState, 'people' | 'extData'>, tag)) {
+      const env: EventEnvelope = { v: 1, t: 'event', seen: { id: ev.id, shown: true, who: who.name.trim().slice(0, 40) } }
+      for (const other of host.recipients?.(ev) ?? []) if (other.id !== peer.id) await host.send(other, env).catch(() => undefined)
+    }
+    return true
+  }
+
   return {
+    /** answers-44d: I accepted the invitation: the person whose link or code I took (`by`) and the hosts I am connected to are told, sealed. */
+    async joined(ev: TwEvent, by?: { name: string; did?: string }): Promise<void> {
+      const st = host.state()
+      const ids = st.people.filter((p) => p.peerId && p.deleted_at === undefined && !p.via && ((by && ((by.did && p.did === by.did) || p.name.trim() === by.name.trim())) || namedHost(ev, p.name, st.people))).map((p) => p.peerId as string)
+      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', joined: { id: ev.id } }).catch(() => undefined) }
+    },
     /** Wave 44c: my "I will attend" (or not) goes to the hosts of the event I am connected to. */
     async rsvp(ev: TwEvent): Promise<void> {
       const st = host.state()
@@ -222,6 +245,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
       if (env.seen) return onSeen(peer, env.seen) ? 'filled' : 'ignored' // wave44c seen-through
+      if (env.joined) return (await onJoined(peer, env.joined).catch(() => false)) ? 'filled' : 'ignored' // wave44c answers-44d
       if (env.os) return (await onOpenSpace(peer, env.os)) ? 'filled' : 'ignored'
       if (env.rsvp) return (await onRsvp(peer, env.rsvp).catch(() => false)) ? 'answered' : 'ignored'   // wave44c event-autosave
       if (env.conf) return onConf(peer, env.conf) ? 'filled' : 'ignored'

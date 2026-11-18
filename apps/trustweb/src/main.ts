@@ -38,6 +38,7 @@ import { introForm, setIntroTarget } from './intro_ask_view'
 import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view' // wave44c seen-through
 import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
+import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { audienceFilterView } from './audience_filter'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
@@ -5513,8 +5514,13 @@ const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
 const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
+/** answers-44d: the event page's community, chat and resources hooks (also the registry's, a44d_actions.ts). */
+const eventHost = eventPageHooks({
+  st, save, tags: loadColourTags, openSheet, closeSheet, toast: (m) => toast(m), send: (peerId, text) => submitText(chatIo(), peerId, text),
+  showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory),
+})
 const eventsView = createEventsView({
-  focusWeb: webFocus,
+  focusWeb: webFocus, ...eventHost,
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
@@ -5701,7 +5707,7 @@ defineEventActions(appActions, {
 defineSyncActions(appActions, devices) // wave43c sync-devices
 defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
 defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
-defineA44dActions(appActions, { answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
+defineA44dActions(appActions, { openEventChat: (id) => { eventHost.openEventChat(id); if (screen !== Screen.Events) go(Screen.Events) }, messageAll: (id, text) => eventHost.messageAllById(id, text), answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),
@@ -6048,6 +6054,8 @@ function maybeOpenPendingEvent(): void {
     const id = joinEvent(st(), ev, now)
     if (ev.by && addBox.checked) addInviter(st(), ev.by, id, S.eventInvitedContext(ev.name), randomId(8), now)
     save(); closeSheet(); openEvents(id, linkOpensEdit(ev))
+    const held = st().events?.find((e) => e.id === id)
+    if (held) void eventEnv.joined(held, ev.by)   // answers-44d: the inviter and the hosts see that I joined
   }
   // The organizer's logo, if the server has one: filled in later, the sheet never waits for it (the title stays the link's own name).
   const logoSlot = ev.srv ? el('div', { 'data-org-logo': '' }) : null
@@ -6061,6 +6069,7 @@ function maybeOpenPendingEvent(): void {
     logoSlot,
     el('h2', {}, [S.eventLinkJoinTitle(emojiTitle(ev.name, emojiOn(st())), eventWhen(ev), ev.where)]),
     ev.by ? el('p', { class: 'meta', 'data-event-invited-by': '' }, [S.eventInvitedBy(ev.by.name)]) : null,
+    el('p', { class: 'meta', 'data-event-join-note': '' }, [S.a44d.joinNote]),   // answers-44d
     ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,
     ev.srv ? el('p', { class: 'meta', 'data-org-counts-note': '' }, [S.evOrgCounts]) : null,
     ev.conditions ? el('p', {}, [ev.conditions]) : null,
