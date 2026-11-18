@@ -78,12 +78,14 @@ describe('server wiring', () => {
     const file = path.join(mkdtempSync(path.join(tmpdir(), 'tw-mcp-bill-')), 'record.json')
     writeFileSync(file, JSON.stringify({ v: 1, people: [] }))
     const child = spawn(process.execPath, [path.resolve('../mcp/src/server.ts')], { env: { ...process.env, TW_RECORD: file, TW_MCP_WRITE: '1' } })
-    const lines = []
-    child.stdout.on('data', (d) => lines.push(...String(d).split('\n').filter(Boolean)))
+    // wave44c feed-ext: buffer the stream (tools/list is longer than one 64 KB pipe chunk), then split on complete lines.
+    let out = ''
+    child.stdout.on('data', (d) => { out += d })
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) + '\n')
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'billing_plans', arguments: {} } }) + '\n')
-    for (let i = 0; i < 100 && lines.length < 2; i += 1) await new Promise((r) => setTimeout(r, 50))
+    for (let i = 0; i < 100 && (out.match(/\n/g) ?? []).length < 2; i += 1) await new Promise((r) => setTimeout(r, 50))
     child.kill()
+    const lines = out.split('\n').filter(Boolean)
     const names = JSON.parse(lines[0]).result.tools.map((t) => t.name)
     expect(names).toEqual(expect.arrayContaining(['billing_plans', 'billing_status', 'billing_checkout_link', 'list_people']))
     expect(JSON.parse(JSON.parse(lines[1]).result.content[0].text)).toHaveLength(3)

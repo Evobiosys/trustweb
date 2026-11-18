@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 44 steer-people-picker-4 (headless, stock dev only): "+ tag" picker adds an existing or a new tag, placement pills fit at 360 and 1280, QR is an SVG symbol.
  *  PORT=5294 SHOTS=<dir> EXE=<chromium headless shell> PLAYWRIGHT_PACKAGE=<playwright-core index.js> node steer_people_picker_4.mjs */
+import { quietKeepCopy } from './rings_first.mjs'
 const pwm = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const pw = pwm.chromium ? pwm : pwm.default
 const ORIGIN = `http://127.0.0.1:${process.env.PORT ?? 5294}`
 const SHOTS = process.env.SHOTS ?? '/tmp'
 const browser = await pw.chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+quietKeepCopy(browser) // review-44c: the Keep-a-copy offer sheet (its veil) covered the controls (red on base 85191dbcde)
 let failed = false
 const check = (name, cond, info) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + (info ?? '')}`); if (!cond) failed = true }
 const person = (id, name, ring, extra = {}) => ({ id, name, ring, lines: [], context: '', metAt: Date.now(), fields: {}, ...extra })

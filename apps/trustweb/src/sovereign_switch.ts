@@ -8,6 +8,7 @@
 import type { RtbfService } from './data/services_rtbf'
 import type { AppState } from './model'
 import type { ZipFile } from './zip'
+import { scrubSecrets } from './secret_scrub' // wave44c answers-44d
 
 const pad = (n: number): string => String(n).padStart(2, '0')
 
@@ -79,7 +80,8 @@ Everything this device holds of your TrustWeb record, as files you own.
 Nothing was sent anywhere to make this file.
 `
 
-export function exportFiles(s: AppState, now: number): ZipFile[] {
+export function exportFiles(rec: AppState, now: number): ZipFile[] {
+  const s: AppState = scrubSecrets({ ...rec, drafts: undefined })   // wave44c event-autosave: drafts never leave this device; answers-44d: nor a Tana secret
   const all = nodes(s)
   let seq = 0
   const log = all.flatMap(({ kind, list }) => list.map((node) => JSON.stringify({ seq: ++seq, ts: now, op: 'create_node', kind, node }))).join('\n')

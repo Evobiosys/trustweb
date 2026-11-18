@@ -21,14 +21,14 @@ describe('notice and default-view tools', () => {
     reset({ wantsToConnect: [{ peerId: 'x', name: 'Ana', at: 1 }] })
     expect(tools(false).notices_list.run({})).toEqual({ cap: 3, kinds: ['cards', 'wants', 'update', 'notice', 'message', 'toast'], waiting: { wants: 1 } })
   })
-  it('the default view is rings until pinned; set stores it, rings drops the pin, unknown views fail', () => {
+  it('the default view is the rings until pinned (answers-44c); set stores it, rings is stored too, unknown views fail', () => {
     reset()
     const t = tools()
     expect(t.web_default_view_get.run({})).toEqual({ view: 'rings' })
     expect(t.web_default_view_set.run({ view: 'network' })).toEqual({ view: 'network' })
     expect(saved().uiViews).toEqual({ webDefault: 'network' })
     expect(t.web_default_view_set.run({ view: 'rings' })).toEqual({ view: 'rings' })
-    expect(saved().uiViews).toBeUndefined()
+    expect(saved().uiViews).toEqual({ webDefault: 'rings' })
     expect(() => t.web_default_view_set.run({ view: 'zzz' })).toThrow(/view must be one of/)
   })
 })

@@ -8,7 +8,7 @@ import { NOTICE_CAP, NOTICE_KINDS } from '../../trustweb/src/notice_layer.ts'
 import type { Tool } from './protocol.ts'
 
 /** The view_menu ViewKeys a person can pin. */
-const VIEWS = ['rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups', 'circles']
+const VIEWS = ['home', 'rings', 'network', 'people', 'complete', 'map', 'dex', 'compact', 'groups', 'circles']
 /** web_default_view.ts, inlined: that module imports without file endings, which plain node cannot load. */
 type Rec = Record<string, unknown> & { uiViews?: { webDefault?: string }; wantsToConnect?: unknown[] }
 const none = { type: 'object', properties: {}, required: [], additionalProperties: false }
@@ -20,15 +20,15 @@ export function noticeTools(o: { file: string; write: boolean }): Tool[] {
       name: 'notices_list', description: 'The one notice layer: how many notices show at once, its kinds top to bottom, and how many "Wants to connect" rows wait in the record.',
       inputSchema: none, run: () => ({ cap: NOTICE_CAP, kinds: [...NOTICE_KINDS], waiting: { wants: load().wantsToConnect?.length ?? 0 } }),
     },
-    { name: 'web_default_view_get', description: 'The view the Web (Contacts) tab opens: rings unless another is pinned.', inputSchema: none, run: () => ({ view: load().uiViews?.webDefault || 'rings' }) },
+    { name: 'web_default_view_get', description: 'The view the Web (Contacts) tab opens in the personal view: the rings unless another (e.g. home) is pinned.', inputSchema: none, run: () => ({ view: load().uiViews?.webDefault || 'rings' }) },
   ]
   const write: Tool[] = [{
-    name: 'web_default_view_set', description: `Pin the default view of Web (Contacts): ${VIEWS.join(', ')}; rings drops the pin.`,
+    name: 'web_default_view_set', description: `Pin the default view of Web (Contacts): ${VIEWS.join(', ')}; rings (the default) opens the rings first, home the Home board.`,
     inputSchema: { type: 'object', properties: { view: { type: 'string', enum: VIEWS } }, required: ['view'], additionalProperties: false },
     run: (a) => {
       if (typeof a.view !== 'string' || !VIEWS.includes(a.view)) throw new Error(`view must be one of ${VIEWS.join(', ')}`)
       const r = load()
-      if (a.view === 'rings') delete r.uiViews; else r.uiViews = { ...r.uiViews, webDefault: a.view }
+      r.uiViews = { ...r.uiViews, webDefault: a.view }
       const tmp = o.file + '.tmp'
       writeFileSync(tmp, JSON.stringify(r))
       renameSync(tmp, o.file)

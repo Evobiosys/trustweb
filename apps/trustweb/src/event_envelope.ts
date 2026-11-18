@@ -17,6 +17,10 @@ import { addItem } from './notify_inbox'
 import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
 import { S } from './strings'
 import type { AppState, TwEvent } from './model'
+import { namedHost } from './event_conference'
+import { addSeenThrough } from './seen_through' // wave44c seen-through
+import { randomId } from '../../demo/src/crypto'
+import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -26,8 +30,8 @@ export const EVENT_WANT_RETRY_MS: readonly number[] = [5_000, 30_000, 120_000]
 /** The short QR leaves the place out; an event without one is still waiting for the rest. */
 export const isIncomplete = (ev: { where: string }): boolean => ev.where === ''
 
-type Fillable = Partial<Pick<TwEvent, 'where' | 'conditions' | 'themes' | 'organizer' | 'hosts' | 'to' | 'core' | 'showAll'>>
-const FILL: readonly (keyof Fillable)[] = ['where', 'conditions', 'themes', 'organizer', 'hosts', 'to', 'core', 'showAll']
+type Fillable = Partial<Pick<TwEvent, 'where' | 'conditions' | 'themes' | 'organizer' | 'hosts' | 'to' | 'core' | 'showAll' | 'confHidden'>>
+const FILL: readonly (keyof Fillable)[] = ['where', 'conditions', 'themes', 'organizer', 'hosts', 'to', 'core', 'showAll', 'confHidden']
 const empty = (v: unknown): boolean => v === undefined || v === '' || (Array.isArray(v) && v.length === 0)
 
 /** Copies into `target` what it lacks from `src`; true when anything changed. */
@@ -77,6 +81,8 @@ export interface EnvelopeHost<P extends { id: string }> {
   /** An event this device holds just got more fields: redraw. */
   changed(): void
   later(fn: () => void, ms: number): void
+  /** Wave 44c event-autosave: my connected peers (the hosts an rsvp goes to, the guests a changed conference link goes to). */
+  peers?(): P[]
 }
 
 export type EnvelopeOutcome = 'answered' | 'filled' | 'pending' | 'ignored'
@@ -121,7 +127,79 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     return true
   }
 
+  /* wave44c event-autosave: the conference link, revealed only after a yes */
+  const confEnv = (ev: TwEvent): EventEnvelope => ({ v: 1, t: 'event', conf: { id: ev.id, links: ev.conference ?? [] } })
+  const peerOf = (id: string): P | undefined => host.peers?.().find((p) => p.id === id)
+  /** The host: a guest's answer. A yes gets the links (and a later change); a no takes them off the list. */
+  async function onRsvp(peer: P, r: NonNullable<EventEnvelope['rsvp']>): Promise<boolean> {
+    const ev = held(r.id)
+    const st = host.state()
+    if (!ev || !isEventHost(ev, st.me.displayName, st.people)) return false
+    const rest = (ev.confTo ?? []).filter((id) => id !== peer.id)
+    const to = r.yes && ev.conference?.length ? [...rest, peer.id] : rest
+    if (to.length) ev.confTo = to; else delete ev.confTo
+    host.save()
+    if (!r.yes || !ev.conference?.length) return !r.yes
+    await host.send(peer, confEnv(ev))
+    return true
+  }
+  /** The guest: links only from a host the event names, and only while I attend. */
+  function onConf(peer: P, c: NonNullable<EventEnvelope['conf']>): boolean {
+    const ev = held(c.id)
+    const st = host.state()
+    const who = st.people.find((p) => p.peerId === peer.id)
+    if (!ev || !ev.attended || !who || !namedHost(ev, who.name, st.people)) return false
+    if (c.links.length) ev.conference = c.links; else delete ev.conference
+    host.save()
+    host.changed()
+    return true
+  }
+
+  /** Wave 44c seen-through: an introduction counts only from a host of an event I attend; the person sits outside my rings via that host. */
+  function onSeen(peer: P, seen: NonNullable<EventEnvelope['seen']>): boolean {
+    const ev = held(seen.id)
+    const st = host.state()
+    const who = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined && !p.via)
+    if (!ev || !ev.attended || !who || !isEventHost(ev, who.name, st.people)) return false
+    if (!addSeenThrough(st, { via: who.id, who: seen.who, shown: seen.shown, source: 'event', event: ev.id, now: host.now(), id: 'seen-' + randomId(10) })) return false
+    host.save()
+    host.changed()
+    return true
+  }
+
+  /* wave44c answers-44d: an accepted invitation. The inviter / a host marks the guest joined; a host of an intimate community's event introduces them to the others there (accepting such an invitation says so in the join sheet). */
+  async function onJoined(peer: P, j: NonNullable<EventEnvelope['joined']>): Promise<boolean> {
+    const st = host.state()
+    const ev = held(j.id)
+    if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, j.id)) return false
+    host.save()
+    host.changed()
+    const tag = communityOfEvent(ev)
+    const who = st.people.find((p) => p.peerId === peer.id)
+    if (who && tag && isEventHost(ev, st.me.displayName, st.people) && isIntimate(st as Pick<AppState, 'people' | 'extData'>, tag)) {
+      const env: EventEnvelope = { v: 1, t: 'event', seen: { id: ev.id, shown: true, who: who.name.trim().slice(0, 40) } }
+      for (const other of host.recipients?.(ev) ?? []) if (other.id !== peer.id) await host.send(other, env).catch(() => undefined)
+    }
+    return true
+  }
+
   return {
+    /** answers-44d: I accepted the invitation: the person whose link or code I took (`by`) and the hosts I am connected to are told, sealed. */
+    async joined(ev: TwEvent, by?: { name: string; did?: string }): Promise<void> {
+      const st = host.state()
+      const ids = st.people.filter((p) => p.peerId && p.deleted_at === undefined && !p.via && ((by && ((by.did && p.did === by.did) || p.name.trim() === by.name.trim())) || namedHost(ev, p.name, st.people))).map((p) => p.peerId as string)
+      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', joined: { id: ev.id } }).catch(() => undefined) }
+    },
+    /** Wave 44c: my "I will attend" (or not) goes to the hosts of the event I am connected to. */
+    async rsvp(ev: TwEvent): Promise<void> {
+      const st = host.state()
+      const ids = st.people.filter((p) => p.peerId && namedHost(ev, p.name, st.people)).map((p) => p.peerId as string)
+      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', rsvp: { id: ev.id, yes: ev.attended } }).catch(() => undefined) }
+    },
+    /** Wave 44c: the host changed the conference link: the guests who accepted get the new one. */
+    async pushConference(ev: TwEvent): Promise<void> {
+      for (const id of ev.confTo ?? []) { const peer = peerOf(id); if (peer) await host.send(peer, confEnv(ev)).catch(() => undefined) }
+    },
     /** The event QR of this event is on screen now. */
     shown(id: string, at: number = host.now()): void { shown = { id, at } },
     /** Wave 44 steer-open-space: my change to the schedule (a proposal, a join) goes to the people at this event. */
@@ -156,9 +234,21 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       await ask()
       EVENT_WANT_RETRY_MS.forEach((ms) => host.later(() => { void ask() }, ms))
     },
+    /** Wave 44c seen-through: a host introduces a person to the people at this event; the name only with that person's yes. */
+    /** review-44c: `skip` = the peer id of the person introduced (they are at the event too; nothing goes back to them). */
+    async introduce(id: string, who: string, shown: boolean, skip?: string): Promise<void> {
+      const ev = held(id)
+      if (!ev) return
+      const env: EventEnvelope = { v: 1, t: 'event', seen: { id, shown, ...(shown ? { who: who.trim().slice(0, 40) } : {}) } }
+      for (const peer of host.recipients?.(ev) ?? []) if (peer.id !== skip) await host.send(peer, env).catch(() => undefined)
+    },
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
+      if (env.seen) return onSeen(peer, env.seen) ? 'filled' : 'ignored' // wave44c seen-through
+      if (env.joined) return (await onJoined(peer, env.joined).catch(() => false)) ? 'filled' : 'ignored' // wave44c answers-44d
       if (env.os) return (await onOpenSpace(peer, env.os)) ? 'filled' : 'ignored'
+      if (env.rsvp) return (await onRsvp(peer, env.rsvp).catch(() => false)) ? 'answered' : 'ignored'   // wave44c event-autosave
+      if (env.conf) return onConf(peer, env.conf) ? 'filled' : 'ignored'
       if (env.want !== undefined) return (await giveTo(peer, env.want).catch(() => false)) ? 'answered' : 'ignored'
       const linked = env.link === undefined ? null : decodeEventLink(env.link.slice(Math.max(0, env.link.indexOf('#'))))
       if (!linked) return 'ignored'

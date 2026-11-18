@@ -19,7 +19,9 @@ const newer = path.join(dir, 'newer', '_chat.txt')
 const li = path.join(dir, 'Connections.csv')
 writeFileSync(li, 'Notes:\nthis is a preamble\n\nFirst Name,Last Name,URL,Email Address,Company,Position,Connected On\nOtto,Beispiel,,otto@example.org,Acme,Dev,05 Oct 2024\n')
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const record = JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Owner Test' }, peers: [], log: [], inventory: [], people: [] })

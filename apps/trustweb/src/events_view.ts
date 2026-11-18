@@ -24,6 +24,9 @@ import type { AppState, Invitation, Person, TwEvent } from './model'
 import { invitationEventRows } from './invitations'
 import { ICONS } from './icons'
 import { S } from './strings'
+import { attendChanged, conferenceLine } from './event_conference'
+import { emojiOn, emojiTitle, titleEmoji } from './title_emoji' // answers-44d
+import { eventTop, shareAudienceRow } from './event_page_top_view' // answers-44d
 
 export interface EventsViewHooks {
   state: () => AppState
@@ -60,7 +63,19 @@ export interface EventsViewHooks {
   askSupport?: () => void
   /** Wave 43 web-focus-filter: show the Web with only this event's people. */
   focusWeb?: (ev: TwEvent) => void
+  /** Wave 44c event-autosave: my answer ("I will attend" or not) goes to the hosts; a saved event's conference link to the guests who accepted. */
+  rsvp?: (ev: TwEvent) => void
+  saved?: (ev: TwEvent) => void
+  /** answers-44d: the community's name; open that community; the Community view is chosen for a community event; Message everyone; the event's Resources. */
+  communityName?: (tag: string) => string
+  openCommunity?: (tag: string) => void
+  communityView?: (tag: string) => void
+  messageAll?: (ev: TwEvent) => void
+  eventResources?: (ev: TwEvent) => void
 }
+
+/** answers-44d (memo: "Invite a new person" made the screen jump up): the event page keeps its scroll position across redraws. */
+let pageScroll = { id: '', top: 0 }
 
 export interface EventsView {
   /** The screen's children, for render(). */
@@ -98,13 +113,13 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   let revealOpen = false
   /** Wave 44: the open editor keeps what was typed across redraws; a change of view ends it. */
   let editor: { body: () => Node[] } | undefined
-  const show = (v: View): void => { view = v; editor = undefined; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; sinceOpen = false; timesOpen = false; notifyHint = false; revealOpen = false; h.redraw() }
+  const show = (v: View): void => { view = v; pageScroll = { id: '', top: 0 }; editor = undefined; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; sinceOpen = false; timesOpen = false; notifyHint = false; revealOpen = false; h.redraw() }
   const find = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
 
   function row(ev: TwEvent): HTMLElement {
     const n = attendees(h.state(), ev.id).length
     return el('button', { class: 'prow', 'data-event': ev.id, onclick: () => show({ kind: 'page', id: ev.id }) }, [
-      el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [[whenLabel(ev), ev.where, S.eventsPeople(n)].filter(Boolean).join(' · ')])]),
+      el('span', { class: 'who' }, [el('b', {}, [emojiTitle(ev.name, emojiOn(h.state()))]), el('i', {}, [[whenLabel(ev), ev.where, S.eventsPeople(n)].filter(Boolean).join(' · ')])]),
     ])
   }
 
@@ -213,7 +228,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   /** "Identify a person": the shared picker (event_person_picker.ts); a pick tags the person with this event. */
   function picker(ev: TwEvent): HTMLElement {
     return el('div', {}, [el('h3', {}, [S.eventsIdentify]), eventPersonPicker(h, ev.id, {
-      exclude: [...listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true), ...attendees(h.state(), ev.id).filter((p) => !searchableAttendees([p], ev.id).length)].map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
+      exclude: [...listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true), ...attendees(h.state(), ev.id).filter((p) => !searchableAttendees([p], ev.id).length), ...h.state().people.filter((p) => p.via) /* wave44c seen-through: people I see only through a friend */].map((p) => p.id), tag: true, ariaLabel: S.eventsIdentify, inputAttr: 'data-event-tag-search', personAttr: 'data-tag-person',
       renderPerson: (p) => el('span', {}, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])]),
       decorate: (chip, p) => { contextPress(chip, () => h.curatorPerson(p.id)); dragPerson(chip, p) },
       onPick: (id) => { tagPerson(h.state(), id, ev.id); h.save(); h.redraw() },
@@ -264,16 +279,17 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   }
 
   /** Wave 43: the share row, two icons side by side; the QR carries the link the toggle now shows. */
-  function shareRow(ev: TwEvent): HTMLElement {
+  function shareRow(ev: TwEvent, top = false): HTMLElement {
     const T = S.w43press
     const icon = (glyph: string, label: string, attr: string, onclick: () => void): HTMLElement => {
       const g = el('span', { class: 'share-glyph', 'aria-hidden': 'true' }, glyph.startsWith('<svg') ? [] : [glyph])
       if (glyph.startsWith('<svg')) g.innerHTML = glyph   // wave 44 steer-people-picker-4: the QR is the app's own SVG symbol, not a text character
       return el('button', { class: 'btn btn-ghost', type: 'button', 'aria-label': label, title: label, [attr]: '', onclick }, [g, ' ', el('u', {}, [label === S.eventLinkShare ? T.shareLink : T.shareQr])])
     }
-    return el('div', { class: 'chips event-share', 'data-event-share-row': '' }, [
-      icon(T.iconLink, S.eventLinkShare, 'data-event-share', () => copyShown(ev)),
-      h.showQr ? icon(ICONS.qr, S.eventQrShare, 'data-event-qr', () => h.showQr?.(ev, hostLink)) : null,
+    // answers-44d: the same icons a second time at the top (own attributes: one control per selector)
+    return el('div', { class: 'chips event-share', [top ? 'data-event-share-top-row' : 'data-event-share-row']: '' }, [
+      icon(T.iconLink, S.eventLinkShare, top ? 'data-event-share-top' : 'data-event-share', () => copyShown(ev)),
+      h.showQr ? icon(ICONS.qr, S.eventQrShare, top ? 'data-event-qr-top' : 'data-event-qr', () => h.showQr?.(ev, hostLink)) : null,
     ])
   }
 
@@ -493,7 +509,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const people = listedAttendees(attendees(h.state(), ev.id), ev.id, ev.showAll === true)   // wave 44 steer-event-visibility: discoverable / off people stay out of the open list
     const attended = el('button', {
       class: 'chip' + (ev.attended ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(ev.attended), 'aria-pressed': String(ev.attended), 'data-event-attended': '',
-      onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
+      onclick: () => { ev.attended = !ev.attended; if (attendChanged(h.state(), ev)) h.rsvp?.(ev); h.save(); h.redraw() },
     }, [rsvpTense(ev, Date.now()) === 'future' ? S.ev44.willAttend : S.eventsAttended])   // wave 44 (item 13)
     // review-fixes-43: one switch for this event's notifications; it also covers the "I'm here now" bell (a muted bell of older records shows as off, switching on clears it).
     const st = h.state()
@@ -508,16 +524,22 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
     // review-fixes-43: the event name in the header is a line of the page too (P1): nothing to expand, so a press edits; a long press / right click edits with the name focused.
     const nameLine = title.querySelector('h2')
+    const emoji = emojiOn(h.state()) ? titleEmoji(ev.name) : ''   // answers-44d: prepended at render, the name stays the name
+    if (nameLine && emoji) nameLine.prepend(el('span', { class: 'title-emoji', 'aria-hidden': 'true', 'data-title-emoji': emoji }, [`${emoji} `]))
     if (nameLine) { nameLine.setAttribute('data-event-name-line', ''); nameLine.setAttribute('role', 'button'); nameLine.tabIndex = 0; editable(nameLine, ev, 'name') }
     // P4: the tag as this device calls it (tagLabel: the tag name, else the event name), the same text the Web filter and the Feed show.
     const tag = tagLabel(ev)
     const tagChip = el('button', { class: 'chip event-tag-chip', type: 'button', 'data-event-tag-chip': tag, 'aria-label': S.eventsTagChipAria(eventTagLabel(tag)), onclick: () => h.copyLink(eventTagSlug(tag), S.eventsTagCopied) }, [eventTagLabel(tag)])
     contextPress(tagChip, () => show({ kind: 'form', id: ev.id }))
-    return [title, el('div', { class: 'scroll events-page' }, [
+    const ctag = communityOfEvent(ev)
+    if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
+    const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, eventResources: h.eventResources, openPerson: h.curatorPerson }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),
       ev.where ? editable(el('p', { 'data-event-where': '' }, [ev.where]), ev, 'where') : null,
+      conferenceLine(ev),   // wave44c event-autosave: under Location
       rolesSection(h, ev),
       techLine(ev),
       ev.themes ? editable(el('div', { class: 'chips', 'data-event-themes': '' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))), ev, 'themes') : null,
@@ -527,10 +549,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.() }, [S.w43press.askSupport]) : null,
       el('div', { class: 'chips' }, [attended, notify, eventModeToggle({ state: h.state, save: h.save, redraw: h.redraw }, ev.id)]),
       notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,
-      shareRow(ev),
-      hostToggle(ev),
-      linkPreview(),
-      el('p', { class: 'meta' }, [S.eventLinkHint]),
       nameReveal(ev),
       el('div', { class: 'ev-people-head' }, [el('h3', {}, [S.eventsAssociated(tagLabel(ev))]), webFocusButton(ev)]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
@@ -540,7 +558,12 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       advanced(ev),
       el('button', { class: 'btn btn-ghost wide', 'data-event-edit': '', onclick: () => show({ kind: 'form', id: ev.id }) }, [S.eventsEdit]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-delete': '', onclick: () => remove(ev) }, [S.eventsDelete]),
-    ])]
+      // answers-44d (memo 4): the share controls at the very bottom too (and at the top, in the cover)
+      el('div', { class: 'ev-share-bottom', 'data-event-share-bottom': '' }, [shareRow(ev), shareAudienceRow(ev, h), hostToggle(ev), linkPreview(), el('p', { class: 'meta' }, [S.eventLinkHint])]),
+    ])
+    if (pageScroll.id === ev.id && pageScroll.top > 0) { const top = pageScroll.top; queueMicrotask(() => { scroller.scrollTop = top }); requestAnimationFrame(() => { if (scroller.scrollTop !== top) scroller.scrollTop = top }) }
+    else pageScroll = { id: ev.id, top: 0 }
+    return [title, scroller]
   }
 
   return {
@@ -556,7 +579,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         const draft = v.draftId ? draftsOf(h.state()).find((d) => d.id === v.draftId) : undefined
         editor ??= createEventEditor(h, {
           ...(ev ? { existing: ev } : draft?.eventId ? { existing: find(draft.eventId) } : {}), ...(draft ? { draft } : {}), ...(v.from ? { presetFrom: v.from } : {}), ...(v.community ? { presetCommunity: v.community } : {}), ...(v.focus ? { focus: v.focus } : {}),
-          done: (id) => show({ kind: 'page', id }),
+          done: (id) => { const saved = find(id); if (saved) h.saved?.(saved); show({ kind: 'page', id }) },
           // Left without saving: back to the event, else to the plain list, where a saved draft now waits (the calendar would hide it).
           leave: () => { if (ev) show({ kind: 'page', id: ev.id }); else { show({ kind: 'list' }); plain = true; h.redraw() } },
         })

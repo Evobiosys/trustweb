@@ -13,6 +13,7 @@ import { editText, fromText, indent, insertAfter, merge, moveDown, moveUp, outde
 import { chatPanel } from './co_chat_view'
 import type { CoMsg } from './co_chat'
 import { chipToken, fromEdit, fromLogseq, logseqUrl, parseChips, parseLogseqRef, refsOf, toEdit, toLogseq } from './co_links'
+import { draftable } from '../../drafts_dom'
 
 export interface CoCtx {
   h: ExtHooks
@@ -234,6 +235,8 @@ export function coEditor(c: CoCtx, id: string, focus = ''): HTMLElement {
       const d = doc()
       const link = el('input', { class: 'field', value: d.logseq ? logseqUrl(d.logseq) : '', placeholder: S_.logseqPh, 'aria-label': S_.logseqLabel, 'data-co-logseq': '' }) as HTMLInputElement
       const paste = el('textarea', { class: 'field', rows: '5', placeholder: S_.importPh, 'aria-label': S_.importLogseq, 'data-co-import': '' }) as HTMLTextAreaElement
+      const pasteBox = el('div', {}, [paste])
+      const kept = draftable(pasteBox, 'co-import', id)   // wave44c event-autosave
       box.replaceChildren(
         el('label', { class: 'eyebrow' }, [S_.logseqLabel]), link,
         el('div', { class: 'co-sheet-row' }, [
@@ -247,12 +250,13 @@ export function coEditor(c: CoCtx, id: string, focus = ''): HTMLElement {
           d.logseq ? el('a', { class: 'co-link', href: logseqUrl(d.logseq), 'data-co-open-logseq': '' }, [S_.openLogseq]) : null,
           el('button', { class: 'btn btn-ghost btn-sm', 'data-co-copy-logseq': '', onclick: () => { void navigator.clipboard.writeText(toLogseq(doc())).then(() => c.h.toast(S_.copied)) } }, [S_.copyLogseq]),
         ]),
-        el('label', { class: 'eyebrow' }, [S_.importLogseq]), paste,
+        el('label', { class: 'eyebrow' }, [S_.importLogseq]), pasteBox,
         el('button', { class: 'btn btn-ghost btn-sm', 'data-co-import-do': '', onclick: () => {
           const got = fromLogseq(paste.value)
           const cur = doc()
           const next = fromText(cur, [toText(cur), got.text].filter(Boolean).join('\n'), c.me(), Date.now())
           c.put(got.uuid && cur.logseq ? setLogseq(next, { ...cur.logseq, uuid: got.uuid }, c.me()) : next)
+          kept.clear()
           c.h.toast(S_.imported)
           history.back()
           draw()

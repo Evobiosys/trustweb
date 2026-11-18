@@ -29,7 +29,7 @@ export type QrContext =
   | { kind: 'web-root'; link: string }
   | { kind: 'person'; link: string; name: string; username?: string; introducePermission?: IntroducePermission; profile?: string }
   | { kind: 'community'; link: string; tag: string; people: string[]; permission?: CommunityPermission }
-  | { kind: 'event'; link: string; eventLink: string }
+  | { kind: 'event'; link: string; eventLink: string; /** answers-44d: the event name (with its emoji) above the code. */ title?: string }
   | { kind: 'item' | 'calendar' | 'group'; link: string; shareLink: string }
 
 export interface QrOption { id: 'username' | 'profile'; on: boolean }

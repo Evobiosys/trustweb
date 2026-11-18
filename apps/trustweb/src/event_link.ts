@@ -10,7 +10,7 @@ import { SHORT_LINK_ORIGINS } from './short_link'
 export type LinkKind = 'peer' | 'host'
 
 /** What travels: the event without my own attendance or when I made it, and the kind of link. */
-export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked' | 'nameReveal'> & { kind: LinkKind; by?: EventBy }
+export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked' | 'nameReveal' | 'confTo'> & { kind: LinkKind; by?: EventBy }
 
 /** Who sent the link: their own name and own identity, nothing about third people (I1). */
 export interface EventBy { name: string; did?: string; /** My nickname (Me.nickname): only the nickname reveal (events.ts revealedBy) may put it in a link as the name. */ nick?: string }
@@ -35,7 +35,7 @@ export function linkOrigin(pageOrigin: string): string {
 
 export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?: EventBy): string {
   const { id, name, from, to, core, where, conditions, themes, organizer, hosts, hostNamesTags, tagName, linkMode, hostDefault, showAll } = ev
-  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(linkMode === 'event' ? { mode: 'event' as const } : {}), ...(showAll ? { showAll: true as const } : {}), ...(tagName ? { tagName } : {}), ...(hostDefault ? { hostDefault } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
+  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(linkMode === 'event' ? { mode: 'event' as const } : {}), ...(showAll ? { showAll: true as const } : {}), ...(tagName ? { tagName } : {}), ...(hostDefault ? { hostDefault } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}), ...(ev.conference?.length ? { conf: true } : {}) }   // wave44c event-autosave: only that a conference link waits, never the link
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
 }
 
@@ -85,7 +85,7 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     const byDid = text(b?.did)
     const { createdAt: _c, attended: _a, ...rest } = ev
     const srv = params.get('srv')
-    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(f.mode === 'event' ? { linkMode: 'event' as const } : {}), ...(f.hostDefault === 'open' || f.hostDefault === 'discoverable' || f.hostDefault === 'off' ? { hostDefault: f.hostDefault } : {}), ...(f.showAll === true ? { showAll: true as const } : {}) }
+    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(f.mode === 'event' ? { linkMode: 'event' as const } : {}), ...(f.hostDefault === 'open' || f.hostDefault === 'discoverable' || f.hostDefault === 'off' ? { hostDefault: f.hostDefault } : {}), ...(f.showAll === true ? { showAll: true as const } : {}), ...(f.conf === true ? { confHidden: true as const } : {}) }
   } catch {
     return null
   }

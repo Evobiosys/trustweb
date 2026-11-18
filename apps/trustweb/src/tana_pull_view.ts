@@ -10,25 +10,31 @@ import type { ServicesHooks } from './services_view'
 import { S } from './strings'
 import { applyPull, planPull, pullErrorKind, readPersons } from './tana_pull'
 import type { PullPlan } from './tana_pull'
+import { syncEnv, canSyncTana } from './sync_capability'
+import { tanaTokenStore } from './tana_token'
 
 const T = S.shellFix2
-const TOKEN_KEY = 'trustweb.tana.token'
-
-export const tanaToken = (): string => { try { return localStorage.getItem(TOKEN_KEY) ?? '' } catch { return '' } }
-const rememberToken = (v: string): void => { try { if (v) localStorage.setItem(TOKEN_KEY, v); else localStorage.removeItem(TOKEN_KEY) } catch { /* kept for this page only */ } }
+const W = S.syncSeamless
 
 /** One persistent block: it redraws itself, so the Import page's own redraws keep a running pull and its preview. */
 export function tanaPullBlock(h: Pick<ServicesHooks, 'state' | 'save' | 'toast' | 'changed'>): HTMLElement {
+  // Wave 44c: Tana answers on the computer's loopback only; a phone says so and receives the result by device sync.
+  if (!canSyncTana(syncEnv())) return el('div', { 'data-tana-pull': '' }, [el('h4', { class: 'eyebrow' }, [T.tanaPullTitle]), el('p', { class: 'meta', 'data-tana-phone-note': '' }, [W.tanaComputerOnly])])
   const root = el('div', { 'data-tana-pull': '' })
+  const store = tanaTokenStore()
   let busy = ''
   let problem = ''
   let plan: { plan: PullPlan; unreadable: number } | null = null
-  const token = el('input', { class: 'field', type: 'password', autocomplete: 'off', 'data-tana-token': '', 'aria-label': T.tanaTokenLabel, placeholder: T.tanaTokenLabel, value: tanaToken() }) as HTMLInputElement
-  token.addEventListener('change', () => rememberToken(token.value.trim()))
+  const token = el('input', { class: 'field', type: 'password', autocomplete: 'off', 'data-tana-token': '', 'aria-label': T.tanaTokenLabel, placeholder: T.tanaTokenLabel }) as HTMLInputElement
+  const remember = el('input', { type: 'checkbox', id: 'tana-remember', 'data-tana-remember': '' }) as HTMLInputElement
+  const keep = (): Promise<void> => store.save(token.value.trim(), remember.checked)
+  token.addEventListener('change', () => void keep())
+  remember.addEventListener('change', () => void keep())
+  void store.load().then((r) => { if (!token.value) token.value = r.token; remember.checked = r.remembered })
 
   async function preview(): Promise<void> {
     const t = token.value.trim()
-    rememberToken(t)
+    await keep()
     plan = null
     if (!t) { problem = T.tanaPullErrToken; draw(); return }
     problem = ''
@@ -66,6 +72,8 @@ export function tanaPullBlock(h: Pick<ServicesHooks, 'state' | 'save' | 'toast' 
       el('p', { class: 'meta', 'data-tana-pull-hint': '' }, [T.tanaPullHint]),
       el('label', { class: 'grp-field' }, [el('span', { class: 'chips-lbl' }, [T.tanaTokenLabel]), token]),
       el('p', { class: 'meta' }, [T.tanaTokenHint]),
+      el('p', { class: 'meta', 'data-tana-token-scope': '' }, [el('b', {}, [S.a44d.tanaStays]), ' ', S.a44d.tanaGrants]),   // answers-44d
+      el('label', { class: 'consent', title: W.tanaRememberHint }, [remember, el('span', {}, [W.tanaRemember])]),
       el('div', { class: 'cur-bar' }, [el('button', { class: 'btn btn-ghost', 'data-tana-preview': '', ...(busy ? { disabled: '' } : {}), onclick: () => void preview() }, [T.tanaPullPreview])]),
       busy ? el('p', { class: 'meta', role: 'status', 'data-tana-busy': '' }, [busy]) : null,
       problem ? el('p', { class: 'warn', role: 'alert', 'data-tana-problem': '' }, [problem]) : null,

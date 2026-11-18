@@ -18,7 +18,7 @@ describe('sync capability', () => {
   it('a phone (coarse pointer, narrow) cannot sync a vault; both entries move under Advanced', () => {
     const env = syncEnvFrom(win({ innerWidth: 360, matchMedia: () => ({ matches: true }) }), nav(ANDROID_UA, 5))
     expect(canSyncLocalVault(env)).toBe(false)
-    expect(canSyncTana(env)).toBe(true)
+    expect(canSyncTana(env)).toBe(false) // wave 44c: Tana is reached on loopback, which a phone does not have
     expect(syncPlacement(env)).toEqual({ obsidian: 'advanced', tana: 'advanced' })
   })
   it('an Android or iOS agent is a phone even in a wide window or with a fine pointer', () => {
@@ -28,6 +28,7 @@ describe('sync capability', () => {
   it('a Tauri shell can always sync a vault, whatever the window', () => {
     const env = syncEnvFrom(win({ __TAURI__: {}, innerWidth: 360, matchMedia: () => ({ matches: true }) }), nav(ANDROID_UA))
     expect(canSyncLocalVault(env)).toBe(true)
+    expect(canSyncTana(env)).toBe(true)
     expect(syncPlacement(env)).toEqual({ obsidian: 'main', tana: 'main' })
   })
   it('missing window/navigator (SSR, tests) reads as a desktop; a throwing matchMedia is no phone', () => {
@@ -36,7 +37,7 @@ describe('sync capability', () => {
   })
   it('syncCapabilities (the MCP answer) reports both flags and the placement', () => {
     expect(syncCapabilities(syncEnvFrom(win({ innerWidth: 360, matchMedia: () => ({ matches: true }) }), nav(ANDROID_UA)))).toEqual({
-      localVault: false, tana: true, placement: { obsidian: 'advanced', tana: 'advanced' },
+      localVault: false, tana: false, placement: { obsidian: 'advanced', tana: 'advanced' },
     })
   })
 })

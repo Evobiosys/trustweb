@@ -30,7 +30,7 @@ describe('community shell tools', () => {
   })
   it('community_menu_get: the menu order, the tiles, the chat scope, connect events', () => {
     const out = fixture().by.community_menu_get.run({ community: 'iyg' })
-    expect(out.items).toEqual(['home', 'spaces', 'events', 'docs', 'chat', 'ask', 'timeline', 'members'])
+    expect(out.items).toEqual(['home', 'spaces', 'events', 'docs', 'resources', 'references', 'chat', 'ask', 'timeline', 'members'])
     expect(out.tiles).toEqual({ managed: [], own: ['events', 'spaces', 'docs', 'members'] })
     expect(out).toMatchObject({ chatOnly: true, connectEvents: false, manager: true })
     expect(() => fixture().by.community_menu_get.run({ community: 'nope' })).toThrow(/no community/)

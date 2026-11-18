@@ -1,0 +1,14 @@
+{
+  "thread": {
+    "$type": "app.bsky.feed.defs#threadViewPost",
+    "post": {
+      "uri": "at://did:plc:testalice234567/app.bsky.feed.post/3kaaa111",
+      "author": { "did": "did:plc:testalice234567", "handle": "alice.test.bsky.social", "displayName": "Alice Test" },
+      "record": { "createdAt": "2026-11-16T09:00:00.000Z", "text": "Seed swap on Saturday" }
+    },
+    "replies": [
+      { "$type": "app.bsky.feed.defs#threadViewPost", "post": { "uri": "at://did:plc:testbob2345678/app.bsky.feed.post/3kfff666", "author": { "did": "did:plc:testbob2345678", "handle": "bob.test.bsky.social", "displayName": "Bob" }, "record": { "createdAt": "2026-11-16T10:00:00.000Z", "text": "I will bring beans" } } },
+      { "$type": "app.bsky.feed.defs#notFoundPost", "uri": "at://x", "notFound": true }
+    ]
+  }
+}

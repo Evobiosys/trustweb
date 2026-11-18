@@ -23,6 +23,7 @@ import { getPublicKey, hexToBytes } from '../../demo/src/nostr_lib'
 import { loadColourTags } from './colour_tags'
 import { algoOf, filterBySources, FEED_EXTERNAL_PUBLISH_ENABLED, PUBLISH_DEFAULT, PUBLISH_TARGETS, publicReadAllowed, rankPosts, setPublishTarget, SOURCES, sourceIdOf, sourceOn } from './feed_sources_page'   // wave 44 feed-sources
 import { createSourcesView } from './feed_sources_view'
+import { createExtFeed } from './feed_ext_view'   // wave44c feed-ext
 import { isTrusted } from './trust_mode'
 import { fetchFeedText, FetchProblem, handleText, safeRemoteUrl, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
 import type { RemoteStatus } from './fediverse'
@@ -37,6 +38,7 @@ import { ICONS } from './icons'
 import { provenanceChip } from './provenance_view'
 import { askPersist } from './storage_persist'
 import { S } from './strings'
+import { draftable } from './drafts_dom'
 
 export interface FeedViewHooks {
   state: () => AppState
@@ -60,6 +62,8 @@ export interface FeedViewHooks {
   openSharePage: (itemId: string) => void
   /** Wave 43: show the Feed screen (an event's Feed row opens it filtered to the event's tag). */
   openFeed: () => void
+  /** wave44c feed-ext: shows an extension module's view ("Open in Phanpy"). */
+  openView?: (id: string) => void
 }
 
 export interface FeedView {
@@ -71,6 +75,8 @@ export interface FeedView {
   settingsGroup(): HTMLElement[]
   /** On a person's sheet: their Mastodon or Pixelfed address, and whether the Feed shows their public posts. */
   personRow(p: Person): HTMLElement
+  /** wave44c feed-ext: on a person's card: follow their Bluesky, Threads or web site (Bridgy Fed) in the Feed. */
+  personExt(p: Person): HTMLElement
   /** On an item's sheet: its picture, and "Share to...". */
   itemExtras(item: InventoryItem): HTMLElement
   /** An item's picture was removed with the item, or the phone was reset. */
@@ -93,7 +99,9 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   const inbound = new Map<string, { at: number; posts: Post[] }>()
   const joined = new Set<string>()
   /* wave44 feed-sources: the Sources page, and "Only <source>" (one source id, in memory). */
-  const sourcesPage = createSourcesView(h)
+  /* wave44c feed-ext: followed Bluesky / PeerTube / Threads / Bridgy accounts, their Sources section, Settings > Feed > Extensions. */
+  const ext = createExtFeed({ ...h, allowLocal })
+  const sourcesPage = createSourcesView({ ...h, extra: () => [ext.sourcesSection()] })
   const onlySource: { id?: string } = {}
 
   const settings = (): FeedSettings => {
@@ -353,16 +361,18 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   }
 
   /** One text sheet: a quote of what it answers (optional), the box, one button. */
-  function textSheet(title: string, quote: string | null, ph: string, start: string, button: string, go: (text: string) => boolean, attr: string): void {
+  function textSheet(title: string, quote: string | null, ph: string, start: string, button: string, go: (text: string) => boolean, attr: string, draftOf?: string): void {
     const text = el('textarea', { class: 'field', rows: '3', placeholder: ph, 'aria-label': ph, [attr]: '1' }) as HTMLTextAreaElement
     text.value = start
-    h.openSheet([el('h3', {}, [title]), quote ? el('blockquote', { class: 'shared-notes' }, [quote.slice(0, 300)]) : null, text,
-      el('button', { class: 'btn btn-electric', [`${attr}-send`]: '1', onclick: () => { if (go(text.value)) h.closeSheet(); else text.focus() } }, [button])])
+    const box = el('div', {}, [text])
+    const kept = draftOf ? draftable(box, 'feed-reply', draftOf) : null   // wave44c event-autosave: a reply is kept until sent
+    h.openSheet([el('h3', {}, [title]), quote ? el('blockquote', { class: 'shared-notes' }, [quote.slice(0, 300)]) : null, box,
+      el('button', { class: 'btn btn-electric', [`${attr}-send`]: '1', onclick: () => { if (go(text.value)) { kept?.clear(); h.closeSheet() } else text.focus() } }, [button])])
     setTimeout(() => text.focus(), 0)
   }
 
   function replySheet(post: Post): void {
-    textSheet(S.feedReplyTitle, post.text, S.feedReplyPh, '', S.feedComposeSend, (text) => writePost(text, { replyTo: post.id, replyText: post.text, eventId: eventOfTag(post.tag)?.id }), 'data-feed-reply-text')
+    textSheet(S.feedReplyTitle, post.text, S.feedReplyPh, '', S.feedComposeSend, (text) => writePost(text, { replyTo: post.id, replyText: post.text, eventId: eventOfTag(post.tag)?.id }), 'data-feed-reply-text', post.id)
   }
 
   function editSheet(post: Post): void {
@@ -389,13 +399,16 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   /** The box at the top of the Feed: a post of mine, on the event's Feed while one is chosen. */
   function composer(eventId?: string): HTMLElement {
     const text = el('textarea', { class: 'field', rows: '2', placeholder: S.feedComposePh, 'aria-label': S.feedComposePh, 'data-feed-compose': '1' }) as HTMLTextAreaElement
-    const embed = el('button', { class: 'btn btn-ghost btn-sm', hidden: true, 'data-feed-embed': '1', onclick: () => { void embedLink(text, embed) } }, [S.feedEmbed.button]) as HTMLButtonElement
+    const embed = el('button', { class: 'btn btn-ghost btn-sm', hidden: true, 'data-feed-embed': '1', onclick: () => { void embedLink(text, embed, () => kept.clear()) } }, [S.feedEmbed.button]) as HTMLButtonElement
     text.addEventListener('input', () => { embed.hidden = !parsePostLink(text.value) })   // a lone link: offer to embed it (wave 44)
-    return el('div', { class: 'feed-compose' }, [text, embed, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) text.value = ''; else text.focus() } }, [S.feedComposeSend]), publishTarget()])
+    const box = el('div', { class: 'feed-compose' }, [text, embed, el('button', { class: 'btn btn-electric btn-sm', 'data-feed-compose-send': '1', onclick: () => { if (writePost(text.value, { eventId })) { text.value = ''; kept.clear() } else text.focus() } }, [S.feedComposeSend]), publishTarget()])
+    const kept = draftable(box, 'feed', eventId ?? 'mine')   // wave44c event-autosave
+    return box
   }
 
   /** Wave 44 feed-embed: the pasted link of one post becomes a post in the Feed; the one GET happens only on this press. */
-  async function embedLink(text: HTMLTextAreaElement, button: HTMLButtonElement): Promise<void> {
+  /** review-44c: `clearDraft` drops the composer's draft with the text (event-autosave), else the redraw below restores the link. */
+  async function embedLink(text: HTMLTextAreaElement, button: HTMLButtonElement, clearDraft: () => void): Promise<void> {
     const link = parsePostLink(text.value)
     if (!link || button.disabled) return
     button.disabled = true
@@ -403,7 +416,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     const embed = await fetchEmbed(link, fetch)
     button.disabled = false
     if (!addEmbed(h.state(), embed)) { h.toast(S.feedEmbed.already); return }
-    text.value = ''; button.hidden = true
+    text.value = ''; clearDraft(); button.hidden = true
     h.save(); h.redrawFeed(); h.toast(embed.card ? S.feedEmbed.card : S.feedEmbed.done)
   }
 
@@ -415,7 +428,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     const tags = loadColourTags()
     const groups = groupsOf(h.state(), tags)
     const readPublic = publicReadAllowed(settings())   // wave 44: "Never read public content" fetches nothing
-    const all = buildFeed(h.state(), [...(readPublic ? [...remoteFor(), ...mastodonFor(eventOfTag(sel.tag)), ...followedPosts()] : []), ...groupPosts(h.state(), tags), ...relayPosts(groups), ...embedPosts(h.state().feedEmbeds, imagesOn())]).filter((p) => isTimelinePost(p) === timeline)
+    const all = buildFeed(h.state(), [...(readPublic ? [...remoteFor(), ...mastodonFor(eventOfTag(sel.tag)), ...followedPosts(), ...ext.posts(imagesOn())] : []), ...groupPosts(h.state(), tags), ...relayPosts(groups), ...embedPosts(h.state().feedEmbeds, imagesOn())]).filter((p) => isTimelinePost(p) === timeline)
     if (sel.group && !groups.some((g) => g.id === sel.group)) delete sel.group
     const metas = h.state().feed?.groupMeta ?? {}
     if (sel.channel && !metas[sel.group ?? '']?.channels?.some((c) => c.id === sel.channel)) delete sel.channel
@@ -438,6 +451,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         ...sources.map((src) => chip(`${S.feedSrc[src]} ${counts[src]}`, sel.source === src, { 'data-feed-src': src }, () => pick(sel.source === src ? undefined : src))),
         timeline ? null : el('button', { class: 'btn btn-electric btn-sm', 'data-feed-post': '1', onclick: () => postSheet(groups) }, [S.feedPostGroup]),
         timeline ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-feed-sources': '1', onclick: () => sourcesPage.open() }, [S.w44sources.open]),
+        timeline ? null : ext.phanpyButton(),
       ]),
       timeline || !sourceIds.size ? null : el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.w44sources.onlyLabel }, SOURCES.filter((d) => sourceIds.has(d.id) && sourceOn(settings(), d.id)).map((d) => chip(S.w44sources.only(S.w44sources.name[d.id] ?? d.id), onlySource.id === d.id, { 'data-feed-only': d.id }, () => { if (onlySource.id === d.id) delete onlySource.id; else onlySource.id = d.id; h.redrawFeed() }))),
       sel.source === FeedSource.Group && groups.length
@@ -450,6 +464,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         ? el('p', { class: 'meta', 'data-feed-governance': metas[sel.group]?.governance ?? 'open' }, [S.feedGov[metas[sel.group]?.governance ?? 'open']])
         : null,
       ...problems(),
+      ...(timeline ? [] : ext.problems()),
       ...mastodonProblem(tagEvent),
       posts.length
         ? el('div', { class: 'posts' }, posts.map((p) => postEl(p, !timeline)))
@@ -502,6 +517,8 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     let type: PostType = 'discussion'
     let hops = 0
     const text = el('textarea', { class: 'field', rows: '3', placeholder: S.feedPostPh, 'aria-label': S.feedPostPh, 'data-feed-text': '1' }) as HTMLTextAreaElement
+    const textBox = el('div', {}, [text])
+    const kept = draftable(textBox, 'feed-group', 'new')   // wave44c event-autosave
     const mark = (b: Element, on: boolean): void => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)) }
     const types = POST_TYPES.map((ty) => el('button', { class: 'chip' + (ty === type ? ' on' : ''), 'aria-pressed': String(ty === type), 'data-feed-type': ty, onclick: () => { type = ty; types.forEach((b, i) => mark(b, POST_TYPES[i] === ty)) } }, [S.feedType[ty]]))
     const hopBtns = [0, 1, 2].map((n) => el('button', { class: 'chip' + (n === hops ? ' on' : ''), 'aria-pressed': String(n === hops), 'data-feed-hops': String(n), onclick: () => { hops = n; hopBtns.forEach((b, i) => mark(b, i === n)) } }, [S.feedHops[n]]))
@@ -514,13 +531,14 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       const chosenTargets: Target[] = targets.filter((t) => picked.has(key(t))).map((t) => ({ group: t.group, channel: t.channel }))
       const { posts, events } = addGroupPosts(s, chosenTargets, text.value, type, Date.now(), loadColourTags(), ensureNostrKey(s), { hops, meta: metas })
       if (!posts.length) { text.focus(); return }
+      kept.clear()   // wave44c event-autosave
       h.save(); h.closeSheet(); chosen.source = FeedSource.Group; chosen.group = posts.length === 1 ? posts[0].group : undefined; if (!chosen.group) delete chosen.group
       delete chosen.channel
       h.redrawFeed(); h.toast(S.feedPosted)
       const urls = s.feed?.relays ?? []
       if (urls.length) void sendOut(posts, events, urls)
     }
-    h.openSheet([el('h3', {}, [S.feedPost]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedTypeLabel }, types), el('p', { class: 'meta' }, [S.feedGroupsPick]), ...rows, el('p', { class: 'meta' }, [S.feedHopsLabel]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedHopsLabel }, hopBtns), text, el('p', { class: 'meta' }, [S.feedPostHint]), el('button', { class: 'btn btn-electric', 'data-feed-send': '1', onclick: send }, [S.feedPostSend])])
+    h.openSheet([el('h3', {}, [S.feedPost]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedTypeLabel }, types), el('p', { class: 'meta' }, [S.feedGroupsPick]), ...rows, el('p', { class: 'meta' }, [S.feedHopsLabel]), el('div', { class: 'feed-chips', role: 'group', 'aria-label': S.feedHopsLabel }, hopBtns), textBox, el('p', { class: 'meta' }, [S.feedPostHint]), el('button', { class: 'btn btn-electric', 'data-feed-send': '1', onclick: send }, [S.feedPostSend])])
     setTimeout(() => text.focus(), 0)
   }
 
@@ -604,6 +622,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
       ]) : null,
       on ? el('div', { class: 'feed-groups' }, [el('h4', { class: 'eyebrow' }, [S.feedGroupSetTitle]), ...groupsOf(s, loadColourTags()).map((g) => groupRow(g))]) : null,
       on && remoteOn() ? toggle(S.fedImages, S.fedImagesHint, imagesOn(), 'data-feed-images', () => { settings().images = !imagesOn(); h.save(); h.settings() }) : null,
+      ...(on ? ext.settingsRows() : []),
     ].filter((n): n is HTMLElement => n !== null)
   }
 
@@ -717,5 +736,5 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     return box
   }
 
-  return { body, eventRow, showEvent, settingsGroup, personRow, itemExtras, dropImage: (id) => { void h.images.remove(id) } }
+  return { body, eventRow, showEvent, settingsGroup, personRow, personExt: ext.personRow, itemExtras, dropImage: (id) => { void h.images.remove(id) } }
 }

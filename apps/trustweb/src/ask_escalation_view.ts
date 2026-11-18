@@ -6,6 +6,7 @@ import type { Zone } from './audience_zones'
 import { ringOfZone, zoneState } from './audience_filter'
 import { S } from './strings'
 import type { AskResult } from './net'
+import { draftable } from './drafts_dom'
 
 export interface EscalateDeps {
   zone: Zone
@@ -63,9 +64,12 @@ export function showAskedRow(on: boolean, toggle: () => void): HTMLElement {
 }
 
 /** The body of an incoming second-round ask: a tip box instead of matches. */
-export function knowCard(onSend: (note: string) => void, onNo: () => void): HTMLElement[] {
+export function knowCard(onSend: (note: string, who?: string) => void, onNo: () => void, whoBox?: HTMLElement, draftOf?: string): (HTMLElement | null)[] {
   const note = el('textarea', { class: 'field know-note', rows: '2', maxlength: '200', placeholder: S.askKnow.notePh, 'aria-label': S.askKnow.noteAria, 'data-know-note': '' })
-  const give = el('button', { class: 'btn btn-mint', type: 'button', 'data-know-send': '', disabled: true, onclick: () => onSend(note.value) }, [S.askKnow.give])
+  // Wave 44c seen-through: the optional "who has it" box (seen_through_view.ts knowWhoBox): that person is asked first whether they may be shown.
+  const give = el('button', { class: 'btn btn-mint', type: 'button', 'data-know-send': '', disabled: true, onclick: () => { kept?.clear(); onSend(note.value, whoBox?.querySelector('input')?.value.trim() || undefined) } }, [S.askKnow.give])
   note.addEventListener('input', () => { give.disabled = !note.value.trim() })
-  return [el('p', { class: 'ask-lbl' }, [S.askKnow.ask]), note, give, el('button', { class: 'btn btn-ghost', type: 'button', 'data-know-no': '', onclick: onNo }, [S.askKnow.none])]
+  const box = el('div', {}, [note])
+  const kept = draftOf ? draftable(box, 'know-note', draftOf) : null   // wave44c event-autosave
+  return [el('p', { class: 'ask-lbl' }, [S.askKnow.ask]), box, whoBox ?? null, give, el('button', { class: 'btn btn-ghost', type: 'button', 'data-know-no': '', onclick: onNo }, [S.askKnow.none])]
 }

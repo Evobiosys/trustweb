@@ -2,13 +2,15 @@
 /** Wave 43b resources-views (POLICY P02, MCP parity): the Resources page's views, filters, kind and "recommended by", as tools over the record file. */
 import { listResources, setKind, setRecommender } from '../../trustweb/src/resource_views.ts'
 import { setPhysical } from '../../trustweb/src/physical_place.ts'
+import { markOpened, scopedList } from '../../trustweb/src/resource_scope.ts'
+import { eventTagLabel, eventTagSlug } from '../../trustweb/src/event_tag.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { InventoryItem } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; deleted_at?: string }
-interface Rec extends Obj { people: Person[]; inventory?: InventoryItem[]; extData?: Record<string, unknown> }
+interface Rec extends Obj { people: Person[]; inventory?: InventoryItem[]; events?: { id: string; name: string; tagName?: string }[]; extData?: Record<string, unknown> }
 export interface ResourceToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -26,17 +28,31 @@ function whoOf(r: Rec, v: unknown): string {
 export function resourceTools(e: ResourceToolsEnv): { read: Tool[]; write: Tool[] } {
   const read: Tool[] = [{
     name: 'resources_list', description: `My resources. Filter by kind (${KIND}), sharedBy (person id or name) and communityId; view: list (default, flat), outliner (community > kind > item) or person (grouped by who shared or recommended). A protected resource (from a protected community) comes without its link.`,
-    inputSchema: schema({ kind: S(KIND), sharedBy: S('person id or exact name'), communityId: S('community id'), view: S('list, outliner or person') }),
+    inputSchema: schema({ kind: S(KIND), sharedBy: S('person id or exact name'), communityId: S('community id'), view: S('list, outliner or person'), scope: S('mine (default), community or event: adds sections {shared, new, general} (ids) of that community or event'), community: S('community id, with scope community'), event: S('event id, with scope event') }),
     run: (a) => {
       const r = e.load()
       const tags = Object.entries(parseCommunity(r.extData?.['community-mighty']).meta ?? {}).map(([id, m]) => ({ id, label: m.name ?? id, protected: false }))
-      return listResources(r.inventory ?? [], tags, {
+      const scoped = scopedList(r.inventory ?? [], tags, r.events ?? [], { slug: eventTagSlug, label: eventTagLabel }, { scope: str(a.scope), community: str(a.community), event: str(a.event) })
+      const listed = listResources(r.inventory ?? [], tags, {
         ...(str(a.kind) ? { kind: str(a.kind) as never } : {}), ...(str(a.sharedBy).trim() ? { sharedBy: whoOf(r, a.sharedBy) } : {}),
         ...(str(a.communityId) ? { communityId: str(a.communityId) } : {}), ...(str(a.view) ? { view: str(a.view) } : {}),
       })
+      return scoped ? { ...listed, ...scoped } : listed
     },
   }]
   const write: Tool[] = [
+    {
+      name: 'resource_mark_opened', description: 'Mark a resource that someone shared with you as opened: it leaves the New section of its community or event.',
+      inputSchema: schema({ id: S('resource id') }, ['id']),
+      run: (a) => {
+        let changed = false
+        e.commit((r) => {
+          if (!(r.inventory ?? []).some((i) => i.id === str(a.id))) throw new Error(`no resource "${str(a.id)}"`)
+          changed = markOpened(r.inventory ?? [], str(a.id), Date.now())
+        })
+        return { id: str(a.id), opened: true, changed }
+      },
+    },
     {
       name: 'resource_set_kind', description: `Say what kind a resource is: ${KIND}.`,
       inputSchema: schema({ id: S('resource id'), kind: S(KIND) }, ['id', 'kind']),

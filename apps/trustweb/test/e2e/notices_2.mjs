@@ -4,7 +4,8 @@
 const { chromium } = await import(process.env.PW ?? 'playwright-core')
 const HOST = (port) => `http://127.0.0.1:${port}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 const mk = (id, o = {}) => ({ id, name: `Gee ${id}`, ring: 'acquaintance', angle: 30 * Number(id.slice(1)), lines: [], context: '', metAt: Date.now() - 86_400_000, fields: {}, ...o })

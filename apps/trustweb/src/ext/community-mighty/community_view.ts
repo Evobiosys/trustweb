@@ -10,6 +10,8 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { addGroupPost } from '../../feed_sources'
 import type { AppState } from '../../model'
+import { randomId } from '../../../../demo/src/crypto' // answers-44d
+import { INTIMATE_MAX, isIntimate } from '../../event_community' // answers-44d
 import { hasColourTag, loadColourTags, saveColourTags } from '../../colour_tags'
 import { contextPress } from '../../context_press'
 import { strikeOff } from '../../bw_mode'
@@ -30,7 +32,10 @@ import { fetchAggregate, layoutShareAllowed, sendTileSet } from './community_ser
 import { readConsent, readEmbeds, writeConsent, writeEmbeds, type Consent } from '../embeds/embeds_data'
 import { NO_TAG, entryFor, withEntry } from '../embeds/embeds_model'
 import { chatPane as embedChatPane, docsPane, type PaneEnv } from '../embeds/embeds_panes'
+import { scopeOf } from '../../resource_scope'
+import { EVENT_TAG, scopedResources } from '../../resource_scope_view'
 import css from './community.css?inline'
+import { draftable } from '../../drafts_dom'
 
 export const readData = (s: AppState): CommunityData => parseCommunity(s.extData?.[MODULE_ID])
 
@@ -94,10 +99,13 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const post = (): void => {
       const tags = loadColourTags()
       if (!addGroupPost(st(), `tag:${to.value}`, text.value, Date.now(), tags)) return
+      kept.clear()   // wave44c event-autosave
       ctx.bus.emit('save')
       draw()
     }
-    return el('div', { class: 'card compose' }, [text, el('div', { class: 'row' }, [el('label', { class: 'meta' }, [t.composeTo, ' ', to]), btn(t.post, post, { 'data-community-post': '' }, 'lnk strong')])])
+    const box = el('div', { class: 'card compose' }, [text, el('div', { class: 'row' }, [el('label', { class: 'meta' }, [t.composeTo, ' ', to]), btn(t.post, post, { 'data-community-post': '' }, 'lnk strong')])])
+    const kept = draftable(box, 'community', 'home')
+    return box
   }
 
   function postCard(p: ReturnType<typeof buildPosts>[number]): HTMLElement {
@@ -118,7 +126,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
   }
 
   // ---- Home: the dashboard of tiles (wave 43b, B35/B36) ----------------------------------------------------------------
-  const TILE_GO: Record<TileId, NavId> = { events: 'events', spaces: 'spaces', docs: 'docs', members: 'members', resources: 'docs', timeline: 'timeline' }
+  const TILE_GO: Record<TileId, NavId> = { events: 'events', spaces: 'spaces', docs: 'docs', members: 'members', resources: 'resources', timeline: 'timeline' }
   function tileCount(tile: TileId, tag: string | null): number {
     const s = st()
     const tags = loadColourTags()
@@ -312,6 +320,16 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     ]
   }
 
+  /** Wave 44c community-resources: this community's resources / references (event mode: the event's), General folded. */
+  function scoped(page: 'resources' | 'references'): Kids {
+    const tags = loadColourTags()
+    const tag = tagNow()
+    const found = tags.find((x) => x.id === tag)
+    const scope = scopeOf(st(), tags, st().events ?? [], EVENT_TAG) ?? (found ? { kind: 'community' as const, id: found.id, label: found.label ?? found.id } : null)
+    if (!scope) return [el('p', { class: 'empty' }, [ctx.strings.w44cr.none])]
+    return scopedResources({ items: st().inventory, tags, events: st().events ?? [], scope, page, emoji: st().titleEmojiOff !== true, nameOf: (id) => st().people.find((p) => p.id === id)?.name, newId: () => randomId(8) /* answers-44d */, open: (id) => ctx.bus.emit('open-item', id), save: () => ctx.bus.emit('save'), render: draw })
+  }
+
   /** The pane environment of the embeds module: this community's tag, redraw after a change, a note under the section. */
   const embedEnv = (kind: 'docs' | 'chat' = 'docs'): PaneEnv => ({ ctx, tag: communityTagOf(data(), st(), loadColourTags()) ?? NO_TAG, redraw: draw, note: (text) => { if (kind === 'docs') ui.note = text; else ui.chatNote = text; draw() } })
 
@@ -386,11 +404,14 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       el('option', { value: '' }, [ctx.strings.w44fc.subTop]),
       ...rows.map((r) => el('option', { value: r.id, ...(r.current ? { selected: '' } : {}) }, [ctx.strings.w44fc.subOf + ' ' + r.name])),
     ]) as HTMLSelectElement
+    const newRow = el('div', { class: 'row wrap switch-new' }, [name, group, kind, parent, btn(w.create, () => make(), { 'data-community-create': '' }, 'lnk strong')])
+    const made = draftable(newRow, 'community-new', 'new')
     const make = (): void => {
       const under = parent.value || undefined
       if (under && !canAddSub(data(), under)) { ui.more = rootOf(data(), under); draw(); return }   // above SUBCOMMUNITY_FREE_LIMIT: the request dialog
       const out = createCommunity(data(), loadColourTags(), name.value, (kind as HTMLSelectElement).value as CommunityKind, (group as HTMLSelectElement).value === 'otherGroup' ? 'otherGroup' : undefined, under)
       if (!out) { name.focus(); return }
+      made.clear()   // wave44c event-autosave
       saveColourTags(out.tags as never)
       ui.switcher = false
       save(out.data)
@@ -409,7 +430,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
           }, [el('b', {}, [r.name]), el('span', { class: 'meta' }, [` ${w.memberCount(r.members)}`])]),
         ])
       }),
-      el('div', { class: 'row wrap switch-new' }, [name, group, kind, parent, btn(w.create, make, { 'data-community-create': '' }, 'lnk strong')]),
+      newRow,
       ui.more ? moreDialog(ui.more) : null,
     ])
   }
@@ -432,6 +453,9 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       ])]),
       el('p', { class: 'meta' }, [m.kind === 'managed' ? w.kindHintManaged : w.kindHintInformal]),
       pick(w.askToggle, { 'data-community-ask-toggle': '' }, m.ask === true, (on) => save(setSettings(data(), tag, { ask: on })), !can),
+      // answers-44d: intimate = everyone knows everyone (events list the members)
+      pick(ctx.strings.a44d.intimateToggle, { 'data-community-intimate-toggle': '' }, isIntimate(st(), tag), (on) => save({ ...data(), meta: { ...data().meta, [tag]: { ...metaOf(data(), tag), intimate: on } } }), !can),
+      el('p', { class: 'meta' }, [ctx.strings.a44d.intimateHint(INTIMATE_MAX)]),
       el('p', { class: 'chips-lbl' }, [w.leftColumn]),
       ...NAV.map((n) => pick(t.nav[n], { 'data-community-nav-toggle': n }, shown.includes(n), () => {
         const now = leftNav(data(), tag)
@@ -516,7 +540,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     if (gear) gear.innerHTML = ICONS.settings
     navEl.replaceWith(nav)
     navEl = nav
-    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'calendar' ? calendar(tag) : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : ui.nav === 'chat' ? chatPage() : ui.nav === 'timeline' ? timeline() : home()
+    const section = ui.settings && tag ? [settingsPanel(tag)] : ui.nav === 'spaces' ? spaces() : ui.nav === 'events' ? events() : ui.nav === 'calendar' ? calendar(tag) : ui.nav === 'members' ? members() : ui.nav === 'docs' ? docs() : ui.nav === 'resources' || ui.nav === 'references' ? scoped(ui.nav) : ui.nav === 'chat' ? chatPage() : ui.nav === 'timeline' ? timeline() : home()
     const main = el('main', { class: 'main' }, [...section, ui.note ? el('p', { class: 'note' }, [ui.note]) : null])
     mainEl.replaceWith(main)
     mainEl = main

@@ -15,6 +15,8 @@ export interface SourcesViewHooks {
   state: () => AppState
   save: () => void
   openSheet: (children: (Node | null)[]) => void
+  /** wave44c feed-ext: more below the sections (the followed Bluesky / PeerTube / Threads / Bridgy accounts). */
+  extra?: () => Node[]
 }
 
 const T = S.w44sources
@@ -93,6 +95,7 @@ export function createSourcesView(h: SourcesViewHooks): { open: () => void; body
         el('p', { class: 'meta' }, [T.sectionHint[g]]),
         ...SOURCES.filter((s) => s.group === g).map((s) => row(s.id, s.discouraged === true)),
       ]),
+      ...(h.extra?.() ?? []),
       el('h4', { class: 'eyebrow', 'data-sources-section': 'algo' }, [T.algoTitle]),
       algoSlider('recency', T.algoRecency), algoSlider('trust', T.algoTrust), algoSlider('source', T.algoSource),
       say,

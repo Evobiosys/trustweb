@@ -5,7 +5,7 @@
  * The consent to load Google Docs or Telegram is NOT here: a consent belongs to the device it was given on (community_view.ts).
  */
 export const MODULE_ID = 'community-mighty'
-export const NAV = ['home', 'spaces', 'events', 'members', 'docs', 'chat', 'timeline'] as const
+export const NAV = ['home', 'spaces', 'events', 'members', 'docs', 'resources', 'references', 'chat', 'timeline'] as const
 export type NavId = (typeof NAV)[number]
 /** Wave 43b community-shell: the Home dashboard's tiles (the rules sit at the end of this file). */
 export const TILES = ['events', 'spaces', 'docs', 'members', 'resources', 'timeline'] as const
@@ -33,6 +33,8 @@ export interface CommunityMeta {
   group?: 'otherGroup'
   /** Wave 44b filters-communities: the community this one is a sub-community of (holarchy); absent = a root. */
   parent?: string
+  /** answers-44d: everyone knows everyone here (events list the members); absent = by size (event_community.ts INTIMATE_MAX). */
+  intimate?: boolean
 }
 export const REMEMBER_MAX = 5
 /** Wave 43c: an anonymous slot is random lower-case hex, 16 to 64 characters (the server's check is the same). */
@@ -88,7 +90,7 @@ function parseMeta(v: unknown): Record<string, CommunityMeta> | undefined {
     out[id] = {
       kind: o.kind === 'managed' ? 'managed' : 'informal', organizers: strs(o.organizers),
       ...(Array.isArray(o.tiles) ? { tiles } : {}), ...(managedTiles.length ? { managedTiles } : {}), ...(o.connectEvents === true ? { connectEvents: true as const } : {}), ...(typeof o.shareLayout === 'boolean' ? { shareLayout: o.shareLayout } : {}), ...(isStr(o.slot) && SLOT_RE.test(o.slot) ? { slot: o.slot } : {}),
-      ...(o.group === 'otherGroup' ? { group: 'otherGroup' as const } : {}), ...(isStr(o.parent) && o.parent ? { parent: o.parent } : {}),
+      ...(o.group === 'otherGroup' ? { group: 'otherGroup' as const } : {}), ...(isStr(o.parent) && o.parent ? { parent: o.parent } : {}), ...(typeof o.intimate === 'boolean' ? { intimate: o.intimate } : {}),
       ...(nav.length ? { nav } : {}), ...(o.ask === false ? { ask: false } : {}), ...(audiences.length ? { audiences } : {}), ...(isStr(o.name) && o.name ? { name: o.name } : {}),
     }
   }
@@ -256,7 +258,7 @@ export const WHATSAPP_BRIDGE_ENABLED = false
 
 export type MenuId = NavId | 'ask'
 /** B33: the menu below the community name. Ask for Support left the top; Timeline and Members (no longer on Home by default) follow. */
-export const MENU_ORDER: readonly MenuId[] = ['home', 'spaces', 'events', 'docs', 'chat', 'ask', 'timeline', 'members']
+export const MENU_ORDER: readonly MenuId[] = ['home', 'spaces', 'events', 'docs', 'resources', 'references', 'chat', 'ask', 'timeline', 'members']
 
 /** The menu entries of a community in menu order: its left-column choice, plus Ask for Support unless switched off. */
 export function menuItems(d: CommunityData, tag: string | null): MenuId[] {

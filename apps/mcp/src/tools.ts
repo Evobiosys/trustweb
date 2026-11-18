@@ -11,9 +11,11 @@ import { billingTools } from './billing_tools.ts'
 import { bubbleTools } from './bubble_tools.ts'
 import { connectExtrasTools } from './connect_extras_tools.ts'
 import { hideTools } from './hide_tools.ts'
+import { seenThroughTools } from './seen_through_tools.ts' // wave44c seen-through
 import { homeTools } from './home_tools.ts'
 import { profilePageTools } from './profile_page_tools.ts'
 import { feedSourcesTools } from './feed_sources_tools.ts' // wave44 feed-sources
+import { feedExtTools } from './feed_ext_tools.ts' // wave44c feed-ext
 import { handshakeTools } from './handshake_tools.ts'
 import { importTools } from './import_tools.ts'
 import { inviteTools } from './invite_tools.ts'
@@ -22,6 +24,8 @@ import { previewTools } from './preview_tools.ts'
 import type { Tool } from './protocol.ts'
 import { recordTools, type RecordToolsOptions } from './record_tools.ts'
 import { syncTools } from './sync_tools.ts'
+import { trashTools } from './trash_tools.ts' // wave44c answers-44c
+import { a44dTools } from './a44d_tools.ts' // wave44c answers-44d
 
 export interface AllToolsOptions extends RecordToolsOptions {
   /** The server the app talks to (billing tools). Default https://app.trustweb.one. */
@@ -31,7 +35,7 @@ export interface AllToolsOptions extends RecordToolsOptions {
 }
 
 /** Tools that change the preview registry, not the record: no card in the preview. */
-const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send', /* wave44 */ 'dashboard_open'])
+const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send', /* wave44 */ 'dashboard_open', /* wave44c home-default */ 'home_open_request', /* wave44c sync-seamless */ 'sync_pair_link', /* wave44c answers-44c */ 'sync_pair_show_new', 'sync_pair_scan', /* wave44c answers-44d: queued actions */ 'ask_answer', 'chat_send', 'event_chat_open', 'event_message_all'])
 
 export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] {
   const build = (write: boolean): Tool[] => [
@@ -40,11 +44,15 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave43c sync-devices */ ...syncTools({ ...o, write }),
     /* wave44 steer-ask-placement-2 */ ...aiChoiceTools({ ...o, write }),
     /* wave44b hide-from-crypto */ ...hideTools(o),
+    /* wave44c seen-through */ ...seenThroughTools(o),
     /* wave44 feed-sources */ ...feedSourcesTools({ ...o, write }),
     /* wave44 steer-bubble-connect */ ...bubbleTools({ ...o, write }),
     /* wave44 handshake-crypto */ ...handshakeTools(o),
     /* wave44 steer-invite-link */ ...inviteTools({ ...o, write }),
     /* wave44b profile-page */ ...profilePageTools({ ...o, write }),
+    /* wave44c feed-ext */ ...feedExtTools({ ...o, write }),
+    /* wave44c answers-44c */ ...trashTools({ ...o, write }),
+    /* wave44c answers-44d */ ...a44dTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

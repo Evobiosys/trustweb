@@ -12,6 +12,7 @@
 import type { IntroInbox, IntroPending, IntroQueued } from './bubble_connect'
 import type { AssistantCfg } from './ext/assistant/providers'
 import type { AlgoCfg, SourceCfg } from './feed_sources_page'
+import type { ExtFollow } from './feed_ext_sources'   // wave44c feed-ext
 import type { HideReportEntry } from './hide_reports'
 import type { InboxItem } from './notify_inbox'
 import type { StatedRelation } from './relations_model'
@@ -25,6 +26,8 @@ import type { InviteEntry, InviteSettings } from './invite_policy'
 import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
+import type { Draft } from './drafts'
+import type { TrashEntry } from './trash' // wave44c answers-44c
 import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -415,6 +418,8 @@ export interface TwEvent {
   hostDefaultAnswered?: true
   /** Wave 44: the host shares this event with the whole community (communityId, else community); absent = off. Local only. */
   shareCommunity?: true
+  /** answers-44d: a community event shared with "Choose later": joiners are not placed as community members (absent = they are; event_community.ts). */
+  shareAudience?: 'later'
   /** Wave 44: when the community was told about it (once). Local only. */
   announcedAt?: number
   /** Wave 44 steer-open-space: host flag "Everyone can see everyone" (small, intimate events): my default turns to show, discoverable people are listed. Travels in the event link. */
@@ -447,6 +452,10 @@ export interface TwEvent {
   repeat?: Repeat
   /** Wave 44: conference links next to the place (kMeet, Zoom, Jitsi, custom). Local only. */
   conference?: ConferenceLink[]
+  /** Wave 44c event-autosave: the event link said the host has a conference link; it is revealed (sealed, event_conference.ts) once I accept. */
+  confHidden?: true
+  /** Wave 44c: the host's list of peers who accepted and got the conference link (a change goes to them). Local only. */
+  confTo?: string[]
   /** Wave 44: a kDrive (https) attachment link. Local only. */
   attachment?: string
   /** Wave 44: the calendar it sits in (event_draft.ts calendarOf); absent = My events, or Shared with me for an event from a link. */
@@ -484,6 +493,8 @@ export interface Person {
   via?: string
   /** Wave 44: either side asked to keep this second-hand person anonymous: drawn without a name. Local only. */
   anonymous?: boolean
+  /** Wave 44c seen-through (seen_through.ts): how I came to see this second-hand person: an event introduction, an intro ask, a resource ask; the ask text (the resource chip) and the event. Local only. */
+  seen?: { source: 'event' | 'intro' | 'ask'; at: number; resource?: string; event?: string }
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
   /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
@@ -756,6 +767,8 @@ export interface InventoryItem {
   place?: string
   /** Wave 44b resources-outliner (resource_blocks.ts): the outline under this resource, a tree of blocks. Absent = none. */
   blocks?: ResBlock[]
+  /** Wave 44c community-resources: when I first opened a received (sharedBy) resource; absent = still new. */
+  openedAt?: number
 }
 
 /** One bullet of a resource's outline; shared as a whole subtree or as its line alone. */
@@ -876,6 +889,9 @@ export interface HeldAsk {
   /** Wave 44: the second round "Do you know someone who has this?" (QueryEnvelope kind 'know'); `note` is the tip the person typed with their yes. */
   know?: true
   note?: string
+  /** Wave 44c seen-through: a show ask (QueryEnvelope kind 'show'): the name of the person who would see me; `seen`: on a know / intro ask, the person I named and their own yes. */
+  show?: string
+  seen?: { who: string; shown: boolean }
   /** Wave 44: who the asker asked, when the asker placed this phone as Closest few or Close and left it on. */
   askedNames?: string[]
   /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring: when it was first asked. */
@@ -1202,7 +1218,7 @@ export interface AppState {
   /** Wave 43c sync-devices: Auto sync with my linked devices is on unless this is true (Settings > My devices). This device only. */
   syncAutoOff?: true
   /** Wave 43c: what Settings shows and MCP sync_status reads: linked devices and the last sync with any of them. This device only. */
-  syncStatus?: { devices: number; lastAt: number }
+  syncStatus?: { devices: number; lastAt: number; /** Wave 44c: pairings with a send not yet acknowledged, and items held for an update of this device. */ unacked?: number; held?: number }
   /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
   notifInbox?: InboxItem[]
   /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
@@ -1259,6 +1275,10 @@ export interface AppState {
   atEvent?: { eventId: string; since: number; bell?: boolean }
   /** Wave 44 event-editor: events not saved yet (event_draft.ts). THIS DEVICE ONLY, never in an ask or a link. */
   eventDrafts?: EventDraft[]
+  /** Wave 44c event-autosave: every editor's draft (drafts.ts), key editor:target. THIS DEVICE ONLY: never synced, exported or asked. */
+  drafts?: Record<string, Draft>
+  /** Wave 44c answers-44c (A4): deleted events, resources, tasks, meetings and invitations for 30 days (trash.ts); travels to my devices as tombstones. Absent = none. */
+  trash?: TrashEntry[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
   calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
@@ -1299,6 +1319,8 @@ export interface AppState {
   uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; /** Wave 44b filters-communities: EVENT MODE, the id of the event whose people Web, Chat, Resources and Ask are narrowed to (event_filter_mode.ts). */ eventMode?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 39: radii (layout px) the user dragged the ring lines to; absent = the default spacing. */ radii?: Partial<Record<Ring, number>>; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
+  /** answers-44d: Settings > Appearance "Emoji before titles" switched off (title_emoji.ts). */
+  titleEmojiOff?: true
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
@@ -1641,6 +1663,8 @@ export interface FeedSettings {
   noPublicRead?: boolean
   /** Where the composer posts by default (feed_sources_page.ts PUBLISH_TARGETS); absent: fediverse. */
   publishTarget?: string
+  /** wave44c feed-ext (feed_ext_sources.ts): followed Bluesky / PeerTube / Threads / Bridgy Fed accounts. Absent: none. No schema bump. */
+  extFollows?: ExtFollow[]
 }
 
 /** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */

@@ -8,6 +8,7 @@
 import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { diffRecords } from '../../trustweb/src/record_diff.ts'
+import { scrubSecrets } from '../../trustweb/src/secret_scrub.ts' // wave44c answers-44d
 import type { AssistantCfg } from '../../trustweb/src/ext/assistant/providers.ts'
 import { barTools } from './bar_tools.ts'
 import { webFilterTools } from './web_filter_tools.ts'
@@ -25,6 +26,7 @@ import { noticeTools } from './notice_tools.ts'
 import { circlesTools } from './circles_tools.ts'
 import type { Tool } from './protocol.ts'
 import { settingsTools } from './settings_tools.ts'
+import { draftsTools } from './drafts_tools.ts' // wave44c event-autosave
 
 type Obj = Record<string, unknown>
 export interface Person extends Obj { id: string; name: string; ring: string; prevRing?: string; context?: string; fields?: Record<string, unknown>; generalNote?: string; lines?: { text: string; notedAt?: number }[]; deleted_at?: string }
@@ -58,11 +60,15 @@ const tagsOf = (p: Person): string[] => Object.entries(p.fields ?? {}).filter(([
 const alive = (r: Rec): Person[] => r.people.filter((p) => p.deleted_at === undefined)
 const limitOf = (v: unknown, dflt: number): number => (typeof v === 'number' && v > 0 ? Math.floor(v) : dflt)
 
-export function load(file: string): Rec {
+/** The record as stored (commitTo writes it back whole). */
+function loadRaw(file: string): Rec {
   const r = JSON.parse(readFileSync(file, 'utf8')) as Rec
   if (r?.v !== 1 || !Array.isArray(r.people)) throw new Error(`${file} is not a TrustWeb record`)
   return r
 }
+
+/** What every tool reads: the record without a Tana token or secret (answers-44d: those stay on the owner's device, never in an MCP answer). */
+export const load = (file: string): Rec => scrubSecrets(loadRaw(file))
 
 export function findPerson(r: Rec, who: unknown): Person {
   const key = needText(who, 'person')
@@ -86,7 +92,7 @@ export function toolAllow(v: string | undefined): string[] | undefined {
 
 /** Applies `change` to a copy of the record, logs the edit, replaces the file. Returns false when nothing changed. */
 export function commitTo(file: string, now: () => Date, change: (r: Rec) => void): boolean {
-  const prev = load(file)
+  const prev = loadRaw(file)
   const next = structuredClone(prev)
   change(next)
   const edits = diffRecords(prev as never, next as never, { at: now().toISOString(), previewId: 'mcp' })
@@ -307,5 +313,5 @@ export function recordTools(o: RecordToolsOptions): Tool[] {
   const blocks = resourceBlockTools({ load: () => load(o.file) as never, commit: commit as never, /* wave44 answers-44b */ write: o.write, file: o.file, now, person: (r, who) => findPerson(r as Rec, who) })
   const feed = feedTools({ load: () => load(o.file) as never, commit: commit as never, now, embedFetch: o.embedFetch })
   const notify = notifyTools({ load: () => load(o.file) as never, commit: commit as never, now })
-  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...blocks.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write, ...blocks.write] : []), ...barTools(o), ...webFilterTools(o), ...filterStateTools(o), ...noticeTools(o), ...circlesTools(o), ...askAudienceTools(o), ...askEscalationTools(o), ...settingsTools(o), ...socialTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
+  return [...read, ...community.read, ...events.read, ...feed.read, ...notify.read, ...resources.read, ...blocks.read, ...(o.write ? [...write, ...community.write, ...events.write, ...feed.write, ...notify.write, ...resources.write, ...blocks.write] : []), ...barTools(o), ...webFilterTools(o), ...filterStateTools(o), ...noticeTools(o), ...circlesTools(o), ...askAudienceTools(o), ...askEscalationTools(o), ...settingsTools(o), ...socialTools(o), ...draftsTools(o)].filter((t) => !o.allow || o.allow.includes(t.name))
 }

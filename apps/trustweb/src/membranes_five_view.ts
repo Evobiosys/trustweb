@@ -72,7 +72,7 @@ export function pinButton(p: Pick<Person, 'name' | 'pinned'>, onToggle: () => vo
 let openShares: [string, string] | null = null
 
 /** An inline one-line editor: Enter or the check saves, Esc or the cross cancels; `done(typed)` runs once, `typed` null on cancel. */
-function inlineEdit(aria: string, value: string, attr: string, done: (typed: string | null) => void): HTMLElement {
+export function inlineEdit(aria: string, value: string, attr: string, done: (typed: string | null) => void): HTMLElement {
   const input = el('input', { class: 'field tap-edit-input', 'aria-label': aria, maxlength: String(RESOURCE_TITLE_MAX), [attr]: '' })
   input.value = value
   let finished = false

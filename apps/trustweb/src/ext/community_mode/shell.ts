@@ -120,6 +120,8 @@ export function createModeShell(host: ModeHost) {
 
   return {
     now,
+    /** answers-44d: a community event opens in the Community view: the switch follows (this session), the screen stays. */
+    choose: (m: UiInterface): void => { if (on() && !host.guest() && now() !== m) remember(m) },
     /** Called after every screen draw: the switch beside the TrustZone heading (or in a row of its own), and the notice under the header. */
     mount(screen: HTMLElement): void {
       if (!on() || host.guest()) return

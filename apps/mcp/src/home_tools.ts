@@ -6,6 +6,7 @@
 import { listAffiliations, affiliationById } from '../../trustweb/src/affiliation.ts'
 import { eventTagSlug as eventTag } from '../../trustweb/src/event_tag.ts'
 import { MODULE_ID, parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
+import { findRequest, requestGroups } from '../../trustweb/src/home_data.ts'
 import { HOME_COLS, HOME_TILES, isDefaultLayout, layoutOf, moveTile, resetLayout, setHomeLayout } from '../../trustweb/src/home_layout.ts'
 import { announce } from './events.ts'
 import { commitTo, load, schema, S, type RecordToolsOptions } from './record_tools.ts'
@@ -21,6 +22,10 @@ export function homeTools(o: RecordToolsOptions): Tool[] {
   const read: Tool[] = [{
     name: 'home_layout_get', description: 'The Home tile board: which tiles sit in the left, centre and right column (asksToMe, connects, web, asksSent, invites), and whether it is the default.',
     inputSchema: schema({}), run: () => shown(load(o.file)),
+  }, {
+    /* wave44c home-default */
+    name: 'requests_list', description: 'The Existing requests tile: every open request, grouped (toMe = asks of you, connects = want to connect, sent = your asks) plus how many invitations you sent. Text only.',
+    inputSchema: schema({}), run: () => requestGroups(load(o.file) as never),
   }]
   if (!o.write) return read
   const write: Tool[] = [
@@ -51,6 +56,17 @@ export function homeTools(o: RecordToolsOptions): Tool[] {
         }
         announce(o.file, { at: now().toISOString(), kind: 'action', tool: 'dashboard_open', summary: `dashboard-open ${id}`.trim(), action: { type: 'dashboard-open', args: id ? { affiliation: id } : {} } })
         return { queued: true, ...(id ? { affiliation: id } : {}) }
+      },
+    },
+    {
+      name: 'home_open_request', description: 'Open one request (an id from requests_list) as its card on the Web of the open TrustWeb preview. Queued as a card.',
+      inputSchema: schema({ id: S('request id from requests_list') }),
+      run: (a) => {
+        const id = typeof a.id === 'string' ? a.id.trim() : ''
+        const found = id ? findRequest(load(o.file) as never, id) : null
+        if (!found) throw new Error(`no open request "${id}"`)
+        announce(o.file, { at: now().toISOString(), kind: 'action', tool: 'home_open_request', summary: `home-open-request ${id}`, action: { type: 'home-open-request', args: { id } } })
+        return { queued: true, kind: found.kind }
       },
     },
   ]

@@ -12,6 +12,7 @@ import { CAP_REASON_MAX, CAP_WANTED_DEFAULT, CAP_WANTED_MAX } from './name_cap_r
 import type { CapRequestOutcome } from './name_cap_request'
 import { ClaimError } from './connect_code'
 import { S } from './strings'
+import { draftable } from './drafts_dom'
 
 export interface NamesViewOptions {
   names: () => NamesState
@@ -52,10 +53,11 @@ export function createNamesView(o: NamesViewOptions): NamesView {
       onclick: async () => {
         const out = await o.askMore(reason.value, Number(wanted.value))
         o.toast(out === 'sent' ? S.nameCapSent : out === 'throttled' ? S.nameCapThrottled : S.nameCapFailed)
-        if (out === 'sent') { sheet.hidden = true; ask.hidden = true }
+        if (out === 'sent') { sheet.hidden = true; ask.hidden = true; kept.clear() }
       },
     }, [S.nameCapSend]),
   ])
+  const kept = draftable(sheet, 'name-reason', 'cap')   // wave44c event-autosave
   const ask = el('button', {
     class: 'btn btn-ghost btn-sm', type: 'button', hidden: '', 'data-name-cap-request': '', onclick: () => { sheet.hidden = !sheet.hidden },
   }, [S.nameCapAsk])

@@ -24,7 +24,7 @@ try {
   const external = []
   a.on('request', (r) => { if (!r.url().startsWith('http://127.0.0.1')) external.push(r.url()) })
   await startPhone(a, vite.base, 'Jakob')
-  await a.evaluate(() => { const r = JSON.parse(localStorage.getItem('trustweb.v1.me')); r.feed = { on: true }; r.events = [{ id: 'e1', name: 'Hike', attended: true }]; localStorage.setItem('trustweb.v1.me', JSON.stringify(r)) })
+  await a.evaluate(() => { const r = JSON.parse(localStorage.getItem('trustweb.v1.me')); r.feed = { on: true }; r.uiBar = { order: ['web', 'chat', 'feed', 'events', 'inventory'], orderVersion: 2 }; r.events = [{ id: 'e1', name: 'Hike', attended: true }]; /* review-44c: Feed is no longer a stock bottom-bar tab (bottom_bar.ts FEED_IN_BAR=false at base 85191dbcde): the record pins it, as feed_ext.mjs does */ localStorage.setItem('trustweb.v1.me', JSON.stringify(r)) })
   await a.reload()
   await a.locator('nav.tabs button', { hasText: 'Feed' }).click()
   // a group post of mine: a source ("nostr") for the "Only" chip
@@ -39,7 +39,8 @@ try {
     await a.locator('[data-feed-sources]').click()
     await a.locator('[data-sources-page]').waitFor({ timeout: 5000 })
     const heads = await a.locator('[data-sources-section]').evaluateAll((n) => n.map((x) => x.dataset.sourcesSection))
-    c.ok(`${tag}: three sections and the algorithm panel`, JSON.stringify(heads) === '["techno","alt","open","algo"]', heads.join(','))
+    // review-44c: wave44c feed-ext added the followed-accounts section (ext, feed_ext_view.ts sourcesSection) before the algorithm panel
+    c.ok(`${tag}: three sections, the followed accounts and the algorithm panel`, JSON.stringify(heads) === '["techno","alt","open","ext","algo"]', heads.join(','))
     c.ok(`${tag}: techno-feudal rows are off (struck through), open ones on`, await a.locator('[data-source-toggle="x"].tw-off[aria-pressed="false"]').count() === 1 && await a.locator('[data-source-toggle="mastodon"][aria-pressed="true"]').count() === 1)
     const bluesky = a.locator('[data-source-toggle="bluesky"]')
     await bluesky.scrollIntoViewIfNeeded()

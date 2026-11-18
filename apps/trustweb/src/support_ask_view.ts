@@ -19,6 +19,7 @@ import {
 import type { SupportIn } from './support_ask'
 import { cancelAsk, inboxRows } from './support_inbox'
 import { agentAsks, approveAgentAsk, discardAgentAsk } from './support_flush'
+import { draftable } from './drafts_dom'
 
 export interface SupportIo {
   st: () => AppState
@@ -56,6 +57,7 @@ export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): 
   let window: SupportWindow = SupportWindow.Today
   const note = el('textarea', { class: 'field', rows: '2', maxlength: '200', placeholder: S.supportNotePh, 'aria-label': S.supportNotePh, 'data-support-note': '' }) as HTMLTextAreaElement
   const body = el('div', { class: 'support-sheet' })
+  const kept = draftable(body, 'support-note', scope?.tag ?? 'mine')   // wave44c event-autosave
   const zoneName = (zone: string): string => (zone.startsWith('tag:') ? loadColourTags().find((t) => t.id === zone.slice(4))?.label ?? zone.slice(4) : S.ringLabel[zone.slice(5) as Ring] ?? zone)
   const applyKey = (key: string): void => {
     const [zone] = key.split('+')
@@ -103,6 +105,7 @@ export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): 
     const text = supportText(io.appUrl, ask)
     for (const t of to) void io.send(t.peer, text).catch(() => { /* the card shows who answered; nobody else is told */ })
     scope?.used(audienceKey(f))
+    kept.clear()
     sent()
     io.toast(S.supportSent(to.length))
     io.render()

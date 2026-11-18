@@ -27,7 +27,7 @@ export function settingsTools(o: { file: string; write: boolean }): Tool[] {
       inputSchema: schema({ q: { type: 'string' } }, ['q']), run: (a) => { const r = load(); return searchSettings(typeof a.q === 'string' ? a.q : '').map((d) => describeSetting(d, r)) },
     },
     {
-      name: 'settings_sync_capabilities', description: 'Which sync entries a device offers: localVault (Obsidian/Logseq vault: computers and the desktop app, not phones), tana (every device), and where each sits in Settings (main or advanced). Both stay reachable here on every device.',
+      name: 'settings_sync_capabilities', description: 'Which sync entries a device offers: localVault (Obsidian/Logseq vault: computers and the desktop app, not phones), tana (computers and the desktop app: Tana answers on the computer only; phones receive its data by device sync), and where each sits in Settings (main or advanced). Both stay reachable here on every device.',
       inputSchema: schema({ device: { type: 'string', enum: Object.keys(DEVICES), description: 'default desktop' } }),
       run: (a) => {
         const device = a.device === undefined ? 'desktop' : String(a.device)

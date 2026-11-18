@@ -66,6 +66,7 @@ export function aboutGroup(): (HTMLElement | null)[] {
     el('p', { class: 'meta about-steward' }, [S.aboutSteward]),
     el('p', { class: 'meta about-credit' }, [S.aboutCredit]),
     el('div', { class: 'about-links' }, ABOUT_PAGES.map((p) => outLink(aboutUrl(p), S.aboutPage[p], 'about-link'))),
+    el('p', { class: 'meta about-licences', 'data-about-licences': '1' }, [S.feedExt.licence]),   // wave44c feed-ext: the Phanpy extension's MIT notice
     // Smooth updates are the hosted version's promise (P20): which build this is, and which data format it keeps.
     el('p', { class: 'meta about-version', 'data-app-version': appVersion() }, [S.aboutVersion(appVersion(), SCHEMA_VERSION)]),
     devRecordFile() ? el('p', { class: 'meta about-dev-record' }, [`dev record: ${devRecordFile()}`]) : null,

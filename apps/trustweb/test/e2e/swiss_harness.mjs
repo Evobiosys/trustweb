@@ -131,7 +131,7 @@ export function checker() {
 export const record = (page, key = 'trustweb.v1.me') => page.evaluate((k) => JSON.parse(localStorage.getItem(k)), key)
 
 export async function newPhone(browser, errors, { speech = false, viewport = { width: 430, height: 900 } } = {}) {
-  const ctx = await browser.newContext({ viewport, permissions: ['microphone'] })
+  const ctx = await (await import('./rings_first.mjs')).pinRings(await browser.newContext({ viewport, permissions: ['microphone'] })) // wave44c home-default: these flows drive the rings
   if (!speech) await ctx.addInitScript(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition })
   const page = await ctx.newPage()
   page.on('pageerror', (e) => { errors.push(e.message); console.log('  [pageerror]', e.message) })
@@ -146,7 +146,7 @@ export async function startPhone(page, base, name) {
   await page.waitForTimeout(1500)
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
+  await page.locator('[data-go="web"]').first().waitFor({ timeout: 15_000 }) // wave44c home-default: Home is the first screen, the tab bar is the common signal
   // The phone-width demo-content offer, if it shows, is answered "no".
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }

@@ -25,6 +25,7 @@ import type { ExtractedPerson } from './obsidian_ingest'
 import { buildContacts } from './obsidian_people'
 import { confirmHost, hostConfirmed, ingestOptIn, suggestOptIn } from './obsidian_prefs'
 import { claimRun, createIngest, onShutdown, resumable } from './obsidian_run'
+import { RESCAN_MS, createRescan } from './obsidian_rescan'
 import type { IngestProgress, StoredRun } from './obsidian_run'
 import { syncVault } from './obsidian_scan'
 import { obsidianAdapter, obsidianAiAdapter, planVault } from './obsidian_stage'
@@ -35,11 +36,12 @@ import type { ServicePlan } from '../../services_import'
 import { targetLine } from './obsidian_settings'
 
 const T = S.obsidian
+const W = S.syncSeamless
 const u = { style: 'text-decoration:underline;cursor:pointer' }
 const some = <N>(xs: readonly (N | null)[]): N[] => xs.filter((x): x is N => x !== null)
 
 interface PickerWindow { showDirectoryPicker?: (o: { id: string; mode: 'read' }) => Promise<DirHandleLike> }
-interface PermHandle extends DirHandleLike { requestPermission?: (o: { mode: 'read' }) => Promise<'granted' | 'denied' | 'prompt'> }
+interface PermHandle extends DirHandleLike { queryPermission?: (o: { mode: 'read' }) => Promise<'granted' | 'denied' | 'prompt'>; requestPermission?: (o: { mode: 'read' }) => Promise<'granted' | 'denied' | 'prompt'> }
 interface Run { people: ExtractedPerson[]; donePaths: string[] }
 /** The run state is written to IndexedDB every this many batches (and when the run pauses, stops or ends). */
 const SNAPSHOT_EVERY = 10
@@ -70,6 +72,8 @@ export function openObsidian(h: ServicesHooks): void {
     /** The run kept on this device (any vault) and the hash of every note now in the vault: `run` is what of it still counts (B9). */
     stored: undefined as Partial<StoredRun> | undefined, hashes: {} as Record<string, string>,
     scan: null as AbortController | null,
+    /** Wave 44c: when the vault was last read (by the owner or by the automatic rescan); 0 = never. */
+    scannedAt: parseObsidian(h.state().extData?.[MODULE_ID]).syncedAt ?? 0,
     /** Notes of the last read (title + excerpt only), for the suggestion step. */
     notes: [] as ParsedNote[],
     /** F05: waiting suggestions (from the record), the ticked paths, the run in progress, whether the owner is asked about the host. */
@@ -99,6 +103,11 @@ export function openObsidian(h: ServicesHooks): void {
     if (list.length) void sync(fromInput(list))
   })
   const picker = (window as unknown as PickerWindow).showDirectoryPicker
+  /** Wave 44c: the kept folder is read again when the owner comes back to the app and every RESCAN_MS, while the browser still allows it (no prompt, no run during a read or an ingestion). */
+  const rescan = createRescan<PermHandle>({
+    handle: () => (ui.reading === null && !ui.ingest && !ui.confirm ? ui.handle : null), now: Date.now, live,
+    scan: async (hd) => { await sync(await walkHandle(hd)) },
+  })
 
   async function sync(v: VaultFiles): Promise<void> {
     ui.error = ''; ui.sync = null
@@ -113,7 +122,9 @@ export function openObsidian(h: ServicesHooks): void {
       if (!live() || scan.signal.aborted) return
       const s = h.state()
       if (v.vault) ui.vault = v.vault
-      s.extData = { ...s.extData, [MODULE_ID]: { ...parseObsidian(s.extData?.[MODULE_ID]), vault: ui.vault, syncedAt: Date.now() } }
+      ui.scannedAt = Date.now()
+      rescan.mark(ui.scannedAt)
+      s.extData = { ...s.extData, [MODULE_ID]: { ...parseObsidian(s.extData?.[MODULE_ID]), vault: ui.vault, syncedAt: ui.scannedAt } }
       h.save()
       ui.hashes = r.hashes
       ui.run = resumable(ui.stored, ui.vault, ui.hashes)
@@ -169,6 +180,7 @@ export function openObsidian(h: ServicesHooks): void {
       ])),
       input,
       el('p', { class: 'meta' }, [ui.handle ? T.resyncHint : T.pickHint]),
+      ui.scannedAt ? el('p', { class: 'meta', 'data-obs-lastscan': String(ui.scannedAt), title: ui.handle ? W.obsAutoHint : '' }, [W.obsLastScan(new Date(ui.scannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))]) : null,
       ui.reading ? el('div', { 'data-obs-reading': `${ui.reading.done}/${ui.reading.total}` }, [
         el('progress', { max: String(ui.reading.total), value: String(ui.reading.done), style: 'width:100%' }),
         el('p', { class: 'meta' }, [T.reading(ui.reading.done, ui.reading.total)]),
@@ -384,7 +396,12 @@ export function openObsidian(h: ServicesHooks): void {
     Object.assign(ui.sg, { list: [], ticked: new Set<string>(), running: null, failed: 0, ran: false, error: false, confirm: false, ctl: null })
     drawSync(); drawIngest(); drawSuggest()
   })
-  const onPop = (): void => { if (!root.isConnected) { stopAll(); window.removeEventListener('popstate', onPop); unregister() } }
+  const onBack = (): void => { if (document.visibilityState !== 'hidden') void rescan.focus() }
+  const timer = setInterval(() => { if (root.isConnected) void rescan.tick(); else endWatch() }, RESCAN_MS)
+  const endWatch = (): void => { clearInterval(timer); window.removeEventListener('focus', onBack); document.removeEventListener('visibilitychange', onBack) }
+  window.addEventListener('focus', onBack)
+  document.addEventListener('visibilitychange', onBack)
+  const onPop = (): void => { if (!root.isConnected) { stopAll(); endWatch(); window.removeEventListener('popstate', onPop); unregister() } }
   window.addEventListener('popstate', onPop)
 
   drawSync(); drawIngest(); drawSuggest()

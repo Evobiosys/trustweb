@@ -214,6 +214,8 @@ export interface ChatViewDeps extends ChatIo {
   open(url: string): void
   /** Wave 37: the person started typing a draft ("thought of you today"). */
   onDraft?(): void
+  /** Wave 44c event-autosave (drafts_dom.ts draftable): keeps the unsent text across a reload; clear() once it is sent. */
+  draftable?(root: HTMLElement): { clear(): void }
 }
 
 function rowNode(deps: ChatViewDeps, r: ChatRowModel): HTMLElement {
@@ -282,7 +284,7 @@ function composer(deps: ChatViewDeps, vm: ChatViewModel, redraw: () => void, dra
     if (!person.peerId || sendBtn.disabled) return
     sendBtn.disabled = true
     const ok = await submitText(deps, person.peerId, area.value, draft.re)
-    if (ok) { draft.text = ''; draft.re = null }
+    if (ok) { draft.text = ''; draft.re = null; kept?.clear() }
     redraw()
   }
   area.addEventListener('input', () => { updateLeft(); deps.onDraft?.() })
@@ -295,13 +297,15 @@ function composer(deps: ChatViewDeps, vm: ChatViewModel, redraw: () => void, dra
     ? h(doc, 'button', { class: 'btn btn-ghost btn-sm', type: 'button' }, [S.sendAgain])
     : null
   again?.addEventListener('click', () => { if (person.peerId) void flushPending(deps, person.peerId).then(redraw) })
-  return h(doc, 'div', { class: 'chat-composer' }, [
+  const box = h(doc, 'div', { class: 'chat-composer' }, [
     vm.showOffline ? h(doc, 'p', { class: 'chat-note', 'data-chat': 'offline' }, [S.offline]) : null,
     contextLine(deps, draft, redraw),
     area,
     h(doc, 'div', { class: 'chat-row' }, [left, again, sendBtn]),
     hint,
   ])
+  const kept = deps.draftable?.(box)
+  return box
 }
 
 export interface ChatHandle {

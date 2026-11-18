@@ -42,8 +42,12 @@ import { pinnedFrom } from './membranes_five'
 import { SCHEMA_VERSION } from './schema_version'
 import { alive } from './deleted_people'
 import { ALSO_DIDS_MAX } from './device_alias'
+import { isTrashEntry, mergeTrash, trashKey } from './trash' // wave44c answers-44c (A4)
+import type { TrashEntry } from './trash'
+import { scrubSecrets } from './secret_scrub' // wave44c answers-44d: no Tana secret leaves this device
 
 /** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
+export const HOP_MAX = 3
 export const SYNC_VERSION = 3
 /** A sync message older than this is ignored on arrival (the relay may hold it longer; see sync_link.ts). */
 export const SYNC_TTL_MS = 10 * 60_000
@@ -80,6 +84,8 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'syncAutoOff', 'syncStatus',
   // wave 43c social-hosting: the name listing is of THIS device's key; hosted records, the lookup cache and waiting intents are this phone's
   'discoverable', 'discoverOpen', 'hosted', 'nameCache', 'intentsIn',
+  /* wave44c event-autosave */ 'drafts',
+  /* wave44c answers-44c: tombstones travel as their own entities (x:<kind>:<id>) */ 'trash',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */
@@ -92,7 +98,8 @@ export function settingsOf(s: object): Record<string, unknown> {
 
 export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'invitation' | 'channel' | 'sameAs' | 'chat' | 'name' | 'peer'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
-export type Stamps = Record<string, { h: string; at: number; by: string; from?: string }>
+/** `rx`/`hp` (wave 44c): when this device took the entity from another one, and over how many devices it has come (0 = made where it was last edited); only such entities are forwarded, up to HOP_MAX. */
+export type Stamps = Record<string, { h: string; at: number; by: string; from?: string; rx?: number; hp?: number }>
 
 export interface SyncBundle {
   v: number
@@ -107,6 +114,8 @@ export interface SyncBundle {
   by?: Record<string, string>
   /** Entity key -> the device that first brought it in (Stamps.from), so the origin survives a hop through a third device. Optional: an older device sends none. */
   from?: Record<string, string>
+  /** Wave 44c: entity key -> devices the entity has already passed over (absent = 0); forwarding stops at HOP_MAX. */
+  hp?: Record<string, number>
   channels?: { mine: ChannelMap; share: ShareSettings }
   events?: TwEvent[]
   /** Wave 24: optional, sent only when I have tasks; a device without the field leaves mine untouched. */
@@ -124,6 +133,8 @@ export interface SyncBundle {
   displayName?: string
   /** Wave 43c: my connections (syncPeer: without what only one device knows), so a person connected on one device can be messaged on the other. */
   peers?: Peer[]
+  /** Wave 44c answers-44c (A4): deleted events, resources, tasks, meetings, invitations (trash.ts); an older build ignores the field. */
+  trash?: TrashEntry[]
 }
 
 export interface Conflict {
@@ -198,7 +209,14 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
   return { ...rest, transcript: [] }
 }
 
-type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare'> & { me?: { displayName: string }; peers?: Peer[]; chats?: ChatBook }
+/** review-44c: a tombstone as it travels: the same device-local fields stay home as for the live item (syncEvent, withoutImage). */
+function syncTrash(t: TrashEntry): TrashEntry {
+  if (t.kind === 'event') return { ...t, item: syncEvent(t.item as unknown as TwEvent) }
+  if (t.kind === 'resource') return { ...t, item: withoutImage(t.item as unknown as InventoryItem) }
+  return t
+}
+
+type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'invitations' | 'myChannels' | 'contactShare' | 'trash'> & { me?: { displayName: string }; peers?: Peer[]; chats?: ChatBook }
 
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
@@ -210,6 +228,7 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
     ...(s.tasks ?? []).map((x): [string, unknown] => [KEY_PREFIX.task + x.id, x]),
     ...(s.invitations ?? []).map((x): [string, unknown] => [KEY_PREFIX.invitation + x.id, x]),
+    ...(s.trash ?? []).map((x): [string, unknown] => [trashKey(x), syncTrash(x)]), // wave44c answers-44c (A4); review-44c: hashed as it travels
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
     ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
@@ -219,7 +238,7 @@ function entities(s: Source, settings: Record<string, unknown>): [string, unknow
   ]
 }
 
-const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, invitations: b.invitations, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined, peers: b.peers, chats: b.chats })
+const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, invitations: b.invitations, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined, peers: b.peers, chats: b.chats, trash: b.trash })
 
 /** The stamps after looking at the record now: unchanged entities keep theirs, new or edited ones get `now` and this device's name. Gone ones drop out. */
 export function refreshStamps(s: AppState, prev: Stamps, now: number, device: string): Stamps {
@@ -233,7 +252,7 @@ export function refreshStamps(s: AppState, prev: Stamps, now: number, device: st
 
 export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBundle {
   const entries = Object.entries(stamps)
-  return {
+  return scrubSecrets({
     v: SYNC_VERSION,
     schemaVersion: SCHEMA_VERSION,
     people: s.people.map(withoutPersonImage),
@@ -242,26 +261,30 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     at: Object.fromEntries(entries.map(([k, x]) => [k, x.at])),
     by: Object.fromEntries(entries.map(([k, x]) => [k, x.by])),
     ...(entries.some(([, x]) => x.from) ? { from: Object.fromEntries(entries.flatMap(([k, x]) => (x.from ? [[k, x.from]] : []))) } : {}),
+    ...(entries.some(([, x]) => x.hp) ? { hp: Object.fromEntries(entries.flatMap(([k, x]) => (x.hp ? [[k, x.hp]] : []))) } : {}),
     channels: { mine: s.myChannels ?? {}, share: s.contactShare ?? {} },
     events: (s.events ?? []).map(syncEvent),
     ...(s.tasks?.length ? { tasks: s.tasks } : {}),
     ...(s.invitations?.length ? { invitations: s.invitations } : {}),
+    ...(s.trash?.length ? { trash: s.trash.map(syncTrash) } : {}),
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
     settings: settingsOf(s),
     ...codesForBundle(s, shareCode),
     ...(shareCode && s.me?.displayName ? { displayName: s.me.displayName } : {}),
     peers: travelling(s.peers).map(syncPeer),
-  }
+  })
 }
 
 /**
- * Wave 43c: the automatic sync's delta: only the entities whose stamp THIS device set after `since` (what arrived from another device keeps that
- * device's name in `by`, so it is never echoed back). `since` 0 = the full bundle. Null when nothing changed. Codes travel with the full bundle only.
+ * Wave 43c: the automatic sync's delta: the entities whose stamp THIS device set after `since`. Wave 44c: also what arrived from another device after `since`
+ * (`rx`), so a third device pairs with one device only: not back to a device in `skip` (the receiver's sync id and, for an older build, its name) and not past HOP_MAX
+ * devices. `since` 0 = the full bundle. Null when nothing changed. Codes travel with the full bundle only.
  */
-export function deltaOf(s: AppState, stamps: Stamps, since: number, device: string): SyncBundle | null {
+export function deltaOf(s: AppState, stamps: Stamps, since: number, device: string, skip: readonly string[] = []): SyncBundle | null {
   if (!since) return bundleOf(s, stamps)
-  const keys = new Set(Object.entries(stamps).filter(([, x]) => x.by === device && x.at > since).map(([k]) => k))
+  const due = (x: Stamps[string]): boolean => (x.by === device ? x.at > since : !skip.includes(x.by) && (x.rx ?? 0) > since && (x.hp ?? 0) < HOP_MAX)
+  const keys = new Set(Object.entries(stamps).filter(([, x]) => due(x)).map(([k]) => k))
   if (!keys.size) return null
   const full = bundleOf(s, stamps, false)
   const pick = <T>(prefix: string, list: T[], id: (x: T) => string): T[] => list.filter((x) => keys.has(prefix + id(x)))
@@ -275,13 +298,14 @@ export function deltaOf(s: AppState, stamps: Stamps, since: number, device: stri
     events: pick(KEY_PREFIX.event, full.events ?? [], (x) => x.id),
     ...(full.tasks ? { tasks: pick(KEY_PREFIX.task, full.tasks, (x) => x.id) } : {}),
     ...(full.invitations ? { invitations: pick(KEY_PREFIX.invitation, full.invitations, (x) => x.id) } : {}),
+    ...(full.trash ? { trash: full.trash.filter((x) => keys.has(trashKey(x))) } : {}),
     peers: (full.peers ?? []).filter((x) => keys.has(peerKey(x.did))),
     chats: Object.fromEntries(Object.entries(full.chats ?? {}).filter(([id]) => keys.has(CHAT_PREFIX + id))),
     settings: Object.fromEntries(Object.entries(full.settings ?? {}).filter(([k]) => keys.has(SETTING_PREFIX + k))),
     channels: channels ? full.channels : { mine: {}, share: {} },
     ...(full.sameAs ? { sameAs: full.sameAs } : {}),
     ...(keys.has('n:me') && s.me?.displayName ? { displayName: s.me.displayName } : {}),
-    at: sub(full.at), by: sub(full.by), ...(full.from ? { from: sub(full.from) } : {}),
+    at: sub(full.at), by: sub(full.by), ...(full.from ? { from: sub(full.from) } : {}), ...(full.hp ? { hp: sub(full.hp) } : {}),
   }
 }
 
@@ -349,6 +373,8 @@ const isTask = (e: unknown): e is TwTask => isObj(e) && ['id', 'title'].every((k
 const isInvitation = (e: unknown): e is Invitation => isObj(e) && e.kind === 'invitation' && typeof e.id === 'string' && typeof e.status === 'string'
 const isEvent = (e: unknown): e is TwEvent => isObj(e) && ['id', 'name', 'from', 'where'].every((k) => typeof e[k] === 'string')
   && typeof e.createdAt === 'number' && typeof e.attended === 'boolean'
+/** review-44c: a tombstone's item is checked like the live list of its kind (a restore puts it there). */
+const trashItemOk = (t: TrashEntry): boolean => (t.kind === 'event' ? isEvent(t.item) : t.kind === 'task' ? isTask(t.item) : t.kind === 'invitation' ? isInvitation(t.item) : isObj(t.item))
 
 /**
  * The untrusted-input boundary: a decrypted bundle that is not exactly this shape is nothing. Versions 1 to 3 are read; a v2 field that is
@@ -370,12 +396,18 @@ export function parseBundle(v: unknown): SyncBundle | null {
   if (!by || !from || !sameAs || !channels || !isList(v.events) || !v.events.every(isEvent) || !isObj(v.chats)) return null
   if (v.tasks !== undefined && !(isList(v.tasks) && v.tasks.every(isTask))) return null
   if (v.invitations !== undefined && !(Array.isArray(v.invitations) && v.invitations.every(isInvitation))) return null
+  if (v.trash !== undefined && !(Array.isArray(v.trash) && v.trash.length <= AT_MAX && v.trash.every((t) => isTrashEntry(t) && trashItemOk(t)))) return null
   out.by = by
   if (Object.keys(from).length) out.from = from
+  if (isObj(v.hp)) {
+    const hp = Object.entries(v.hp).filter(([k, n]) => k.length <= 120 && Number.isInteger(n) && (n as number) >= 0 && (n as number) <= HOP_MAX)
+    if (hp.length) out.hp = Object.fromEntries(hp) as Record<string, number>
+  }
   out.channels = channels
   out.events = (v.events as TwEvent[]).map(syncEvent)
   if (v.tasks) out.tasks = v.tasks as TwTask[]
   if (v.invitations) out.invitations = v.invitations as Invitation[]
+  if (v.trash) out.trash = (v.trash as TrashEntry[]).map(syncTrash)
   out.chats = sanitizeChatBook(v.chats)
   const settings = parseSettings(v.settings)
   if (settings) out.settings = settings
@@ -461,16 +493,18 @@ function remapBundle(b: SyncBundle, map: Record<string, string> | undefined): Sy
   const at: Record<string, number> = {}
   const by: Record<string, string> = {}
   const from: Record<string, string> = {}
+  const hp: Record<string, number> = {}
   for (const [k, n] of Object.entries(b.at)) {
     const key = k.startsWith(KEY_PREFIX.person) ? KEY_PREFIX.person + id(k.slice(2)) : k
     if (at[key] === undefined || n > at[key]) {
       at[key] = n
       if (b.by?.[k] !== undefined) by[key] = b.by[k]
       if (b.from?.[k] !== undefined) from[key] = b.from[k]
+      if (b.hp?.[k] !== undefined) hp[key] = b.hp[k]
     }
   }
   return {
-    ...b, at, by, from,
+    ...b, at, by, from, ...(b.hp ? { hp } : {}),
     people: b.people.map((p) => (id(p.id) === p.id ? p : { ...p, id: id(p.id) })),
     meetings: b.meetings.map((m) => (m.personId && id(m.personId) !== m.personId ? { ...m, personId: id(m.personId) } : m)),
   }
@@ -566,13 +600,18 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (sameAs) mine.sameAs = sameAs
   const theirs = remapBundle(incoming, sameAs)
   const c: Ctx = { myAt: myStamps, theirs, since, res }
+  // Wave 44c answers-44c (A4): tombstones first: their newer delete takes my copy away, my newer delete keeps their older copy out.
+  const tomb = mergeTrash(mine, theirs.trash ?? [], { event: theirs.events ?? [], resource: theirs.inventory, task: theirs.tasks ?? [], meeting: theirs.meetings, invitation: theirs.invitations ?? [] },
+    (k, id) => KEY_PREFIX[k] + id, (k) => myStamps[k]?.at ?? 0, (k) => theirs.at[k] ?? 0)
+  res.updated += tomb.changed
+  const live = tomb.lists as { event: TwEvent[]; resource: InventoryItem[]; task: TwTask[]; meeting: PastMeeting[]; invitation: Invitation[] }
   mine.people = mergeList('person', mine.people, theirs.people.map(withoutPersonImage), c, (p) => p.name, uniteKeepingDelete)
-  mine.inventory = mergeList('resource', mine.inventory, theirs.inventory.map(withoutImage), c, (x) => x.text, fillMissing)
-  mine.meetings = mergeList('meeting', mine.meetings ?? [], theirs.meetings, c, (x) => x.about, fillMissing)
-  if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)
+  mine.inventory = mergeList('resource', mine.inventory, live.resource.map(withoutImage), c, (x) => x.text, fillMissing)
+  mine.meetings = mergeList('meeting', mine.meetings ?? [], live.meeting, c, (x) => x.about, fillMissing)
+  if (live.event.length) mine.events = mergeList('event', mine.events ?? [], live.event, c, (x) => x.name, fillMissing)
   // A task is edited whole (ticking removes `done`): the newer version wins as it is, nothing is filled in from the older.
-  if (theirs.tasks?.length) mine.tasks = mergeList('task', mine.tasks ?? [], theirs.tasks, c, (x) => x.title, (winner) => winner)
-  if (theirs.invitations?.length) mine.invitations = mergeList('invitation', mine.invitations ?? [], theirs.invitations, c, (x) => x.event ?? x.place ?? x.id, (winner) => winner)
+  if (live.task.length) mine.tasks = mergeList('task', mine.tasks ?? [], live.task, c, (x) => x.title, (winner) => winner)
+  if (live.invitation.length) mine.invitations = mergeList('invitation', mine.invitations ?? [], live.invitation, c, (x) => x.event ?? x.place ?? x.id, (winner) => winner)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
   if (theirs.peers?.length) mergePeers(mine, theirs.peers, c)
@@ -666,11 +705,18 @@ export function stampsAfterMerge(s: AppState, before: Stamps, incoming: SyncBund
     const at = theirs.at[key]
     if (at === undefined) continue
     const from = before[key]?.from ?? theirs.from?.[key] ?? theirName
-    if (theirHash.get(key) === hashOf(e)) fresh[key] = { h: hashOf(e), at, by: theirs.by?.[key] ?? theirName, from }
+    if (theirHash.get(key) === hashOf(e)) {
+      // Wave 44c: what this merge changed here is taken over from that device: it may go on to a third one (rx, one more hop).
+      const took = before[key]?.h !== hashOf(e) ? { rx: now, hp: (theirs.hp?.[key] ?? 0) + 1 } : { ...(before[key]?.rx !== undefined ? { rx: before[key].rx } : {}), ...(before[key]?.hp !== undefined ? { hp: before[key].hp } : {}) }
+      fresh[key] = { h: hashOf(e), at, by: theirs.by?.[key] ?? theirName, from, ...took }
+    }
     else fresh[key] = { ...fresh[key], from }
   }
   return fresh
 }
+
+/** Wave 44c: the stable id of a device in stamps (`by`, `from`): from its sync DID, never its editable name. */
+export const syncIdOf = (did: string): string => 'd:' + (did.split('.')[1] ?? did).slice(-12)
 
 /** The conflicts of a merge, kept in the record (newest first, at most REVIEW_MAX) until the owner dismisses them; meetings without their large parts. */
 export function recordReview(s: AppState, conflicts: Conflict[]): void {
@@ -709,12 +755,20 @@ const CODE_PREFIX = 'TWD1'
 const SECRET_RE = /^[A-Za-z0-9_-]{22,43}$/
 const DID_RE = /^did:peer:2\.[A-Za-z0-9.:_-]{20,1500}$/
 
+/** Wave 44c: the QR of "Link a device" holds a link of the app (the phone's camera app opens it), the pairing code is its fragment. Switch: one constant. */
+export const PAIR_LINK_BASE = 'https://app.trustweb.one/'
+export const pairLink = (code: string): string => `${PAIR_LINK_BASE}#pair=${code}`
+/** The code in a page fragment (`#pair=<code>`), or null. */
+export const pairCodeFromHash = (hash: string): string | null => /^#?pair=([^&\s]+)/.exec(hash)?.[1] ?? null
+
 export function pairingCode(did: string, secret: string): string {
   return [CODE_PREFIX, did, secret].join('~')
 }
 
 export function parsePairingCode(text: string): { did: string; secret: string } | null {
-  const [prefix, did, secret, ...rest] = text.trim().split('~')
+  const t = text.trim()
+  // Wave 44c: the code also comes inside a link of the app (`/#pair=<code>`, or `/pair#<code>`): only the code matters, never the host.
+  const [prefix, did, secret, ...rest] = (/(?:#pair=|\/pair#)([^&\s#]+)/.exec(t)?.[1] ?? t).split('~')
   return prefix === CODE_PREFIX && rest.length === 0 && DID_RE.test(did ?? '') && SECRET_RE.test(secret ?? '') ? { did, secret } : null
 }
 

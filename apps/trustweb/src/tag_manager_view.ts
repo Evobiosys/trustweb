@@ -7,6 +7,7 @@ import { tagPill } from './components/tag_pill'
 import type { Person } from './model'
 import { foldText } from './settings_search'
 import { S } from './strings'
+import { draftable } from './drafts_dom'
 import { addChild, createGroup, forkTag, removeChild, setManaged, toggleExclude, toggleSteward } from './tag_manager'
 import { childrenOf, toTag } from './tags_model'
 
@@ -76,17 +77,20 @@ export function tagManagerView(io: TagManagerIo): HTMLElement {
       const name = draft.trim()
       if (!name) return
       draft = ''
+      kept.clear()   // wave44c event-autosave
       apply((l) => createGroup(l, name))
     }
     const input = el('input', { class: 'field', placeholder: S.tagsNewPh, 'aria-label': S.tagsNewPh, maxlength: '40', value: draft, 'data-tag-new': '', oninput: (e) => { draft = (e.target as HTMLInputElement).value } }) as HTMLInputElement
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); create() } })
+    const head = el('div', { class: 'tm-head' }, [input, el('button', { class: 'btn btn-ghost', type: 'button', 'data-tag-create': '', onclick: create }, [S.tagsCreate])])
+    const kept = draftable(head, 'tag-new', 'new')
     const wasOpen = (root as HTMLDetailsElement).open
     open = new Set(Array.from(root.querySelectorAll<HTMLDetailsElement>('[data-tag-row]')).filter((d) => d.open).map((d) => d.dataset.tagRow ?? ''))
     root.replaceChildren(
       el('summary', { class: 'adv-toggle' }, alphaHeading(S.tagsTitle)),
       el('div', { class: 'tag-manager' }, [
         el('p', { class: 'meta' }, [S.tagsLead]),
-        el('div', { class: 'tm-head' }, [input, el('button', { class: 'btn btn-ghost', type: 'button', 'data-tag-create': '', onclick: create }, [S.tagsCreate])]),
+        head,
         ...(all.length ? all.map((t) => row(t, all)) : [el('p', { class: 'meta' }, [S.tagsNone])]),
       ]),
     )

@@ -4,7 +4,8 @@ const pw = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5303}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond, info) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + (info ?? '')}`); if (!cond) failed = true }
 const peer = (id, name, ring, did) => ({ id, displayName: name, did, ring, connectedAt: 1 })
@@ -49,7 +50,7 @@ try {
     }
 
     // B. the Ask page: How far? sits on the main form, Custom stays Custom for 2
-    await page.locator('.hdr [data-open-query]:visible').first().click(); await page.waitForTimeout(500)
+    await page.locator('[data-open-query]:visible').first().click(); await page.waitForTimeout(500)
     check(`${w}: How far? is on the main form, not under Advanced`, (await page.locator('[data-reach]').count()) === 1 && (await page.locator('[data-aud-advanced] [data-reach]').count()) === 0)
     await page.locator('[data-reach-choice="custom"]').click(); await page.waitForTimeout(250)
     check(`${w}: Custom shows its number box`, (await page.locator('[data-reach-custom]').count()) === 1)
@@ -69,7 +70,7 @@ try {
     // D. a queued escalation (from an assistant) waits for Send or Discard
     await page.evaluate(() => { const r = JSON.parse(localStorage.getItem('trustweb.v1.me')); r.askEscalate = { text: 'Who has a drill?', zone: 'close' }; localStorage.setItem('trustweb.v1.me', JSON.stringify(r)) })
     await page.reload(); await page.waitForTimeout(1200)
-    if ((await page.locator('[data-escalate-queued]').count()) === 0) { await page.locator('.hdr [data-open-query]:visible').first().click(); await page.waitForTimeout(500) }
+    if ((await page.locator('[data-escalate-queued]').count()) === 0) { await page.locator('[data-open-query]:visible').first().click(); await page.waitForTimeout(500) }
     check(`${w}: a queued second round shows Send and Discard`, (await page.locator('[data-escalate-queued]').count()) === 1)
     await page.locator('[data-escalate-queued-discard]').click(); await page.waitForTimeout(250)
     check(`${w}: Discard drops it`, (await store()).askEscalate === undefined && (await page.locator('[data-escalate-queued]').count()) === 0)

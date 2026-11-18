@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 33 (invitations.ts): the Resources section "Invited to", its add/edit and paste sheets, and the Invitations line on a person card. DOM and words only; main.ts passes the app in. */
+import { trashItems } from './trash' // wave44c answers-44c (A4)
 import { el } from '../../demo/src/ui/dom'
 import type { AppState, Invitation, Person } from './model'
 import { INVITATION_STATUSES, groupByPlace, invitationsOfHost, newInvitation, parseInvitationList } from './invitations'
 import { S } from './strings'
+import { draftable } from './drafts_dom'
 
 export interface InvitationIo {
   st: () => AppState
@@ -63,32 +65,40 @@ export function invitationSheet(io: InvitationIo, existing?: Invitation, preset?
     const made = newInvitation({ place: place.value, host: host.value, event: event.value, date: date.value, link: link.value, note: note.value, status: status.value }, existing?.id ?? io.newId(), existing?.source)
     if (typeof made === 'string') { error.textContent = S.invitedErr[made]; error.hidden = false; return }
     s.invitations = [...(s.invitations ?? []).filter((i) => i.id !== made.id), made]
+    kept?.clear()
     io.save()
     io.closeSheet()
     io.render()
   }
-  io.openSheet([
-    el('h3', {}, [S.invitedTitle]),
+  const form = el('div', {}, [
     ...field(S.invitedPlace, place), ...field(S.invitedHost, host), ...field(S.invitedEvent, event),
     ...field(S.invitedDate, date), ...field(S.invitedLink, link), ...field(S.invitedStatus, status), ...field(S.invitedNote, note),
+  ])
+  const kept = existing ? null : draftable(form, 'invitation', preset?.host ?? 'new')   // wave44c event-autosave: a new invitation is kept until saved
+  io.openSheet([
+    el('h3', {}, [S.invitedTitle]),
+    form,
     error,
     el('button', { class: 'btn btn-electric wide', 'data-invitation-save': '', onclick: save }, [S.invitedSave]),
-    existing ? el('button', { class: 'btn btn-ghost btn-sm', 'data-invitation-remove': existing.id, onclick: () => { s.invitations = (s.invitations ?? []).filter((i) => i.id !== existing.id); io.save(); io.closeSheet(); io.render() } }, [S.invitedRemove]) : null,
+    existing ? el('button', { class: 'btn btn-ghost btn-sm', 'data-invitation-remove': existing.id, onclick: () => { trashItems(s, 'invitation', [existing.id], Date.now()); io.save(); io.closeSheet(); io.render() } }, [S.invitedRemove]) : null,
   ])
 }
 
 /** "Place: Person, Person" lines become invitations. */
 export function pasteSheet(io: InvitationIo): void {
   const box = el('textarea', { class: 'field', rows: '6', placeholder: S.invitedPastePh, 'aria-label': S.invitedPaste, 'data-invitation-paste-text': '' }) as HTMLTextAreaElement
+  const wrap = el('div', {}, [box])
+  const kept = draftable(wrap, 'invitation-paste', 'new')   // wave44c event-autosave
   io.openSheet([
     el('h3', {}, [S.invitedPaste]),
     el('p', { class: 'meta' }, [S.invitedPasteLead]),
-    box,
+    wrap,
     el('button', { class: 'btn btn-electric wide', 'data-invitation-paste-go': '', onclick: () => {
       const s = io.st()
       const made = parseInvitationList(box.value, s.people, io.newId)
       if (!made.length) return
       s.invitations = [...(s.invitations ?? []), ...made]
+      kept.clear()
       io.save()
       io.closeSheet()
       io.toast(S.invitedPasteDone(made.length))

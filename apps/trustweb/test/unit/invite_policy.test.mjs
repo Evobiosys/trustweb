@@ -98,7 +98,9 @@ describe('the inviter counter', () => {
     const { ledger: rv, revoked } = revokeInvites(ledger, 'iyg')
     expect(revoked).toBe(1)
     expect(redeem(rv, e.tok, a.did)).toMatchObject({ ok: false, reason: 'revoked' })
-    expect(redeem(ledger, e.tok.slice(0, -2) + 'AA', a.did)).toMatchObject({ ok: false, reason: 'tampered' })
+    // ci-fix-44: change a signature char that is all data bits; the old `slice(0, -2) + 'AA'` left a signature ending in 'AA' unchanged (~1 run in 16)
+    const sigTampered = e.tok.slice(0, -3) + (e.tok.at(-3) === 'A' ? 'B' : 'A') + e.tok.slice(-2)
+    expect(redeem(ledger, sigTampered, a.did)).toMatchObject({ ok: false, reason: 'tampered' })
     expect(redeem([], e.tok, a.did)).toMatchObject({ ok: false, reason: 'unknown' })
   })
   it('rate limit per token and hour', () => {

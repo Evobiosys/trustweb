@@ -4,7 +4,8 @@ const pw = await import(process.env.PLAYWRIGHT_PACKAGE ?? 'playwright-core')
 const chromium = pw.chromium ?? pw.default.chromium
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5443}/`
 const SHOTS = process.env.SHOTS ?? '/tmp'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const { ringsFirst } = await import('./rings_first.mjs') // wave44c home-default: Home is first, these checks are about the rings
+const browser = ringsFirst(await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] }))
 let failed = false
 const check = (name, cond, info) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : ' ' + (info ?? '')}`); if (!cond) failed = true }
 const hit = (a, b) => !(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y)
@@ -28,7 +29,9 @@ try {
     const probe = async (name) => {
       const labels = await right()
       if (baseline === null || baseline.w !== w) baseline = { w, labels }
-      check(`${w}: ${name}: right cluster ${JSON.stringify(labels)} is the same as Web's`, JSON.stringify(labels) === JSON.stringify(baseline.labels) && labels[0] === 'qr' && labels[1] === 'settings', JSON.stringify(baseline.labels))
+      // wave44c header-cluster: eye and search join the right cluster (only where the screen has them); QR and settings stay the tail (header_cluster.mjs checks the order)
+      const tail = labels.filter((l) => l === 'qr' || l === 'settings')
+      check(`${w}: ${name}: right cluster ${JSON.stringify(labels)} ends with QR, settings`, tail.join() === 'qr,settings' && labels.indexOf('qr') + 1 === labels.indexOf('settings'), JSON.stringify(baseline.labels))
       await inLeft40('[data-open-requests]', `${name}: inbox`)
       await inLeft40('[data-notify-bell]', `${name}: notify center`)
       const order = await page.locator('.hdr-left > *').evaluateAll((ns) => ns.map((n, i) => (i === 0 ? 'logo' : n.tagName === 'H2' ? 'title' : n.hasAttribute('data-open-requests') ? 'inbox' : n.hasAttribute('data-notify-bell') ? 'bell' : '?')).filter((x) => x !== '?'))
