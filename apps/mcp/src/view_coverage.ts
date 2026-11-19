@@ -35,6 +35,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'contacts_sync_view.ts': ['sync_status', 'sync_now'],
   'dashboard_view.ts': ['dashboard_open', 'home_layout_get'],
   'desktop_view.ts': NAV,
+  'event_merge_view.ts': ['event_merge', 'event_merge_answer', 'event_merge_asks_list'], // wave45 merge-events
   'event_editor_view.ts': ['event_drafts_list', 'event_draft_save', 'event_details_set', 'event_times_set', 'event_invite'],
   'event_plan_view.ts': ['event_signup', 'event_resource_ask', 'event_resource_cover'],
   'event_roles_view.ts': ['event_roles_set', 'event_get'],

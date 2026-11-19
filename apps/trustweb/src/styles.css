@@ -2330,3 +2330,9 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .events-page .ev-who{margin-top:4px}
 .events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
 .rs-by{display:block; font-size:12.5px}
+/* wave45 merge-events */
+.events-page .merge-chip{align-self:flex-start; width:auto; margin:8px 0; border-color:var(--electric, #2b59c3); color:var(--electric, #2b59c3)}
+.events-page .merge-ask{display:block; border-radius:12px; padding:10px 12px; margin:0 0 10px}
+.events-page .merge-ask .row{display:flex; gap:8px; flex-wrap:wrap}
+.events-page .merge-ask .ev-what{margin:0 0 6px; font-weight:600}
+[data-event-merge-pick][aria-pressed="true"]{outline:2px solid var(--electric, #2b59c3)}

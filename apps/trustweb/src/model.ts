@@ -15,6 +15,7 @@ import type { AlgoCfg, SourceCfg } from './feed_sources_page'
 import type { ExtFollow } from './feed_ext_sources'   // wave44c feed-ext
 import type { HideReportEntry } from './hide_reports'
 import type { InboxItem } from './notify_inbox'
+import type { MergeAsk } from './event_merge' // wave45 merge-events
 import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
@@ -1279,6 +1280,10 @@ export interface AppState {
   drafts?: Record<string, Draft>
   /** Wave 44c answers-44c (A4): deleted events, resources, tasks, meetings and invitations for 30 days (trash.ts); travels to my devices as tombstones. Absent = none. */
   trash?: TrashEntry[]
+  /** wave45 merge-events (event_merge.ts): merged event ids, gone -> kept; an old id (a link, a joined record) opens the kept event. Travels to my devices as a setting. Absent = none. */
+  eventMerged?: Record<string, string>
+  /** wave45 merge-events: merge asks between hosts (in: to me; out: mine, waiting). They name peer ids, so THIS DEVICE ONLY (sync_core.ts SYNC_EXCLUDED). */
+  eventMergeAsks?: MergeAsk[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
   calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */

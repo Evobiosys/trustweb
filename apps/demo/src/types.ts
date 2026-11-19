@@ -468,6 +468,8 @@ export interface EventEnvelope {
   seen?: { id: string; shown: boolean; who?: string }
   /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
   joined?: { id: string }
+  /** wave45 merge-events: two events become one (trustweb event_merge_flow.ts). `ask` (a host of `keep` asks a host of `gone`; `link` = the kept event), `yes` / `no` (the answer), `done` (a host of `gone` tells its people; `link` = the kept event). */
+  merge?: { step: 'ask' | 'yes' | 'no' | 'done'; keep: string; gone: string; link?: string }
 }
 // ----- END TrustWeb wave 43c -----
 
