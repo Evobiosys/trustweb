@@ -328,6 +328,7 @@ import { createEventsView } from './events_view'
 import { createWebFocus } from './web_focus'
 import { showCommunity } from './filter_active'
 import { mountFilterBar } from './filter_bar_view'
+import { applyEventModeLook, mountEventModeNote } from './event_mode_look'
 import { narrowById } from './event_filter_mode'
 import { createModeShell } from './ext/community_mode/shell'
 import { communityLead } from './ext/community_mode/mode'
@@ -2261,6 +2262,7 @@ function render(): void {
   if (kept && kept.parentNode === host) { for (const n of [...host.childNodes]) if (n !== kept) n.remove(); kept.before(...(frame ? [frame] : []), ...body.slice(0, -1)) }
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
+  applyEventModeLook(document.body, st()); mountEventModeNote(host, st())   // wave 45: event mode is visible (tint + note chip)
   if (screen === Screen.Web || screen === Screen.Chat || screen === Screen.Inventory || screen === Screen.Ask) mountFilterBar(host, { state: st, save, redraw: render })   // wave 44b: event-mode pill + pinned filters
   mountSettingsGear()
   mountAskButton()
