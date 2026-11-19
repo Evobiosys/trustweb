@@ -95,3 +95,20 @@ export function addScoped(items: InventoryItem[], sc: Scope, page: Page, title: 
   items.push(item)
   return item
 }
+
+/* wave45 resource-event-private */
+/** The events made in / shared with a community (colour tag id), for the "visible to" pick of its add row. */
+export const communityEvents = <E extends Ev & { communityId?: string; community?: string }>(events: readonly E[], communityId: string): E[] => events.filter((e) => (e.communityId ?? e.community) === communityId)
+
+/**
+ * Kept private to ONE event: the event's tag only (so only people holding it are answered, rings closed, I9), tied to the event and to its community
+ * (it lists in that community's Resources for me; a member without the event tag is never answered, so sees no trace). Null for an empty title.
+ */
+export function addEventPrivate(items: InventoryItem[], ev: Ev & { communityId?: string; community?: string }, et: EventTagRules, page: Page, title: string, id: string, now: number, source: InventoryItem['source']): InventoryItem | null {
+  const item = addScoped(items, { kind: 'event', id: ev.id, label: et.label(evName(ev)), tagIds: [et.slug(evName(ev))] }, page, title, id, now, source)
+  if (!item) return null
+  item.eventId = ev.id
+  const community = ev.communityId ?? ev.community
+  if (community) item.communityId = community
+  return item
+}

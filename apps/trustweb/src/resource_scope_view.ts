@@ -4,7 +4,7 @@ import { el } from '../../demo/src/ui/dom'
 import type { InventoryItem } from './model'
 import { eventTagLabel, eventTagSlug } from './event_tag'
 import { resourceList } from './resource_list'
-import { addScoped, forPage, itemTags, markOpened, partitionScope, type EventTagRules, type Page, type Scope } from './resource_scope'
+import { addEventPrivate, addScoped, communityEvents, forPage, itemTags, markOpened, partitionScope, type EventTagRules, type Page, type Scope } from './resource_scope'
 import { ageCompact } from './feed_row'
 import { inlineEdit } from './membranes_five_view'
 import { typedSource } from './provenance'
@@ -13,7 +13,7 @@ import { S } from './strings'
 export const EVENT_TAG: EventTagRules = { slug: eventTagSlug, label: eventTagLabel }
 
 type Tag = { id: string; label?: string; community?: boolean }
-type Ev = { id: string; name: string; tagName?: string }
+type Ev = { id: string; name: string; tagName?: string; communityId?: string; community?: string }
 
 /** P3: General stays folded until asked, per view. */
 let generalOpen = false
@@ -44,8 +44,16 @@ export function sharedByLine(i: InventoryItem, nameOf: (id: string) => string | 
 function addRow(c: ScopedCtx, newId: () => string): HTMLElement {
   const row = el('div', { class: 'meta card-res-row', 'data-rs-add-row': '' })
   const show = (): void => row.replaceChildren(el('button', { class: 'card-res-add', type: 'button', 'data-rs-add': '' }, [S.a44d.addResource]))
-  const edit = (): void => row.replaceChildren(inlineEdit(S.a44d.addResource, '', 'data-rs-add-input', (typed) => {
-    if (typed !== null && addScoped(c.items as InventoryItem[], c.scope, c.page, typed, newId(), Date.now(), typedSource())) { c.save(); c.render() } else show()
+  /* wave45 resource-event-private: in a community, "Visible to" the whole community or only one of its events (P7: a small optional pick). */
+  const evs = c.scope.kind === 'community' ? communityEvents(c.events, c.scope.id) : []
+  const pick = evs.length === 0 ? null : el('select', { class: 'field meta', 'data-rs-add-audience': '', 'aria-label': S.w45rep.visibleTo }, [
+    el('option', { value: '' }, [S.w45rep.wholeCommunity]), ...evs.map((e) => el('option', { value: e.id }, [S.w45rep.onlyEvent(EVENT_TAG.label(e.tagName ?? e.name))]))])
+  const edit = (): void => row.replaceChildren(...(pick ? [pick] : []), inlineEdit(S.a44d.addResource, '', 'data-rs-add-input', (typed) => {
+    const ev = evs.find((e) => e.id === (pick as HTMLSelectElement | null)?.value)
+    const made = typed === null ? null : ev
+      ? addEventPrivate(c.items as InventoryItem[], ev, EVENT_TAG, c.page, typed, newId(), Date.now(), typedSource())
+      : addScoped(c.items as InventoryItem[], c.scope, c.page, typed, newId(), Date.now(), typedSource())
+    if (made) { c.save(); c.render() } else show()
   }))
   row.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-rs-add]')) edit() })
   show()
