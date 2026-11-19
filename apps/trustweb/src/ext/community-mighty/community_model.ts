@@ -15,9 +15,10 @@ import { localDay } from '../../engagement'
 import { groupPosts, groupsOf } from '../../feed_sources'
 import { communityTags } from '../../trustzones'
 import { removeZoneTag, zoneTagIds } from '../../zone_tags'
-import { NAV, safeUrl, type CommunityData, type NavId, type Resource, type ResourceView } from './community_data'
+import { NAV, safeUrl, type CommunityData, type NavId, type ResourceView } from './community_data'
 
-export { MODULE_ID, NAV, parseCommunity, safeUrl, metaOf, listCommunities, createCommunity, setKind, canEditSettings, setSettings, leftNav, rememberAudience, addMember, adoptMetaTags, communityAudience, REMEMBER_MAX } from './community_data'
+export { MODULE_ID, NAV, parseCommunity, safeUrl, metaOf, listCommunities, createCommunity, setKind, canEditSettings, setSettings, leftNav, rememberAudience, addMember, adoptMetaTags, communityAudience, REMEMBER_MAX, resolveView, documentsOf } from './community_data'
+export type { ViewRow } from './community_data'
 export type { CommunityData, CommunityKind, CommunityMeta, CommunityRow, NavId, Resource, ResourceView } from './community_data'
 /** The zone key that holds the spaces I joined. */
 const SELF = 'self'
@@ -99,21 +100,6 @@ export function buildEvents(events: readonly TwEvent[] | undefined, now: number,
     }
   })
   return [...cards.filter((c) => !c.past).sort((a, b) => a.from.localeCompare(b.from)), ...cards.filter((c) => c.past).sort((a, b) => b.from.localeCompare(a.from))]
-}
-
-export interface ViewRow { item: Resource; state: 'shown' | 'new' | 'hidden' }
-
-/** My view over the shared list: my order first, then what others added since (new: greyed, with Add), then what I hid. */
-export function resolveView(resources: readonly Resource[], view: ResourceView | undefined): ViewRow[] {
-  const byId = new Map(resources.map((r) => [r.id, r]))
-  const order = (view?.order ?? []).filter((id) => byId.has(id))
-  const hidden = new Set(view?.hidden ?? [])
-  const placed = new Set([...order, ...hidden])
-  return [
-    ...order.filter((id) => !hidden.has(id)).map((id): ViewRow => ({ item: byId.get(id)!, state: 'shown' })),
-    ...resources.filter((r) => !placed.has(r.id)).map((item): ViewRow => ({ item, state: 'new' })),
-    ...resources.filter((r) => hidden.has(r.id)).map((item): ViewRow => ({ item, state: 'hidden' })),
-  ]
 }
 
 export const forkView = (from: ResourceView, owner: string): ResourceView => ({ owner, order: [...from.order], hidden: [...from.hidden], from: from.owner })

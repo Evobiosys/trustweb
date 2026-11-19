@@ -19,7 +19,7 @@ import { ICONS } from '../../icons'
 import type { TwCtx } from '../tw_registry'
 import {
   MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
-  joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
+  documentsOf, joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
   adoptMetaTags, canEditSettings, createCommunity, leftNav, listCommunities, metaOf, setKind, setSettings, type CommunityKind,
 } from './community_model'
 import { SUBCOMMUNITY_FREE_LIMIT, canAddSub, communityTree, descendantsOf, legacyLinksPatch, rootOf, subCommunityCount, TILES, type TileId } from './community_data'
@@ -199,8 +199,22 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       tag ? (syncAggregate(tag), socialCard(tag)) : null,
       managed.length ? el('section', { class: 'tiles-managed', 'data-community-tiles-managed': '' }, [el('h4', { class: 'eyebrow' }, [w43.homeManaged]), el('div', { class: 'grid' }, managed.map((x) => tileCard(x, tag, true)))]) : null,
       own.length ? el('div', { class: 'grid', 'data-community-tiles': '' }, own.map((x) => tileCard(x, tag, false))) : el('p', { class: 'empty' }, [w43.homeNoTiles]),
+      documentsSection(d),
       choose,
     ]
+  }
+
+  /** wave45 community-documents: the community's documents on its Home, so "by <community>" shows them at once; the Docs page keeps the editing. */
+  function documentsSection(d: CommunityData): HTMLElement {
+    const w = ctx.strings.w45cd
+    const list = documentsOf(d)
+    return el('section', { class: 'community-docs', 'data-community-documents': String(list.length) }, [
+      el('h4', { class: 'eyebrow' }, [`${w.title} · ${w.count(list.length)}`]),
+      list.length
+        ? el('ul', { class: 'res-list' }, list.map((r) => el('li', { class: 'res shown', 'data-community-document': r.id }, [el('div', { class: 'res-main' }, [el('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' }, [r.title]), el('span', { class: 'meta' }, [t.by(r.by)])])])))
+        : el('p', { class: 'empty' }, [w.none]),
+      btn(w.all, () => go('docs'), { 'data-community-documents-all': '' }, 'lnk strong'),
+    ])
   }
 
   // ---- Spaces --------------------------------------------------------------

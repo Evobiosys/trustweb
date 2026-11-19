@@ -3958,6 +3958,7 @@ export const S = {
       resources_list: 'List your resources, filtered by kind, who shared them or community, in a list, outliner or by person; scope community or event adds the sections Shared by me, New and General',
       resource_set_kind: 'Say whether a resource is a book, publication, reference, recording or link',
       resource_set_suggester: 'Say who suggested a resource to you',
+      /* wave45 community-documents */ community_documents_list: 'List the documents (shared links) of a community',
       /* wave44c community-resources */ resource_mark_opened: 'Mark a resource shared with you as opened (it leaves the New section)',
       feed_list: 'Read the Feed',
       feed_post: 'Post to the Feed or an event\'s Feed',
@@ -5227,6 +5228,13 @@ export const S = {
     shared: 'Shared by me', fresh: 'New, shared with me', general: 'General',
     none: 'Nothing here yet.', generalCount: (n: number) => `${n} more`,
     tagFilter: (label: string) => `Show only ${label}`,
+  },
+  /* wave45 community-documents */
+  w45cd: {
+    title: 'Documents',
+    count: (n: number) => (n === 1 ? '1 document' : `${n} documents`),
+    none: 'No documents yet.',
+    all: 'All documents',
   },
   /* wave44c home-default */
   homeDefault: {

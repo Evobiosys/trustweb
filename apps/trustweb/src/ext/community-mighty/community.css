@@ -139,3 +139,6 @@ details[open] > summary::after { content: ' \25B4'; }
 .members .card.member.add-tile{justify-content:center}
 .members .member .name{max-width:100%; overflow:visible; white-space:normal; text-overflow:clip; overflow-wrap:anywhere; line-height:1.25}
 .members .member .chip.ring{white-space:normal; text-align:center; max-width:100%}
+
+/* wave45 community-documents */
+.community-docs { margin-top: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }

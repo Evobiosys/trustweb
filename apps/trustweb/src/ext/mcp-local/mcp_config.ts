@@ -89,6 +89,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'profile_link_check', write: true },
   /* wave44 steer-circles-view */
   { name: 'circles_layout', write: false },
+  /* wave45 community-documents */
+  { name: 'community_documents_list', write: false },
   /* wave44c community-resources */
   { name: 'resource_mark_opened', write: true },
   /* wave44c home-default */
