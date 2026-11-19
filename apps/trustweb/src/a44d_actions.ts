@@ -11,9 +11,11 @@ export interface A44dActionHost {
   /** False when the ask is no longer open on this device. */
   answerAsk(qid: string, yes: boolean, note?: string, who?: string): boolean | Promise<boolean>
   sendChat(personId: string, text: string): Promise<boolean>
-  /** Item 4: the event's Message everyone composer; sending to everyone at it (how many it reached). */
+  /** Item 4, since wave45 event-group-chat: the event's ONE shared chat; one message into it (1 kept, 0 refused). */
   openEventChat(eventId: string): void
   messageAll(eventId: string, text: string): Promise<number>
+  /** wave45 event-group-chat: leave (true) or rejoin (false) the event's chat. */
+  leaveEventChat(eventId: string, leave: boolean): Promise<boolean>
 }
 
 export function defineA44dActions(reg: Actions, host: A44dActionHost): void {
@@ -34,17 +36,32 @@ export function defineA44dActions(reg: Actions, host: A44dActionHost): void {
   })
   /* item 4: the event chat (Message everyone) */
   reg.define({
-    type: 'event-chat-open', doc: 'Opens Message everyone of an event (the composer whose text goes to every connected person at it).', shape: '{"event": event id or name}',
+    type: 'event-chat-open', doc: 'Opens the shared chat of an event (one thread for the hosts and the people joining).', shape: '{"event": event id or name}',
     parse: (a) => ({ event: str(a, 'event', 120) as string }),
     label: () => S.a44d.chatOpenLabel,
     apply: (a) => host.openEventChat(a.event),
     undoable: false,
   })
   reg.define({
-    type: 'event-message-all', doc: 'Sends one message into the chat with every connected person at an event (the people joining and the hosts).', shape: '{"event": event id or name, "text": message}',
+    type: 'event-message-all', doc: 'Sends one message into the shared chat of an event (same as event-chat-send; kept for older callers).', shape: '{"event": event id or name, "text": message}',
     parse: (a) => ({ event: str(a, 'event', 120) as string, text: str(a, 'text', 2000) as string }),
     label: () => S.a44d.messageAllLabel,
     apply: (a) => { void host.messageAll(a.event, a.text) },
+    undoable: false,
+  })
+  /* wave45 event-group-chat */
+  reg.define({
+    type: 'event-chat-send', doc: 'Sends one message into the shared chat of an event (everyone at it reads the same thread).', shape: '{"event": event id, "text": message}',
+    parse: (a) => ({ event: str(a, 'event', 120) as string, text: str(a, 'text', 2000) as string }),
+    label: () => S.w45gc.sendLabel,
+    apply: (a) => { void host.messageAll(a.event, a.text) },
+    undoable: false,
+  })
+  reg.define({
+    type: 'event-chat-leave', doc: 'Leaves the shared chat of an event (leave true), or joins it again (leave false); the others are told.', shape: '{"event": event id, "leave": true|false}',
+    parse: (a) => ({ event: str(a, 'event', 120) as string, leave: bool(a, 'leave') }),
+    label: () => S.w45gc.leaveLabel,
+    apply: (a) => { void host.leaveEventChat(a.event, a.leave) },
     undoable: false,
   })
 }

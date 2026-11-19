@@ -468,7 +468,11 @@ export interface EventEnvelope {
   seen?: { id: string; shown: boolean; who?: string }
   /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
   joined?: { id: string }
+  /** wave45 event-group-chat: one item of the event's ONE shared thread: a message (`text`), or a join / leave notice. `m` = the item id (dedupe), `by` = the author's name (a host forwards it on), `ts` = the author's clock. */
+  gc?: { id: string; m: string; k: 'msg' | 'join' | 'leave'; by: string; ts: number; text?: string }
 }
+/** wave45 event-group-chat: the longest text of one group-chat message (EventEnvelope.gc.text). */
+export const EVENT_CHAT_TEXT_MAX = 2000
 // ----- END TrustWeb wave 43c -----
 
 // ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----

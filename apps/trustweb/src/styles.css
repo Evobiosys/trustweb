@@ -2330,3 +2330,11 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .events-page .ev-who{margin-top:4px}
 .events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
 .rs-by{display:block; font-size:12.5px}
+
+/* wave45 event-group-chat */
+.event-chat .chat-thread{max-height:52vh; overflow-y:auto}
+.event-chat .chat-msg .chat-by{display:block; font-size:12px; font-weight:600; opacity:.8}
+.event-chat .ec-notice{text-align:center; margin:4px 0}
+.event-chat .ec-compose{display:flex; flex-direction:column; gap:6px; margin-top:8px}
+.event-chat .ec-compose[hidden]{display:none}
+.event-chat .ec-leave{margin-top:6px}

@@ -12,7 +12,7 @@
  */
 
 import type { AnswerEnvelope, AskAgainEnvelope, HideReportEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
-import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION, HIDE_BLOB_MAX_JSON, HIDE_KEY_RE, HIDE_REPORT_MAX_JSON } from './types'
+import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_CHAT_TEXT_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION, HIDE_BLOB_MAX_JSON, HIDE_KEY_RE, HIDE_REPORT_MAX_JSON } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
@@ -161,6 +161,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   if ('os' in o) return hasWant || hasLink ? null : parseOpenSpace(o.os)
   if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
   if ('seen' in o) return hasWant || hasLink ? null : parseSeen(o.seen) // wave44c seen-through
+  if ('gc' in o) return hasWant || hasLink ? null : parseGroupChat(o.gc) // wave45 event-group-chat
   if ('joined' in o) { // answers-44d: {id} only
     const j = o.joined as Record<string, unknown> | null
     return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id } }
@@ -214,6 +215,18 @@ function parseSeen(v: unknown): EventEnvelope | null {
   if (typeof x.id !== 'string' || !QID_RE.test(x.id) || typeof x.shown !== 'boolean') return null
   if ('who' in x && (!x.shown || !isNonEmptyString(x.who) || x.who.length > VIA_NAME_MAX)) return null
   return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}) } }
+}
+
+/* wave45 event-group-chat */
+/** Event id, item id, kind, author name (1..VIA_NAME_MAX), a finite time; `text` (1..EVENT_CHAT_TEXT_MAX) exactly on a msg. Anything else is null. */
+function parseGroupChat(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  if (typeof x.id !== 'string' || !QID_RE.test(x.id) || typeof x.m !== 'string' || !QID_RE.test(x.m)) return null
+  if ((x.k !== 'msg' && x.k !== 'join' && x.k !== 'leave') || !isNonEmptyString(x.by) || x.by.length > VIA_NAME_MAX || typeof x.ts !== 'number' || !Number.isFinite(x.ts)) return null
+  if ((x.k === 'msg') !== ('text' in x)) return null
+  if (x.k === 'msg' && (!isNonEmptyString(x.text) || x.text.length > EVENT_CHAT_TEXT_MAX)) return null
+  return { v: WIRE_VERSION, t: 'event', gc: { id: x.id, m: x.m, k: x.k, by: x.by, ts: x.ts, ...(x.k === 'msg' ? { text: x.text as string } : {}) } }
 }
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----

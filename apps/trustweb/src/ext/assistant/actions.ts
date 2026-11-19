@@ -31,6 +31,8 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   /* wave44c answers-44d: queued for the open app (a44d_actions.ts) */
   'ask-answer': 'ask_answer', 'chat-send': 'chat_send',
   'event-chat-open': 'event_chat_open', 'event-message-all': 'event_message_all',
+  /* wave45 event-group-chat */
+  'event-chat-send': 'event_chat_send', 'event-chat-leave': 'event_chat_leave',
 }
 
 /** The actions `app_action` accepts (derived, so a new entry above needs no second edit). */
