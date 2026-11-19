@@ -2330,3 +2330,7 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .events-page .ev-who{margin-top:4px}
 .events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
 .rs-by{display:block; font-size:12.5px}
+/* wave45 outliner-quickadd */
+.ol-quick{margin:6px 0}
+.ol-chips{display:flex; gap:4px; flex-wrap:wrap}
+.ol-chips .chip{padding:1px 7px; font-size:11px; cursor:default}

@@ -3888,6 +3888,7 @@ function itemSheet(itemId: string): void {
     outlineView({
       item, newId: () => randomId(8), save, canShare: canShareOn(item, loadColourTags()),
       share: resourceShare(resShareHost),
+      known: () => ({ tags: loadColourTags().map((t) => t.label ?? t.id), people: s.people.filter((p) => p.ring !== Ring.None).map((p) => p.name) }),
     }),
     feed.itemExtras(item),
     // Review 43b (B17): a protected resource offers no way to pass it on (canShareOn).

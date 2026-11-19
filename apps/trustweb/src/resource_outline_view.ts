@@ -4,11 +4,14 @@
  * the bullet collapses; buttons do the same on a phone. Long press (or right click) on a bullet: share the whole block or only that line. Logic: resource_blocks.ts.
  */
 import { el } from '../../demo/src/ui/dom'
+import { chipInput } from './chip_input'
 import { contextPress } from './context_press'
 import type { InventoryItem, ResBlock } from './model'
 import { addBlock, countBlocks, editBlock, locate, markdownToBlocks, moveBlock, removeBlock, shareProjection, toggleCollapsed } from './resource_blocks'
 import type { BlockShare, MoveHow, ShareScope, ShareVia } from './resource_blocks'
 import { S } from './strings'
+import { completeToken, lineChips, quickHits } from './resource_quick_add'
+import type { QuickKnown } from './resource_quick_add'
 import { DRAFT_DEBOUNCE_MS } from './drafts'
 import { draftable } from './drafts_dom'
 
@@ -20,6 +23,8 @@ export interface OutlineCtx {
   canShare: boolean
   /** Hands the chosen projection to the app's share route: link (QR), chat or feed (answers-44b); the shared copy carries projection.ref. */
   share: (p: BlockShare, via: ShareVia) => void
+  /** Wave 45 outliner-quickadd: tags and people the quick-add input suggests after # and @. */
+  known: () => QuickKnown
 }
 
 /** "1 line" / "1 block, 12 lines": what the share sheet says will travel. */
@@ -30,6 +35,9 @@ export function outlineView(c: OutlineCtx): HTMLElement {
   let focusId: string | null = null
   let picking: string | null = null
   let sharing: BlockShare | null = null
+  let lastId: string | null = null
+  let quickFocus = false
+  let quickText = ''
   const blocks = (): ResBlock[] => (c.item.blocks ??= [])
   const change = (f: () => void): void => { f(); c.save(); draw() }
   /* wave44c event-autosave: a line is kept 500 ms after typing stops, not only when it loses focus */
@@ -62,7 +70,8 @@ export function outlineView(c: OutlineCtx): HTMLElement {
         else if (e.key === 'Backspace' && v === '' && b.children.length === 0) { e.preventDefault(); change(() => { removeBlock(blocks(), b.id) }); focusId = null }
       },
     })
-    const row = el('div', { class: 'ol-row', style: `padding-left:${depth * 18}px`, 'data-ol-row': b.id }, [bullet(b), input])
+    const chips = lineChips(b.text)
+    const row = el('div', { class: 'ol-row', style: `padding-left:${depth * 18}px`, 'data-ol-row': b.id }, [bullet(b), input, ...(chips.length ? [el('span', { class: 'ol-chips', 'data-ol-chips': b.id }, chips.map((t) => el('span', { class: 'chip on' }, [t])))] : [])])
     const out: Node[] = [row]
     if (picking === b.id) out.push(pickRow(b))
     if (!b.collapsed) for (const k of b.children) out.push(...rowOf(k, depth + 1))
@@ -82,6 +91,29 @@ export function outlineView(c: OutlineCtx): HTMLElement {
       el('button', { class: 'btn btn-ghost btn-sm', 'data-ol-share-line': b.id, onclick: () => pick('line') }, [S.resOutliner.shareLine]),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { picking = null; draw() } }, [S.close]),
     ])
+  }
+
+  /* wave45 outliner-quickadd: the chip input of the filters (# tag / @ person suggestions, Enter takes the first); with none, Enter adds a line below the last one added and stays in the box; Tab / Shift+Tab move that line. */
+  const quickAdd = (): HTMLElement => {
+    const hitsOf = (v: string): { label: string; attrs: Record<string, string>; pick: () => void }[] => quickHits(v, c.known()).map((h) => ({
+      label: h, attrs: { 'data-ol-quick-hit': h },
+      pick: () => { box.input.value = completeToken(box.input.value, h); quickText = box.input.value; box.input.dispatchEvent(new Event('input')); box.input.focus() },
+    }))
+    const box = chipInput({ placeholder: S.resQuick.ph, aria: S.resQuick.aria, attrs: { 'data-ol-quick': '', maxlength: '400' }, hits: hitsOf })
+    box.input.value = quickText
+    box.input.addEventListener('input', () => { quickText = box.input.value })
+    box.input.addEventListener('keydown', (ev) => {
+      const e = ev as KeyboardEvent
+      const mine = lastId && locate(blocks(), lastId) ? lastId : null
+      if (e.key === 'Enter' && hitsOf(box.input.value).length === 0) {
+        e.preventDefault()
+        const v = box.input.value.trim()
+        if (!v) return
+        const id = c.newId(); lastId = id; quickText = ''; quickFocus = true; focusId = null
+        change(() => { addBlock(blocks(), id, v, mine ? { afterId: mine } : {}) })
+      } else if (e.key === 'Tab' && mine) { e.preventDefault(); quickFocus = true; focusId = null; change(() => { moveBlock(blocks(), mine, e.shiftKey ? 'outdent' : 'indent') }) }
+    }, true)
+    return el('div', { class: 'ol-quick', 'data-ol-quickbox': '' }, [box.input, box.hits])
   }
 
   const tool = (key: string, label: string, f: () => void): HTMLElement =>
@@ -119,10 +151,12 @@ export function outlineView(c: OutlineCtx): HTMLElement {
         tool('up', S.resOutliner.up, () => { if (focusId) move(focusId, 'up') }),
         tool('down', S.resOutliner.down, () => { if (focusId) move(focusId, 'down') }),
       ]),
+      quickAdd(),
       importBox(),
       ...(sharing ? [shareBox(sharing)] : []),
     )
-    if (focusId) { const t = root.querySelector<HTMLInputElement>(`[data-ol-text="${focusId}"]`); if (t) setTimeout(() => t.focus(), 0) }
+    if (quickFocus) { quickFocus = false; setTimeout(() => root.querySelector<HTMLInputElement>('[data-ol-quick]')?.focus(), 0) }
+    else if (focusId) { const t = root.querySelector<HTMLInputElement>(`[data-ol-text="${focusId}"]`); if (t) setTimeout(() => t.focus(), 0) }
   }
   draw()
   return root
