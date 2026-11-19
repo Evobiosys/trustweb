@@ -33,6 +33,8 @@ export interface ScopedCtx {
   /** answers-44d: a person id -> name (the sender of a received item); and the id of a new item ("+ Add resource"; absent: no add row). */
   nameOf?: (id: string) => string | undefined
   newId?: () => string
+  /** wave45 event-back-button: the in-app Back before the title; absent: none. */
+  back?: () => void
 }
 
 /** answers-44d: "shared by <name> · <age>" of one item: the sender of a received item (its id when unknown), null = me; `at` for the tooltip. */
@@ -76,6 +78,7 @@ export function scopedResources(c: ScopedCtx): Node[] {
     generalOpen ? list('general', p.general) : null,
   ])
   const name = c.scope.label
-  return [el('h3', { class: 'rs-title', 'data-rs-title': c.page }, [c.page === 'references' ? S.w44cr.refTitle(name) : S.w44cr.title(name)]),
+  const title = el('h3', { class: 'rs-title', 'data-rs-title': c.page }, [c.page === 'references' ? S.w44cr.refTitle(name) : S.w44cr.title(name)])
+  return [c.back ? el('div', { class: 'rs-head' }, [el('button', { class: 'back', type: 'button', 'aria-label': S.back, 'data-rs-back': '', onclick: c.back }, ['‹']), title]) : title,
     section('shared', S.w44cr.shared, p.shared), section('fresh', S.w44cr.fresh, p.fresh, true), general].filter((n): n is Node => n !== null)
 }

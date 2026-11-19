@@ -344,6 +344,7 @@ import { alphaHeading, alphaSub } from './alpha_heading'
 import { tagManagerView } from './tag_manager_view'
 import { obsidianLink } from './ext/obsidian/obsidian_card'
 import { gateScreen } from './screen_gate'
+import { backScreen } from './scoped_back'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { eventForLink } from './event_roles'
@@ -1875,7 +1876,7 @@ function go(to: Screen): void {
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   if (s !== Screen.Web) web.resetZoom()
-  if (s !== Screen.Inventory) { invOnly = null; invMatches = false }
+  if (s !== Screen.Inventory) { invOnly = null; invMatches = false } else if (screen !== Screen.Inventory) invFrom = screen   // wave45 event-back-button
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -3306,6 +3307,9 @@ function setMatchesView(on: boolean): void {
 let invQuery = ''
 /** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
 let invOnly: { label: string; ids: Set<string> } | null = null
+/** wave45 event-back-button: the screen Resources was opened from (event page, community, a person's card); the in-app Back of a scoped page returns there. */
+let invFrom: Screen | null = null
+const invBack = (): void => go(backScreen(invFrom, Screen.Inventory, Screen.Web))
 
 
 /** The web-view-row: the heading of the chosen view or the search field (the magnifier sits in the header, wave 28; expand all sits in the TrustZones sidebar, wave 28b). */
@@ -8241,7 +8245,7 @@ function screenInventory(): Node[] {
   const scope = scopeOf(s, loadColourTags(), s.events ?? [], EVENT_TAG)
   if (scope) {
     return [
-      header(S.w44cr.title(scope.label)),
+      header(S.w44cr.title(scope.label), { back: invBack }),
       el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', emoji: emojiOn(s), nameOf: (id) => s.people.find((p) => p.id === id)?.name, newId: () => randomId(8), open: itemSheet, save, render })),
     ]
   }
@@ -8313,7 +8317,7 @@ function screenInventory(): Node[] {
     undoNotice(S.cal.dropAdded(item.text), () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() })
   })
   return [
-    header(S.invTitle, { glyph: el('span', { class: 'hdr-pair' }, [zoomGlyph('inventory'), info]) }),
+    header(S.invTitle, { ...(invOnly ? { back: invBack } : {}), glyph: el('span', { class: 'hdr-pair' }, [zoomGlyph('inventory'), info]) }),
     list,
   ]
 }
