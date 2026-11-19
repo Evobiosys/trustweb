@@ -2330,3 +2330,15 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .events-page .ev-who{margin-top:4px}
 .events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
 .rs-by{display:block; font-size:12.5px}
+
+/* wave45 demo-content-overlay: the chip floats above the content (no padding taken from the tab bar), the X sits above it */
+.demo-overlay{position:fixed; left:24px; bottom:104px; z-index:40; display:flex; flex-direction:column; align-items:flex-start; gap:6px; pointer-events:none}
+.demo-overlay[hidden]{display:none}
+.demo-overlay > *{pointer-events:auto}
+.demo-overlay .demo-toggle{position:static}
+.demo-overlay-x{width:28px; height:28px; padding:0; border:0; border-radius:50%; font:inherit; font-size:18px; line-height:1; cursor:pointer; background:var(--card); color:var(--ink-soft); box-shadow:0 4px 12px rgba(36,27,46,.25)}
+.demo-overlay-x:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+@media (max-width:960px){ .demo-overlay{display:none} }
+@media (min-width:961px){
+  body:has(.demo-toggle:not(.desk-toggle):not([hidden])) .tabs{padding-left:8px}
+}
