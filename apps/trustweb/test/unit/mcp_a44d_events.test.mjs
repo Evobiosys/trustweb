@@ -67,3 +67,19 @@ describe('event_chat_open / event_message_all: queued for the open app', () => {
     expect(ACTION_MCP['event-message-all']).toBe('event_message_all')
   })
 })
+
+describe('wave45 event_people_list / event_people_add', () => {
+  it('lists hosts first then who joins; Add people tags a person; read-only has no add', () => {
+    const f = fixture()
+    expect(f.by.event_people_list.run({ event: 'e1' })).toEqual({ total: 2, people: [{ id: 'h', name: 'Hanna', host: true }, { id: 'b', name: 'Ben', host: false }] })
+    expect(f.by.event_people_add.run({ event: 'Winter OG', person: 'Cleo' })).toEqual({ event: 'e1', person: 'c' })
+    expect(f.rec().people.find((p) => p.id === 'c').events).toEqual(['e1'])
+    f.by.event_people_add.run({ event: 'e1', person: 'c' })
+    expect(f.rec().people.find((p) => p.id === 'c').events).toEqual(['e1'])
+    expect(f.by.event_people_list.run({ event: 'e1' }).total).toBe(3)
+    expect(() => f.by.event_people_add.run({ event: 'nope', person: 'c' })).toThrow(/no event/)
+    const ro = fixture(false)
+    expect(ro.by.event_people_add).toBeUndefined()
+    expect(ro.by.event_people_list.run({ event: 'e1' }).total).toBe(2)
+  })
+})
