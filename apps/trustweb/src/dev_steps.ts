@@ -90,11 +90,23 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
     draw()
   }
 
+  /** ? (not driving): a step whose target is not on this screen first goes to the row's view, at once, then rings its target. */
+  async function reach(me: number): Promise<void> {
+    const step = list[at]
+    if (!ctx || !step.selector || me !== opened) return
+    const plan = navPlan(ctx, appScreen(), appView())
+    const m = stepMove(step, !!(await waitVisible(step.selector, 0)), false, plan)
+    if (m.kind !== 'nav') return
+    note = ''
+    if (!(await runNav(plan, quickTap))) note = navNote(plan)
+    if (me === opened && on) go(at)
+  }
+
   function back(): void {
-    if (driving) { const s = driveNext({ at, auto }, 'back', list.length); auto = s.auto; skip = null; note = ''; go(s.at) } else go(at - 1)
+    if (driving) { const s = driveNext({ at, auto }, 'back', list.length); auto = s.auto; skip = null; note = ''; go(s.at) } else { go(at - 1); void reach(opened) }
   }
   function next(): void {
-    if (!driving) { go(at + 1); return }
+    if (!driving) { go(at + 1); void reach(opened); return }
     auto = driveNext({ at, auto }, 'next', list.length).auto
     if (skip) skip(); else void drive(opened)
   }
@@ -126,7 +138,7 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
         for (;;) {
           const el = step.selector ? await waitVisible(step.selector, navTried ? 4000 : 2500) : null
           if (me !== opened) return
-          const m = stepMove(step, !!el, navTried, navPlan(ctx, appScreen(), appView()), ctx)
+          const m = stepMove(step, !!el, navTried, navPlan(ctx, appScreen(), appView()))
           if (m.kind === 'tap') { note = ''; break }
           if (m.kind === 'nav') { navTried = true; note = ''; draw(); await runNav({ taps: m.taps, path: '' }, navTap(me)); if (me !== opened) return; continue }
           auto = driveNext({ at, auto }, 'stuck', list.length).auto
