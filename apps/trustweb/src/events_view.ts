@@ -333,16 +333,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return el('button', { class: 'chip' + (on ? ' on' : ' tw-off'), type: 'button', 'aria-pressed': String(on), [attr]: '', onclick }, [label])
   }
 
-  /** Wave 43 answers (zeta): the host names a Mastodon instance; the event Feed merges its public posts under the event tag. A change saves when the field loses focus; a bad host shows a line and keeps the old one. */
-  function mastodonInput(ev: TwEvent): HTMLElement {
-    const input = el('input', { class: 'field', value: ev.mastodonInstance ?? '', placeholder: S.w43answers.mastodonPh, 'aria-label': S.w43answers.mastodon, 'data-event-mastodon': '' }) as HTMLInputElement
-    const bad = el('p', { class: 'warn', 'data-event-mastodon-bad': '', hidden: true }, [S.w43answers.mastodonBad])
-    input.addEventListener('change', () => {
-      try { applyEventSettings(ev, { mastodonInstance: input.value }); bad.hidden = true; h.save(); input.value = ev.mastodonInstance ?? '' } catch { bad.hidden = false }
-    })
-    return el('div', {}, [input, bad])
-  }
-
   /** Wave 43 answers (iota): my nickname at this event; the Nickname reveal of this event uses it, else my first nickname. */
   function myNicknameInput(ev: TwEvent): HTMLInputElement {
     const input = el('input', { class: 'field', value: ev.myNickname ?? '', placeholder: nicknamesOf(h.state().me)[0] ?? '', 'aria-label': S.w43answers.myNickname, 'data-event-my-nickname': '' }) as HTMLInputElement
@@ -425,7 +415,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ]) : null,
       ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [
         ...field(S.w43answers.community, communityPick(ev.communityId, (id) => { applyEventSettings(ev, { communityId: id }); h.save() })), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
-        ...field(S.w43answers.mastodon, mastodonInput(ev)), el('p', { class: 'meta' }, [S.w43answers.mastodonHint]),
       ] : []),
       // Wave 43b (B5): the host chooses what people see when they open this event's link.
       ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [el('div', { 'data-event-link-mode': ev.linkMode ?? 'full' }, [

@@ -325,6 +325,7 @@ import { ringFilterShown } from './select_tool'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
+import { eventsBetaRows } from './events_beta_settings'
 import { createWebFocus } from './web_focus'
 import { showCommunity } from './filter_active'
 import { mountFilterBar } from './filter_bar_view'
@@ -7943,6 +7944,7 @@ function settingsSheet(): void {
     ],
     events: [
       featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
+      settingsSection('events-beta', S.w45mastodon.title, eventsBetaRows({ state: st, save })),   // wave45 mastodon-beta-events
     ],
     inventory: [
       featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),

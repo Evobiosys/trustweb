@@ -5405,4 +5405,10 @@ export const S = {
     intimateHint: (n: number) => `On: its events list the community's members, and the Web shows them at its events. On by default up to ${n} members.`,
     tanaGrants: 'It is the Tana app\'s local API token: it can read (and write) your Tana workspace through the Tana app on this computer; TrustWeb only reads people with it. Never synced to your other devices, never in a backup, an export or an MCP answer.',
   },
+  /* wave45 mastodon-beta-events */
+  w45mastodon: {
+    title: 'Beta features',
+    hint: 'Mastodon instance per event: the event Feed also shows the public posts under the event tag on that instance (read-only, nothing is sent). Empty = the default while the event Feed is on.',
+    label: 'Mastodon instance',
+  },
 } as const
