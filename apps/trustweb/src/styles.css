@@ -2469,3 +2469,7 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 /* wave45 sync-errors-retry */
 .sync-err{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px}
 .sync-err .btn{margin:0}
+/* wave45 open-space-date-poll */
+.os-poll{margin:.75rem 0}
+.os-poll-opt{padding:.5rem 0;border-top:1px solid var(--line,rgba(127,127,127,.25))}
+.os-poll-opt .os-head{flex-wrap:wrap}

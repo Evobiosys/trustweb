@@ -5112,6 +5112,22 @@ export const S = {
     others: (n: number) => (n === 1 ? '1 other' : `${n} others`),
     notes: 'Shared notes',
   },
+  /* wave45 open-space-date-poll */
+  w45osp: {
+    title: 'Date poll',
+    add: 'Propose a date',
+    from: 'Starts',
+    to: 'Ends at (optional)',
+    addGo: 'Add this date',
+    yes: 'Yes',
+    maybe: 'Maybe',
+    no: 'No',
+    tally: (y: number, m: number, n: number) => `${y} yes · ${m} maybe · ${n} no`,
+    leading: 'Leading',
+    chosen: 'Chosen',
+    use: 'Use this date',
+    hint: 'Everyone answers yes, maybe or no per date. You pick the winner.',
+  },
   /* wave44b filters-communities */
   w44fc: {
     eventMode: 'Event mode',
