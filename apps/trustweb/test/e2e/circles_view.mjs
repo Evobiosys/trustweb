@@ -39,6 +39,12 @@ try {
     check(`${name}: Dan sits in two circles`, (await page.locator('[data-drag-pid="p3"].circle-av').count()) === 2)
     const sz = async (id) => (await page.locator(`[data-circle="${id}"]`).boundingBox()).width
     check(`${name}: a circle with more people is bigger`, (await sz('choir')) > (await sz('climb')) && (await sz('climb')) > (await sz('empty')))
+    // wave45 circles-ring-fix: the ring is drawn (thick coloured border), carries the tag label above it, avatars sit on it; the empty ring is drawn too
+    const ring = await page.locator('[data-circle="choir"]').evaluate((c) => { const cs = getComputedStyle(c); const l = c.querySelector('.circle-name').getBoundingClientRect(); const r = c.getBoundingClientRect(); return { bw: parseFloat(cs.borderTopWidth), rad: cs.borderTopLeftRadius, label: c.querySelector('.circle-name').textContent, labelOnRim: l.bottom <= r.top && r.top - l.bottom < 24 } })
+    check(`${name}: the Choir ring is a thick drawn ring (${ring.bw}px) labelled "Choir" just above it`, ring.bw >= 4 && ring.label === 'Choir' && ring.labelOnRim)
+    const newRing = await page.locator('.circle-new').evaluate((c) => { const cs = getComputedStyle(c); return { bw: parseFloat(cs.borderTopWidth), st: cs.borderTopStyle } })
+    check(`${name}: the empty new-circle ring is drawn thick and dashed`, newRing.bw >= 4 && newRing.st === 'dashed')
+    check(`${name}: avatars sit on the ring line`, await page.locator('[data-circle="choir"]').evaluate((c) => { const r = c.getBoundingClientRect(); const R = r.width / 2; return [...c.querySelectorAll('.circle-av')].every((a) => { const b = a.getBoundingClientRect(); return Math.abs(Math.hypot(b.left + b.width / 2 - (r.left + R), b.top + b.height / 2 - (r.top + R)) - R) < 4 }) }))
     const rowBox = await page.locator('[data-circles-row]').evaluate((r) => ({ sw: r.scrollWidth, cw: r.clientWidth, wrap: getComputedStyle(r).flexWrap, ox: getComputedStyle(r).overflowX }))
     if (name === '360') check(`360: the circle row scrolls sideways (${rowBox.sw} > ${rowBox.cw})`, rowBox.sw > rowBox.cw && rowBox.ox === 'auto')
     else check('1280: the circles wrap into a grid', rowBox.wrap === 'wrap')

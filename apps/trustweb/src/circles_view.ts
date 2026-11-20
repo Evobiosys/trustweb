@@ -52,12 +52,14 @@ export function circlesView(io: CirclesIo, redraw: () => void = () => undefined)
     const slots = ringSlots(c.members.length)
     const more = hiddenCount(c.members.length)
     const body = el('button', { class: 'circle-body', type: 'button', 'data-circle-open': c.id, 'aria-expanded': String(openId === c.id), 'aria-label': S.circles.circleAria(c.name, c.members.length), onclick: () => { openId = openId === c.id ? null : c.id; redraw() } },
-      [el('b', { class: 'circle-name' }, [c.name]), el('small', { class: 'circle-count' }, [String(c.members.length)]), more ? el('small', { class: 'circle-more' }, [S.circles.more(more)]) : null])
+      [el('small', { class: 'circle-count' }, [String(c.members.length)]), more ? el('small', { class: 'circle-more' }, [S.circles.more(more)]) : null])
     contextPress(body, () => { openId = c.id; redraw(); setTimeout(() => root.querySelector<HTMLInputElement>('[data-circle-rename]')?.focus(), 0) })
-    const wrap = el('div', { class: 'circle' + (openId === c.id ? ' open' : ''), 'data-circle': c.id, style: `--d:${c.size}px; --c:${c.colour}` }, [body])
+    const wrap = el('div', { class: 'circle' + (openId === c.id ? ' open' : ''), 'data-circle': c.id, style: `--d:${c.size}px; --c:${c.colour}` }, [body, el('b', { class: 'circle-name' }, [c.name])])
     c.members.slice(0, slots.length).forEach((pid, i) => {
       const a = person(pid, c.id, 'circle-av')
-      a.style.left = `${slots[i].x * 100}%`; a.style.top = `${slots[i].y * 100}%`
+      // Offsets are from the padding box, inside the 5 px border: centre the avatar on the ring line (radius d/2 - 2.5 px).
+      const on = (f: number): string => `calc((var(--d) - 10px) / 2 + ${f - 0.5} * (var(--d) - 5px))`
+      a.style.left = on(slots[i].x); a.style.top = on(slots[i].y)
       wrap.appendChild(a)
     })
     return wrap
