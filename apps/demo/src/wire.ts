@@ -11,8 +11,8 @@
  * fields).
  */
 
-import type { AnswerEnvelope, AskAgainEnvelope, HideReportEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
-import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_CHAT_TEXT_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION, HIDE_BLOB_MAX_JSON, HIDE_KEY_RE, HIDE_REPORT_MAX_JSON } from './types'
+import type { GroupOp, AnswerEnvelope, AskAgainEnvelope, HideReportEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
+import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_CHAT_TEXT_MAX, GROUP_ITEM_TEXT_MAX, GROUP_NAME_MAX, GROUP_ROSTER_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION, HIDE_BLOB_MAX_JSON, HIDE_KEY_RE, HIDE_REPORT_MAX_JSON } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
@@ -162,6 +162,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
   if ('seen' in o) return hasWant || hasLink ? null : parseSeen(o.seen) // wave44c seen-through
   if ('gc' in o) return hasWant || hasLink ? null : parseGroupChat(o.gc) // wave45 event-group-chat
+  if ('gg' in o) return hasWant || hasLink ? null : parseGroupOp(o.gg) // wave45 group-chat-list
   if ('joined' in o) { // answers-44d: {id} only
     const j = o.joined as Record<string, unknown> | null
     return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id } }
@@ -227,6 +228,43 @@ function parseGroupChat(v: unknown): EventEnvelope | null {
   if ((x.k === 'msg') !== ('text' in x)) return null
   if (x.k === 'msg' && (!isNonEmptyString(x.text) || x.text.length > EVENT_CHAT_TEXT_MAX)) return null
   return { v: WIRE_VERSION, t: 'event', gc: { id: x.id, m: x.m, k: x.k, by: x.by, ts: x.ts, ...(x.k === 'msg' ? { text: x.text as string } : {}) } }
+}
+
+/* wave45 group-chat-list */
+const nameOk = (v: unknown, max: number): v is string => isNonEmptyString(v) && v.length <= max
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+/** One group op (types.ts GroupOp): ids, kind, actor name, a finite time, and exactly the payload its kind needs. Anything else is null. */
+function parseGroupOp(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  const kinds = ['msg', 'join', 'leave', 'check', 'list', 'item', 'roster'] as const
+  const k = kinds.find((y) => y === x.k)
+  if (!k || typeof x.g !== 'string' || !QID_RE.test(x.g) || typeof x.m !== 'string' || !QID_RE.test(x.m) || !nameOk(x.by, VIA_NAME_MAX) || !finite(x.ts)) return null
+  const wantsText = k === 'msg' || k === 'check' || k === 'roster'
+  if (wantsText !== ('text' in x) || (k === 'list') !== ('list' in x) || (k === 'item') !== ('it' in x) || (k === 'roster') !== ('names' in x)) return null
+  const op: GroupOp = { g: x.g, m: x.m, k, by: x.by, ts: x.ts }
+  if (wantsText) {
+    if (!nameOk(x.text, k === 'msg' ? EVENT_CHAT_TEXT_MAX : k === 'check' ? GROUP_ITEM_TEXT_MAX : GROUP_NAME_MAX)) return null
+    op.text = x.text
+  }
+  if (k === 'list') {
+    const l = x.list as Record<string, unknown> | null
+    if (typeof l !== 'object' || l === null || typeof l.id !== 'string' || !QID_RE.test(l.id) || !nameOk(l.name, GROUP_NAME_MAX) || (l.act !== undefined && l.act !== true)) return null
+    op.list = { id: l.id, name: l.name, ...(l.act ? { act: true as const } : {}) }
+  }
+  if (k === 'item') {
+    const i = x.it as Record<string, unknown> | null
+    if (typeof i !== 'object' || i === null || typeof i.id !== 'string' || !QID_RE.test(i.id) || typeof i.l !== 'string' || !QID_RE.test(i.l) || !nameOk(i.text, GROUP_ITEM_TEXT_MAX) || !finite(i.o)) return null
+    const d = i.done as Record<string, unknown> | null | undefined
+    if (d !== undefined && (typeof d !== 'object' || d === null || !nameOk(d.by, VIA_NAME_MAX) || !finite(d.at))) return null
+    if (i.arc !== undefined && i.arc !== true) return null
+    op.it = { id: i.id, l: i.l, text: i.text, o: i.o, ...(d ? { done: { by: d.by as string, at: d.at as number } } : {}), ...(i.arc ? { arc: true as const } : {}) }
+  }
+  if (k === 'roster') {
+    if (!Array.isArray(x.names) || x.names.length > GROUP_ROSTER_MAX || !x.names.every((n) => nameOk(n, VIA_NAME_MAX))) return null
+    op.names = x.names as string[]
+  }
+  return { v: WIRE_VERSION, t: 'event', gg: op }
 }
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----

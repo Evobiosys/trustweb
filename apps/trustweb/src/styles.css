@@ -2343,3 +2343,37 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .event-chat .ec-compose{display:flex; flex-direction:column; gap:6px; margin-top:8px}
 .event-chat .ec-compose[hidden]{display:none}
 .event-chat .ec-leave{margin-top:6px}
+
+/* wave45 group-chat-list */
+.gl-new-row{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.gl-new-row > .btn{width:auto; margin:0}
+.gl-section h3{margin:6px 0 4px; font-size:var(--fs-1, 13px); text-transform:uppercase; letter-spacing:.04em; color:var(--ink-2)}
+.gl-badge{flex:none; display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:var(--r-control, 10px); background:var(--trust-tint, #E3F4F1); color:var(--trust-strong, #0E5A63); font-weight:600}
+.group-chat .chat-thread{max-height:46vh; overflow-y:auto}
+.group-chat .chat-msg .chat-by{display:block; font-size:12px; font-weight:600; opacity:.8}
+.group-chat .gl-quiet{text-align:center; margin:4px 0; font-size:12.5px; opacity:.75}
+.gl-head{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 6px}
+.gl-head .gl-members-btn{flex:0 0 auto; width:auto; margin-right:auto; padding:0 4px; font-size:13.5px; white-space:nowrap}
+.gl-chip{width:auto; margin:0; cursor:pointer}
+.gl-chip-list{background:var(--shared-tint, #DDF3EA); color:var(--shared-ink, #0E6B55)}
+.gl-chip-invite{background:var(--looking-tint, #E6E8FB); color:var(--looking-ink, #3440A8)}
+.gl-chip-on{outline:2px solid var(--trust, #13867E); outline-offset:-2px; font-weight:600}
+.gl-members[hidden], .gl-compose[hidden]{display:none}
+.gl-compose{display:flex; flex-direction:column; gap:6px; margin-top:8px}
+.gl-leave{margin-top:6px}
+.gl-lists{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.gl-lists .gl-new-list{width:auto; flex:1 1 140px; min-width:0}
+.gl-items{display:flex; flex-direction:column; gap:4px; max-height:46vh; overflow-y:auto; margin:6px 0}
+.gl-item{display:flex; align-items:center; gap:4px; padding:6px 8px; border-radius:var(--r-control, 10px); background:var(--card, #fff)}
+.gl-item .gl-label{flex:1 1 auto; min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; cursor:pointer}
+.gl-item .gl-label input{width:20px; height:20px; margin:0; flex:none}
+.gl-item .gl-text{flex:1 1 auto; min-width:0; overflow-wrap:anywhere}
+.gl-item.gl-done .gl-text{text-decoration:line-through; opacity:.7}
+.gl-item .gl-by{flex:1 0 100%; padding-left:28px; font-size:12px}
+.gl-item .gl-move{flex:none; width:32px; min-width:32px; margin:0; padding:4px 0}
+.gl-item .gl-move[disabled]{opacity:.3}
+.gl-add{display:flex; gap:6px; align-items:center}
+.gl-add .field{flex:1 1 auto; min-width:0; margin:0}
+.gl-add .btn{width:auto; margin:0}
+.gl-foot{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0}
+.gl-foot .btn{width:auto; margin:0}

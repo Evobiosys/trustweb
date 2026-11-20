@@ -40,6 +40,8 @@ import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
 import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
+import { createGroupView } from './group_chat_view' // wave45 group-chat-list
+import { defineGroupActions } from './group_chat_actions' // wave45 group-chat-list
 import { audienceFilterView } from './audience_filter'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
@@ -577,7 +579,10 @@ let pendingConnect: StampedLink | null = connectLinkOf(location.search)
 const invites = createInvites({
   state: st, save, render, identity: () => net.ownIdentity(), connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
   openSheet, closeSheet, renderQr, copy: copyLink, notice: (t, b) => showNotice(t, b, [], HANDSHAKE_NOTICE_MS), toast, tags: loadColourTags, saveTags: saveColourTags,
+  group: { joined: (gid, name, pid) => { groups.joined(gid, name, pid) }, admitted: (gid, pid) => { void groups.admit(gid, pid) } },   // wave45 group-chat-list
 }, location.hash)
+/** wave45 group-chat-list: groups (a chat with members, independent of events, with lists); Chat > Groups / New group. */
+const groups = createGroupView<Peer>({ st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e), openInvite: (tag, label) => invites.openSheet(tag, label), changed: () => { if (screen === Screen.Chat) render() } })
 /** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
 let reachOutPending = false
 let heldToasted = false
@@ -953,7 +958,7 @@ const net = new Net({
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
-  onEvent: (peer, env) => { if (env.gc) void eventChat.onEnvelope(peer, env.gc); else void eventEnv.onEnvelope(peer, env).then((o) => eventChat.afterEnvelope(peer, env, o)) },   // wave45 event-group-chat
+  onEvent: (peer, env) => { if (env.gg) void groups.onEnvelope(peer, env.gg); else if (env.gc) void eventChat.onEnvelope(peer, env.gc); else void eventEnv.onEnvelope(peer, env).then((o) => eventChat.afterEnvelope(peer, env, o)) },   // wave45 event-group-chat
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -3496,6 +3501,7 @@ function chatListBody(): Node[] {
   const fresh = newlyAdded(people, s.peers, now).filter((r) => !rows.some((x) => x.personId === r.personId))
   return [
     ...(community ? [community] : []),
+    ...(chatQuery.trim() || chatCommunitiesOnly ? [] : groups.rows()),   // wave45 group-chat-list
     ...(fresh.length && !chatQuery.trim() && !s.chatsHidden ? [el('section', { class: 'chat-newly', 'data-chat-newly': '' }, [
       el('h3', {}, [S.w43b.newlyAdded]),
       ...fresh.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-newly-row': r.personId, onclick: () => chatSheet(r.personId) }, [
@@ -3556,7 +3562,7 @@ function screenChat(): Node[] {
       s.chatsHidden ? el('p', { class: 'meta', 'data-chats-hidden': '' }, [S.chatDndHint]) : null,
       view.body,
       view.simple ? search : null,
-      view.simple ? el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]) : null,
+      view.simple ? el('div', { class: 'row gl-new-row' }, [el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]), groups.newButton()]) : null,   // wave45 group-chat-list: New group
       view.simple ? body : null,
     ]),
   ]
@@ -5707,6 +5713,7 @@ defineEventActions(appActions, {
   sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
 })
 defineSyncActions(appActions, devices) // wave43c sync-devices
+defineGroupActions(appActions, { ...groups, open: (gid) => { if (screen !== Screen.Chat) go(Screen.Chat); groups.open(gid) } }) // wave45 group-chat-list: MCP group_* / list_*
 defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
 defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
 defineA44dActions(appActions, { openEventChat: (id) => { eventHost.openEventChat(id); if (screen !== Screen.Events) go(Screen.Events) }, messageAll: (id, text) => eventHost.messageAllById(id, text), leaveEventChat: (id, leave) => eventChat.leave(id, leave), answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
