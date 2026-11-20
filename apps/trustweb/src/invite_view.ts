@@ -18,6 +18,7 @@ import { tagPerson, createTag } from './tag_create'
 import { joinSpace } from './ext/community-mighty/community_model'
 import type { AppState, Peer, Person } from './model'
 import { S } from './strings'
+import { groupOfTag } from './group_store' // wave45 group-chat-list
 import {
   addInvite, createInvite, inviteLink, inviteOfHash, inviteSettingsOf, openInviteOf, redeemInvite, revokeInvites, setOpenMax, takeInvite,
   verifyInvite, type InviteEntry, type InviteKind, type InviteToken,
@@ -37,6 +38,8 @@ export interface InviteDeps {
   toast(msg: string): void
   tags(): ColourTag[]
   saveTags(tags: readonly ColourTag[]): void
+  /** wave45 group-chat-list: an invite whose tag is a group's (`grp:<id>`, group_store.ts) lets in to just that group, no community tag. */
+  group?: { joined(gid: string, name: string, personId: string): void; admitted(gid: string, personId: string): void }
 }
 
 const T = S.invite
@@ -47,10 +50,10 @@ export function createInvites(d: InviteDeps, hash: string) {
   let incoming = inviteOfHash(hash)
   const verifier = (did: string) => (bytes: Uint8Array, sig: string): boolean => verifyDidSignature(did, bytes, sig)
 
-  function make(kind: InviteKind, tag: string): InviteEntry {
+  function make(kind: InviteKind, tag: string, name?: string): InviteEntry {
     const s = d.state()
     const id = d.identity()
-    const label = d.tags().find((t) => t.id === tag)?.label ?? tag
+    const label = name ?? d.tags().find((t) => t.id === tag)?.label ?? tag
     const e = createInvite({ kind, tag, label, inviterDid: id.did, inviterName: s.me.displayName, id: toB64u(randomBytes(16)), now: Date.now(), settings: s.inviteSettings, sign: (b) => signBytes(id, b) })
     s.invites = addInvite(s.invites, e)
     d.save()
@@ -58,8 +61,8 @@ export function createInvites(d: InviteDeps, hash: string) {
   }
 
   /** The inviter's sheet for one community tag. */
-  function openSheet(tag: string): void {
-    const label = d.tags().find((t) => t.id === tag)?.label ?? tag
+  function openSheet(tag: string, name?: string): void {
+    const label = name ?? d.tags().find((t) => t.id === tag)?.label ?? tag
     let personal: InviteEntry | null = null
     let advOpen = false
     const box = el('div', { class: 'invite-sheet', 'data-invite-sheet': tag })
@@ -67,7 +70,7 @@ export function createInvites(d: InviteDeps, hash: string) {
     const pQr = qrBox('data-invite-qr-personal')
     const oQr = qrBox('data-invite-qr-open')
     const linkOf = async (kind: InviteKind): Promise<string> => {
-      const e = kind === 'personal' ? (personal ??= make('personal', tag)) : openInviteOf(d.state().invites, tag, Date.now()) ?? make('open', tag)
+      const e = kind === 'personal' ? (personal ??= make('personal', tag, name)) : openInviteOf(d.state().invites, tag, Date.now()) ?? make('open', tag, name)
       const link = inviteLink(await d.connectLink(), e)
       draw()
       return link
@@ -186,6 +189,8 @@ export function createInvites(d: InviteDeps, hash: string) {
   function join(tok: string, link: ConnectLinkParams, person: Person): void {
     const v = verifyInvite(tok, link.did, Date.now(), verifier(link.did))
     if (!v.ok) return
+    const gid = groupOfTag(v.inv.t)
+    if (gid) { d.group?.joined(gid, v.inv.l, person.id); d.toast(T.joined(v.inv.l)); return }   // wave45 group-chat-list
     ensureTag(v.inv.t, v.inv.l)
     tagPerson(person, v.inv.t)
     joinSpace(d.state(), d.tags(), v.inv.t, Date.now())
@@ -210,6 +215,8 @@ export function createInvites(d: InviteDeps, hash: string) {
     const e = (s.invites ?? []).find((x) => x.tok === inv)
     const person = s.people.find((p) => p.peerId === peer.id)
     if (!e || !person) return
+    const gid = groupOfTag(e.tag)
+    if (gid) { d.group?.admitted(gid, person.id); d.render(); return }   // wave45 group-chat-list
     tagPerson(person, e.tag)
     d.save()
     d.render()

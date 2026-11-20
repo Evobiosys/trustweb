@@ -27,6 +27,7 @@ import { syncTools } from './sync_tools.ts'
 import { trashTools } from './trash_tools.ts' // wave44c answers-44c
 import { a44dTools } from './a44d_tools.ts' // wave44c answers-44d
 import { eventChatTools } from './event_chat_tools.ts' // wave45 event-group-chat
+import { groupTools } from './group_tools.ts' // wave45 group-chat-list
 
 export interface AllToolsOptions extends RecordToolsOptions {
   /** The server the app talks to (billing tools). Default https://app.trustweb.one. */
@@ -36,7 +37,7 @@ export interface AllToolsOptions extends RecordToolsOptions {
 }
 
 /** Tools that change the preview registry, not the record: no card in the preview. */
-const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send', /* wave44 */ 'dashboard_open', /* wave44c home-default */ 'home_open_request', /* wave44c sync-seamless */ 'sync_pair_link', /* wave44c answers-44c */ 'sync_pair_show_new', 'sync_pair_scan', /* wave44c answers-44d: queued actions */ 'ask_answer', 'chat_send', 'event_chat_open', 'event_message_all', /* wave45 event-group-chat */ 'event_chat_send', 'event_chat_leave'])
+const NO_CARD = new Set(['preview_verdict', 'preview_mark_merged', /* wave43c: announces its own action */ 'sync_now', 'event_envelope_send', /* wave44 */ 'dashboard_open', /* wave44c home-default */ 'home_open_request', /* wave44c sync-seamless */ 'sync_pair_link', /* wave44c answers-44c */ 'sync_pair_show_new', 'sync_pair_scan', /* wave44c answers-44d: queued actions */ 'ask_answer', 'chat_send', 'event_chat_open', 'event_message_all', /* wave45 event-group-chat */ 'event_chat_send', 'event_chat_leave', /* wave45 group-chat-list: queued actions */ 'group_open', 'group_send', 'group_leave', 'list_create', 'list_set_active', 'list_add_item', 'list_check', 'list_move', 'list_archive_done'])
 
 export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] {
   const build = (write: boolean): Tool[] => [
@@ -55,6 +56,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave44c answers-44c */ ...trashTools({ ...o, write }),
     /* wave44c answers-44d */ ...a44dTools({ ...o, write }),
     /* wave45 event-group-chat */ ...eventChatTools({ ...o, write }),
+    /* wave45 group-chat-list */ ...groupTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))
