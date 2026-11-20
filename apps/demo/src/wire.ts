@@ -175,12 +175,15 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
 // ----- BEGIN TrustWeb wave 44 (steer-open-space): the open-space schedule (types.ts EventEnvelope.os) -----
 const OS_ACTS_MAX = 60
 const OS_BYTES_MAX = 24_000
+const OS_POLL_BYTES_MAX = 16_000   // wave 45 open-space-date-poll
 /** An event id and at most 60 activities in at most 24 KB; each activity is checked by the receiver (open_space.ts), not here. */
 function parseOpenSpace(v: unknown): EventEnvelope | null {
   if (typeof v !== 'object' || v === null) return null
   const os = v as Record<string, unknown>
   if (typeof os.id !== 'string' || !QID_RE.test(os.id) || !Array.isArray(os.acts) || os.acts.length > OS_ACTS_MAX || JSON.stringify(os.acts).length > OS_BYTES_MAX) return null
-  return { v: WIRE_VERSION, t: 'event', os: { id: os.id, ...(os.open === true ? { open: true as const } : {}), acts: os.acts } }
+  const poll = typeof os.poll === 'object' && os.poll !== null ? os.poll : undefined   // wave 45: the date poll, checked by the receiver (open_space_poll.ts)
+  if (poll && JSON.stringify(poll).length > OS_POLL_BYTES_MAX) return null
+  return { v: WIRE_VERSION, t: 'event', os: { id: os.id, ...(os.open === true ? { open: true as const } : {}), acts: os.acts, ...(poll ? { poll } : {}) } }
 }
 // ----- END TrustWeb wave 44 -----
 

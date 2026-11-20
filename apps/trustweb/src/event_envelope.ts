@@ -13,6 +13,7 @@ import { decodeEventLink } from './event_link'
 import type { LinkedEvent } from './event_link'
 import { isEventHost } from './event_roles'
 import { mergeActivities } from './open_space'
+import { mergePoll } from './open_space_poll'
 import { addItem } from './notify_inbox'
 import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
 import { S } from './strings'
@@ -103,7 +104,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   /** The schedule as an envelope; a host also says the event is an open space (receivers accept that only from a host). */
   const osEnvelope = (ev: TwEvent): EventEnvelope => {
     const st = host.state()
-    return { v: 1, t: 'event', os: { id: ev.id, ...(isEventHost(ev, st.me.displayName, st.people) ? { open: true as const } : {}), acts: ev.openSpace?.acts ?? [] } }
+    return { v: 1, t: 'event', os: { id: ev.id, ...(isEventHost(ev, st.me.displayName, st.people) ? { open: true as const } : {}), acts: ev.openSpace?.acts ?? [], ...(ev.openSpace?.poll ? { poll: ev.openSpace.poll } : {}) } }
   }
   const pushOs = async (ev: TwEvent, except?: string): Promise<void> => {
     if (!ev.openSpace) return
@@ -120,6 +121,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     let changed = false
     if (!ev.openSpace && os.open && who && isEventHost(ev, who.name, st.people)) { ev.openSpace = { acts: [] }; changed = true }
     if (mergeActivities(ev, os.acts)) changed = true
+    if (os.poll !== undefined && mergePoll(ev, os.poll, !!who && isEventHost(ev, who.name, st.people))) changed = true   // wave 45 open-space-date-poll
     if (!changed) return false
     host.save()
     host.changed()

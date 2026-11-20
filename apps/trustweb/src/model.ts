@@ -362,7 +362,11 @@ export interface TwTask {
  */
 /** Wave 44 steer-open-space: one proposed activity; joins = token of a person (open_space.ts tokenOf) -> time of the last change, positive joined, negative left. */
 export interface OsActivity { id: string; title: string; slot: string; by: string; description?: string; joins: Record<string, number> }
-export interface OpenSpace { acts: OsActivity[] }
+/** Wave 45 open-space-date-poll: a proposed date (same shape as the event's from/to, one day); votes = token of a person -> yes/maybe/no with the time of the last change (the later wins). */
+export type PollVote = 'yes' | 'maybe' | 'no'
+export interface DatePollOption { id: string; from: string; to?: string; votes: Record<string, { v: PollVote; at: number }> }
+export interface DatePoll { options: DatePollOption[]; chosen?: string }
+export interface OpenSpace { acts: OsActivity[]; poll?: DatePoll }
 
 export interface TwEvent {
   id: string
