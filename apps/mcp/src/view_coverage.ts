@@ -18,6 +18,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'ask_escalation_view.ts': ['ask_escalation_get', 'ask_escalation_set', 'asks_incoming_list', 'ask_answer'],
   'ask_web_view.ts': ['ask_audience_get', 'ask_audience_set', 'settings_set'],
   'backup_view.ts': ['settings_keep_copy', 'app_action'],
+  'bulk_invite_view.ts': ['invite_bulk'],
   'bubble_connect_view.ts': ['introduce_people', 'introduce_link_create', 'handshake_status'],
   'bw_mode_view.ts': ['settings_get', 'settings_set'],
   'card_pages_view.ts': ['profile_get', 'profile_link_add', 'profile_link_remove'],
@@ -42,7 +43,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'event_group_chat_view.ts': ['event_chat_open', 'event_chat_read', 'event_chat_send', 'event_chat_leave'], // wave45 event-group-chat
   'group_chat_view.ts': ['group_list', 'group_read', 'group_create', 'group_invite', 'group_open', 'group_send', 'group_leave', 'list_create', 'list_set_active', 'list_add_item', 'list_check', 'list_move', 'list_archive_done'], // wave45 group-chat-list
   'events_view.ts': ['events_list', 'event_get', 'event_create', 'event_settings_set', 'event_link_open', 'event_share_audience_set', 'event_chat_open', 'event_message_all'],
-  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add'],
+  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add', 'invite_bulk'],
   'ext/calendar/at_event_view.ts': ['event_get', 'event_settings_set'],
   'ext/calendar/calendar_tags_view.ts': ['calendar_tag_toggle'],
   'ext/calendar/calendar_view.ts': ['events_list', 'calendar_add'],

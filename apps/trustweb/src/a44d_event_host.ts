@@ -5,14 +5,16 @@
  * event-group-chat opens the event's ONE shared thread (the earlier fan-out into each person's chat: DEVLOG/wave45/archive/event-group-chat).
  * The same functions serve the registry actions behind MCP event_chat_open, event_chat_send and event_message_all (a44d_actions.ts).
  */
+import type { ColourTag } from './colour_tags'
 import type { AppState, TwEvent } from './model'
 import { setEventFilter } from './event_filter_mode'
+import { openBulkInvite } from './bulk_invite_view' // wave45 bulk-invite-filter
 import { parseCommunity } from './ext/community-mighty/community_data'
 
 export interface EventHostDeps {
   st: () => AppState
   save: () => void
-  tags: () => readonly { id: string; label?: string }[]
+  tags: () => readonly ColourTag[]
   openSheet: (body: (Node | null)[]) => void
   closeSheet: () => void
   toast: (text: string) => void
@@ -44,6 +46,7 @@ export function eventPageHooks(d: EventHostDeps) {
     communityView: (_tag: string): void => d.chooseCommunity(),
     /** wave45 event-group-chat: "Message everyone" / Event chat opens the event's ONE shared thread (the fan-out into each person's chat is archived). */
     messageAll: (ev: TwEvent): void => d.groupChat.open(ev.id),
+    inviteMany: (ev: TwEvent, done: () => void): void => openBulkInvite(ev, d, done),
     eventResources: (ev: TwEvent): void => { setEventFilter(d.st(), ev.id); d.save(); d.showResources() },
     /** Registry (MCP): open the event's shared chat; send one message into it (1 = kept and sent or waiting, 0 = refused). */
     openEventChat: (id: string): void => d.groupChat.open(find(id).id),

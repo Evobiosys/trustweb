@@ -7,7 +7,7 @@ import { eventModeToggle } from './filter_bar_view'
 import { el } from '../../demo/src/ui/dom'
 import type { EventOffers } from './events'
 import { EVENT_VISIBILITIES, communityOfEvent, listedAttendees, searchableAttendees, visibilityOf } from './event_visibility'
-import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, mayEdit, nameRevealOf, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
+import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, mayEdit, mayInvite, nameRevealOf, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import { eventForLink, isEventHost, mayApprove, relatedOthers } from './event_roles'
 import { createEventEditor } from './event_editor_view'
@@ -71,6 +71,8 @@ export interface EventsViewHooks {
   openCommunity?: (tag: string) => void
   communityView?: (tag: string) => void
   messageAll?: (ev: TwEvent) => void
+  /** wave45 bulk-invite-filter: the Invite many sheet; `done` redraws the page. */
+  inviteMany?: (ev: TwEvent, done: () => void) => void
   eventResources?: (ev: TwEvent) => void
 }
 
@@ -523,7 +525,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const ctag = communityOfEvent(ev)
     if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
     const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
-      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, eventResources: h.eventResources, openPerson: h.curatorPerson }),
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),
