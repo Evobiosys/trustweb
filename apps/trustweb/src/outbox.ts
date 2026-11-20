@@ -16,7 +16,7 @@ export const OUTBOX_BASE_MS = 30 * 1000
 export const OUTBOX_MAX_MS = 60 * 60 * 1000
 /** A waiting item that could not be sent for this long turns `failed` (still listed, never dropped). */
 export const OUTBOX_HORIZON_MS = 7 * 24 * 60 * 60 * 1000
-/** Sent items are kept this long for the status line, and at most this many items are held; waiting ones are never dropped to make room. */
+/** Sent items are kept this long for the status line, and at most this many items are held; only sent ones are dropped to make room (waiting and failed never). */
 export const OUTBOX_SENT_KEEP_MS = 24 * 60 * 60 * 1000
 export const OUTBOX_MAX_ITEMS = 200
 
@@ -27,18 +27,22 @@ export function backoffMs(tries: number): number {
 
 const queueOf = (s: Rec): OutboxItem[] => (Array.isArray(s.sendQueue) ? s.sendQueue : [])
 
-/** Drops sent items past their keep time, then the oldest sent/failed ones beyond the bound. */
+/** Drops sent items past their keep time, then the oldest sent ones beyond the bound (review-45: a failed item is never dropped). */
 function prune(list: OutboxItem[], now: number): OutboxItem[] {
   let out = list.filter((x) => !(x.state === 'sent' && now - (x.sentAt ?? x.queuedAt) > OUTBOX_SENT_KEEP_MS))
   for (const x of [...out]) {
     if (out.length <= OUTBOX_MAX_ITEMS) break
-    if (x.state !== 'waiting') out = out.filter((y) => y !== x)
+    if (x.state === 'sent') out = out.filter((y) => y !== x)
   }
   return out
 }
 
-/** Queues one envelope for `peerId`; due at once. */
+const sameEnv = (a: unknown, b: unknown): boolean => { try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false } }
+
+/** Queues one envelope for `peerId`; due at once. The same envelope already waiting for that person is not queued twice (review-45: a re-fetch while offline). */
 export function enqueue(s: Rec, i: Pick<OutboxItem, 'peerId' | 'kind' | 'env'>, now: number): OutboxItem {
+  const twin = queueOf(s).find((x) => x.state === 'waiting' && x.peerId === i.peerId && x.kind === i.kind && sameEnv(x.env, i.env))
+  if (twin) return twin
   const item: OutboxItem = { id: `${now.toString(36)}${Math.random().toString(36).slice(2, 8)}`, peerId: i.peerId, kind: i.kind, env: i.env, queuedAt: now, tries: 0, nextAt: now, state: 'waiting' }
   s.sendQueue = prune([...queueOf(s), item], now)
   return item
@@ -68,4 +72,9 @@ export const shownItems = (s: Rec, now: number): OutboxItem[] => prune(queueOf(s
 export function nextDueAt(s: Rec): number | undefined {
   const t = queueOf(s).filter((x) => x.state === 'waiting').map((x) => x.nextAt)
   return t.length ? Math.min(...t) : undefined
+}
+
+/** review-45: the relay refused a send; the other items due now wait until `at` too (their tries unchanged), so a dead relay is not tried once a second per item. */
+export function holdDue(s: Rec, now: number, at: number): void {
+  for (const x of dueItems(s, now)) x.nextAt = Math.max(x.nextAt, at)
 }

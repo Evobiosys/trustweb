@@ -77,7 +77,7 @@ import { NAMELESS_PEER, cleanHelloName } from './hello'
 import { addHeldAsk, dropHeldAsk, liveHeldAsks } from './held_asks'
 import { addLateAnswer, addSentAsk, addShownAnswer, forgetSentAsk, LATE_KEEP_MS, openWindowUntil, releaseLateAnswers, sentAskFor } from './late_answers'
 import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
-import { dueItems, enqueue, markFailed, markSent, nextDueAt } from './outbox' // wave45 offline-outbox
+import { dueItems, enqueue, holdDue, markFailed, markSent, nextDueAt } from './outbox' // wave45 offline-outbox
 import type { OutboxKind } from './outbox'
 import { LogOutcome, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
@@ -767,8 +767,11 @@ export class Net {
         try {
           await this.channel.send(peer.did, item.env as Envelope, await this.pairKey(peer))
           markSent(s, item.id, Date.now())
+          this.hooks.save() // review-45: saved per item, so a reload after this send never sends it again
         } catch {
-          markFailed(s, item.id, Date.now())
+          const now = Date.now()
+          markFailed(s, item.id, now)
+          holdDue(s, now, s.sendQueue?.find((x) => x.id === item.id)?.nextAt ?? now)
           break
         }
       }
