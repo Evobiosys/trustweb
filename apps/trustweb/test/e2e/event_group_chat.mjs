@@ -35,7 +35,7 @@ try {
     if (await page.locator('[data-cal-all]').count()) await page.locator('[data-cal-all]').click()
     await page.waitForTimeout(200)
     await page.locator('[data-event="e1"]').click(); await page.waitForTimeout(400)
-    const btn = page.locator('[data-event-message-all], [data-event-chat-open]').first()
+    const btn = page.locator('button[data-event-chat], [data-event-message-all], [data-event-chat-open]').first() // review-45: row 01 names the button data-event-chat
     check(`${w}: the event page has the chat button`, (await btn.count()) === 1)
     await btn.click(); await page.waitForTimeout(400)
     const sheet = page.locator('[data-event-chat="e1"]')
