@@ -24,7 +24,7 @@ import { randomId } from '../../demo/src/crypto'
 import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
 import { createEventMerge } from './event_merge_flow' // wave45 merge-events
 import { resolveEvent } from './event_merge'
-import { mayAnnounce } from './community_event_access' // wave45 community-events-invite-only
+import { mayAnnounce, seesEvent } from './community_event_access' // wave45 community-events-invite-only; answers-45a: seesEvent
 import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
@@ -98,9 +98,15 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   const held = (id: string): TwEvent | undefined => host.state().events?.find((e) => e.id === id)
   const waiting = (id: string): boolean => { const e = held(id) ?? (host.pending()?.id === id ? host.pending() : null); return !!e && isIncomplete(e) }
 
+  /** answers-45a (review-45 Q5): the read filter of a community event. Outside the QR window a host gives it only to whom seesEvent lets see it
+   *  (invited personally, or a member while the community's mode is members); someone I cannot name as a person sees no community event. */
+  const QR_ONLY = { id: '' }
   async function giveTo(peer: P, id: string): Promise<boolean> {
     const ev = held(id)
-    if (!ev || !mayAnswer(host.state(), id, shown, host.now())) return false
+    const st = host.state()
+    if (!ev || !mayAnswer(st, id, shown, host.now())) return false
+    const viaQr = shown?.id === id && host.now() - shown.at <= EVENT_SHOW_WINDOW_MS
+    if (!viaQr && !seesEvent(st, ev, st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined) ?? QR_ONLY)) return false
     await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev) })
     if (ev.openSpace) await host.send(peer, osEnvelope(ev)).catch(() => undefined)
     return true

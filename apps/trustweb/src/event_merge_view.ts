@@ -12,8 +12,9 @@ import { mayMerge, mergeCandidates } from './event_merge'
 import { hostPeersOf, type MergeStart } from './event_merge_flow'
 import { S } from './strings'
 
-export { defineEventMergeActions } from './event_merge_actions'
-export { mergedInto } from './event_merge'
+import type { Actions } from './actions'
+import { defineEventMergeActions } from './event_merge_actions'
+import { mergedInto } from './event_merge'
 
 export interface MergeViewHost {
   st(): AppState
@@ -95,4 +96,10 @@ export function createMergeView(h: MergeViewHost) {
   }
 
   return { eventSection }
+}
+
+/** answers-45a (P5): the whole row in one call for main.ts: the event page part, the MCP registry actions, and where an old (merged) id now points. */
+export function installEventMerge(reg: Actions, h: MergeViewHost): ReturnType<typeof createMergeView> & { keptOf(id: string): string | undefined } {
+  defineEventMergeActions(reg, h)
+  return { ...createMergeView(h), keptOf: (id) => mergedInto(h.st(), id) }
 }

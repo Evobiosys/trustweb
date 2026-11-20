@@ -150,8 +150,9 @@ function withItem(t: EventThread, item: GcItem): EventThread {
   return { ...t, items: [...t.items, item].sort(order).slice(-EVENT_CHAT_KEEP), unread: Math.min(EVENT_CHAT_KEEP, t.unread + (item.k === 'msg' && !item.mine ? 1 : 0)) }
 }
 
-export function eventChatUnread(s: Pick<AppState, 'eventChats'>): number {
-  return Object.values(sanitizeEventChats(s.eventChats)).reduce((n, t) => n + t.unread, 0)
+/** Unread messages of one event's chat (`id`, the badge on its Event chat button), or of all event chats. */
+export function eventChatUnread(s: Pick<AppState, 'eventChats'>, id?: string): number {
+  return id === undefined ? Object.values(sanitizeEventChats(s.eventChats)).reduce((n, t) => n + t.unread, 0) : threadOf(s, id).unread
 }
 
 const iHost = (s: Rec, ev: TwEvent): boolean => isEventHost(ev, s.me.displayName, s.people)

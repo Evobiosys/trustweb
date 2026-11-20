@@ -13,7 +13,6 @@ export type EventAccess = (typeof EVENT_ACCESS)[number]
 export const DEFAULT_EVENT_ACCESS: EventAccess = 'members'
 
 const MOD = 'community-mighty'
-type Rec = Pick<AppState, 'people'> & Partial<Pick<AppState, 'extData'>>
 
 export const isEventAccess = (v: unknown): v is EventAccess => (EVENT_ACCESS as readonly unknown[]).includes(v)
 
@@ -40,6 +39,4 @@ export function seesEvent(s: Partial<Pick<AppState, 'extData'>>, ev: Pick<TwEven
 /** The whole community gets an announcement only in mode members. */
 export const mayAnnounce = (s: Partial<Pick<AppState, 'extData'>>, tag: string): boolean => eventAccessOf(s, tag) === 'members'
 
-/** The live people among `ids` who are not members of the community: the ones the "N are not members" warning counts. */
-export const nonMembersOf = (s: Rec, tag: string, ids: readonly string[]): Person[] =>
-  s.people.filter((p) => ids.includes(p.id) && p.deleted_at === undefined && !p.via && !holds(p, tag))
+/* answers-45a: nonMembersOf archived ($O/DEVLOG/wave45/archive/nonMembersOf/): bulk_invite.ts nonMembers counts the warning. */

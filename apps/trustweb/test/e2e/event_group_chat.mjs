@@ -37,6 +37,11 @@ try {
     await page.locator('[data-event="e1"]').click(); await page.waitForTimeout(400)
     const btn = page.locator('button[data-event-chat], [data-event-message-all], [data-event-chat-open]').first() // review-45: row 01 names the button data-event-chat
     check(`${w}: the event page has the chat button`, (await btn.count()) === 1)
+    // answers-45a: the unread count of this event's chat sits on the button, inside it (D-P06: overlays nothing)
+    const badge = btn.locator('[data-event-chat-unread]')
+    const [bb, kb] = [await btn.boundingBox(), await badge.boundingBox().catch(() => null)]
+    check(`${w}: Event chat carries the unread badge (1), inside the button`, (await badge.getAttribute('data-event-chat-unread').catch(() => null)) === '1' && !!kb && kb.x >= bb.x && kb.x + kb.width <= bb.x + bb.width + 0.5 && kb.y >= bb.y - 0.5 && kb.y + kb.height <= bb.y + bb.height + 0.5, JSON.stringify({ bb, kb }))
+    if (w === 360) await page.screenshot({ path: `${SHOTS}/event-group-chat-badge-${w}.png` })
     await btn.click(); await page.waitForTimeout(400)
     const sheet = page.locator('[data-event-chat="e1"]')
     check(`${w}: it opens the event's shared thread`, (await sheet.count()) === 1 && /Event chat/.test(await sheet.locator('h3').textContent()))
