@@ -8,9 +8,10 @@ import { el } from '../../demo/src/ui/dom'
 import type { AppState } from './model'
 import { eventFilterOf, eventModePill, setEventFilter } from './event_filter_mode'
 import { applySavedFilter, pinSavedFilter, pinnedFilters, saveFilterState } from './saved_filters'
+import { setEveryone } from './event_bubble'
 import { S } from './strings'
 
-export interface FilterBarIo { state: () => AppState; save: () => void; redraw: () => void }
+export interface FilterBarIo { state: () => AppState; save: () => void; redraw: () => void; /** Wave 45 event-bubble: the Web screen, where the chip "Everyone" shows. */ web?: boolean }
 
 /** The bar element, or null when there is nothing to show. */
 export function filterBar(io: FilterBarIo): HTMLElement | null {
@@ -23,8 +24,16 @@ export function filterBar(io: FilterBarIo): HTMLElement | null {
       pill,
       el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-mode-leave': '', 'aria-label': S.w44fc.leaveEventMode, onclick: () => { setEventFilter(s, null); io.save(); io.redraw() } }, ['×']),
     ]) : null,
+    pill && io.web && !s.eventBubbleOff ? everyoneChip(io) : null,   // wave45 event-bubble
     ...pinned.map((f) => el('button', { type: 'button', class: 'chip on', 'data-pinned-filter': f.id, onclick: () => { applySavedFilter(s, f.id); io.save(); io.redraw() } }, [f.name])),
   ])
+}
+
+/** Wave 45 event-bubble: "Everyone" lifts the Web's narrowing to the event's people (pressed = lifted; the other screens stay narrowed). */
+function everyoneChip(io: FilterBarIo): HTMLElement {
+  const lifted = io.state().uiRings?.eventEveryone === true
+  return el('button', { type: 'button', class: 'chip' + (lifted ? ' on' : ' tw-off'), 'aria-pressed': String(lifted), 'data-event-everyone': '',
+    onclick: () => { setEveryone(io.state(), !lifted); io.save(); io.redraw() } }, [S.w45eb.everyone])
 }
 
 /** Inserts the bar before the screen's `.scroll`, on the screens that carry a filter row (the caller decides which). */

@@ -4,13 +4,14 @@
  * (event_mode_get / event_mode_set). Both live in the record (`savedFilters`, `uiRings.eventMode`); the app redraws on its next load.
  */
 import { eventTagSlug } from '../../trustweb/src/event_tag.ts'
+import { bubbleOn, setEveryone } from '../../trustweb/src/event_bubble.ts'
 import { applySavedFilter, pinSavedFilter, saveFilterState, type SavedFilter } from '../../trustweb/src/saved_filters.ts'
 import { commitTo, load, schema, S, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Ev { id: string; name: string; tagName?: string }
-type Rec = Obj & { savedFilters?: SavedFilter[]; uiRings?: Obj & { show?: string[]; hide?: string[]; eventMode?: string }; events?: Ev[] }
+type Rec = Obj & { savedFilters?: SavedFilter[]; uiRings?: Obj & { show?: string[]; hide?: string[]; eventMode?: string; eventEveryone?: true }; eventBubbleOff?: true; events?: Ev[] }
 
 const shape = (f: SavedFilter): Obj => ({ id: f.id, name: f.name, show: f.show, hide: f.hide, pinned: f.pinned === true })
 const find = (r: Rec, key: unknown): SavedFilter => {
@@ -29,7 +30,7 @@ function eventId(r: Rec, v: unknown): string {
 const modeOf = (r: Rec): Obj => {
   const id = r.uiRings?.eventMode
   const ev = (r.events ?? []).find((e) => e.id === id)
-  return { on: !!ev, ...(ev ? { event: eventTagSlug(ev.tagName ?? ev.name), id: ev.id } : {}) }
+  return { on: !!ev, ...(ev ? { event: eventTagSlug(ev.tagName ?? ev.name), id: ev.id, webNarrowed: bubbleOn(r) } : {}) }   // wave45 event-bubble: webNarrowed = the Web shows only the event's people
 }
 
 export function filterStateTools(o: RecordToolsOptions): Tool[] {
@@ -68,8 +69,23 @@ export function filterStateTools(o: RecordToolsOptions): Tool[] {
         commitTo(o.file, now, (r) => {
           const rec = r as Rec
           const ui = { ...rec.uiRings }
+          delete ui.eventEveryone
           if (a.event === undefined || a.event === null || a.event === '') delete ui.eventMode; else ui.eventMode = eventId(rec, a.event)
           rec.uiRings = ui
+          out = modeOf(rec)
+        })
+        return out
+      },
+    },
+    {
+      name: 'event_bubble_set', description: 'EVENT MODE bubble: everyone true = the chip "Everyone" lifts the Web narrowing to the event\'s people (Chat, Resources and Ask stay narrowed); false puts it back. Needs event mode on; it ends with the mode. Turning the auto-bubble off for good is settings_set events.autoBubble.',
+      inputSchema: schema({ everyone: { type: 'boolean', description: 'true lifts, false restores' } }, ['everyone']),
+      run: (a) => {
+        let out: Obj = {}
+        commitTo(o.file, now, (r) => {
+          const rec = r as Rec
+          if (!rec.uiRings?.eventMode) throw new Error('event mode is off: nothing to lift')
+          setEveryone(rec, a.everyone === true)
           out = modeOf(rec)
         })
         return out

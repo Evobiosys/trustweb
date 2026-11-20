@@ -5483,4 +5483,8 @@ export const S = {
     actMove: 'Move an item of a group list',
     actArchive: 'Archive the done items of a group list',
   },
+  /* wave45 event-bubble */
+  w45eb: {
+    everyone: 'Everyone',
+  },
 } as const

@@ -69,7 +69,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'feed_ext_view.ts': ['feed_extension_set', 'feed_source_add', 'feed_source_remove', 'feed_refresh'],
   'feed_sources_view.ts': ['feed_sources_get', 'feed_source_toggle', 'feed_algorithm_set'],
   'feed_view.ts': ['feed_list', 'feed_post', 'feed_edit', 'feed_star', 'feed_post_read'],
-  'filter_bar_view.ts': ['web_filter_get', 'web_filter_set', 'event_mode_get', 'event_mode_set'],
+  'filter_bar_view.ts': ['web_filter_get', 'web_filter_set', 'event_mode_get', 'event_mode_set', 'event_bubble_set'],
   'five_rings_view.ts': ['list_people', 'set_ring'],
   'groups_view.ts': ['groups_list', 'create_group_tag'],
   'hide_from_view.ts': ['person_hide', 'ask_tamper_reports_list'],
