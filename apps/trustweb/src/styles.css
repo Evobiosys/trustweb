@@ -2434,3 +2434,17 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 .nv-preview img{width:100%; height:100%; object-fit:cover}
 .nv-host{font-size:12px; color:var(--ink-soft); padding:0 6px; text-align:center; overflow-wrap:anywhere}
 .nv-initial{font-size:34px; font-weight:700; color:var(--ink-soft)}
+/* wave45 settings-suggest */
+.ss-item{display:flex; flex-direction:column; gap:4px; padding:10px 12px; margin:6px 0; border-radius:14px; background:var(--card); border:1.5px solid var(--line)}
+.ss-item > b{font-size:14px; overflow-wrap:anywhere}
+.ss-diff{margin:2px 0; padding-left:18px; font-size:13px; color:var(--ink-soft)}
+.ss-diff li{overflow-wrap:anywhere}
+.ss-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.ss-actions .chip{width:auto; margin:0; text-decoration:underline}
+.chip.ss-yes{border-color:var(--teal); color:var(--teal); background:var(--tint-teal)}
+.chip.ss-open{border-color:var(--electric); color:var(--electric)}
+.ss-follow{display:flex; flex-direction:column; gap:4px; padding:8px 0; border-top:1px solid var(--line)}
+.ss-follow > .chip{align-self:flex-start; width:auto; text-decoration:underline}
+.ss-reach{display:flex; gap:6px}
+.ss-reach > .radio{flex:1 1 0; min-width:0}
+.ss-new{font-weight:600; color:var(--teal)}

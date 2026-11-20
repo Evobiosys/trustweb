@@ -127,6 +127,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'event_merge_asks_list', write: false }, { name: 'event_merge', write: true }, { name: 'event_merge_answer', write: true },
   /* wave45 resources-notion-views */
   { name: 'resources_view_set', write: true },
+  /* wave45 settings-suggest */
+  { name: 'settings_suggestions_list', write: false }, { name: 'settings_suggest', write: true }, { name: 'settings_follow', write: true }, { name: 'settings_suggestion_accept', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

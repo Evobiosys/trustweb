@@ -30,6 +30,7 @@ import { eventPeopleTools } from './event_people_tools.ts' // wave45 event-peopl
 import { eventChatTools } from './event_chat_tools.ts' // wave45 event-group-chat
 import { groupTools } from './group_tools.ts' // wave45 group-chat-list
 import { eventMergeTools } from './event_merge_tools.ts' // wave45 merge-events
+import { settingsShareTools } from './settings_share_tools.ts' // wave45 settings-suggest
 
 export interface AllToolsOptions extends RecordToolsOptions {
   /** The server the app talks to (billing tools). Default https://app.trustweb.one. */
@@ -61,6 +62,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave45 event-group-chat */ ...eventChatTools({ ...o, write }),
     /* wave45 group-chat-list */ ...groupTools({ ...o, write }),
     /* wave45 merge-events */ ...eventMergeTools({ ...o, write }),
+    /* wave45 settings-suggest */ ...settingsShareTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))
