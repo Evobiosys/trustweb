@@ -26,6 +26,7 @@ import { recordTools, type RecordToolsOptions } from './record_tools.ts'
 import { syncTools } from './sync_tools.ts'
 import { trashTools } from './trash_tools.ts' // wave44c answers-44c
 import { a44dTools } from './a44d_tools.ts' // wave44c answers-44d
+import { outboxTools } from './outbox_tools.ts' // wave45 offline-outbox
 
 export interface AllToolsOptions extends RecordToolsOptions {
   /** The server the app talks to (billing tools). Default https://app.trustweb.one. */
@@ -53,6 +54,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave44c feed-ext */ ...feedExtTools({ ...o, write }),
     /* wave44c answers-44c */ ...trashTools({ ...o, write }),
     /* wave44c answers-44d */ ...a44dTools({ ...o, write }),
+    /* wave45 offline-outbox */ ...outboxTools(o),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

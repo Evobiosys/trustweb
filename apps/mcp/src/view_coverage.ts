@@ -140,6 +140,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'title_emoji_view.ts': ['settings_get', 'settings_set'],
   'transcription_view.ts': ['settings_get', 'settings_set'],
   'trash_view.ts': ['trash_list', 'trash_restore'],
+  'outbox_view.ts': ['outbox_list'],
   'trustzones_view.ts': ['trusted_only_set', 'trust_override_set'],
   'web_default_view.ts': ['web_default_view_get', 'web_default_view_set'],
   'web_view.ts': ['list_people', 'web_filter_get', 'web_filter_set', 'circles_layout'],

@@ -5405,4 +5405,17 @@ export const S = {
     intimateHint: (n: number) => `On: its events list the community's members, and the Web shows them at its events. On by default up to ${n} members.`,
     tanaGrants: 'It is the Tana app\'s local API token: it can read (and write) your Tana workspace through the Tana app on this computer; TrustWeb only reads people with it. Never synced to your other devices, never in a backup, an export or an MCP answer.',
   },
+  /* wave45 offline-outbox */
+  outbox: {
+    title: 'Pending',
+    hint: 'Invites, shares, messages and other sends wait here while you are offline and go out by themselves when you are back. Nothing is lost when you close the app.',
+    empty: 'Nothing waiting to be sent.',
+    waiting: 'Sent when you are online',
+    sent: 'Sent',
+    failed: 'Could not be sent',
+    queued: (who: string) => `You are offline. The message to ${who} is sent when you are online.`,
+    kinds: { text: 'Message', host: 'Hosting', event: 'Event' } as Record<string, string>,
+    to: (kind: string, who: string) => `${kind} to ${who}`,
+    tries: (n: number) => (n === 1 ? '1 try' : `${n} tries`),
+  },
 } as const
