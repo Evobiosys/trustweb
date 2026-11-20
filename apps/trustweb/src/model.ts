@@ -38,6 +38,7 @@ import type { CoMsg } from './ext/co_notes/co_chat'
 import type { Profile } from './profile_fields'
 import type { EmbedRecord } from './feed_embed'
 import type { HomeLayout } from './home_layout'
+import type { SettingsShare } from './settings_share' // wave45 settings-suggest
 import type { SavedFilter } from './saved_filters'
 import type { CoDoc } from './ext/co_notes/co_doc'
 import type { CoGuest, CoInvite } from './ext/co_notes/co_invite'
@@ -1301,6 +1302,8 @@ export interface AppState {
   uiViews?: { webDefault?: string }
   /** Wave 44 home-dashboard (home_layout.ts): the Home tile board's columns. Absent: the default (Web centre, others' requests left, mine right). Syncs with the record. */
   homeLayout?: HomeLayout
+  /** Wave 45 settings-suggest (settings_share.ts): suggestions in, the follow book (liquid delegation), what waits to go out. Absent: none. This device only. */
+  settingsShare?: SettingsShare
   /** Wave 44b filters-communities: saved filter states (in / out chips), some pinned above the filter row (saved_filters.ts; schema 4). */
   savedFilters?: SavedFilter[]
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */

@@ -242,6 +242,7 @@ import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView, infoKey as backupInfoKey } from './backup_view'
 import { loadInfo as loadBackupInfoOf } from './auto_backup'
 import { guardLeaving, lastKept, markCopy, markOffered, wasOffered } from './keep_copy'
+import { createSettingsShare } from './settings_share_view' // wave45 settings-suggest
 import type { BackupView } from './backup_view'
 import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
@@ -5731,6 +5732,7 @@ const cal = extOn.find((m) => m.id === 'calendar')?.screen(extHooks)
 const coNotes = extOn.find((m) => m.id === 'co-notes')?.screen(extHooks)
 /** Wave 27: the messengers extension modules add to the Chat screen's Extend. */
 const messengers = extOn.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
+const settingsShare = createSettingsShare(extHooks)   // wave45 settings-suggest: Settings > Share settings, its relay timer
 
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet: openCardPage, itemSheet,
@@ -8104,6 +8106,7 @@ function settingsSheet(): void {
         'ui.import': () => openServicesImport(importHooks()), 'ui.help': () => openSheet([el('h3', {}, [S.setTitle]), ...aboutGroup()]),
       },
     }),
+    ...settingsShare.rows(settingsSheet),   // wave45 settings-suggest
     advancedBlock([
     viewRow(),
     themeRow(),
