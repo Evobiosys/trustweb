@@ -22,6 +22,7 @@ import type { AppState, Person, ServiceBatch, ServiceDone, ServiceRow } from './
 import { rowTags, snapOf, tagSlug } from './import_tags'
 import { DEFAULT_IMPORT_NOTE, SERVICE_LABEL, importTagId } from './import_registry'
 import { fingerprint } from './safe_text'
+import { googleKey } from './google_sync'
 import { bulkAcceptable, propose, writeFor } from './zone_proposals'
 import type { Choice, Proposal } from './zone_proposals'
 
@@ -114,7 +115,8 @@ export function planServices(s: State, files: readonly ServiceFile[], o: PlanOpt
   contacts.forEach((c, i) => {
     // One person in several WhatsApp chats is one row: the evidence of all chats is already summed under the same key.
     if (c.sourceRef.startsWith('wa:') && taken.has(c.sourceRef)) return
-    let key = c.sourceRef.startsWith('wa:') ? c.sourceRef : `${c.source}:${normalizeName(c.name)}`
+    // Wave 45: a Google contact is keyed by its resource name, so the sync finds the person again after a rename in Google.
+    let key = c.sourceRef.startsWith('wa:') ? c.sourceRef : c.source === ContactSource.GoogleApi && c.sourceRef.startsWith('people/') ? googleKey(c.sourceRef) : `${c.source}:${normalizeName(c.name)}`
     const first = !taken.has(key)
     if (!first) key += `|${c.sourceRef}`
     taken.add(key)
@@ -280,7 +282,7 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
  * Wave 39 review: an import or an undo is no edit by the owner. When one changes a person, the other imports' fingerprints of that person
  * that still matched (the owner had not touched them) move along, so "edited since" keeps meaning the owner's own changes.
  */
-function rebaseSnaps(s: State, personId: string, from: string, to: string): void {
+export function rebaseSnaps(s: State, personId: string, from: string, to: string): void {
   if (from === to) return
   for (const b of s.serviceImports ?? []) for (const d of Object.values(b.done)) if (d.personId === personId && d.snap === from) d.snap = to
 }

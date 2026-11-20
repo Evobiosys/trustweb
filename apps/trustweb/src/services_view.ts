@@ -160,7 +160,7 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   }
   redraw = draw
   draw()
-  return [box, ...(googleOn() ? [googleGroup((contacts) => offerContacts(h, contacts), h.toast)] : []), exportEntry({ state: h.state, toast: h.toast, pages: h.pages })]
+  return [box, ...(googleOn() ? [googleGroup(h)] : []), exportEntry({ state: h.state, toast: h.toast, pages: h.pages })]
 }
 
 /** The one way in from Contacts, Settings and "Import everything": the Import page (import_home_view.ts); its Contacts section is servicesGroup above. */

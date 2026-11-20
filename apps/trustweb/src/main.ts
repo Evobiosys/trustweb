@@ -1233,7 +1233,7 @@ const importEntry = (): HTMLElement => el('button', { class: 'btn btn-ghost', 'd
 const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport(importHooks()) }
 mountOnboardingNotice(onboardHooks)
 // Wave 33: back from Google's sign-in with a code in the address: finish it and show the contacts in the import summary.
-void resumeGoogle({ state: st, toast: (msg) => toast(msg), pages }, (contacts) => offerContacts({ state: st, save, toast, changed: render, pages }, contacts), bootHref)
+void resumeGoogle({ state: st, save, toast, changed: render, pages }, bootHref) // wave45 google-contacts-sync: first sync = import preview, then the sync
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
