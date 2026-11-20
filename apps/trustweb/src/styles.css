@@ -2406,3 +2406,7 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 .events-page .merge-ask .row{display:flex; gap:8px; flex-wrap:wrap}
 .events-page .merge-ask .ev-what{margin:0 0 6px; font-weight:600}
 [data-event-merge-pick][aria-pressed="true"]{outline:2px solid var(--electric, #2b59c3)}
+/* wave45 outliner-quickadd */
+.ol-quick{margin:6px 0}
+.ol-chips{display:flex; gap:4px; flex-wrap:wrap}
+.ol-chips .chip{padding:1px 7px; font-size:11px; cursor:default}

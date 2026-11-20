@@ -5521,4 +5521,6 @@ export const S = {
     actionLabel: 'Merge two events',
     answerLabel: 'Answer a merge ask',
   },
+  /* wave45 outliner-quickadd */
+  resQuick: { ph: 'Add a line… #tag @person', aria: 'Add a line; type # for tags, @ for people, Enter adds, Tab indents' },
 } as const
