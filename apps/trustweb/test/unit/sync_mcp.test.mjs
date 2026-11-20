@@ -19,9 +19,9 @@ function fixture(rec, write = true) {
 
 describe('sync over MCP', () => {
   it('sync_status: devices, last sync and Auto sync from the record (no status yet: none)', () => {
-    expect(fixture({}).by.sync_status.run({})).toEqual({ devices: 0, lastAt: null, auto: true, unacked: 0, held: 0 })
+    expect(fixture({}).by.sync_status.run({})).toEqual({ error: null, devices: 0, lastAt: null, auto: true, unacked: 0, held: 0 })
     const at = Date.parse('2026-11-16T00:30:00Z')
-    expect(fixture({ syncStatus: { devices: 2, lastAt: at }, syncAutoOff: true }).by.sync_status.run({})).toEqual({ devices: 2, lastAt: '2026-11-16T00:30:00.000Z', auto: false, unacked: 0, held: 0 })
+    expect(fixture({ syncStatus: { devices: 2, lastAt: at }, syncAutoOff: true }).by.sync_status.run({})).toEqual({ error: null, devices: 2, lastAt: '2026-11-16T00:30:00.000Z', auto: false, unacked: 0, held: 0 })
   })
 
   it('sync_now queues the app action for the open preview and changes no record; read-only servers lack it', () => {

@@ -1218,7 +1218,7 @@ export interface AppState {
   /** Wave 43c sync-devices: Auto sync with my linked devices is on unless this is true (Settings > My devices). This device only. */
   syncAutoOff?: true
   /** Wave 43c: what Settings shows and MCP sync_status reads: linked devices and the last sync with any of them. This device only. */
-  syncStatus?: { devices: number; lastAt: number; /** Wave 44c: pairings with a send not yet acknowledged, and items held for an update of this device. */ unacked?: number; held?: number }
+  syncStatus?: { devices: number; lastAt: number; /** Wave 44c: pairings with a send not yet acknowledged, and items held for an update of this device. */ unacked?: number; held?: number; /** Wave 45: the cause of the last failed sync (sync_error.ts), until a sync works. */ error?: string }
   /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
   notifInbox?: InboxItem[]
   /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */

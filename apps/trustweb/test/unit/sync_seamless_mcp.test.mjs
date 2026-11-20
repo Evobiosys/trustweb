@@ -19,7 +19,7 @@ function fixture(rec, write = true) {
 
 describe('sync-seamless over MCP', () => {
   it('sync_status adds the sends not yet acknowledged and the items held for an update (0 when the app wrote none)', () => {
-    expect(fixture({ syncStatus: { devices: 2, lastAt: 0 } }).by.sync_status.run({})).toEqual({ devices: 2, lastAt: null, auto: true, unacked: 0, held: 0 })
+    expect(fixture({ syncStatus: { devices: 2, lastAt: 0 } }).by.sync_status.run({})).toEqual({ error: null, devices: 2, lastAt: null, auto: true, unacked: 0, held: 0 })
     expect(fixture({ syncStatus: { devices: 2, lastAt: 0, unacked: 1, held: 3 } }).by.sync_status.run({})).toMatchObject({ unacked: 1, held: 3 })
   })
 

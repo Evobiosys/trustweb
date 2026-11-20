@@ -14,6 +14,7 @@ import { Norm } from './profile'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
 import { ModeSharing, ShareMode } from './share_modes'
 import { ClaimError } from './connect_code'
+import { SYNC_HINT } from './sync_error'
 import { AddKind, DidProblem, ParseError, ResolveError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
 
@@ -1314,16 +1315,16 @@ export const S = {
   dvUnlinkConfirm: 'Unlink this device? Nothing is deleted on either side.',
   dvLast: (when: string) => `Last sync: ${when}`,
   dvNever: 'Not synced yet',
-  dvOffline: 'The other device is not on. Open TrustWeb there and try again.',
-  dvTooLarge: 'This record is too large to send between devices.',
-  dvSendFailed: 'Sending failed. Check the connection and try again.',
+  dvOffline: SYNC_HINT['device-off'],
+  dvTooLarge: SYNC_HINT['too-large'],
+  dvSendFailed: SYNC_HINT.other,
   dvTryAgain: 'Try again',
   dvUpdate: (name: string) => `Update TrustWeb on ${name}, then try again.`,
   dvSent: 'Sent. The other device asks before it merges.',
   dvReceiveOnly: 'This device only receives',
   dvReceiveOnlyHint: 'Changes from your phone arrive here (with Auto sync off you are asked before they merge). Nothing you change on this device is sent to the phone. Only this device stores the setting.',
   dvReceiveOnlyPhone: 'On the phone this setting does nothing: the phone is the holder and always sends.',
-  dvReceiveOnlyNow: 'This device only receives. Press Sync now on your phone, or switch the setting off.',
+  dvReceiveOnlyNow: SYNC_HINT['receive-only'],
   dvReceiveTitle: (name: string) => `Receive from ${name}?`,
   dvReceiveBody: (c: { people: number; lines: number; resources: number; meetings: number; events: number; messages: number }) => `${c.people} ${c.people === 1 ? 'person' : 'people'}, ${c.lines} ${c.lines === 1 ? 'line' : 'lines'}, ${c.resources} ${c.resources === 1 ? 'resource' : 'resources'}, ${c.meetings} ${c.meetings === 1 ? 'meeting' : 'meetings'}, ${c.events} ${c.events === 1 ? 'event' : 'events'}, ${c.messages} ${c.messages === 1 ? 'message' : 'messages'}.`,
   dvAlsoFile: 'Also save an encrypted file',
@@ -5405,4 +5406,6 @@ export const S = {
     intimateHint: (n: number) => `On: its events list the community's members, and the Web shows them at its events. On by default up to ${n} members.`,
     tanaGrants: 'It is the Tana app\'s local API token: it can read (and write) your Tana workspace through the Tana app on this computer; TrustWeb only reads people with it. Never synced to your other devices, never in a backup, an export or an MCP answer.',
   },
+  /* wave45 sync-errors-retry */
+  syncErr: { ...SYNC_HINT, retry: 'Retry' },
 } as const
