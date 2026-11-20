@@ -44,6 +44,7 @@ import { createEventChatView } from './event_group_chat_view' // wave45 event-gr
 import { createGroupView } from './group_chat_view' // wave45 group-chat-list
 import { defineGroupActions } from './group_chat_actions' // wave45 group-chat-list
 import { audienceFilterView } from './audience_filter'
+import { eventTagLabel } from './event_tag'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
 import { decodeIntroLink, encodeIntroLink, introDraft } from './intro_link'
@@ -8562,14 +8563,14 @@ function queryDock(s: AppState): HTMLElement {
   // Wave 43b: the audience filter (zones, Also include / Hide from) with "How far?" under its Advanced; hints and intros share it.
   const filter = askFilterOf(s)
   const tagsNow = loadColourTags()
-  const chipName = (c: string): string => (c.startsWith('person:') ? s.people.find((p) => p.id === c.slice(7))?.name ?? '' : tagsNow.find((t) => t.id === c.slice(4))?.label ?? c.slice(4))
+  const chipName = (c: string): string => (c.startsWith('person:') ? s.people.find((p) => p.id === c.slice(7))?.name ?? '' : c.startsWith('event:') ? eventTagLabel(tagLabel(s.events?.find((e) => e.id === c.slice(6)) ?? { name: c.slice(6) })) : tagsNow.find((t) => t.id === c.slice(4))?.label ?? c.slice(4))
   const reach = reachChooser(askReachOf(s), askDirectOnly(s) || busy, (r, custom) => {
     if (r === HOPS_DEFAULT) delete s.askReach; else s.askReach = r
     if (custom) s.askReachCustom = true; else delete s.askReachCustom
     save(); render()
   }, { zone: filter.zone, add: filter.add.map(chipName), exclude: filter.exclude.map(chipName) }, s.askReachCustom === true)
   const audienceBox = audienceFilterView({
-    filter, people: () => s.people.filter((p) => p.peerId), zoneRequired: false, main: [reach], advanced: [showAskedRow(s.askShowAsked !== false, () => { if (s.askShowAsked === false) delete s.askShowAsked; else s.askShowAsked = false; save(); render() })], openSheet, closeSheet, steps: askReachOf(s),
+    filter, people: () => s.people.filter((p) => p.peerId), events: () => (s.events ?? []).map((e) => ({ id: e.id, name: tagLabel(e) })), zoneRequired: false, main: [reach], advanced: [showAskedRow(s.askShowAsked !== false, () => { if (s.askShowAsked === false) delete s.askShowAsked; else s.askShowAsked = false; save(); render() })], openSheet, closeSheet, steps: askReachOf(s),
     changed: () => { saveAskFilter(s, filter); save(); render() },
   })
   const modeChips = el('div', { class: 'chips', 'data-ask-modes': '' }, ASK_MODES.filter((m) => m !== AskMode.Support || isEnabled('support-ask')).map((m) => el('button', {

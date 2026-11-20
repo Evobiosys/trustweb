@@ -5630,4 +5630,8 @@ export const S = {
     back: 'Back',
     done: (n: number) => (n === 1 ? 'Invited 1 person.' : `Invited ${n} people.`),
   },
+  /* wave45 ask-event-limit */
+  askEvent: {
+    hint: '#event:<name> = people who attended',
+  },
 } as const

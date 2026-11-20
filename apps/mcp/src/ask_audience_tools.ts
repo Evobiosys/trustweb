@@ -18,11 +18,11 @@ function shape(r: Rec): Record<string, unknown> {
 export function askAudienceTools(o: { file: string; write: boolean }): Tool[] {
   const load = (): Rec => JSON.parse(readFileSync(o.file, 'utf8')) as Rec
   const read: Tool[] = [{
-    name: 'ask_audience_get', description: 'Who an ask reaches: the zone (closest, close, friend: this zone and more intimate; none = every connected person), people and tags added (person:<id>, tag:<id>), hidden ones, and the degree 1, 2 or 3.',
+    name: 'ask_audience_get', description: 'Who an ask reaches: the zone (closest, close, friend: this zone and more intimate; none = every connected person), people, tags and events added (person:<id>, tag:<id>, event:<id> = who attended), hidden ones, and the degree 1, 2 or 3.',
     inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false }, run: () => shape(load()),
   }]
   const write: Tool[] = [{
-    name: 'ask_audience_set', description: 'Set who an ask reaches: zone (closest, close, friend), add / exclude lists of person:<id> or tag:<id>, degree 1, 2 or 3. Public is not available yet.',
+    name: 'ask_audience_set', description: 'Set who an ask reaches: zone (closest, close, friend), add / exclude lists of person:<id>, tag:<id> or event:<id>, degree 1, 2 or 3. Public is not available yet.',
     inputSchema: {
       type: 'object',
       properties: {
