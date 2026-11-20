@@ -9,6 +9,7 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
+import type { OutboxItem } from './outbox'
 import type { IntroInbox, IntroPending, IntroQueued } from './bubble_connect'
 import type { AssistantCfg } from './ext/assistant/providers'
 import type { AlgoCfg, SourceCfg } from './feed_sources_page'
@@ -1289,6 +1290,8 @@ export interface AppState {
   eventMerged?: Record<string, string>
   /** wave45 merge-events: merge asks between hosts (in: to me; out: mine, waiting). They name peer ids, so THIS DEVICE ONLY (sync_core.ts SYNC_EXCLUDED). */
   eventMergeAsks?: MergeAsk[]
+  /** Wave 45 offline-outbox: envelopes the relay did not take yet, sent when it is back (outbox.ts). THIS DEVICE ONLY: never synced, exported or asked. */
+  sendQueue?: OutboxItem[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
   calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */

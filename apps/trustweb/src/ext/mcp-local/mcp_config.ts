@@ -135,6 +135,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'invite_bulk', write: true },
   /* wave45 community-events-invite-only */
   { name: 'community_event_visibility', write: true },
+  /* wave45 offline-outbox */
+  { name: 'outbox_list', write: false },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

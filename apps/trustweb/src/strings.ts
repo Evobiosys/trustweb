@@ -5641,4 +5641,17 @@ export const S = {
     /** Same wording as wave45 bulk-invite-filter S.bulkInvite.notMembers: the chain builder keeps one of the two. */
     notMembers: (n: number, community: string) => `${n} are not members of ${community}: they will see the community's events only through this invitation.`,
   },
+  /* wave45 offline-outbox */
+  outbox: {
+    title: 'Pending',
+    hint: 'Invites, shares, messages and other sends wait here while you are offline and go out by themselves when you are back. Nothing is lost when you close the app.',
+    empty: 'Nothing waiting to be sent.',
+    waiting: 'Sent when you are online',
+    sent: 'Sent',
+    failed: 'Could not be sent',
+    queued: (who: string) => `You are offline. The message to ${who} is sent when you are online.`,
+    kinds: { text: 'Message', host: 'Hosting', event: 'Event' } as Record<string, string>,
+    to: (kind: string, who: string) => `${kind} to ${who}`,
+    tries: (n: number) => (n === 1 ? '1 try' : `${n} tries`),
+  },
 } as const
