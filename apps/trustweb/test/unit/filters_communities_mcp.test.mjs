@@ -47,6 +47,17 @@ describe('event mode over MCP', () => {
     expect(rec().uiRings.eventMode).toBeUndefined()
     expect(() => by.event_mode_set.run({ event: 'event_nope' })).toThrow(/no event/)
   })
+  it('event_bubble_set lifts and restores the Web narrowing; needs event mode; ends with the mode (wave 45)', () => {
+    const { by, rec } = fx()
+    expect(() => by.event_bubble_set.run({ everyone: true })).toThrow(/event mode is off/)
+    expect(by.event_mode_set.run({ event: 'event_Winter_IYG' })).toMatchObject({ webNarrowed: true })
+    expect(by.event_bubble_set.run({ everyone: true })).toMatchObject({ on: true, webNarrowed: false })
+    expect(rec().uiRings.eventEveryone).toBe(true)
+    expect(by.event_bubble_set.run({ everyone: false })).toMatchObject({ webNarrowed: true })
+    by.event_bubble_set.run({ everyone: true })
+    by.event_mode_set.run({})
+    expect(rec().uiRings.eventEveryone).toBeUndefined()
+  })
 })
 
 describe('sub-communities over MCP', () => {
