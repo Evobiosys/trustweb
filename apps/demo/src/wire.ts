@@ -167,6 +167,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
     const j = o.joined as Record<string, unknown> | null
     return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id } }
   }
+  if ('merge' in o) return hasWant || hasLink ? null : parseMerge(o.merge) // wave45 merge-events
   if (hasWant === hasLink) return null
   if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
   if (!isNonEmptyString(o.link) || o.link.length > EVENT_LINK_MAX) return null
@@ -265,6 +266,17 @@ function parseGroupOp(v: unknown): EventEnvelope | null {
     op.names = x.names as string[]
   }
   return { v: WIRE_VERSION, t: 'event', gg: op }
+}
+/* wave45 merge-events: {step, keep, gone, link?}; ask and done need the kept event's link, yes and no carry none. */
+const MERGE_STEPS = ['ask', 'yes', 'no', 'done'] as const
+function parseMerge(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const m = v as Record<string, unknown>
+  const step = MERGE_STEPS.find((x) => x === m.step)
+  if (!step || typeof m.keep !== 'string' || typeof m.gone !== 'string' || !QID_RE.test(m.keep) || !QID_RE.test(m.gone) || m.keep === m.gone) return null
+  const needsLink = step === 'ask' || step === 'done'
+  if (needsLink !== ('link' in m) || (needsLink && (!isNonEmptyString(m.link) || m.link.length > EVENT_LINK_MAX))) return null
+  return { v: WIRE_VERSION, t: 'event', merge: { step, keep: m.keep, gone: m.gone, ...(needsLink ? { link: m.link as string } : {}) } }
 }
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----

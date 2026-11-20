@@ -21,6 +21,8 @@ import { namedHost } from './event_conference'
 import { addSeenThrough } from './seen_through' // wave44c seen-through
 import { randomId } from '../../demo/src/crypto'
 import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
+import { createEventMerge } from './event_merge_flow' // wave45 merge-events
+import { resolveEvent } from './event_merge'
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -89,6 +91,7 @@ export type EnvelopeOutcome = 'answered' | 'filled' | 'pending' | 'ignored'
 
 export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHost<P>) {
   let shown: { id: string; at: number } | null = null
+  const merge = createEventMerge(host) // wave45 merge-events
   const held = (id: string): TwEvent | undefined => host.state().events?.find((e) => e.id === id)
   const waiting = (id: string): boolean => { const e = held(id) ?? (host.pending()?.id === id ? host.pending() : null); return !!e && isIncomplete(e) }
 
@@ -170,8 +173,10 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   /* wave44c answers-44d: an accepted invitation. The inviter / a host marks the guest joined; a host of an intimate community's event introduces them to the others there (accepting such an invitation says so in the join sheet). */
   async function onJoined(peer: P, j: NonNullable<EventEnvelope['joined']>): Promise<boolean> {
     const st = host.state()
-    const ev = held(j.id)
-    if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, j.id)) return false
+    const id = resolveEvent(st, j.id) // wave45 merge-events: a joined record for a merged event lands on the kept one; the joiner is told
+    const ev = held(id)
+    if (ev && id !== j.id) await merge.tell(peer, ev, j.id)
+    if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, id)) return false
     host.save()
     host.changed()
     const tag = communityOfEvent(ev)
@@ -184,6 +189,8 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   }
 
   return {
+    /** wave45 merge-events: start a merge (event_merge_flow.ts) or answer the other host's ask. */
+    merge: { start: merge.start, answer: merge.answer },
     /** answers-44d: I accepted the invitation: the person whose link or code I took (`by`) and the hosts I am connected to are told, sealed. */
     async joined(ev: TwEvent, by?: { name: string; did?: string }): Promise<void> {
       const st = host.state()
@@ -245,6 +252,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
       if (env.seen) return onSeen(peer, env.seen) ? 'filled' : 'ignored' // wave44c seen-through
+      if (env.merge) return (await merge.onEnvelope(peer, env.merge).catch(() => false)) ? 'filled' : 'ignored' // wave45 merge-events
       if (env.joined) return (await onJoined(peer, env.joined).catch(() => false)) ? 'filled' : 'ignored' // wave44c answers-44d
       if (env.os) return (await onOpenSpace(peer, env.os)) ? 'filled' : 'ignored'
       if (env.rsvp) return (await onRsvp(peer, env.rsvp).catch(() => false)) ? 'answered' : 'ignored'   // wave44c event-autosave
