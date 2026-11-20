@@ -198,12 +198,12 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
       },
     },
     {
-      name: 'event_chat_open', description: 'Open "Message everyone" of an event on the open TrustWeb app (the composer whose text goes to every connected person at it). Queued.',
+      name: 'event_chat_open', description: 'Open the shared chat of an event on the open TrustWeb app (one thread for the hosts and the people joining; read it with event_chat_read). Queued.',
       inputSchema: schema({ event: S('event id or exact name') }, ['event']),
       run: (a) => { const e = findEvent(load(o.file), a.event); queue('event_chat_open', 'event-chat-open', { event: e.id }); return { queued: true, event: e.id } },
     },
     {
-      name: 'event_message_all', description: 'Send one message into the chat with every connected person at an event (the people joining and the hosts). Queued for the open TrustWeb app.',
+      name: 'event_message_all', description: 'Send one message into the shared chat of an event (same as event_chat_send; kept for older callers). Queued for the open TrustWeb app.',
       inputSchema: schema({ event: S('event id or exact name'), text: S('the message') }, ['event', 'text']),
       run: (a) => {
         const e = findEvent(load(o.file), a.event)

@@ -39,6 +39,7 @@ import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view'
 import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
 import { eventPageHooks } from './a44d_event_host' // answers-44d
+import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
 import { audienceFilterView } from './audience_filter'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
 import { introCard } from './intro_card_view'
@@ -952,7 +953,7 @@ const net = new Net({
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
-  onEvent: (peer, env) => { void eventEnv.onEnvelope(peer, env) },
+  onEvent: (peer, env) => { if (env.gc) void eventChat.onEnvelope(peer, env.gc); else void eventEnv.onEnvelope(peer, env).then((o) => eventChat.afterEnvelope(peer, env, o)) },   // wave45 event-group-chat
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -5515,8 +5516,9 @@ const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
 const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
 /** answers-44d: the event page's community, chat and resources hooks (also the registry's, a44d_actions.ts). */
+const eventChat = createEventChatView<Peer>({ st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 event-group-chat
 const eventHost = eventPageHooks({
-  st, save, tags: loadColourTags, openSheet, closeSheet, toast: (m) => toast(m), send: (peerId, text) => submitText(chatIo(), peerId, text),
+  st, save, tags: loadColourTags, openSheet, closeSheet, toast: (m) => toast(m), groupChat: eventChat,
   showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory),
 })
 const eventsView = createEventsView({
@@ -5707,7 +5709,7 @@ defineEventActions(appActions, {
 defineSyncActions(appActions, devices) // wave43c sync-devices
 defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
 defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
-defineA44dActions(appActions, { openEventChat: (id) => { eventHost.openEventChat(id); if (screen !== Screen.Events) go(Screen.Events) }, messageAll: (id, text) => eventHost.messageAllById(id, text), answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
+defineA44dActions(appActions, { openEventChat: (id) => { eventHost.openEventChat(id); if (screen !== Screen.Events) go(Screen.Events) }, messageAll: (id, text) => eventHost.messageAllById(id, text), leaveEventChat: (id, leave) => eventChat.leave(id, leave), answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),

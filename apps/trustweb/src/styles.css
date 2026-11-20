@@ -2336,3 +2336,10 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .events-page .ev-people-actions{margin-top:8px}
 .events-page .ev-act{border-color:var(--evc); color:var(--evc); background:color-mix(in srgb, var(--evc) 10%, transparent); text-decoration:underline}
 .events-page .ev-act[aria-pressed="true"]{background:color-mix(in srgb, var(--evc) 24%, transparent)}
+/* wave45 event-group-chat */
+.event-chat .chat-thread{max-height:52vh; overflow-y:auto}
+.event-chat .chat-msg .chat-by{display:block; font-size:12px; font-weight:600; opacity:.8}
+.event-chat .ec-notice{text-align:center; margin:4px 0}
+.event-chat .ec-compose{display:flex; flex-direction:column; gap:6px; margin-top:8px}
+.event-chat .ec-compose[hidden]{display:none}
+.event-chat .ec-leave{margin-top:6px}

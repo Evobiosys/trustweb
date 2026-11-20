@@ -114,6 +114,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'event_share_audience_set', write: true }, { name: 'community_intimate_set', write: true }, { name: 'event_chat_open', write: true }, { name: 'event_message_all', write: true },
   /* wave45 event-people-list */
   { name: 'event_people_list', write: false }, { name: 'event_people_add', write: true },
+  /* wave45 event-group-chat */
+  { name: 'event_chat_read', write: false }, { name: 'event_chat_send', write: true }, { name: 'event_chat_leave', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

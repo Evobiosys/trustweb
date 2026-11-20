@@ -38,6 +38,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'event_editor_view.ts': ['event_drafts_list', 'event_draft_save', 'event_details_set', 'event_times_set', 'event_invite'],
   'event_plan_view.ts': ['event_signup', 'event_resource_ask', 'event_resource_cover'],
   'event_roles_view.ts': ['event_roles_set', 'event_get'],
+  'event_group_chat_view.ts': ['event_chat_open', 'event_chat_read', 'event_chat_send', 'event_chat_leave'], // wave45 event-group-chat
   'events_view.ts': ['events_list', 'event_get', 'event_create', 'event_settings_set', 'event_link_open', 'event_share_audience_set', 'event_chat_open', 'event_message_all'],
   'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add'],
   'ext/calendar/at_event_view.ts': ['event_get', 'event_settings_set'],

@@ -28,6 +28,7 @@ import type { SignalProvider } from './channel'
 import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
 import type { Draft } from './drafts'
 import type { TrashEntry } from './trash' // wave44c answers-44c
+import type { EventChats } from './event_group_chat' // wave45 event-group-chat
 import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -1584,6 +1585,8 @@ export interface AppState {
   coGuest?: CoGuest
   coChats?: Record<string, CoMsg[]>
   coDevice?: string
+  /** wave45 event-group-chat (event_group_chat.ts): event id -> the event's ONE shared thread. Travels to my devices as a setting (merged item by item). Absent: none. No schema bump. */
+  eventChats?: EventChats
 }
 
 /** A named list of people (and tags) an ask can be narrowed to. */
