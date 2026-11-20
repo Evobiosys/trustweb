@@ -2463,3 +2463,6 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 .outbox-row .meta{flex:1 1 100%}
 .outbox-row[data-outbox-state=sent] em{opacity:.6}
 .outbox-row[data-outbox-state=failed] em{text-decoration:underline}
+/* wave45 events-refetch */
+[data-events-refetch]{display:block; margin:10px auto 4px}
+[data-events-refetch]:disabled{opacity:.6; cursor:default}

@@ -5654,4 +5654,11 @@ export const S = {
     to: (kind: string, who: string) => `${kind} to ${who}`,
     tries: (n: number) => (n === 1 ? '1 try' : `${n} tries`),
   },
+  /* wave45 events-refetch */
+  w45refetch: {
+    label: 'Look for new events',
+    button: 'Refresh',
+    looking: 'Looking for new events…',
+    pull: 'Pull down to look for new events',
+  },
 } as const
