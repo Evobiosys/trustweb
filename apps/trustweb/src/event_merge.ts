@@ -11,6 +11,7 @@ import { trashItems } from './trash'
 import { tagOfEvent } from './feed_social'
 import { sameEventTag } from './event_tag'
 import { mergeActivities } from './open_space'
+import { moveEventThread } from './event_group_chat' // review-45: the gone event's chat moves too
 
 /** A merge ask between two hosts: `in` = the other host asks me (I host `gone`); `out` = I asked them (I host `keep`). `link` = the kept event as an event link (in only). */
 export interface MergeAsk { dir: 'in' | 'out'; keep: string; gone: string; peer: string; from: string; at: number; link?: string }
@@ -103,6 +104,7 @@ export function mergeEvents(s: AppState, keepId: string, goneId: string, now: nu
     if (s.uiRings.eventMode === goneId) s.uiRings.eventMode = keepId
     for (const k of ['show', 'hide'] as const) if (s.uiRings[k]) s.uiRings[k] = [...new Set(s.uiRings[k].map((c) => (c === `event:${goneId}` ? `event:${keepId}` : c)))]
   }
+  moveEventThread(s, goneId, keepId)
   s.eventMerged = { ...Object.fromEntries(Object.entries(s.eventMerged ?? {}).map(([from, to]) => [from, repoint(to) as string])), [goneId]: keepId }
   trashItems(s, 'event', [goneId], now)
   return { people, resources }

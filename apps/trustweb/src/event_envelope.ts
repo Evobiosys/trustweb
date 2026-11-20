@@ -201,7 +201,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     let any = false
     for (const ev of host.state().events ?? []) {
       const tag = communityOfEvent(ev)
-      if (ev.announcedAt === undefined || ev.shareCommunity !== true || !tag || !host.members?.(tag).some((m) => m.id === peer.id)) continue
+      if (ev.announcedAt === undefined || ev.shareCommunity !== true || !tag || !mayAnnounce(host.state(), tag) || !host.members?.(tag).some((m) => m.id === peer.id)) continue   // review-45: mode invited replays nothing
       await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev), announce: true })
       if (ev.openSpace) await host.send(peer, osEnvelope(ev))
       any = true

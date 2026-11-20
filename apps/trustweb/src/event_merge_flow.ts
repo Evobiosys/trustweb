@@ -52,9 +52,9 @@ export function createEventMerge<P extends { id: string }>(host: MergeHost<P>) {
   }
 
   /** Merges here (the kept event added from its link first when this device lacks it); the gone event's people are told. */
-  async function mergeHere(keep: TwEvent, goneId: string, skip?: string): Promise<number> {
+  async function mergeHere(keep: TwEvent, goneId: string, skip?: string, tell = true): Promise<number> {
     const gone = held(goneId)
-    const people = gone ? (host.recipients?.(gone) ?? []).filter((p) => p.id !== skip) : []
+    const people = gone && tell ? (host.recipients?.(gone) ?? []).filter((p) => p.id !== skip) : []
     if (!held(keep.id)) { keep.attended = gone?.attended ?? false; st().events = [...(st().events ?? []), keep] }
     const r = mergeEvents(st(), keep.id, goneId, host.now())
     host.save()
@@ -98,7 +98,7 @@ export function createEventMerge<P extends { id: string }>(host: MergeHost<P>) {
     const gone = held(m.gone)
     const keep = held(m.keep) ?? linked(m.link, m.keep)
     if (!who || !gone || !keep || !namedHost(gone, who.name, s.people)) return false
-    await mergeHere(keep, m.gone)
+    await mergeHere(keep, m.gone, undefined, false) // review-45: a guest merges quietly; only a host tells the people
     return true
   }
 
