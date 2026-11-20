@@ -2466,3 +2466,6 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 /* wave45 events-refetch */
 [data-events-refetch]{display:block; margin:10px auto 4px}
 [data-events-refetch]:disabled{opacity:.6; cursor:default}
+/* wave45 sync-errors-retry */
+.sync-err{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px}
+.sync-err .btn{margin:0}

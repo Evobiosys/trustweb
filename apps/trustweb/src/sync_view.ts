@@ -36,6 +36,7 @@ import { setDeviceNameSource } from './device_name'
 import { readSyncMode, shouldSend, writeSyncMode } from './sync_mode'
 import { readRelayOn, writeRelayOn } from './notes_relay'
 import { dedupeByPeerId, pairLink } from './sync_core'
+import { classifySyncError, SYNC_HINT, type SyncCause } from './sync_error'
 
 export interface SyncViewHooks {
   persona: string
@@ -135,6 +136,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   const log: string[] = []
   const nameKey = storageKey(h.persona, h.storeCtx) + ':device-name'
   const failed = new Map<string, string>()
+  let lastCause: SyncCause | undefined
   let started = false
   const showing = (): boolean => h.sheet.dataset.kind === SHEET_KIND && h.sheet.classList.contains('on')
 
@@ -166,19 +168,21 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   const autoOn = (): boolean => { const s = h.peek(); return !!s && !s.syncAutoOff }
   const status = (): { devices: number; lastAt: number; auto: boolean; unacked: number; held: number } => (started ? { ...link.status(), auto: autoOn(), held: link.held().items } : { devices: 0, lastAt: 0, auto: autoOn(), unacked: 0, held: 0 })
   /** Keeps the record's copy of the status current (MCP sync_status reads it); saves only on a change. */
-  function noteStatus(): void {
+  function noteStatus(cause?: SyncCause): void {
     const s = h.peek()
     if (!s || !started) return
     const { devices, lastAt, unacked } = link.status()
     const held = link.held().items
-    if (s.syncStatus?.devices === devices && s.syncStatus.lastAt === lastAt && s.syncStatus.unacked === unacked && s.syncStatus.held === held) return
-    s.syncStatus = { devices, lastAt, unacked, held }
+    if (cause) lastCause = cause
+    else if (failed.size === 0) lastCause = undefined
+    if (s.syncStatus?.devices === devices && s.syncStatus.lastAt === lastAt && s.syncStatus.unacked === unacked && s.syncStatus.held === held && s.syncStatus.error === lastCause) return
+    s.syncStatus = { devices, lastAt, unacked, held, ...(lastCause ? { error: lastCause } : {}) }
     h.save()
   }
   /** One round: send my changes, tell my connections about my other devices, note the status. */
   function tick(): void {
     if (!started || !h.peek()) return
-    void link.autoTick().then(noteStatus)
+    void link.autoTick().then(() => noteStatus())
     const dids = link.pairings().flatMap((p) => (p.askDid ? [p.askDid] : []))
     if (dids.length) h.tellDevices?.(dids)
   }
@@ -244,8 +248,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     const rows = link.pairings().map((p: Pairing) => el('div', { class: 'verse', 'data-device': p.name }, [
       el('h3', {}, [p.name]),
       el('p', { class: 'meta' }, [((at) => `${p.fp} · ${at ? S.dvLast(h.when(at)) : S.dvNever}`)(Math.max(p.lastSyncAt, p.autoSentAt ?? 0))]),
-      failed.has(p.did) ? el('p', { class: 'warn', 'data-sync-failed': p.did }, [failed.get(p.did)]) : null,
-      el('button', { class: 'btn btn-electric btn-sm', 'data-sync-now': p.did, onclick: () => void syncNow(p) }, [failed.has(p.did) ? S.dvTryAgain : S.dvSyncNow]),
+      failed.has(p.did) ? el('p', { class: 'warn sync-err', role: 'alert', 'data-sync-failed': p.did }, [failed.get(p.did), el('button', { class: 'btn btn-electric btn-sm', 'data-sync-retry': p.did, onclick: () => void syncNow(p) }, [S.syncErr.retry])]) : null,
+      failed.has(p.did) ? null : el('button', { class: 'btn btn-electric btn-sm', 'data-sync-now': p.did, onclick: () => void syncNow(p) }, [S.dvSyncNow]),
       el('button', { class: 'btn btn-ghost btn-sm', 'data-take-state': p.did, onclick: () => void ask(p, link.takeFrom(p.did), S.adAsked(p.name)) }, [S.adTake]),
       el('button', { class: 'btn btn-ghost btn-sm', 'data-give-state': p.did, onclick: () => void ask(p, link.sendTo(p.did), S.adOffered) }, [S.adGive]),
       shareToggle(p),
@@ -444,8 +448,10 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   /** Runs one request to a linked device; says why in the device's row when it fails. */
   async function request(p: Pairing, run: Promise<void>, done: () => void): Promise<void> {
-    try { await run; failed.delete(p.did); done() } catch (e) {
-      failed.set(p.did, { version: S.dvUpdate(p.name), offline: S.dvOffline, 'too large': S.dvTooLarge, 'receive only': S.dvReceiveOnlyNow }[(e as Error).message] ?? S.dvSendFailed)
+    try { await run; if (failed.delete(p.did)) devicesSheet(); noteStatus(); done() } catch (e) {
+      const cause = classifySyncError(e, navigator.onLine)
+      failed.set(p.did, SYNC_HINT[cause])
+      noteStatus(cause)
       devicesSheet()
     }
   }
