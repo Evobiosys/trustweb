@@ -5487,4 +5487,8 @@ export const S = {
   w45eb: {
     everyone: 'Everyone',
   },
+  /* wave45 demo-content-overlay */
+  demoOverlay: {
+    close: 'Dismiss',
+  },
 } as const

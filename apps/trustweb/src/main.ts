@@ -262,6 +262,7 @@ import { fetchEditStream, keepLocalRecord, liveDevActive, liveSyncedAt, markAdop
 import { startMcpLive } from './mcp_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
+import { demoOverlayDismissed, dismissDemoOverlay } from './demo_overlay'
 import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement } from './agreements'
 import { agreementsSection } from './agreements_view'
@@ -1248,6 +1249,9 @@ const MSG_NOTICE_MS = 6_000
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
 /** Desktop, bottom left, outside the phone: show or hide the demo content (Settings also removes it). */
 const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => toggleDemoContent() })
+/** Wave 45: the chip floats above the content with an X above it; the X is remembered on this device until the record changes (demo_overlay.ts). */
+const demoClose = el('button', { class: 'demo-overlay-x', 'data-demo-overlay-x': '', 'aria-label': S.demoOverlay.close, title: S.demoOverlay.close, onclick: () => { if (state) dismissDemoOverlay(localStorage, state); updateDemoToggle() } }, ['×'])
+const demoOverlay = el('div', { class: 'demo-overlay', 'data-demo-overlay': '', hidden: true }, [demoClose, demoToggle])
 /** Wave 18: above it, only on a wide browser tab: the Desk (full window) <-> the phone version. Kept built, never shown: */
 // 2026-10-23: only under Settings > View (Jakob).
 const DESK_PILL_SHOWN = false
@@ -1287,7 +1291,7 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
   pageDock = el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see])
-  root.append(pageDock, demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
+  root.append(pageDock, demoOverlay, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
 }
 
 /**
@@ -2545,6 +2549,7 @@ function updateDemoToggle(): void {
   if (pageDock) pageDock.hidden = own
   demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp() || own
   if (state) demoToggle.textContent = demoShown(state) ? S.demoHide : S.demoAdd
+  demoOverlay.hidden = demoToggle.hidden || !state || demoOverlayDismissed(localStorage, state)
   updateDeskToggle()
 }
 
