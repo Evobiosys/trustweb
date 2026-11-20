@@ -4,10 +4,16 @@ import { el } from '../../demo/src/ui/dom'
 import type { ColourTag } from './colour_tags'
 import type { InventoryItem, ResourceKind } from './model'
 import {
-  RESOURCE_KINDS, RESOURCE_VIEWS, filterResources, groupByPerson, groupOutliner, isProtected, kindOf, playUrl, revealLinks, setKind, acceptRecommender, dismissRecommender, splitSections, suggestionFor,
+  RESOURCE_KINDS, groupByPerson, groupOutliner, isProtected, kindOf, playUrl, revealLinks, setKind, acceptRecommender, dismissRecommender, splitSections, suggestionFor,
 } from './resource_views'
-import type { ResourceFilter, ResourceView } from './resource_views'
+import type { ResourceFilter } from './resource_views'
 import { S } from './strings'
+import { ALL_VIEWS, scopeLabelOf, viewPrefs } from './resource_notion'
+import type { ResViews } from './resource_notion'
+import { arrangedItems, notionBody, patchView, viewPills, viewTools } from './resource_notion_view'
+import type { NotionCtx } from './resource_notion_view'
+import { itemTags } from './resource_scope'
+import { EVENT_TAG } from './resource_scope_view'
 
 export interface ResourceViewsCtx {
   items: readonly InventoryItem[]
@@ -23,10 +29,14 @@ export interface ResourceViewsCtx {
   play: (url: string) => void
   save: () => void
   render: () => void
+  /** Wave 45 resources-notion-views: the app state (its resViews keeps view, filter and sort, scope 'mine'); absent: kept in memory. */
+  state?: { resViews?: ResViews }
+  events?: readonly { id: string; name: string; tagName?: string }[]
+  /** The item's attached picture (Gallery). */
+  image?: (id: string) => Promise<Blob | null>
 }
 
-let view: ResourceView = 'list'
-let filter: ResourceFilter = {}
+const memory: { resViews?: ResViews } = {}
 let revealed: string[] = []
 let filtersOpen = false
 
@@ -35,12 +45,19 @@ const noSelect = (n: HTMLElement): HTMLElement => { n.addEventListener('selectst
 export function resourceViews(c: ResourceViewsCtx): Node[] {
   const name = (id: string): string => c.people.find((p) => p.id === id)?.name ?? id
   const label = (id: string): string => c.tags.find((t) => t.id === id)?.label ?? id
-  const set = (f: ResourceFilter): void => { filter = f; revealed = []; c.render() }
+  // Wave 45: view, filter and sort live per scope in AppState.resViews (resource_notion.ts); 'mine' = this page.
+  const nc: NotionCtx = {
+    state: c.state ?? memory, key: 'mine', items: c.items, open: c.open, save: c.save, render: c.render, image: c.image, hideLink: (i) => isProtected(i, c.tags),
+    tagsOf: (i) => itemTags(i, c.tags, c.events ?? [], EVENT_TAG), nameOf: (id) => c.people.find((p) => p.id === id)?.name, scopeOf: (i) => scopeLabelOf(i, c.tags, c.events ?? [], EVENT_TAG),
+  }
+  const vp = viewPrefs(nc.state, 'mine')
+  const view = vp.view
+  const filter: ResourceFilter = { kind: vp.filter.kind, sharedBy: vp.filter.sharedBy, communityId: vp.filter.communityId }
+  const set = (f: ResourceFilter): void => { revealed = []; patchView(nc, { filter: { kind: f.kind ?? '', sharedBy: f.sharedBy ?? '', communityId: f.communityId ?? '' } }) }
   const pressed = (on: boolean, attrs: Record<string, string>, text: string, click: () => void): HTMLElement =>
     el('button', { class: 'btn btn-ghost btn-sm' + (on ? '' : ' tw-off'), 'aria-pressed': String(on), ...attrs, onclick: click }, [text])
 
-  const switcher = el('div', { class: 'rv-switch', role: 'group', 'aria-label': S.resViews.viewsAria }, RESOURCE_VIEWS.map((v) =>
-    pressed(view === v, { 'data-rv-view': v }, S.resViews.view[v], () => { view = v; revealed = []; c.render() })))
+  const switcher = viewPills(nc, ALL_VIEWS)
   const sharers = [...new Set(c.items.map((i) => i.sharedBy).filter((x): x is string => Boolean(x)))]
   const communities = [...new Set(c.items.map((i) => i.communityId).filter((x): x is string => Boolean(x)))]
   const kindChips = el('div', { class: 'rv-chips' }, [
@@ -53,7 +70,7 @@ export function resourceViews(c: ResourceViewsCtx): Node[] {
   const comm = communities.length === 0 ? null : el('div', { class: 'rv-chips' }, communities.map((id) =>
     pressed(filter.communityId === id, { 'data-rv-community': id }, label(id), () => set({ ...filter, communityId: filter.communityId === id ? undefined : id }))))
 
-  const items = filterResources(c.items, filter)
+  const items = arrangedItems(nc)
   const chipsOf = (i: InventoryItem): HTMLElement => el('div', { class: 'cal-chips' }, [
     el('span', { class: 'cal-chip' }, [S.resViews.kind[kindOf(i)]]),
     i.communityId ? el('span', { class: 'cal-chip' }, [label(i.communityId)]) : null,
@@ -94,7 +111,9 @@ export function resourceViews(c: ResourceViewsCtx): Node[] {
 
   const section = (key: string, title: string, list: readonly InventoryItem[]): Node => el('section', { class: 'rv-section', 'data-rv-section': key }, [el('h3', {}, [title]), ...list.map(rowFor)])
   let body: Node[]
-  if (items.length === 0) body = c.items.length ? [el('p', { class: 'empty' }, [S.resViews.none])] : []
+  const notion = notionBody(nc)
+  if (notion) body = notion
+  else if (items.length === 0) body = c.items.length ? [el('p', { class: 'empty' }, [S.resViews.none])] : []
   else if (view === 'outliner') {
     body = groupOutliner(items, c.tags).map((g) => el('section', { class: 'rv-section', 'data-rv-community-group': g.id }, [
       el('h3', {}, [g.label || S.resViews.noCommunity]),
@@ -107,7 +126,7 @@ export function resourceViews(c: ResourceViewsCtx): Node[] {
     body = [section('mine', S.resViews.mine, s.mine), ...(s.suggested.length ? [section('suggested', S.resViews.suggested, s.suggested)] : [])]
   }
   // P3: the filters sit behind a V expander; they stay open while one is on.
-  const open = filtersOpen || Boolean(filter.kind || filter.sharedBy || filter.communityId)
+  const open = filtersOpen || Boolean(filter.kind || filter.sharedBy || filter.communityId || vp.filter.tag)
   const toggle = el('button', { class: 'btn btn-ghost btn-sm rv-filters-toggle', 'data-rv-filters-toggle': '', 'aria-expanded': String(open), onclick: () => { filtersOpen = !open; c.render() } }, [S.resViews.filters + (open ? ' ⌃' : ' ⌄')])
-  return [el('div', { class: 'rv-bar', 'data-resource-views': view }, [el('div', { class: 'rv-head' }, [switcher, toggle]), ...(open ? [kindChips, shared, comm] : [])]), ...body]
+  return [el('div', { class: 'rv-bar', 'data-resource-views': view }, [el('div', { class: 'rv-head' }, [switcher, toggle]), ...(open ? [kindChips, shared, comm, ...viewTools(nc)] : [])]), ...body]
 }
