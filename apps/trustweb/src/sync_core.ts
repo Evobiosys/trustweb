@@ -71,7 +71,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
   'serverTranscriptionConsent', 'apkVersion', 'apkCheckedAt', 'apkUpdates', 'tabOrder', 'tabRow', 'shareMode', 'demo', 'demoHidden', 'demoOffered',
-  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', 'agent',
+  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', /* wave45 google-contacts-sync */ 'googleSync', 'agent',
   // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
   'groups',
   // wave 42 push-popup: the notification inbox mirror stays on this phone

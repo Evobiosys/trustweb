@@ -2330,3 +2330,8 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .events-page .ev-who{margin-top:4px}
 .events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
 .rs-by{display:block; font-size:12.5px}
+/* wave45 google-contacts-sync */
+.gsync-part{display:flex; flex-direction:column; gap:6px; margin-top:8px}
+.gsync-part .gsync-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+.gsync-part .btn,.gsync-part .chip{text-decoration:underline}
+.gsync-part .chip.tw-off{text-decoration:underline line-through}

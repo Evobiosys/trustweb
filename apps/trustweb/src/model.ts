@@ -14,6 +14,7 @@ import type { AssistantCfg } from './ext/assistant/providers'
 import type { AlgoCfg, SourceCfg } from './feed_sources_page'
 import type { ExtFollow } from './feed_ext_sources'   // wave44c feed-ext
 import type { HideReportEntry } from './hide_reports'
+import type { GoogleSync } from './google_sync'   // wave45 google-contacts-sync
 import type { InboxItem } from './notify_inbox'
 import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
@@ -1559,6 +1560,8 @@ export interface AppState {
   imports?: ImportBatch[]
   /** Wave 27: imports from other services (WhatsApp, LinkedIn, contact files), newest first. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). Absent: none. */
   serviceImports?: ServiceBatch[]
+  /** Wave 45 google-contacts-sync: the People API sync state (sync token, the last Google version of each contact, what Google last wrote per person). THIS DEVICE ONLY. Absent: never synced. */
+  googleSync?: GoogleSync
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */

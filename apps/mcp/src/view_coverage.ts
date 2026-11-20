@@ -144,6 +144,8 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'web_default_view.ts': ['web_default_view_get', 'web_default_view_set'],
   'web_view.ts': ['list_people', 'web_filter_get', 'web_filter_set', 'circles_layout'],
   'zone_share_link_view.ts': ['invite_link_create', 'app_action'],
+  /* wave45 google-contacts-sync */
+  'google_sync_view.ts': ['google_sync_status', 'google_sync_set'],
 }
 
 /** Every *_view.ts under `srcDir`, as paths relative to it (forward slashes), sorted. */
