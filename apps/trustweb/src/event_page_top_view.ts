@@ -24,6 +24,8 @@ export interface EventTopHooks {
   communityName?: (tag: string) => string
   openCommunity?: (tag: string) => void
   messageAll?: (ev: TwEvent) => void
+  /** wave45 bulk-invite-filter: the Invite many sheet; absent when I may not invite. */
+  inviteMany?: (ev: TwEvent) => void
   eventResources?: (ev: TwEvent) => void
   openPerson?: (id: string) => void
 }
@@ -61,6 +63,7 @@ export function eventTop(ev: TwEvent, h: EventTopHooks): (Node | null)[] {
     members.length ? el('div', { class: 'ev-joining', 'data-event-community-members': String(members.length) }, [el('b', {}, [S.a44d.communityRow]), chipsOf(members, 'data-event-community-list', h.openPerson)]) : null,
     el('div', { class: 'chips' }, [
       h.messageAll ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-message-all': '', onclick: () => h.messageAll?.(ev) }, [el('u', {}, [S.a44d.messageAll])]) : null,
+      h.inviteMany ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-invite-many': '', onclick: () => h.inviteMany?.(ev) }, [el('u', {}, [S.bulkInvite.open])]) : null,
       h.eventResources ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-resources': '', onclick: () => h.eventResources?.(ev) }, [el('u', {}, [S.a44d.resourcesOf(eventTagLabel(tagLabel(ev)))])]) : null,
     ]),
   ]

@@ -6,18 +6,20 @@
  * event_message_all (a44d_actions.ts).
  */
 import { el } from '../../demo/src/ui/dom'
+import type { ColourTag } from './colour_tags'
 import type { AppState, TwEvent } from './model'
 import { everyoneAt } from './event_community'
 import { eventTagLabel } from './event_tag'
 import { tagLabel } from './events'
 import { setEventFilter } from './event_filter_mode'
+import { openBulkInvite } from './bulk_invite_view' // wave45 bulk-invite-filter
 import { parseCommunity } from './ext/community-mighty/community_data'
 import { S } from './strings'
 
 export interface EventHostDeps {
   st: () => AppState
   save: () => void
-  tags: () => readonly { id: string; label?: string }[]
+  tags: () => readonly ColourTag[]
   openSheet: (body: (Node | null)[]) => void
   closeSheet: () => void
   toast: (text: string) => void
@@ -71,6 +73,7 @@ export function eventPageHooks(d: EventHostDeps) {
     },
     communityView: (_tag: string): void => d.chooseCommunity(),
     messageAll,
+    inviteMany: (ev: TwEvent, done: () => void): void => openBulkInvite(ev, d, done),
     eventResources: (ev: TwEvent): void => { setEventFilter(d.st(), ev.id); d.save(); d.showResources() },
     /** Registry (MCP): open the composer of an event; send to everyone at it. */
     openEventChat: (id: string): void => messageAll(find(id)),

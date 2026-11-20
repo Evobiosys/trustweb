@@ -3984,6 +3984,8 @@ export const S = {
       event_details_set: 'Set how an event repeats, its conference links, attachment and calendar',
       calendar_add: 'Add a calendar with tags',
       calendar_tag_toggle: 'Switch calendars on or off by tag',
+      /* wave45 bulk-invite-filter */
+      invite_bulk: 'Invite many people to an event with a filter of @people and #tags to add and to leave out',
     } as Record<string, string>,
     connectTitle: 'Connect an agent',
     pathHint: 'The commands below hold the exact folder of this TrustWeb. The program reads ~/.cache/trustweb-dev/dev-record.live.json, or the file of this preview when it differs.',
@@ -5404,5 +5406,22 @@ export const S = {
     intimateToggle: 'Everyone knows everyone here',
     intimateHint: (n: number) => `On: its events list the community's members, and the Web shows them at its events. On by default up to ${n} members.`,
     tanaGrants: 'It is the Tana app\'s local API token: it can read (and write) your Tana workspace through the Tana app on this computer; TrustWeb only reads people with it. Never synced to your other devices, never in a backup, an export or an MCP answer.',
+  },
+  /* wave45 bulk-invite-filter */
+  bulkInvite: {
+    open: 'Invite many',
+    title: (event: string) => `Invite many to ${event}`,
+    include: 'Add',
+    exclude: 'Except',
+    includePh: '@person or #tag',
+    excludePh: '@person or #tag to leave out',
+    nobody: 'Nobody matches yet: add a @person or #tag.',
+    count: (n: number) => (n === 1 ? '1 person to invite' : `${n} people to invite`),
+    go: (n: number) => (n === 1 ? 'Invite 1 person' : `Invite ${n} people`),
+    /** Also the warning of community-events-invite-only (row 29): one string. */
+    notMembers: (n: number, community: string) => `${n} ${n === 1 ? 'is not a member' : 'are not members'} of ${community}: they will see the community's events only through this invitation.`,
+    anyway: 'Invite anyway',
+    back: 'Back',
+    done: (n: number) => (n === 1 ? 'Invited 1 person.' : `Invited ${n} people.`),
   },
 } as const
