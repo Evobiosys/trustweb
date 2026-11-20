@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 43b ask-page-filter: the stored audience of the hints and intro asks (AppState.askAudience; its degree is `askReach`) and the peers it reaches. */
-import { parseFilter, peopleFor } from './audience_filter'
+import { chipIds, parseFilter, peopleFor } from './audience_filter'
 import type { AudienceFilter } from './audience_filter'
 import { memberIds } from './colour_tags'
 import type { ColourTag } from './colour_tags'
@@ -46,7 +46,7 @@ export function hiddenDids(s: Held & Pick<AppState, 'peers'>, tags: readonly Col
   const f = askFilterOf(s)
   if (!f.exclude.length) return []
   const has = tagTester(s.people, tags)
-  const ids = new Set(f.exclude.flatMap((c) => (c.startsWith('person:') ? [c.slice(7)] : s.people.filter((p) => has(p, c.slice(4))).map((p) => p.id))))
+  const ids = new Set(chipIds(f.exclude, s.people, has))
   return s.people.filter((p) => ids.has(p.id) && p.peerId).flatMap((p) => {
     const peer = s.peers.find((x) => x.id === p.peerId)
     return peer ? didsOf(peer) : []

@@ -35,3 +35,13 @@ describe('ask audience tools', () => {
     expect('askReach' in saved()).toBe(false)
   })
 })
+
+/* wave45 ask-event-limit */
+describe('ask audience tools: event chips', () => {
+  it('set stores event:<id> chips and get returns them', () => {
+    reset()
+    const out = tools().ask_audience_set.run({ zone: 'closest', add: ['event:ev1'] })
+    expect(out).toEqual({ zone: 'closest', add: ['event:ev1'], exclude: [], degree: 1 })
+    expect(saved().askAudience.add).toEqual(['event:ev1'])
+  })
+})
