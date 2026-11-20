@@ -8242,7 +8242,7 @@ function screenInventory(): Node[] {
   if (scope) {
     return [
       header(S.w44cr.title(scope.label)),
-      el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', emoji: emojiOn(s), nameOf: (id) => s.people.find((p) => p.id === id)?.name, newId: () => randomId(8), open: itemSheet, save, render })),
+      el('div', { class: 'scroll pad', 'data-scoped-resources': scope.kind }, scopedResources({ items: s.inventory, tags: loadColourTags(), events: s.events ?? [], scope, page: 'resources', emoji: emojiOn(s), nameOf: (id) => s.people.find((p) => p.id === id)?.name, newId: () => randomId(8), open: itemSheet, save, render, state: s, image: (id) => images.get(id) /* wave45 resources-notion-views */ })),
     ]
   }
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
@@ -8295,6 +8295,7 @@ function screenInventory(): Node[] {
       // Wave 43b resources-views: the view switcher, filters and the two sections; protected rows come from resource_views_view.ts.
       ...resourceViews({
         items: shown, people: s.people, tags: loadColourTags(), row: invRow, open: itemSheet, save, render,
+        state: s, events: s.events ?? [], image: (id) => images.get(id), // wave45 resources-notion-views
         tagRow: (i) => tagRow(i, loadColourTags(), s.events ?? [], (id, label) => { invOnly = { label: label.startsWith('#') ? label : '#' + label, ids: new Set(s.inventory.filter((x) => itemTags(x, loadColourTags(), s.events ?? [], EVENT_TAG).some((t) => t.id === id)).map((x) => x.id)) }; render() }),
         play: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
         record: (item) => { if (draftInProgress()) { toast(S.resViews.recordBusy); return }; newDraft(); draft.mode = RecordMode.Solo; draft.about = AboutKind.What; draft.name = item.text; draft.itemId = item.id; go(recordScreen()); void startSolo() },

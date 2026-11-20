@@ -327,7 +327,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const found = tags.find((x) => x.id === tag)
     const scope = scopeOf(st(), tags, st().events ?? [], EVENT_TAG) ?? (found ? { kind: 'community' as const, id: found.id, label: found.label ?? found.id } : null)
     if (!scope) return [el('p', { class: 'empty' }, [ctx.strings.w44cr.none])]
-    return scopedResources({ items: st().inventory, tags, events: st().events ?? [], scope, page, emoji: st().titleEmojiOff !== true, nameOf: (id) => st().people.find((p) => p.id === id)?.name, newId: () => randomId(8) /* answers-44d */, open: (id) => ctx.bus.emit('open-item', id), save: () => ctx.bus.emit('save'), render: draw })
+    return scopedResources({ items: st().inventory, tags, events: st().events ?? [], scope, page, emoji: st().titleEmojiOff !== true, nameOf: (id) => st().people.find((p) => p.id === id)?.name, newId: () => randomId(8) /* answers-44d */, state: st() /* wave45 resources-notion-views */, open: (id) => ctx.bus.emit('open-item', id), save: () => ctx.bus.emit('save'), render: draw })
   }
 
   /** The pane environment of the embeds module: this community's tag, redraw after a change, a note under the section. */

@@ -9,6 +9,10 @@ import { ageCompact } from './feed_row'
 import { inlineEdit } from './membranes_five_view'
 import { typedSource } from './provenance'
 import { S } from './strings'
+import { NOTION_VIEWS, scopeKey, scopeLabelOf, viewPrefs } from './resource_notion'
+import type { ResViews } from './resource_notion'
+import { arrangedItems, notionBody, viewPills, viewTools } from './resource_notion_view'
+import type { NotionCtx } from './resource_notion_view'
 
 export const EVENT_TAG: EventTagRules = { slug: eventTagSlug, label: eventTagLabel }
 
@@ -17,6 +21,9 @@ type Ev = { id: string; name: string; tagName?: string }
 
 /** P3: General stays folded until asked, per view. */
 let generalOpen = false
+/** Wave 45: the sort / tag filter of a scoped view, behind its V expander (P3). */
+let toolsOpen = false
+const memory: { resViews?: ResViews } = {}
 
 export interface ScopedCtx {
   items: readonly InventoryItem[]
@@ -33,6 +40,10 @@ export interface ScopedCtx {
   /** answers-44d: a person id -> name (the sender of a received item); and the id of a new item ("+ Add resource"; absent: no add row). */
   nameOf?: (id: string) => string | undefined
   newId?: () => string
+  /** Wave 45 resources-notion-views: the app state (its resViews keeps view, filter and sort per scope); absent: kept in memory. */
+  state?: { resViews?: ResViews }
+  /** The item's attached picture (Gallery). */
+  image?: (id: string) => Promise<Blob | null>
 }
 
 /** answers-44d: "shared by <name> · <age>" of one item: the sender of a received item (its id when unknown), null = me; `at` for the tooltip. */
@@ -61,7 +72,24 @@ export function tagRow(i: InventoryItem, tags: readonly Tag[], events: readonly 
 
 export function scopedResources(c: ScopedCtx): Node[] {
   const now = Date.now()
-  const p = partitionScope(forPage(c.items, c.page), c.scope)
+  // Wave 45: List keeps its sections; Table, Board and Gallery show the scope's own items (Shared by me + New). Filter and sort per view.
+  const inPage = forPage(c.items, c.page)
+  const scoped = (({ shared, fresh }) => [...shared, ...fresh])(partitionScope(inPage, c.scope))
+  const nc: NotionCtx = {
+    state: c.state ?? memory, key: scopeKey(c.scope, c.page), items: scoped, save: c.save, render: c.render, image: c.image, hideLink: (i) => i.protected === true,
+    open: (id) => { if (markOpened(c.items, id, Date.now())) c.save(); c.open(id) },
+    tagsOf: (i) => itemTags(i, c.tags, c.events, EVENT_TAG), nameOf: (id) => c.nameOf?.(id), scopeOf: (i) => scopeLabelOf(i, c.tags, c.events, EVENT_TAG),
+  }
+  const vp = viewPrefs(nc.state, nc.key)
+  const isOpen = toolsOpen || Boolean(vp.filter.tag)
+  const bar = el('div', { class: 'rv-bar', 'data-nv-bar': nc.key }, [
+    el('div', { class: 'rv-head' }, [viewPills(nc, NOTION_VIEWS), el('button', { class: 'btn btn-ghost btn-sm rv-filters-toggle', type: 'button', 'data-nv-tools-toggle': '', 'aria-expanded': String(isOpen), onclick: () => { toolsOpen = !isOpen; c.render() } }, [S.resViews.filters + (isOpen ? ' ⌃' : ' ⌄')])]),
+    ...(isOpen ? viewTools(nc) : []),
+  ])
+  const titleEl = el('h3', { class: 'rs-title', 'data-rs-title': c.page }, [c.page === 'references' ? S.w44cr.refTitle(c.scope.label) : S.w44cr.title(c.scope.label)])
+  const notion = notionBody(nc)
+  if (notion) return [titleEl, bar, ...notion]
+  const p = partitionScope(arrangedItems({ ...nc, items: inPage }), c.scope)
   const list = (key: string, rows: readonly InventoryItem[]): Node => el('div', { 'data-rs-list': key }, [resourceList('mine', rows.map((i) => ({
     id: i.id, title: i.text, at: i.createdAt, emoji: c.emoji, ...(c.nameOf ? { by: sharedByLine(i, c.nameOf, now) } : {}), chips: itemTags(i, c.tags, c.events, EVENT_TAG).map((t) => t.label),
     onOpen: () => { if (markOpened(c.items, i.id, Date.now())) c.save(); c.open(i.id) },
@@ -75,7 +103,6 @@ export function scopedResources(c: ScopedCtx): Node[] {
     el('button', { class: 'btn btn-ghost btn-sm rv-filters-toggle', 'data-rs-general-toggle': '', 'aria-expanded': String(generalOpen), onclick: () => { generalOpen = !generalOpen; c.render() } }, [`${S.w44cr.general} (${p.general.length})${generalOpen ? ' ⌃' : ' ⌄'}`]),
     generalOpen ? list('general', p.general) : null,
   ])
-  const name = c.scope.label
-  return [el('h3', { class: 'rs-title', 'data-rs-title': c.page }, [c.page === 'references' ? S.w44cr.refTitle(name) : S.w44cr.title(name)]),
+  return [titleEl, bar,
     section('shared', S.w44cr.shared, p.shared), section('fresh', S.w44cr.fresh, p.fresh, true), general].filter((n): n is Node => n !== null)
 }
