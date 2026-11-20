@@ -133,6 +133,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'google_sync_status', write: false }, { name: 'google_sync_set', write: true },
   /* wave45 bulk-invite-filter */
   { name: 'invite_bulk', write: true },
+  /* wave45 community-events-invite-only */
+  { name: 'community_event_visibility', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }
