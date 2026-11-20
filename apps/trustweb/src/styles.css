@@ -2377,3 +2377,6 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .gl-add .btn{width:auto; margin:0}
 .gl-foot{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0}
 .gl-foot .btn{width:auto; margin:0}
+/* wave45 event-back-button */
+.rs-head{display:flex; align-items:center; gap:2px}
+.rs-head .rs-title{margin:8px 0 4px}
