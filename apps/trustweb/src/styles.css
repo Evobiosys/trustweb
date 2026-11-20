@@ -2386,3 +2386,6 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 .hdr-left .ev-mode-note{flex:0 1 auto; min-width:0; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:var(--event-mode-colour); color:#fff}
 /* wave45 event-bubble */
 .filter-bar [data-event-everyone]{width:auto; margin:0}
+/* wave45 bar-equal-no-highlight: in a raised pair the outer ring marks only a strict maximum (.tab-lead), never a tie */
+.tabs.pair .tab.tab-primary.on{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen)}
+.tabs.pair .tab.tab-primary.on.tab-lead{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen), 0 0 0 8px rgba(23,143,134,.35)}
