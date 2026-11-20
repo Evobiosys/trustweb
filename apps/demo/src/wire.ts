@@ -165,6 +165,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
     const j = o.joined as Record<string, unknown> | null
     return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id } }
   }
+  if ('sync' in o) return hasWant || hasLink || o.sync !== true ? null : { v: WIRE_VERSION, t: 'event', sync: true } // wave45 events-refetch
   if (hasWant === hasLink) return null
   if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
   if (!isNonEmptyString(o.link) || o.link.length > EVENT_LINK_MAX) return null

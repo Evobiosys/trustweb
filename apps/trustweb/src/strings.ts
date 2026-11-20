@@ -5405,4 +5405,11 @@ export const S = {
     intimateHint: (n: number) => `On: its events list the community's members, and the Web shows them at its events. On by default up to ${n} members.`,
     tanaGrants: 'It is the Tana app\'s local API token: it can read (and write) your Tana workspace through the Tana app on this computer; TrustWeb only reads people with it. Never synced to your other devices, never in a backup, an export or an MCP answer.',
   },
+  /* wave45 events-refetch */
+  w45refetch: {
+    label: 'Look for new events',
+    button: 'Refresh',
+    looking: 'Looking for new events…',
+    pull: 'Pull down to look for new events',
+  },
 } as const

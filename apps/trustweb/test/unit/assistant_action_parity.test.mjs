@@ -8,6 +8,7 @@ import { defineHomeActions } from '../../src/home_actions.ts'
 import { defineResourceShareActions } from '../../src/resource_share_send.ts'
 import { defineSeenActions } from '../../src/seen_through_actions.ts' // review-44c
 import { defineA44dActions } from '../../src/a44d_actions.ts' // answers-44d
+import { defineEventsRefetchAction } from '../../src/events_refetch_actions.ts'
 import { ACTION_MCP, mcpToolFor } from '../../src/ext/assistant/actions.ts'
 import { allTools } from '../../../mcp/src/tools.ts'
 
@@ -20,6 +21,7 @@ defineHomeActions(reg, host) // wave44 home-dashboard   // main.ts defines both 
 defineResourceShareActions(reg, host) // wave44 answers-44b
 defineSeenActions(reg, host) // review-44c: seen-introduce
 defineA44dActions(reg, host) // answers-44d
+defineEventsRefetchAction(reg, host) // wave45 events-refetch
 
 describe('registry <-> MCP parity', () => {
   const tools = allTools({ file: '/nonexistent', write: true }).map((t) => t.name)

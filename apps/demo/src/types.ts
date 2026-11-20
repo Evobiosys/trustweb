@@ -468,6 +468,8 @@ export interface EventEnvelope {
   seen?: { id: string; shown: boolean; who?: string }
   /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
   joined?: { id: string }
+  /** wave45 events-refetch: "send me the events you announced to my communities" (alone in the envelope). */
+  sync?: true
 }
 // ----- END TrustWeb wave 43c -----
 
