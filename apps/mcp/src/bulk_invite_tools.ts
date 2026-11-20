@@ -6,6 +6,8 @@
  */
 import { nonMembers, toInvite } from '../../trustweb/src/bulk_invite.ts'
 import { inviteGuests } from '../../trustweb/src/event_draft.ts'
+import { eventOrganizers, mayApprove, roleNames, sameName } from '../../trustweb/src/event_roles.ts'
+import { DEFAULT_INVITE_POLICY } from '../../trustweb/src/event_press.ts'
 import type { TwEvent } from '../../trustweb/src/model.ts'
 import { commitTo, load, needText, S, schema, type RecordToolsOptions, type Rec } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
@@ -22,6 +24,29 @@ const eventOf = (r: Rec, q: unknown): TwEvent => {
   const ev = all.find((e) => e.id === key) ?? all.find((e) => e.name.toLowerCase() === key.toLowerCase())
   if (!ev) throw new Error(`no event "${key}"`)
   return ev
+}
+/**
+ * review-45: events.ts mayInvite (the app shows Invite many only then), restated over plain ring strings because events.ts / model.ts are not loadable
+ * under plain node (enums). test/unit/review45_fixes.test.mjs pins it to mayInvite over a case matrix.
+ */
+const TRUSTED = ['closest', 'close']
+const RING_VALUES = ['closest', 'close', 'friend', 'acquaintance', 'intending']
+const slot = (p: { ring: string; fields?: Record<string, unknown> }): string => {
+  if (p.ring !== 'family') return p.ring
+  const c = String(p.fields?.['tw-closeness'])
+  return RING_VALUES.includes(c) ? c : 'close'
+}
+export function mayInviteRecord(ev: TwEvent, r: Rec): boolean {
+  const people = (r.people ?? []) as unknown as NonNullable<Parameters<typeof mayApprove>[2]>
+  const me = String((r.me as { displayName?: string } | undefined)?.displayName ?? '')
+  if (mayApprove(ev, me, people)) return true
+  if (!ev.attended) return false
+  const policy = ev.invitePolicy ?? DEFAULT_INVITE_POLICY
+  if (policy === 'everyone') return true
+  if (policy !== 'trusted') return false
+  const refs = new Set([...(ev.hosts ?? []), ...eventOrganizers(ev)])
+  const names = roleNames(ev, people, ['hosts', 'organizers'])
+  return people.some((p) => (refs.has(p.id) || names.some((h) => sameName(h, p.name))) && TRUSTED.includes(slot(p as never)))
 }
 const arr = (description: string): Record<string, unknown> => ({ type: 'array', items: { type: 'string' }, description })
 
@@ -44,6 +69,7 @@ export function bulkInviteTools(o: RecordToolsOptions): Tool[] {
       let out: Record<string, unknown> = {}
       commitTo(o.file, now, (r) => {
         const ev = eventOf(r, a.event)
+        if (!mayInviteRecord(ev, r)) throw new Error(`you may not invite to "${ev.name}" (the app shows Invite many only to whom may invite)`) // review-45: the UI gate
         const v = view(r, ev, true)
         if ((v.notMembers as string[]).length && a.accept_non_members !== true) throw new Error(`${(v.notMembers as string[]).length} are not members of ${String(v.community)}: they see the community's events only through this invitation; pass accept_non_members:true to invite them`)
         inviteGuests(ev, v.people as string[])
