@@ -21,6 +21,7 @@ import { namedHost } from './event_conference'
 import { addSeenThrough } from './seen_through' // wave44c seen-through
 import { randomId } from '../../demo/src/crypto'
 import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
+import { mayAnnounce } from './community_event_access' // wave45 community-events-invite-only
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -65,7 +66,7 @@ export function receiveAnnounce(s: Pick<AppState, 'events' | 'notifInbox'>, ev: 
 }
 
 export interface EnvelopeHost<P extends { id: string }> {
-  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts'>>
+  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts' | 'extData'>>
   /** Wave 44: the connected peers of the people who carry this community tag (the ones an announce goes to). */
   members?(tag: string): P[]
   /** Wave 44 steer-open-space: the connected people at this event (tagged or invited): the schedule of an open space goes to them. */
@@ -216,7 +217,8 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       for (const ev of due) {
         ev.announcedAt = host.now()
         const link = host.link(ev)
-        for (const peer of host.members?.(communityOfEvent(ev) ?? '') ?? []) {
+        const tag = communityOfEvent(ev) ?? ''
+        for (const peer of mayAnnounce(host.state(), tag) ? host.members?.(tag) ?? [] : []) {   // wave45: mode invited tells nobody
           void host.send(peer, { v: 1, t: 'event', link, show: visibilityOf(ev), announce: true }).then(() => (ev.openSpace ? host.send(peer, osEnvelope(ev)) : undefined)).catch(() => undefined)
         }
       }
