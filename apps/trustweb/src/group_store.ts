@@ -32,7 +32,9 @@ const HIDDEN_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u
 
 export type GKind = 'msg' | 'join' | 'leave' | 'check'
 export interface GItem { m: string; k: GKind; by: string; ts: number; at: number; text?: string; mine?: true; state?: 'pending' | 'sent' }
-export interface GMember { name: string; on: boolean; at: number }
+/** wave46 answers-45b (review-45 Q7): `adm` = the member key who admitted this member on my device ('me' = I did; a person id = the one whose
+ *  join told me of them); absent = nobody (myself, my inviter, older data): then only they themselves change their membership. */
+export interface GMember { name: string; on: boolean; at: number; adm?: string }
 export interface GList { id: string; name: string; u: number }
 export interface LItem { id: string; l: string; text: string; o: number; u: number; by: string; done?: { by: string; at: number }; arc?: true }
 export interface ChatGroup {
@@ -113,7 +115,7 @@ function sanitizeGroup(id: string, v: unknown): ChatGroup | null {
   const seen = new Set<string>()
   const items = v.items.map(sanitizeItem).filter((i): i is GItem => i !== null && !seen.has(i.m) && !!seen.add(i.m)).sort(byOrder).slice(-GROUP_KEEP)
   const mem = Object.fromEntries(Object.entries(v.mem).filter(([key, x]) => key.length <= 120 && isObj(x) && typeof x.on === 'boolean' && num(x.at))
-    .slice(0, GROUP_MEMBERS_MAX).map(([key, x]) => [key, { name: key === 'me' ? '' : cleanName((x as GMember).name), on: (x as GMember).on, at: (x as GMember).at }]))
+    .slice(0, GROUP_MEMBERS_MAX).map(([key, x]) => { const adm = (x as GMember).adm; return [key, { name: key === 'me' ? '' : cleanName((x as GMember).name), on: (x as GMember).on, at: (x as GMember).at, ...(typeof adm === 'string' && adm && adm.length <= 120 ? { adm } : {}) }] }))
   const ls = new Set<string>()
   const lists = v.lists.filter((l): l is GList => isObj(l) && idOk(l.id) && !!cleanLine(l.name, GROUP_NAME_MAX) && num(l.u) && !ls.has(l.id) && !!ls.add(l.id))
     .slice(0, GROUP_LISTS_MAX).map((l) => ({ id: l.id, name: cleanLine(l.name, GROUP_NAME_MAX) as string, u: l.u }))
@@ -163,8 +165,9 @@ export function memberNames(g: ChatGroup, myName: string): string[] {
 export const lastLine = (g: ChatGroup): GItem | undefined => g.items[g.items.length - 1]
 
 /** A member's state changed (joined: on, left: off), with the time of the change. */
-export function setMember(g: ChatGroup, key: string, name: string, on: boolean, at: number): ChatGroup {
-  const mem = { ...g.mem, [key]: { name: key === 'me' ? '' : cleanName(name), on, at } }
+export function setMember(g: ChatGroup, key: string, name: string, on: boolean, at: number, adm?: string): ChatGroup {
+  const by = adm ?? g.mem[key]?.adm   // wave46 answers-45b: the admitter stays with the member
+  const mem = { ...g.mem, [key]: { name: key === 'me' ? '' : cleanName(name), on, at, ...(by ? { adm: by } : {}) } }
   return { ...g, mem: Object.keys(mem).length > GROUP_MEMBERS_MAX ? g.mem : mem }
 }
 

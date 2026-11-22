@@ -6,6 +6,9 @@
  *     who left). Chat items dedupe by id; list and item ops win only when newer (group_store.ts), so a flood stops by itself;
  *   - an op is taken only from a sender who is a member of a group I hold and did not leave; the actor's name travels as given (the members
  *     vouch for what they pass on);
+ *   - wave46 answers-45b (review-45 Q7): a join / leave naming someone other than its sender is taken only from whoever admitted that member
+ *     on my device (GMember.adm: me, or the member whose join first told me of them, who then passes their changes on); a join of someone new
+ *     records its sender as admitter. Event chats (event_group_chat.ts) and merge-events are not touched.
  *   - in through an invite link scoped to just this group (invite_policy.ts, tag `grp:<id>`): the inviter's device admits the new member (a join
  *     notice to everyone, then the roster, the last GROUP_HISTORY messages, the lists and their items to the new member); the new member's
  *     device holds the group with the inviter from the invite (joined);
@@ -142,7 +145,7 @@ export function createGroupChat<P extends { id: string }>(h: GroupChatHost<P>) {
       const by = cleanName(p.name) || 'TrustWeb'
       const join: GItem = { m: h.newId(), k: 'join', by, ts: now, at: now }
       const names = [myName(), ...Object.entries(g.mem).filter(([key, m]) => key !== 'me' && key !== p.id && m.on && m.name).map(([, m]) => m.name)].slice(0, ROSTER_MAX)
-      const next = addChatItem(setMember(g, p.id, p.name, true, now), join).g
+      const next = addChatItem(setMember(g, p.id, p.name, true, now, 'me'), join).g
       store(next)
       await flood(next, chatOp(gid, join))
       if (!p.peerId) return true
@@ -296,7 +299,7 @@ export function createGroupChat<P extends { id: string }>(h: GroupChatHost<P>) {
         next = g
         for (const n of op.names ?? []) {
           const name = cleanName(n)
-          if (name && lower(name) !== lower(myName()) && !Object.values(next.mem).some((m) => lower(m.name) === lower(name))) next = setMember(next, `n:${lower(name)}`, name, true, now)
+          if (name && lower(name) !== lower(myName()) && !Object.values(next.mem).some((m) => lower(m.name) === lower(name))) next = setMember(next, `n:${lower(name)}`, name, true, now, who.id)
         }
         if (next !== g) store(next)
         return next !== g
@@ -306,6 +309,11 @@ export function createGroupChat<P extends { id: string }>(h: GroupChatHost<P>) {
         if (!r.changed) return false
         next = r.g
       } else {
+        // wave46 answers-45b: about someone else -> only from their admitter; someone new -> the sender admits them
+        const other = (op.k === 'join' || op.k === 'leave') && !about && lower(by) !== lower(myName())
+        const known = other ? Object.entries(g.mem).find(([k, m]) => k !== 'me' && lower(m.name) === lower(by)) : undefined
+        if (other && known && known[1].adm !== who.id) return false
+        if (other && !known && op.k === 'leave') return false
         const text = op.k === 'msg' ? cleanMsg(op.text) : op.k === 'check' ? cleanLine(op.text, GROUP_ITEM_TEXT_MAX) : null
         if ((op.k === 'msg' || op.k === 'check') && !text) return false
         const r = addChatItem(g, { m: op.m, k: op.k, by, ts, at: now, ...(text ? { text } : {}) })
@@ -313,7 +321,7 @@ export function createGroupChat<P extends { id: string }>(h: GroupChatHost<P>) {
         next = r.g
         if ((op.k === 'join' || op.k === 'leave') && lower(by) !== lower(myName())) {
           const key = about ? who.id : Object.entries(next.mem).find(([k, m]) => k !== 'me' && lower(m.name) === lower(by))?.[0] ?? `n:${lower(by)}`
-          next = setMember(next, key, by, op.k === 'join', now)
+          next = setMember(next, key, by, op.k === 'join', now, about ? undefined : who.id)
         }
       }
       store(next)
