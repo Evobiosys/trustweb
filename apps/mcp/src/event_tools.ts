@@ -275,5 +275,5 @@ export function eventTools(e: EventToolsEnv): { read: Tool[]; write: Tool[] } {
   ]
   const editor = eventEditorTools(e as never)   // wave 44 event-editor
   const openSpace = openSpaceTools(e as never)   // wave 44 steer-open-space
-  return { read: [...read, ...editor.read], write: [...write, ...editor.write, ...openSpace.write] }
+  return { read: [...read, ...editor.read, ...openSpace.read], write: [...write, ...editor.write, ...openSpace.write] }
 }

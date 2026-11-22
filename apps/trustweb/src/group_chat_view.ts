@@ -14,6 +14,8 @@ import type { EventEnvelope } from '../../demo/src/types'
 import type { AppState } from './model'
 import { injectChatStyles } from './chat_view'
 import { createGroupChat } from './group_chat'
+import type { Actions } from './actions'
+import { defineGroupActions } from './group_chat_actions'
 import { GROUP_ITEM_TEXT_MAX, GROUP_NAME_MAX, activeListId, archivedOf, groupTag, groupsOf, lastLine, liveItems, memberNames, type ChatGroup, type GItem } from './group_store'
 import { S } from './strings'
 
@@ -189,3 +191,11 @@ export function createGroupView<P extends { id: string }>(d: GroupViewDeps<P>) {
   return { ...chat, open, openList, newSheet, rows, newButton }
 }
 export type GroupView = ReturnType<typeof createGroupView>
+
+/** answers-45a (P5): the whole row in one call for main.ts: the group sheets plus the registry actions behind MCP group_* / list_* (`showChat`
+ *  brings the Chat screen up before an action opens a group). */
+export function installGroupChat<P extends { id: string }>(reg: Actions, d: GroupViewDeps<P> & { showChat: () => void }): GroupView {
+  const v = createGroupView(d)
+  defineGroupActions(reg, { ...v, open: (gid) => { d.showChat(); v.open(gid) } })
+  return v
+}

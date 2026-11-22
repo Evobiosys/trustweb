@@ -86,6 +86,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'discoverable', 'discoverOpen', 'hosted', 'nameCache', 'intentsIn',
   /* wave44c event-autosave */ 'drafts',
   /* wave44c answers-44c: tombstones travel as their own entities (x:<kind>:<id>) */ 'trash',
+  /* review-45: the outbox holds unsealed envelopes for this device's pair keys; settings suggestions in/out and the follow book are this device's */ 'sendQueue', 'settingsShare',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */

@@ -8,6 +8,7 @@ import { el } from '../../demo/src/ui/dom'
 import { attendees } from './events'
 import { listedAttendees } from './event_visibility'
 import { joinActivity, joinedOf, leaveActivity, proposeActivity, sortedActivities, tokenOf, windowOf } from './open_space'
+import { pollSection } from './open_space_poll_view'
 import type { AppState, OsActivity, TwEvent } from './model'
 import { S } from './strings'
 
@@ -81,6 +82,7 @@ export function openSpaceSection(ev: TwEvent, h: OpenSpaceHooks): Node[] {
   return [el('section', { class: 'os', 'data-open-space': ev.id }, [
     el('h3', {}, [T.title]),
     el('p', { class: 'meta', 'data-os-window': '' }, [T.window(w.day, w.start, w.end)]),
+    pollSection(ev, h),
     ...sortedActivities(ev).map(row),
     ev.openSpace.acts.length ? null : el('p', { class: 'empty meta', 'data-os-empty': '' }, [T.empty]),
     el('button', { class: 'btn btn-ghost wide', type: 'button', 'aria-expanded': String(draft.open), 'data-os-propose': '', onclick: () => { draft.open = !draft.open; h.redraw() } }, [T.propose + (draft.open ? ' ▴' : ' ▾')]),

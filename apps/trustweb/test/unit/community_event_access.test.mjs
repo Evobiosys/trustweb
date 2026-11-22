@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 45 community-events-invite-only: who sees a community's events. Fake data. */
-import { DEFAULT_EVENT_ACCESS, EVENT_ACCESS, eventAccessOf, invitedTo, isEventAccess, mayAnnounce, nonMembersOf, seesEvent, setEventAccess } from '../../src/community_event_access.ts'
+import { DEFAULT_EVENT_ACCESS, EVENT_ACCESS, eventAccessOf, invitedTo, isEventAccess, mayAnnounce, seesEvent, setEventAccess } from '../../src/community_event_access.ts'
 import { applyJoined } from '../../src/event_community.ts'
 import { parseCommunity } from '../../src/ext/community-mighty/community_data.ts'
 
@@ -57,10 +57,6 @@ describe('announce and the warning', () => {
   it('the community as a whole is told only in mode members', () => {
     expect(mayAnnounce(rec(), 'iyg')).toBe(true)
     expect(mayAnnounce(rec([], 'invited'), 'iyg')).toBe(false)
-  })
-  it('nonMembersOf counts the live people without the community tag', () => {
-    const r = rec([P('m', 'Mia', { fields: { iyg: 'true' } }), P('s', 'Sam'), P('t', 'Tia', { deleted_at: 'x' }), P('v', 'Via', { via: 'm' })])
-    expect(nonMembersOf(r, 'iyg', ['m', 's', 't', 'v', 'zz']).map((p) => p.id)).toEqual(['s'])
   })
 })
 

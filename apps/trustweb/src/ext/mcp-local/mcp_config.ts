@@ -78,6 +78,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'invite_link_create', write: true }, { name: 'invite_link_revoke', write: true }, { name: 'invite_link_status', write: false },
   /* wave44 steer-open-space */
   { name: 'open_space_propose', write: true }, { name: 'open_space_join', write: true },
+  /* wave45 open-space-date-poll */
+  { name: 'open_space_poll_get', write: false }, { name: 'open_space_poll_add', write: true }, { name: 'open_space_poll_vote', write: true }, { name: 'open_space_poll_use', write: true },
 
   /* wave44b profile-page */
   { name: 'profile_get', write: false }, { name: 'profile_set', write: true }, { name: 'profile_link_add', write: true }, { name: 'profile_link_remove', write: true },

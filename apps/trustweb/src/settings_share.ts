@@ -6,7 +6,8 @@
  *     that person's key like the co-notes chat); the receiver sees the diff and taps Accept or Decline. Nothing is applied before Accept.
  *   - follow: who follows whom per group is a liquid delegation (packages/liquid-delegation; resolved to depth 1 now). Following sends a
  *     follow request; the followed person taps Allow (I9: nothing goes out unasked), then gets their group sent at once and again whenever it
- *     changes (dueFollowerUpdates). The follower takes an update directly when its per-follow "auto-apply" is on, else it waits in the inbox.
+ *     changes (dueFollowerUpdates). The follower takes an update directly when its per-follow "auto-apply" is on, else it waits in the inbox;
+ *     an update that opens a privacy setting up (loosens) always waits in the inbox (answers-45a).
  * Everything leaves through `outbox` (the open app seals and posts it, then drops it), so a step taken over MCP goes out when the app is next open.
  * Values are only ever written through the settings registry (writeSetting): an id outside the group or a bad value is dropped, never applied.
  * Pure: no DOM, no clock, no ids of its own (passed in).
@@ -179,7 +180,7 @@ export function setFollowAuto(r: Rec, group: ShareGroup, auto: boolean): boolean
 
 /**
  * A payload from a known person (the caller maps the relay sender to a person id and drops strangers).
- * 'applied' = an update from the person I follow on that group, auto-apply on; 'inbox' = waits for my tap; 'unfollowed'; 'ignored'.
+ * 'applied' = an update from the person I follow on that group, auto-apply on, nothing loosened; 'inbox' = waits for my tap; 'unfollowed'; 'ignored'.
  */
 export function receive(r: Rec, from: string, msg: Wire | null, now: number): 'applied' | 'inbox' | 'unfollowed' | 'ignored' {
   if (!msg) return 'ignored'
@@ -204,7 +205,7 @@ export function receive(r: Rec, from: string, msg: Wire | null, now: number): 'a
     if (followed) s.waiting = s.waiting.filter((w) => w !== waitKey(from, g))
     if (!diffOf(r, g, msg.values).length) {
       outcome = 'ignored'
-    } else if (followed && mine?.auto) {
+    } else if (followed && mine?.auto && !diffOf(r, g, msg.values).some((d) => loosens(d.id, d.from, d.to))) {
       s.inbox = others('suggest')
       put(r, s)
       applyValues(r, g, msg.values)
@@ -216,6 +217,20 @@ export function receive(r: Rec, from: string, msg: Wire | null, now: number): 'a
   }
   put(r, s)
   return outcome
+}
+
+/**
+ * answers-45a (review-45 Q3): each privacy setting's values from the most private to the most open. Auto-apply of a followed person's update
+ * never takes a step to the open side: such an update waits in the inbox for my tap, like any suggestion.
+ */
+const PRIVATE_TO_OPEN: Readonly<Record<string, readonly SettingValue[]>> = {
+  'profile.discoverable': [false, true], 'profile.openToConnect': [false, true], 'general.profileAuto': [false, true], 'trust.only': [true, false],
+  'hosting.friends': ['off', 'closest', 'close'], 'web.askDirectOnly': [true, false], 'general.qrProfileOption': [false, true], 'inventory.notesMatch': [false, true],
+}
+/** True when going from `from` to `to` opens a privacy setting up. */
+export function loosens(id: string, from: SettingValue, to: SettingValue): boolean {
+  const order = PRIVATE_TO_OPEN[id]
+  return !!order && order.indexOf(to) > order.indexOf(from)
 }
 
 /** Accept (Allow) or Decline an inbox item. Accepting a suggestion applies it; allowing a follow records the follower and sends my group. */

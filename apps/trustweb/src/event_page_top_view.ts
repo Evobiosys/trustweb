@@ -14,6 +14,7 @@ import { tagLabel } from './events'
 import { communityOfEvent } from './event_visibility'
 import { communityRowOf, firstSentence, hostedBy, joiningOf, setShareAudience, shareAudienceOf, type ShareAudience } from './event_community'
 import { peopleAtEvent, visiblePeople, PEOPLE_COLLAPSE_AT } from './event_people_list' // wave45 event-people-list
+import { eventChatUnread } from './event_group_chat' // answers-45a: unread badge on Event chat
 import { S } from './strings'
 
 export interface EventTopHooks {
@@ -53,13 +54,16 @@ function peopleSection(ev: TwEvent, h: EventTopHooks, colour: string): HTMLEleme
   const open = showAll.has(ev.id)
   const long = all.length > PEOPLE_COLLAPSE_AT
   const chip = (x: (typeof all)[number]): HTMLElement => el('button', { type: 'button', class: x.host ? 'chip on' : 'chip', 'data-person-chip': x.id ?? '', ...(x.id ? {} : { disabled: true }), onclick: () => { if (x.id) h.openPerson?.(x.id) } }, [x.name])
-  const act = (attr: string, label: string, fn: () => void, on = false): HTMLElement => el('button', { type: 'button', class: 'chip ev-act', 'aria-pressed': String(on), [attr]: '', onclick: fn }, [el('u', {}, [label])])
+  const act = (attr: string, label: string, fn: () => void, on = false, badge = 0): HTMLElement => el('button', { type: 'button', class: 'chip ev-act', 'aria-pressed': String(on), [attr]: '', onclick: fn }, [
+    el('u', {}, [label]),
+    badge > 0 ? el('span', { class: 'ec-unread', role: 'img', 'aria-label': S.chatTabUnread(badge), 'data-event-chat-unread': String(badge) }, [badge > 99 ? '99+' : String(badge)]) : null,
+  ])
   return el('div', { class: 'ev-people', 'data-event-people': String(all.length), style: `--evc:${colour}` }, [
     el('b', {}, [S.w45.peopleAt]),
     all.length ? el('div', { class: 'chips ev-who', 'data-event-people-list': '' }, visiblePeople(all, open).map(chip)) : el('span', { class: 'meta' }, [` ${S.a44d.nobodyYet}`]),
     long ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-people-toggle': open ? 'fewer' : 'all', onclick: () => { flip(showAll, ev.id); h.redraw() } }, [el('u', {}, [open ? S.w45.showFewer : S.w45.showAll(all.length)])]) : null,
     el('div', { class: 'chips ev-people-actions' }, [
-      h.messageAll ? act('data-event-chat', S.w45.eventChat, () => h.messageAll?.(ev)) : null,
+      h.messageAll ? act('data-event-chat', S.w45.eventChat, () => h.messageAll?.(ev), false, eventChatUnread(h.state(), ev.id)) : null,
       h.addPeople ? act('data-event-add-people', S.w45.addPeople, () => { flip(adding, ev.id); h.redraw() }, adding.has(ev.id)) : null,
     ]),
     h.addPeople && adding.has(ev.id) ? h.addPeople(ev) : null,

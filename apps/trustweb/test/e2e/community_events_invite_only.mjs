@@ -23,7 +23,7 @@ try {
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)))
     await page.goto(URL); await page.waitForTimeout(900)
     await page.evaluate(([r, t]) => { localStorage.setItem('trustweb.v1.me', r); localStorage.setItem('trustweb.v1.colourtags', t); sessionStorage.clear() }, [record, JSON.stringify(tags)])
-    await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(900)
+    await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp, .demo-overlay { display: none !important }' /* review-45: the demo overlay floats over the left nav at 1280 */ }); await page.waitForTimeout(900)
     await page.locator('[data-mode="community"]').click(); await page.locator('[data-community]').waitFor({ timeout: 15_000 }); await page.waitForTimeout(500)
     if (w < 900) { await page.locator('[data-community-menu]').click(); await page.waitForTimeout(150) }
     await page.locator('[data-community-settings]').click(); await page.waitForTimeout(300)

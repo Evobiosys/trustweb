@@ -104,6 +104,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'notify_popup_view.ts': ['notifications_inbox_list', 'notifications_popup_set'],
   'onboarding_whatsapp_view.ts': NAV,
   'open_space_view.ts': ['open_space_propose', 'open_space_join'],
+  'open_space_poll_view.ts': ['open_space_poll_get', 'open_space_poll_add', 'open_space_poll_vote', 'open_space_poll_use'],
   'own_profile_view.ts': ['profile_get', 'profile_set'],
   'pack_view.ts': NAV,
   'page_view.ts': NAV,

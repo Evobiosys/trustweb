@@ -13,6 +13,7 @@ import { decodeEventLink } from './event_link'
 import type { LinkedEvent } from './event_link'
 import { isEventHost } from './event_roles'
 import { mergeActivities } from './open_space'
+import { mergePoll } from './open_space_poll'
 import { addItem } from './notify_inbox'
 import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
 import { S } from './strings'
@@ -23,7 +24,7 @@ import { randomId } from '../../demo/src/crypto'
 import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
 import { createEventMerge } from './event_merge_flow' // wave45 merge-events
 import { resolveEvent } from './event_merge'
-import { mayAnnounce } from './community_event_access' // wave45 community-events-invite-only
+import { mayAnnounce, seesEvent } from './community_event_access' // wave45 community-events-invite-only; answers-45a: seesEvent
 import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
@@ -97,9 +98,15 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   const held = (id: string): TwEvent | undefined => host.state().events?.find((e) => e.id === id)
   const waiting = (id: string): boolean => { const e = held(id) ?? (host.pending()?.id === id ? host.pending() : null); return !!e && isIncomplete(e) }
 
+  /** answers-45a (review-45 Q5): the read filter of a community event. Outside the QR window a host gives it only to whom seesEvent lets see it
+   *  (invited personally, or a member while the community's mode is members); someone I cannot name as a person sees no community event. */
+  const QR_ONLY = { id: '' }
   async function giveTo(peer: P, id: string): Promise<boolean> {
     const ev = held(id)
-    if (!ev || !mayAnswer(host.state(), id, shown, host.now())) return false
+    const st = host.state()
+    if (!ev || !mayAnswer(st, id, shown, host.now())) return false
+    const viaQr = shown?.id === id && host.now() - shown.at <= EVENT_SHOW_WINDOW_MS
+    if (!viaQr && !seesEvent(st, ev, st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined) ?? QR_ONLY)) return false
     await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev) })
     if (ev.openSpace) await host.send(peer, osEnvelope(ev)).catch(() => undefined)
     return true
@@ -108,7 +115,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   /** The schedule as an envelope; a host also says the event is an open space (receivers accept that only from a host). */
   const osEnvelope = (ev: TwEvent): EventEnvelope => {
     const st = host.state()
-    return { v: 1, t: 'event', os: { id: ev.id, ...(isEventHost(ev, st.me.displayName, st.people) ? { open: true as const } : {}), acts: ev.openSpace?.acts ?? [] } }
+    return { v: 1, t: 'event', os: { id: ev.id, ...(isEventHost(ev, st.me.displayName, st.people) ? { open: true as const } : {}), acts: ev.openSpace?.acts ?? [], ...(ev.openSpace?.poll ? { poll: ev.openSpace.poll } : {}) } }
   }
   const pushOs = async (ev: TwEvent, except?: string): Promise<void> => {
     if (!ev.openSpace) return
@@ -125,6 +132,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     let changed = false
     if (!ev.openSpace && os.open && who && isEventHost(ev, who.name, st.people)) { ev.openSpace = { acts: [] }; changed = true }
     if (mergeActivities(ev, os.acts)) changed = true
+    if (os.poll !== undefined && mergePoll(ev, os.poll, !!who && isEventHost(ev, who.name, st.people))) changed = true   // wave 45 open-space-date-poll
     if (!changed) return false
     host.save()
     host.changed()
@@ -199,7 +207,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     let any = false
     for (const ev of host.state().events ?? []) {
       const tag = communityOfEvent(ev)
-      if (ev.announcedAt === undefined || ev.shareCommunity !== true || !tag || !host.members?.(tag).some((m) => m.id === peer.id)) continue
+      if (ev.announcedAt === undefined || ev.shareCommunity !== true || !tag || !mayAnnounce(host.state(), tag) || !host.members?.(tag).some((m) => m.id === peer.id)) continue   // review-45: mode invited replays nothing
       await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev), announce: true })
       if (ev.openSpace) await host.send(peer, osEnvelope(ev))
       any = true

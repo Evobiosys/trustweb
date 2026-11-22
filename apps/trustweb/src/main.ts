@@ -38,13 +38,11 @@ import { introForm, setIntroTarget } from './intro_ask_view'
 import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view' // wave44c seen-through
 import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
-import { createMergeView, defineEventMergeActions, mergedInto } from './event_merge_view' // wave45 merge-events
-import { createEventsRefetch } from './events_refetch' // wave45 events-refetch
-import { defineEventsRefetchAction } from './events_refetch_actions' // wave45 events-refetch
+import { installEventMerge } from './event_merge_view' // wave45 merge-events
+import { installEventsRefetch } from './events_refetch_actions' // wave45 events-refetch
 import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
-import { createGroupView } from './group_chat_view' // wave45 group-chat-list
-import { defineGroupActions } from './group_chat_actions' // wave45 group-chat-list
+import { installGroupChat } from './group_chat_view' // wave45 group-chat-list
 import { audienceFilterView } from './audience_filter'
 import { eventTagLabel } from './event_tag'
 import { allowedPeerIds, askFilterOf, hiddenDids, saveAskFilter, tagTester } from './ask_audience'
@@ -591,8 +589,12 @@ const invites = createInvites({
   openSheet, closeSheet, renderQr, copy: copyLink, notice: (t, b) => showNotice(t, b, [], HANDSHAKE_NOTICE_MS), toast, tags: loadColourTags, saveTags: saveColourTags,
   group: { joined: (gid, name, pid) => { groups.joined(gid, name, pid) }, admitted: (gid, pid) => { void groups.admit(gid, pid) } },   // wave45 group-chat-list
 }, location.hash)
-/** wave45 group-chat-list: groups (a chat with members, independent of events, with lists); Chat > Groups / New group. */
-const groups = createGroupView<Peer>({ st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e), openInvite: (tag, label) => invites.openSheet(tag, label), changed: () => { if (screen === Screen.Chat) render() } })
+// Wave 40 ai-edit-chat: every step the person can tap, as undoable commands (actions.ts, app_actions.ts). The bar, Variations, Extensions,
+// Theme and the Curate page run through them; the assistant proposes the same commands, so whatever a hand can do, it can do too.
+// answers-45a: created this early so a row's install*() registers its actions where it is wired (P5).
+const appActions = createActions()
+/** wave45 group-chat-list: groups (a chat with members, independent of events, with lists); Chat > Groups / New group; MCP group_* / list_*. */
+const groups = installGroupChat<Peer>(appActions, { st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e), openInvite: (tag, label) => invites.openSheet(tag, label), changed: () => { if (screen === Screen.Chat) render() }, showChat: () => { if (screen !== Screen.Chat) go(Screen.Chat) } })
 /** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
 let reachOutPending = false
 let heldToasted = false
@@ -2287,7 +2289,7 @@ function render(): void {
   if (kept && kept.parentNode === host) { for (const n of [...host.childNodes]) if (n !== kept) n.remove(); kept.before(...(frame ? [frame] : []), ...body.slice(0, -1)) }
   else host.replaceChildren(...(frame ? [frame] : []), ...body)
   mountHeaderControls()
-  applyEventModeLook(document.body, st()); mountEventModeNote(host, st())   // wave 45: event mode is visible (tint + note chip)
+  if (state) { applyEventModeLook(document.body, state); mountEventModeNote(host, state) }   // wave 45: event mode is visible (tint + note chip); review-45: not before the record exists (onboarding threw 'no state yet')
   if (screen === Screen.Web || screen === Screen.Chat || screen === Screen.Inventory || screen === Screen.Ask) mountFilterBar(host, { state: st, save, redraw: render, web: screen === Screen.Web })   // wave 44b: event-mode pill + pinned filters
   mountSettingsGear()
   mountAskButton()
@@ -5540,8 +5542,8 @@ const eventEnv = createEventEnvelopes<Peer>({
   recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
 })
 announceDue = () => { eventEnv.announceDue() }
-const eventMerge = createMergeView({ st, openSheet, closeSheet, toast: (m) => toast(m), redraw: render, ...eventEnv.merge }) // wave45 merge-events
-refetchEvents = createEventsRefetch({ now: Date.now, peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) }).run   // wave45 events-refetch
+const eventMerge = installEventMerge(appActions, { st, openSheet, closeSheet, toast: (m) => toast(m), redraw: render, ...eventEnv.merge }) // wave45 merge-events (+ MCP event_merge, event_merge_answer)
+refetchEvents = installEventsRefetch(appActions, { now: Date.now, peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 events-refetch (+ MCP events_refetch)
 setDraftHost({ state: st, save })   // wave44c event-autosave
 restoreRecordDraft()
 const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown, skip) => eventEnv.introduce(id, who, shown, skip) }) // wave44c seen-through
@@ -5653,9 +5655,6 @@ bindTw({
   ctx: twCtx,
 })
 
-// Wave 40 ai-edit-chat: every step the person can tap, as undoable commands (actions.ts, app_actions.ts). The bar, Variations, Extensions,
-// Theme and the Curate page run through them; the assistant proposes the same commands, so whatever a hand can do, it can do too.
-const appActions = createActions()
 const BAR_PLACES: Partial<Record<AppPlace, BarId>> = { web: 'web', chat: 'chat', people: 'people', resources: 'inventory', events: 'events', feed: 'feed', timeline: 'timeline' }
 let placeNow: AppPlace | null = null
 function openAppPlace(place: AppPlace, personId?: string): void {
@@ -5742,12 +5741,9 @@ defineEventActions(appActions, {
   sendEnvelope: (ev, who) => { const peer = st().peers.find((x) => x.id === st().people.find((p) => p.id === who)?.peerId); if (!peer) throw new Error(`${who} is not connected`); void eventEnv.sendNow(peer, ev.id) },
 })
 defineSyncActions(appActions, devices) // wave43c sync-devices
-defineGroupActions(appActions, { ...groups, open: (gid) => { if (screen !== Screen.Chat) go(Screen.Chat); groups.open(gid) } }) // wave45 group-chat-list: MCP group_* / list_*
 defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
 defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
 defineA44dActions(appActions, { openEventChat: (id) => { eventHost.openEventChat(id); if (screen !== Screen.Events) go(Screen.Events) }, messageAll: (id, text) => eventHost.messageAllById(id, text), leaveEventChat: (id, leave) => eventChat.leave(id, leave), answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
-defineEventMergeActions(appActions, eventEnv.merge) // wave45 merge-events: MCP event_merge, event_merge_answer
-defineEventsRefetchAction(appActions, { refetch: (explicit) => refetchEvents(explicit) })   // wave45 events-refetch: MCP events_refetch
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),
@@ -6087,7 +6083,7 @@ function maybeOpenPendingEvent(): void {
     ])
     return
   }
-  const kept = mergedInto(st(), ev.id); if (kept) { openEvents(kept); return } // wave45 merge-events: an old link opens the kept event
+  const kept = eventMerge.keptOf(ev.id); if (kept) { openEvents(kept); return } // wave45 merge-events: an old link opens the kept event
   if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id, linkOpensEdit(ev)); return }
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement

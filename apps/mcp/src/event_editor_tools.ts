@@ -8,6 +8,8 @@ import { addCalendar, applyEventDetails, calendarsOf, draftsOf, emptyFields, inv
 import type { EditorFields } from '../../trustweb/src/event_draft.ts'
 import type { AppState, TwEvent } from '../../trustweb/src/model.ts'
 import type { Tool } from './protocol.ts'
+import { mayInviteRecord } from './bulk_invite_tools.ts' // answers-45a: the UI's mayInvite gate
+import type { Rec as RecordRec } from './record_tools.ts'
 
 type Obj = Record<string, unknown>
 interface Person { id: string; name: string; deleted_at?: string }
@@ -61,6 +63,7 @@ export function eventEditorTools(e: EventEditorEnv): { read: Tool[]; write: Tool
         let out: Obj = {}
         e.commit((r) => {
           const ev = eventOf(r, a.event)
+          if (!mayInviteRecord(ev, r as unknown as RecordRec)) throw new Error(`you may not invite to "${ev.name}" (the app shows Invite only to whom may invite)`) // answers-45a (review-45 Q9)
           const ids = (Array.isArray(a.people) ? a.people : []).map((p) => personId(r, str(p)))
           inviteGuests(ev, ids, a.cohost === true)
           out = { id: ev.id, people: ev.people ?? [], hosts: ev.hosts ?? [] }

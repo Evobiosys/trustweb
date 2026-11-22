@@ -57,6 +57,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
 const order = (a: GcItem, b: GcItem): number => a.ts - b.ts || (a.m < b.m ? -1 : a.m > b.m ? 1 : 0)
 const live = (p: Person): boolean => p.deleted_at === undefined && !p.via
+const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 /** Text fit to send and keep: no hidden characters, tidy line breaks; null when empty or too long. */
 export function cleanGcText(raw: unknown): string | null {
@@ -123,7 +124,18 @@ export function mergeEventChats(mine: unknown, theirs: unknown): EventChats {
 }
 SETTING_MERGERS.set('eventChats', mergeEventChats)
 
-type Rec = Pick<AppState, 'people' | 'me'> & Partial<Pick<AppState, 'events' | 'extData' | 'uiRings' | 'eventChats'>>
+/** review-45 (merge-events): the gone event's thread joins the kept event's (items by id, membership by the newer change, unread added); the gone key goes. */
+export function moveEventThread(s: Pick<AppState, 'eventChats'>, goneId: string, keepId: string): void {
+  const all = sanitizeEventChats(s.eventChats)
+  const gone = all[goneId]
+  if (!gone || goneId === keepId) return
+  const keep = all[keepId]
+  const joined = keep ? mergeEventChats({ x: keep }, { x: gone }).x : gone
+  const { [goneId]: _gone, ...rest } = all
+  s.eventChats = bounded({ ...rest, [keepId]: { ...joined, unread: Math.min(EVENT_CHAT_KEEP, (keep?.unread ?? 0) + gone.unread) } })
+}
+
+type Rec = Pick<AppState, 'people' | 'me'> & Partial<Pick<AppState, 'events' | 'extData' | 'uiRings' | 'eventChats' | 'eventMerged'>>
 
 /** The thread of one event (empty when none yet). */
 export function threadOf(s: Pick<AppState, 'eventChats'>, id: string): EventThread {
@@ -138,8 +150,9 @@ function withItem(t: EventThread, item: GcItem): EventThread {
   return { ...t, items: [...t.items, item].sort(order).slice(-EVENT_CHAT_KEEP), unread: Math.min(EVENT_CHAT_KEEP, t.unread + (item.k === 'msg' && !item.mine ? 1 : 0)) }
 }
 
-export function eventChatUnread(s: Pick<AppState, 'eventChats'>): number {
-  return Object.values(sanitizeEventChats(s.eventChats)).reduce((n, t) => n + t.unread, 0)
+/** Unread messages of one event's chat (`id`, the badge on its Event chat button), or of all event chats. */
+export function eventChatUnread(s: Pick<AppState, 'eventChats'>, id?: string): number {
+  return id === undefined ? Object.values(sanitizeEventChats(s.eventChats)).reduce((n, t) => n + t.unread, 0) : threadOf(s, id).unread
 }
 
 const iHost = (s: Rec, ev: TwEvent): boolean => isEventHost(ev, s.me.displayName, s.people)
@@ -180,6 +193,8 @@ export interface GroupChatHost<P extends { id: string }> {
 
 export function createEventGroupChat<P extends { id: string }>(h: GroupChatHost<P>) {
   const held = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
+  /** review-45: an item for a merged event's old id lands on the kept event (AppState.eventMerged, as event_merge.ts resolveEvent). */
+  const resolved = (id: string): string => { let x = id; for (let n = 0; n < 16 && !held(x) && h.state().eventMerged?.[x]; n++) x = h.state().eventMerged?.[x] as string; return x }
   const myName = (): string => cleanName(h.state().me.displayName) || 'TrustWeb'
   const personOf = (peerId: string): Person | undefined => h.state().people.find((p) => p.peerId === peerId && live(p))
   const env = (id: string, i: GcItem): EventEnvelope => ({ v: 1, t: 'event', gc: { id, m: i.m, k: i.k, by: i.by, ts: i.ts, ...(i.text ? { text: i.text } : {}) } })
@@ -207,6 +222,7 @@ export function createEventGroupChat<P extends { id: string }>(h: GroupChatHost<
     const ev = held(eventId)
     const who = s.people.find((p) => p.id === personId && live(p))
     if (!ev || !who || !iHost(s, ev)) return false
+    if (!atEvent(s, ev).some((p) => p.id === who.id)) return false // review-45: a yes from someone not at the event never opens the chat
     const t = threadOf(s, ev.id)
     if (t.mem?.[who.id]?.on === (k === 'join')) return false
     const now = h.now()
@@ -253,7 +269,7 @@ export function createEventGroupChat<P extends { id: string }>(h: GroupChatHost<
     /** A sealed gc item from a connected peer. True when it was new and kept (a host then passes it on). */
     async onEnvelope(peer: { id: string }, gc: NonNullable<EventEnvelope['gc']>): Promise<boolean> {
       const s = h.state()
-      const ev = held(gc.id)
+      const ev = held(resolved(gc.id))
       const who = personOf(peer.id)
       if (!ev || !who || !iTakePart(s, ev)) return false
       const t = threadOf(s, ev.id)
@@ -264,7 +280,9 @@ export function createEventGroupChat<P extends { id: string }>(h: GroupChatHost<
       if (gc.k === 'msg' && !text) return false
       const now = h.now()
       const item: GcItem = { m: gc.m, k: gc.k, by: (fromHost && cleanName(gc.by)) || cleanName(who.name) || 'TrustWeb', ts: Math.min(gc.ts, now + SKEW_MS), at: now, ...(text ? { text } : {}) }
-      store(ev.id, withItem(fromHost || gc.k === 'msg' ? t : withMem(t, who.id, gc.k === 'join', now), item))
+      // review-45: a join / leave the host passes on names its subject by name; my device marks that person (never me: 'me' is my own Leave)
+      const subject = gc.k === 'msg' ? undefined : fromHost ? atEvent(s, ev).find((p) => sameName(p.name, item.by)) : who
+      store(ev.id, withItem(subject ? withMem(t, subject.id, gc.k === 'join', now) : t, item))
       if (iHost(s, ev)) await broadcast(ev, item, [peer.id])
       return true
     },
