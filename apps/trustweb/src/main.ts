@@ -266,6 +266,7 @@ import { startMcpLive } from './mcp_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { demoOverlayDismissed, dismissDemoOverlay } from './demo_overlay'
+import { demoOverlayRows } from './demo_overlay_view' // wave46 answers-45b
 import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement } from './agreements'
 import { agreementsSection } from './agreements_view'
@@ -8085,6 +8086,7 @@ function settingsSheet(): void {
       'data-remove-demo': '1',
       onclick: () => { removeDemoContent(); settingsSheet() },
     }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
+    ...demoOverlayRows(s, () => { updateDemoToggle(); settingsSheet() }),   // wave46 answers-45b
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     readersBlock({ state: st, save, redraw: settingsSheet, openSheet: (c) => openSheet(c), toast }),
     el('button', {

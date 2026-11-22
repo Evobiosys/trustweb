@@ -5680,4 +5680,15 @@ export const S = {
   },
   /* wave45 sync-errors-retry */
   syncErr: { ...SYNC_HINT, retry: 'Retry' },
+  /* wave46 answers-45b */
+  w46b: {
+    queued: '',
+    demoAgain: 'Show the demo-content button again',
+    demoAgainHint: 'Brings back the "Show demo content" button you closed with ×, on this device.',
+    googleOnce: '',
+    webBubble: '',
+    closeFollow: '',
+    closeFollowHint: '',
+    closeFollowPeople: '',
+  },
 } as const

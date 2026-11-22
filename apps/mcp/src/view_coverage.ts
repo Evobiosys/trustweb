@@ -35,6 +35,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'contact_box_view.ts': ['get_person', 'set_field'],
   'contacts_sync_view.ts': ['sync_status', 'sync_now'],
   'dashboard_view.ts': ['dashboard_open', 'home_layout_get'],
+  'demo_overlay_view.ts': NAV, // wave46 answers-45b: device-local (localStorage), reached by app_action tap
   'desktop_view.ts': NAV,
   'event_merge_view.ts': ['event_merge', 'event_merge_answer', 'event_merge_asks_list'], // wave45 merge-events
   'event_editor_view.ts': ['event_drafts_list', 'event_draft_save', 'event_details_set', 'event_times_set', 'event_invite'],
