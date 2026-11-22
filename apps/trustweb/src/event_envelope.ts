@@ -24,6 +24,7 @@ import { applyJoined, isIntimate } from './event_community' // wave44c answers-4
 import { createEventMerge } from './event_merge_flow' // wave45 merge-events
 import { resolveEvent } from './event_merge'
 import { mayAnnounce } from './community_event_access' // wave45 community-events-invite-only
+import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -189,6 +190,23 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     return true
   }
 
+  /* wave45 events-refetch: a connected person asks for what I announced; the announce envelopes go again (their receiver skips events it holds). Only members of the community, at most once per REPLAY_GAP_MS. */
+  const askedAt = new Map<string, number>()
+  async function replay(peer: P): Promise<boolean> {
+    const t = host.now()
+    if (t - (askedAt.get(peer.id) ?? -Infinity) < REPLAY_GAP_MS) return false
+    askedAt.set(peer.id, t)
+    let any = false
+    for (const ev of host.state().events ?? []) {
+      const tag = communityOfEvent(ev)
+      if (ev.announcedAt === undefined || ev.shareCommunity !== true || !tag || !host.members?.(tag).some((m) => m.id === peer.id)) continue
+      await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev), announce: true })
+      if (ev.openSpace) await host.send(peer, osEnvelope(ev))
+      any = true
+    }
+    return any
+  }
+
   return {
     /** wave45 merge-events: start a merge (event_merge_flow.ts) or answer the other host's ask. */
     merge: { start: merge.start, answer: merge.answer },
@@ -253,6 +271,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     },
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
+      if (env.sync) return (await replay(peer).catch(() => false)) ? 'answered' : 'ignored' // wave45 events-refetch
       if (env.seen) return onSeen(peer, env.seen) ? 'filled' : 'ignored' // wave44c seen-through
       if (env.merge) return (await merge.onEnvelope(peer, env.merge).catch(() => false)) ? 'filled' : 'ignored' // wave45 merge-events
       if (env.joined) return (await onJoined(peer, env.joined).catch(() => false)) ? 'filled' : 'ignored' // wave44c answers-44d

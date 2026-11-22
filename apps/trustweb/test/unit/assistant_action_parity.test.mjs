@@ -10,6 +10,7 @@ import { defineSeenActions } from '../../src/seen_through_actions.ts' // review-
 import { defineA44dActions } from '../../src/a44d_actions.ts' // answers-44d
 import { defineGroupActions } from '../../src/group_chat_actions.ts' // wave45 group-chat-list
 import { defineEventMergeActions } from '../../src/event_merge_actions.ts' // wave45 merge-events
+import { defineEventsRefetchAction } from '../../src/events_refetch_actions.ts'
 import { ACTION_MCP, mcpToolFor } from '../../src/ext/assistant/actions.ts'
 import { allTools } from '../../../mcp/src/tools.ts'
 
@@ -24,6 +25,7 @@ defineSeenActions(reg, host) // review-44c: seen-introduce
 defineA44dActions(reg, host) // answers-44d
 defineGroupActions(reg, host) // wave45 group-chat-list
 defineEventMergeActions(reg, host) // wave45 merge-events
+defineEventsRefetchAction(reg, host) // wave45 events-refetch
 
 describe('registry <-> MCP parity', () => {
   const tools = allTools({ file: '/nonexistent', write: true }).map((t) => t.name)

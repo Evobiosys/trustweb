@@ -39,6 +39,8 @@ import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view'
 import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
 import { createMergeView, defineEventMergeActions, mergedInto } from './event_merge_view' // wave45 merge-events
+import { createEventsRefetch } from './events_refetch' // wave45 events-refetch
+import { defineEventsRefetchAction } from './events_refetch_actions' // wave45 events-refetch
 import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
 import { createGroupView } from './group_chat_view' // wave45 group-chat-list
@@ -672,6 +674,7 @@ let superseded = false
 let autoBackup: BackupView | null = null
 /** Also read by save(): declared here so a boot-time save never meets them uninitialised (wave 44 steer-event-visibility-3). announceDue is set once eventEnv exists; mirrorTimer is the push-bundle write timer. */
 let announceDue: () => void = () => undefined
+let refetchEvents: (explicit: boolean) => Promise<number | null> = async () => null   // wave45 events-refetch: set once eventEnv exists
 let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
@@ -1898,6 +1901,7 @@ function go(to: Screen): void {
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   if (s !== Screen.Web) web.resetZoom()
   if (s !== Screen.Inventory) { invOnly = null; invMatches = false } else if (screen !== Screen.Inventory) invFrom = screen   // wave45 event-back-button
+  if (s === Screen.Events && screen !== Screen.Events) void refetchEvents(false)   // wave45 events-refetch: new events of my communities, at most every 5 min
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -5537,6 +5541,7 @@ const eventEnv = createEventEnvelopes<Peer>({
 })
 announceDue = () => { eventEnv.announceDue() }
 const eventMerge = createMergeView({ st, openSheet, closeSheet, toast: (m) => toast(m), redraw: render, ...eventEnv.merge }) // wave45 merge-events
+refetchEvents = createEventsRefetch({ now: Date.now, peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) }).run   // wave45 events-refetch
 setDraftHost({ state: st, save })   // wave44c event-autosave
 restoreRecordDraft()
 const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown, skip) => eventEnv.introduce(id, who, shown, skip) }) // wave44c seen-through
@@ -5553,7 +5558,8 @@ const eventHost = eventPageHooks({
 const eventsView = createEventsView({
   focusWeb: webFocus, ...eventHost,
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
-  undoNotice,
+  undoNotice, refetch: (explicit) => refetchEvents(explicit),   // wave45 events-refetch
+
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
   showQr: (ev, host) => eventQr(ev, false, host),
@@ -5741,6 +5747,7 @@ defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-das
 defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
 defineA44dActions(appActions, { openEventChat: (id) => { eventHost.openEventChat(id); if (screen !== Screen.Events) go(Screen.Events) }, messageAll: (id, text) => eventHost.messageAllById(id, text), leaveEventChat: (id, leave) => eventChat.leave(id, leave), answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
 defineEventMergeActions(appActions, eventEnv.merge) // wave45 merge-events: MCP event_merge, event_merge_answer
+defineEventsRefetchAction(appActions, { refetch: (explicit) => refetchEvents(explicit) })   // wave45 events-refetch: MCP events_refetch
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),

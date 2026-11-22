@@ -137,6 +137,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'community_event_visibility', write: true },
   /* wave45 offline-outbox */
   { name: 'outbox_list', write: false },
+  /* wave45 events-refetch */
+  { name: 'events_refetch', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

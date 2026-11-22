@@ -475,6 +475,8 @@ export interface EventEnvelope {
   gg?: GroupOp
   /** wave45 merge-events: two events become one (trustweb event_merge_flow.ts). `ask` (a host of `keep` asks a host of `gone`; `link` = the kept event), `yes` / `no` (the answer), `done` (a host of `gone` tells its people; `link` = the kept event). */
   merge?: { step: 'ask' | 'yes' | 'no' | 'done'; keep: string; gone: string; link?: string }
+  /** wave45 events-refetch: "send me the events you announced to my communities" (alone in the envelope). */
+  sync?: true
 }
 /** wave45 group-chat-list: see EventEnvelope.gg. */
 export interface GroupOp {

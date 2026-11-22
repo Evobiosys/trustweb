@@ -38,6 +38,8 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   'list-add-item': 'list_add_item', 'list-check': 'list_check', 'list-move': 'list_move', 'list-archive-done': 'list_archive_done',
   /* wave45 merge-events (event_merge_actions.ts) */
   'event-merge': 'event_merge', 'event-merge-answer': 'event_merge_answer',
+  /* wave45 events-refetch */
+  'events-refetch': 'events_refetch',
 }
 
 /** The actions `app_action` accepts (derived, so a new entry above needs no second edit). */

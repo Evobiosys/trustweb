@@ -27,6 +27,7 @@ import { S } from './strings'
 import { attendChanged, conferenceLine } from './event_conference'
 import { emojiOn, emojiTitle, titleEmoji } from './title_emoji' // answers-44d
 import { eventTop, shareAudienceRow } from './event_page_top_view' // answers-44d
+import { onPullDown } from './events_refetch' // wave45 events-refetch
 
 export interface EventsViewHooks {
   state: () => AppState
@@ -44,6 +45,8 @@ export interface EventsViewHooks {
   newId: () => string
   /** Copies a text and says so (the app's toast, or `done` as its words). */
   copyLink: (text: string, done?: string) => void
+  /** Wave 45 events-refetch: asks the connected people for new events (true = a manual refresh, skips the 5-minute cache); resolves when the asking is done. */
+  refetch?: (explicit: boolean) => Promise<unknown>
   /** Opens the join sheet for a pasted event link; false when the text holds none. */
   joinLink: (text: string) => boolean
   origin: string
@@ -154,12 +157,26 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return el('div', {}, [input, error])
   }
 
+  /* wave45 events-refetch: the list's scroller takes a pull-down and shows a Refresh button; both ask the connected people for new events. */
+  function refetchable(scroller: HTMLElement, button: HTMLButtonElement): HTMLElement {
+    const run = (): void => {
+      if (!h.refetch || button.disabled) return
+      button.disabled = true
+      button.textContent = S.w45refetch.looking
+      void h.refetch(true).finally(() => { button.disabled = false; button.textContent = S.w45refetch.button })
+    }
+    button.onclick = run
+    onPullDown(scroller, run)
+    return scroller
+  }
+  const refetchButton = (): HTMLButtonElement => el('button', { class: 'mini', type: 'button', 'data-events-refetch': '', title: S.w45refetch.pull }, [S.w45refetch.button]) as HTMLButtonElement
+
   function list(): Node[] {
     const { upcoming, past } = eventsSorted(h.state(), Date.now())
     const add = el('button', { class: 'btn btn-electric wide', 'data-event-add': '', onclick: () => show({ kind: 'form' }) }, [S.eventsAdd])
     const invited = (): HTMLElement[] => invitationEventRows(h.state(), '').map(invitationRow)
     const drafts = draftsOf(h.state()).map(draftRow)
-    if (!upcoming.length && !past.length && !invited().length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [...drafts, el('p', { class: 'empty' }, [S.eventsEmpty]), add, pasteRow()])]
+    if (!upcoming.length && !past.length && !invited().length) { const b = refetchButton(); return [h.header(S.eventsTitle, { back: h.leave }), refetchable(el('div', { class: 'scroll' }, [...drafts, el('p', { class: 'empty' }, [S.eventsEmpty]), b, add, pasteRow()]), b)] }
     const rows = el('div', {}, [])
     const draw = (q: string): void => {
       const [up, pa] = [upcoming, past].map((l) => l.filter((e) => eventMatches(e, q)))
@@ -173,7 +190,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const filter = upcoming.length + past.length + invited().length > 0
       ? el('input', { class: 'field', placeholder: S.eventsFilter, 'aria-label': S.eventsFilter, 'data-event-filter': '', oninput: (e: Event) => draw((e.target as HTMLInputElement).value) })
       : null
-    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [...drafts, filter, rows, add, pasteRow()])]
+    const b = refetchButton()
+    return [h.header(S.eventsTitle, { back: h.leave }), refetchable(el('div', { class: 'scroll' }, [...drafts, filter, rows, b, add, pasteRow()]), b)]
   }
 
   function field(label: string, input: HTMLElement): Node[] {
