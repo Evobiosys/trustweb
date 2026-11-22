@@ -23,12 +23,13 @@ export function homeButton(context: string | undefined): string | null {
 
 /** What to do for `step`: `visible` = its target is on screen, `navTried` = the row's navigation was already done for this step,
  *  `plan` = navPlan from where the app is now to the row's `context`. */
-export function stepMove(step: { text: string; selector: string | null }, visible: boolean, navTried: boolean, plan: NavPlan, context: string | undefined): StepMove {
+export function stepMove(step: { text: string; selector: string | null }, visible: boolean, navTried: boolean, plan: NavPlan): StepMove {
   if (!step.selector) return { kind: 'card' }
   if (visible) return { kind: 'tap', selector: step.selector }
   if (!navTried && plan.taps.length) return { kind: 'nav', taps: plan.taps }
-  if (!plan.path) return { kind: 'missing', ring: null, note: S.walkNotHere(step.text) }
-  return { kind: 'missing', ring: plan.taps[0]?.selector ?? homeButton(context), note: navNote(plan) }
+  // Already there (no tap left to do) or no known view: never say "navigate to X first" without a way to go.
+  if (!plan.path || !plan.taps.length) return { kind: 'missing', ring: null, note: S.walkNotHere(step.text) }
+  return { kind: 'missing', ring: plan.taps[0].selector, note: navNote(plan) }
 }
 
 /** `at` = the step to do next; `auto` = the walker does it by itself after the pause. */
