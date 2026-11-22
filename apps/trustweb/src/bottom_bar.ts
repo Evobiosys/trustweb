@@ -219,6 +219,14 @@ export function promoteBar(bar: UiBar | undefined, id: string, f: BarFlags, max:
 
 export const HALO_MAX = 2
 
+/** Wave 45: of the raised (highlighted) views, the one that wears the extra outer ring: the strict maximum of the counts, none when two or more tie (absent count = 0). */
+export const ringLead = (counts: Readonly<Record<string, number>>, raised: readonly string[]): string | null => {
+  if (raised.length < 2) return null
+  const top = Math.max(...raised.map((id) => counts[id] ?? 0))
+  const lead = raised.filter((id) => (counts[id] ?? 0) === top)
+  return lead.length === 1 ? lead[0] : null
+}
+
 /** Wave 40: the views wearing a halo now: stored ones that are still in the row, the newest HALO_MAX. Wave 43b (B16): a view raised as the centre button (`raised`) wears none. */
 export const haloOf = (bar: UiBar | undefined, ids: readonly BarId[], raised: readonly BarId[] = []): BarId[] =>
   (Array.isArray(bar?.halo) ? bar.halo : []).filter((id): id is BarId => ids.includes(id as BarId)).slice(-HALO_MAX).filter((id) => !raised.includes(id))
