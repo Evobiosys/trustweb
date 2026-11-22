@@ -15,6 +15,7 @@ import { settingById, type Rec, type SettingValue } from './settings_registry'
 import {
   GROUP_SETTINGS, SHARE_GROUPS, answer, diffOf, dropOutgoing, dueFollowerUpdates, follow, followers, follows, parseWire, reachable, receive, setFollowAuto, shareOf, suggest,
   takeOutgoing, unfollow, type Reach, type ShareGroup,
+  CLOSE_RINGS, closeFollowPerson, setCloseFollow, // wave46 answers-45b
 } from './settings_share'
 import { S } from './strings'
 
@@ -64,8 +65,9 @@ export function createSettingsShare(h: ShareHost): { rows: (redraw: () => void) 
       for (const { from, item } of got) {
         const p = bySender(from)
         if (!p) continue
-        const outcome = receive(r, p.id, item, Date.now())
+        const outcome = receive(r, p.id, item, Date.now(), () => randomId(12))
         if (outcome === 'applied') h.toast(T.applied(p.name, groupName(item.group)))
+        if (outcome === 'allowed') h.toast(S.w46b.followAllowed(p.name, groupName(item.group)))   // wave46 answers-45b
         if (outcome === 'inbox') arrived++
         changed = true
       }
@@ -142,6 +144,21 @@ export function createSettingsShare(h: ShareHost): { rows: (redraw: () => void) 
     ])
   }
 
+  /** wave46 answers-45b: per person in Closest / Close, may they follow without asking (on) or do they ask first (struck through). */
+  function closePeopleSheet(): void {
+    const r = rec()
+    const list = reachable(people(), 'direct', h.didOf).filter((p) => CLOSE_RINGS.includes(p.ring))
+    h.sheet([
+      el('h3', {}, [S.w46b.closeFollowPeople]),
+      el('p', { class: 'meta' }, [S.w46b.closeFollowPeopleHint]),
+      ...(list.length ? list.map((p) => { const on = closeFollowPerson(r, p.id); return el('button', {
+        class: 'radio' + (on ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(on), 'aria-pressed': String(on), 'data-ss-close-person': p.id,
+        onclick: () => { setCloseFollow(r, p.id, !on); h.save(); closePeopleSheet() },
+      }, [el('b', {}, [p.name])]) }) : [el('p', { class: 'meta', 'data-ss-nobody': '' }, [T.nobody])]),
+      el('button', { class: 'btn btn-ghost', onclick: back }, [S.setTitle]),
+    ])
+  }
+
   /** A tap: the step, saved, Settings redrawn; a step on an item already answered (a double tap) only redraws. */
   const act = (fn: () => void, msg?: string): void => {
     try { fn(); h.save(); if (msg) h.toast(msg) } catch { /* already answered */ }
@@ -186,6 +203,13 @@ export function createSettingsShare(h: ShareHost): { rows: (redraw: () => void) 
       }, [el('b', {}, [T.auto]), el('small', {}, [T.autoHint])]),
       el('button', { class: 'chip', 'data-ss-stop': f.group, onclick: () => act(() => unfollow(r, f.group, Date.now(), () => randomId(12))) }, [T.stop]),
     ]))
+    const closeRow = (r: Rec): HTMLElement => { const on = shareOf(r).closeAsk !== true; return el('div', { class: 'ss-close', 'data-ss-close': String(on) }, [
+      el('button', {
+        class: 'radio' + (on ? ' on' : ' tw-off'), role: 'switch', 'aria-checked': String(on), 'aria-pressed': String(on), 'data-ss-close-auto': '',
+        onclick: () => act(() => setCloseFollow(r, null, !on)),
+      }, [el('b', {}, [S.w46b.closeFollow]), el('small', {}, [S.w46b.closeFollowHint])]),
+      on ? el('button', { class: 'chip ss-open', 'data-ss-close-people': '', onclick: () => closePeopleSheet() }, [S.w46b.closeFollowPeople]) : null,
+    ]) }
     const byGroup = SHARE_GROUPS.flatMap((g) => { const names = followers(r).filter((f) => f.group === g).map((f) => nameOf(f.person)); return names.length ? [el('p', { class: 'meta', 'data-ss-followers': g }, [T.followers(names.join(', '), groupName(g))])] : [] })
     const d = el('details', { class: 'settings-adv', 'data-settings-section': 'share-settings', 'data-settings-share': '', 'data-settings-group': 'share-settings' }, [
       el('summary', { class: 'adv-toggle' }, [T.title, items.length ? el('span', { class: 'ss-new', 'data-ss-new': '' }, [` · ${T.newCount(items.length)}`]) : null]),
@@ -197,6 +221,7 @@ export function createSettingsShare(h: ShareHost): { rows: (redraw: () => void) 
       ]),
       ...mine,
       ...byGroup,
+      closeRow(r),   // wave46 answers-45b
     ]) as HTMLDetailsElement
     d.open = items.length > 0 || keepOpen
     d.addEventListener('toggle', () => { keepOpen = d.open })

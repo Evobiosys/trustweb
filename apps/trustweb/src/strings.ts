@@ -5688,8 +5688,10 @@ export const S = {
     demoAgainHint: 'Brings back the "Show demo content" button you closed with ×, on this device.',
     googleOnce: '',
     webBubble: 'Web: just people from this event',
-    closeFollow: '',
-    closeFollowHint: '',
-    closeFollowPeople: '',
+    closeFollow: 'Let Closest/Close follow my settings without asking',
+    closeFollowHint: 'On: someone in your Closest or Close ring who asks to follow a settings group gets it at once. Everyone else waits for your Allow. They still decide what to take.',
+    closeFollowPeople: 'Per person',
+    closeFollowPeopleHint: 'Struck through: this person asks first, like everyone outside Closest and Close.',
+    followAllowed: (name: string, group: string) => `${name} (Closest/Close) now follows your ${group} settings.`,
   },
 } as const

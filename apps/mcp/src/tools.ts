@@ -30,7 +30,7 @@ import { eventPeopleTools } from './event_people_tools.ts' // wave45 event-peopl
 import { eventChatTools } from './event_chat_tools.ts' // wave45 event-group-chat
 import { groupTools } from './group_tools.ts' // wave45 group-chat-list
 import { eventMergeTools } from './event_merge_tools.ts' // wave45 merge-events
-import { settingsShareTools } from './settings_share_tools.ts' // wave45 settings-suggest
+import { closeFollowTools, settingsShareTools } from './settings_share_tools.ts' // wave45 settings-suggest; wave46 answers-45b closeFollowTools
 import { googleSyncTools } from './google_sync_tools.ts' // wave45 google-contacts-sync
 import { bulkInviteTools } from './bulk_invite_tools.ts' // wave45 bulk-invite-filter
 import { communityEventAccessTools } from './community_event_access_tools.ts' // wave45 community-events-invite-only
@@ -73,6 +73,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave45 community-events-invite-only */ ...(write ? communityEventAccessTools(o) : []),
     /* wave45 offline-outbox */ ...outboxTools(o),
     /* wave45 events-refetch */ ...eventsRefetchTools({ ...o, write }),
+    /* wave46 answers-45b */ ...closeFollowTools({ ...o, write }),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

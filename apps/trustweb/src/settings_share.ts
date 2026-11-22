@@ -8,6 +8,8 @@
  *     follow request; the followed person taps Allow (I9: nothing goes out unasked), then gets their group sent at once and again whenever it
  *     changes (dueFollowerUpdates). The follower takes an update directly when its per-follow "auto-apply" is on, else it waits in the inbox;
  *     an update that opens a privacy setting up (loosens) always waits in the inbox (answers-45a).
+ *     wave46 answers-45b (Jakob 2026-11-22): a follow request from someone in my Closest or Close ring is allowed at once, without my tap,
+ *     unless I switched that off for everyone (`closeAsk`, registry share.closeFollowAuto) or for that person (`ask`); everyone else still asks.
  * Everything leaves through `outbox` (the open app seals and posts it, then drops it), so a step taken over MCP goes out when the app is next open.
  * Values are only ever written through the settings registry (writeSetting): an id outside the group or a bad value is dropped, never applied.
  * Pure: no DOM, no clock, no ids of its own (passed in).
@@ -50,6 +52,10 @@ export interface SettingsShare {
   outbox: Outgoing[]
   /** `<person>/<group>`: I asked to follow; no update has come yet. */
   waiting: string[]
+  /** wave46 answers-45b: true = Closest / Close need my Allow too (global off). */
+  closeAsk?: true
+  /** wave46 answers-45b: person ids in Closest / Close who still need my Allow. */
+  ask?: string[]
 }
 
 export const isGroup = (g: unknown): g is ShareGroup => typeof g === 'string' && (SHARE_GROUPS as readonly string[]).includes(g)
@@ -93,7 +99,9 @@ export function shareOf(r: Rec): SettingsShare {
   })
   const sent: SettingsShare['sent'] = {}
   for (const g of SHARE_GROUPS) if (typeof obj(s.sent)[g] === 'string') sent[g] = obj(s.sent)[g] as string
-  return { inbox, book: cleanDelegations(s.book), sent, outbox, waiting: Array.isArray(s.waiting) ? s.waiting.filter((w): w is string => typeof w === 'string') : [] }
+  const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((w): w is string => typeof w === 'string') : [])
+  const ask = strs(s.ask)
+  return { inbox, book: cleanDelegations(s.book), sent, outbox, waiting: strs(s.waiting), ...(s.closeAsk === true ? { closeAsk: true as const } : {}), ...(ask.length ? { ask } : {}) }
 }
 
 const put = (r: Rec, s: SettingsShare): void => {
@@ -182,7 +190,7 @@ export function setFollowAuto(r: Rec, group: ShareGroup, auto: boolean): boolean
  * A payload from a known person (the caller maps the relay sender to a person id and drops strangers).
  * 'applied' = an update from the person I follow on that group, auto-apply on, nothing loosened; 'inbox' = waits for my tap; 'unfollowed'; 'ignored'.
  */
-export function receive(r: Rec, from: string, msg: Wire | null, now: number): 'applied' | 'inbox' | 'unfollowed' | 'ignored' {
+export function receive(r: Rec, from: string, msg: Wire | null, now: number, newId: () => string = () => `a${now}`): 'applied' | 'allowed' | 'inbox' | 'unfollowed' | 'ignored' {
   if (!msg) return 'ignored'
   const s = shareOf(r)
   const g = msg.group
@@ -195,6 +203,10 @@ export function receive(r: Rec, from: string, msg: Wire | null, now: number): 'a
       outcome = 'unfollowed'
     } else if (delegateOf(s.book, from, g)?.to === ME) {
       outcome = 'ignored'
+    } else if (closeFollowAuto(r, from)) {
+      s.inbox = others('follow')
+      allowFollow(r, s, from, g, now, newId)
+      outcome = 'allowed'
     } else {
       s.inbox = [...others('follow'), { id: `${from}:${msg.id}`, t: 'follow', from, group: g, at: now }]
       outcome = 'inbox'
@@ -239,13 +251,16 @@ export function answer(r: Rec, id: string, accept: boolean, now: number, newId: 
   const item = s.inbox.find((i) => i.id === id)
   if (!item) throw new Error(`no suggestion "${id}"`)
   s.inbox = s.inbox.filter((i) => i !== item)
-  if (accept && item.t === 'follow') {
-    s.book = delegate(s.book, { from: item.from, to: ME, topic: item.group, auto: false, since: now })
-    s.sent[item.group] = fingerprint(groupValues(r, item.group))
-    queue(s, item.from, suggestMsg(r, item.group, now, newId(), true))
-  }
+  if (accept && item.t === 'follow') allowFollow(r, s, item.from, item.group, now, newId)
   put(r, s)
   return { applied: accept && item.t === 'suggest' ? applyValues(r, item.group, item.values) : [] }
+}
+
+/** Records `from` as my follower on `group` and queues my group for them at once. */
+function allowFollow(r: Rec, s: SettingsShare, from: string, group: ShareGroup, now: number, newId: () => string): void {
+  s.book = delegate(s.book, { from, to: ME, topic: group, auto: false, since: now })
+  s.sent[group] = fingerprint(groupValues(r, group))
+  queue(s, from, suggestMsg(r, group, now, newId(), true))
 }
 
 /** For each group someone follows: when it changed since it was last sent, queue it for every follower. How many messages were queued. */
@@ -293,3 +308,30 @@ export function reachable<P extends Pickable>(people: readonly P[], reach: Reach
     .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
     .map(({ p }) => p)
 }
+
+/* wave46 answers-45b */
+export const CLOSE_RINGS: readonly unknown[] = ['closest', 'close']
+type Ringed = { id?: unknown; ring?: unknown; deleted_at?: unknown; via?: unknown }
+const personRec = (r: Rec, id: string): Ringed | undefined => (Array.isArray(r.people) ? (r.people as Ringed[]) : []).find((p) => p && p.id === id && p.deleted_at === undefined && !p.via)
+
+/** True when this person may follow my settings without my Allow: my own card in Closest or Close, not switched off globally or for them. */
+export function closeFollowAuto(r: Rec, person: string): boolean {
+  const s = shareOf(r)
+  return CLOSE_RINGS.includes(personRec(r, person)?.ring) && !s.closeAsk && !(s.ask ?? []).includes(person)
+}
+
+/** Per person (person id) or for everyone (null): whether Closest / Close may follow without asking (default yes). */
+export function setCloseFollow(r: Rec, person: string | null, allow: boolean): void {
+  const s = shareOf(r)
+  if (person === null) {
+    if (allow) delete s.closeAsk; else s.closeAsk = true
+  } else {
+    const id = needPerson(r, person)
+    const rest = (s.ask ?? []).filter((x) => x !== id)
+    if (allow) { if (rest.length) s.ask = rest; else delete s.ask } else s.ask = [...rest, id]
+  }
+  put(r, s)
+}
+
+/** Whether this person, by person id, may follow without asking (my per-person switch only). */
+export const closeFollowPerson = (r: Rec, person: string): boolean => !(shareOf(r).ask ?? []).includes(person)
