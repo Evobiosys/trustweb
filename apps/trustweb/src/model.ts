@@ -20,6 +20,7 @@ import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
+import type { ResViews } from './resource_notion'   // wave45 resources-notion-views
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { HandshakeLogEntry, HandshakeMode } from './handshake_status'
@@ -1330,6 +1331,8 @@ export interface AppState {
   titleEmojiOff?: true
   /** Wave 45 event-bubble: Settings > Events "Event mode narrows the Web" switched off (event_bubble.ts). */
   eventBubbleOff?: true
+  /** Wave 45 resources-notion-views: the Resources view (List, Table, Board, Gallery, ...) and each view's filter and sort, per scope key (resource_notion.ts scopeKey). Absent: List. */
+  resViews?: ResViews
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */

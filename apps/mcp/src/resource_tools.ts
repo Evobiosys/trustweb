@@ -2,7 +2,10 @@
 /** Wave 43b resources-views (POLICY P02, MCP parity): the Resources page's views, filters, kind and "recommended by", as tools over the record file. */
 import { listResources, setKind, setRecommender } from '../../trustweb/src/resource_views.ts'
 import { setPhysical } from '../../trustweb/src/physical_place.ts'
-import { markOpened, scopedList } from '../../trustweb/src/resource_scope.ts'
+import { forPage, itemTags, markOpened, partitionScope, scopedList } from '../../trustweb/src/resource_scope.ts'
+import type { Scope } from '../../trustweb/src/resource_scope.ts'
+import { arrange, scopeKey, scopeLabelOf, setViewPrefs } from '../../trustweb/src/resource_notion.ts'
+import type { NotionRow, ResViews, ViewPatch, ViewPrefs } from '../../trustweb/src/resource_notion.ts'
 import { eventTagLabel, eventTagSlug } from '../../trustweb/src/event_tag.ts'
 import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { InventoryItem } from '../../trustweb/src/model.ts'
@@ -10,7 +13,7 @@ import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
 interface Person extends Obj { id: string; name: string; deleted_at?: string }
-interface Rec extends Obj { people: Person[]; inventory?: InventoryItem[]; events?: { id: string; name: string; tagName?: string }[]; extData?: Record<string, unknown> }
+interface Rec extends Obj { people: Person[]; inventory?: InventoryItem[]; resViews?: ResViews; events?: { id: string; name: string; tagName?: string }[]; extData?: Record<string, unknown> }
 export interface ResourceToolsEnv { load: () => Rec; commit: (change: (r: Rec) => void) => boolean }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -81,5 +84,51 @@ export function resourceTools(e: ResourceToolsEnv): { read: Tool[]; write: Tool[
       },
     },
   ]
-  return { read, write }
+  return { read, write: [...write, resourcesViewSet(e)] /* wave45 resources-notion-views */ }
+}
+
+/* wave45 resources-notion-views */
+function resourcesViewSet(e: ResourceToolsEnv): Tool {
+  return {
+    name: 'resources_view_set', description: 'Pick how Resources look (as the view pills do), remembered per scope: view list, table, board, gallery (or the older outliner / person) for mine (default), a community or an event. Optional for that view: sort (name, tags, sharedBy, when, scope; none clears) with dir asc/desc, groupBy tag or status (board), filters tag, kind, sharedBy (person id), communityId ("" clears one). Answers the rows the view shows (id, name, tags, sharedBy, when, scope, status) and, for a board, its columns.',
+    inputSchema: schema({
+      scope: S('mine (default), community or event'), community: S('community id, with scope community'), event: S('event id, with scope event'), page: S('resources (default) or references'),
+      view: S('list, table, board, gallery, outliner or person'), sort: S('name, tags, sharedBy, when, scope or none'), dir: S('asc or desc (default asc; when: desc)'), groupBy: S('tag or status (board)'),
+      tag: S('only items with this tag id ("" clears)'), kind: S(`${KIND} ("" clears)`), sharedBy: S('person id ("" clears)'), communityId: S('community id ("" clears)'),
+    }, ['view']),
+    run: (a) => {
+      const r0 = e.load()
+      const tags = Object.entries(parseCommunity(r0.extData?.['community-mighty']).meta ?? {}).map(([id, m]) => ({ id, label: m.name ?? id, community: true }))
+      const events = r0.events ?? []
+      const et = { slug: eventTagSlug, label: eventTagLabel }
+      const scope = str(a.scope) || 'mine'
+      let sc: Scope | null = null
+      if (scope === 'community') {
+        const t = tags.find((x) => x.id === str(a.community))
+        if (!t) throw new Error('community: give the id of a community')
+        sc = { kind: 'community', id: t.id, label: t.label }
+      } else if (scope === 'event') {
+        const ev = events.find((x) => x.id === str(a.event))
+        if (!ev) throw new Error('event: give the id of an event')
+        sc = { kind: 'event', id: ev.id, label: et.label(ev.tagName ?? ev.name), tagIds: [et.slug(ev.tagName ?? ev.name)] }
+      } else if (scope !== 'mine') throw new Error('scope must be one of mine, community, event')
+      const page = str(a.page) === 'references' ? 'references' : 'resources'
+      const key = scopeKey(sc, page)
+      const sortName = str(a.sort)
+      const filter = Object.fromEntries((['tag', 'kind', 'sharedBy', 'communityId'] as const).filter((k) => typeof a[k] === 'string').map((k) => [k, str(a[k])]))
+      const patch: ViewPatch = {
+        view: str(a.view), ...(str(a.groupBy) ? { groupBy: str(a.groupBy) } : {}), ...(Object.keys(filter).length ? { filter } : {}),
+        ...(sortName === 'none' ? { sort: null } : sortName ? { sort: { key: sortName, dir: str(a.dir) || (sortName === 'when' ? 'desc' : 'asc') } } : {}),
+      }
+      let prefs: ViewPrefs | undefined
+      e.commit((r) => { prefs = setViewPrefs(r, key, patch) })
+      const r = e.load()
+      const inv = r.inventory ?? []
+      const items = sc ? (({ shared, fresh }) => [...shared, ...fresh])(partitionScope(forPage(inv, page), sc)) : inv
+      const ctx = { tagsOf: (i: InventoryItem) => itemTags(i, tags, events, et), nameOf: (id: string) => r.people.find((p) => p.id === id)?.name, scopeOf: (i: InventoryItem) => scopeLabelOf(i, tags, events, et) }
+      const shown = arrange(items, ctx, prefs!)
+      const row = (x: NotionRow): Obj => ({ id: x.id, name: x.name, tags: x.tags, sharedBy: x.sharedBy, when: x.when, scope: x.scope, status: x.status })
+      return { key, prefs, rows: shown.rows.map(row), ...(prefs!.view === 'board' ? { columns: shown.columns.map((c) => ({ id: c.id, label: c.label, ids: c.rows.map((x) => x.id) })) } : {}) }
+    },
+  }
 }
