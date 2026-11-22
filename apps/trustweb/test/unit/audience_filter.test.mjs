@@ -109,3 +109,25 @@ describe('steps diagram (A7)', () => {
     expect(stepsDiagram(5, labels)).toContain('data-step-more')
   })
 })
+
+/* wave45 ask-event-limit */
+describe('event chips: limit an ask by who attended', () => {
+  const att = (id, ring, events) => ({ ...p(id, ring), events })
+  const crowd = [att('a', Ring.Closest, []), att('b', Ring.Friend, ['ev1']), att('c', Ring.Acquaintance, ['ev1']), att('d', Ring.Acquaintance, ['ev2'])]
+  it('parseFilter accepts event:<id> chips', () => {
+    expect(parseFilter({ add: ['event:ev1'], exclude: ['event:ev2'] })).toEqual({ zone: undefined, add: ['event:ev1'], exclude: ['event:ev2'], degree: 1 })
+  })
+  it('add event:<id> reaches its attendees on top of the zone', () => {
+    expect(ids(peopleFor(f({ zone: 'closest', add: ['event:ev1'] }), crowd, hasTag))).toEqual(['a', 'b', 'c'])
+  })
+  it('exclude event:<id> hides its attendees', () => {
+    expect(ids(peopleFor(f({ zone: 'friend', exclude: ['event:ev1'] }), crowd, hasTag))).toEqual(['a'])
+  })
+  it('# suggests events by tag label or plain name', () => {
+    const evs = [{ id: 'ev1', name: 'Winter IYG' }]
+    expect(suggest('#event:win', [], [], [], evs)).toEqual([{ kind: 'event', id: 'ev1', label: 'event:Winter IYG' }, { kind: 'create', label: 'event:win' }])
+    expect(suggest('#iyg', [], [], [], evs).map((s) => s.kind)).toEqual(['event', 'create'])
+    expect(suggest('@win', [], [], [], evs)).toEqual([])
+    expect(suggest('#event:win', [], [], ['event:ev1'], evs).map((s) => s.kind)).toEqual(['create'])
+  })
+})
