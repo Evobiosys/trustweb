@@ -885,7 +885,7 @@ const net = new Net({
   save,
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
-  onQueued: (peer) => toast(S.outbox.queued(peer.displayName)), // wave45 offline-outbox
+  onQueued: () => toast(S.w46b.queued), // wave45 offline-outbox; wave46 answers-45b (Q2): both toasts stay, this one says it waits
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
   inviteVerdict: (inv, did) => invites.verdict(inv, did), onInviteAccepted: (peer, inv) => invites.accepted(peer, inv),   // wave44 steer-invite-link

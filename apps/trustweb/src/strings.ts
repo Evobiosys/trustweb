@@ -5682,7 +5682,8 @@ export const S = {
   syncErr: { ...SYNC_HINT, retry: 'Retry' },
   /* wave46 answers-45b */
   w46b: {
-    queued: '',
+    /** Q2: the "sent" toast stays; the queued one (net.ts onQueued) says this. Settings > Pending keeps its own line (S.outbox). */
+    queued: 'Waiting for being online again',
     demoAgain: 'Show the demo-content button again',
     demoAgainHint: 'Brings back the "Show demo content" button you closed with ×, on this device.',
     googleOnce: '',
