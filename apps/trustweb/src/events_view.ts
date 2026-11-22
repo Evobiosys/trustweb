@@ -534,7 +534,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const ctag = communityOfEvent(ev)
     if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
     const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
-      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, eventResources: h.eventResources, openPerson: h.curatorPerson }),
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, eventResources: h.eventResources, openPerson: h.curatorPerson }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),

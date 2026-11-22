@@ -2330,3 +2330,9 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 .events-page .ev-who{margin-top:4px}
 .events-page .ev-share-bottom{margin-top:14px; padding-top:10px; border-top:1px solid var(--line, rgba(0,0,0,.12))}
 .rs-by{display:block; font-size:12.5px}
+
+/* wave45 event-people-list */
+.events-page .ev-people{margin:6px 0}
+.events-page .ev-people-actions{margin-top:8px}
+.events-page .ev-act{border-color:var(--evc); color:var(--evc); background:color-mix(in srgb, var(--evc) 10%, transparent); text-decoration:underline}
+.events-page .ev-act[aria-pressed="true"]{background:color-mix(in srgb, var(--evc) 24%, transparent)}
