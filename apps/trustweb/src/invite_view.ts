@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 44 steer-invite-link: the community invite in the app (rules and token: invite_policy.ts).
- *   inviter    Community > Members "Invite" opens the sheet: Personal (one person) and Open (can be passed on), each Copy + QR; Advanced (V
+ *   inviter    Community > Members "Invite" opens the sheet: Personal (one person) and Open (can be passed on), each Copy + its QR shown at once
+ *              (wave 45: the same .qrwrap + renderQr as the top-of-page share QR, payload = the signed link); Advanced (V
  *              expander): max uses of the open link, days of new links, revoke all. A connect-ack carrying a token is checked here
  *              (verdict) against this device's counter; an accepted one tags the new connection with the community (accepted).
  *   recipient  a link with `#inv=` shows the confirmation before anything is sent (gate): inviter name, community, "Only accept if <name>
@@ -66,7 +67,7 @@ export function createInvites(d: InviteDeps, hash: string) {
     let personal: InviteEntry | null = null
     let advOpen = false
     const box = el('div', { class: 'invite-sheet', 'data-invite-sheet': tag })
-    const qrBox = (attr: string): HTMLElement => el('div', { class: 'invite-qr', [attr]: '', hidden: '' })
+    const qrBox = (attr: string): HTMLElement => el('div', { class: 'qrwrap invite-qr', [attr]: '' })
     const pQr = qrBox('data-invite-qr-personal')
     const oQr = qrBox('data-invite-qr-open')
     const linkOf = async (kind: InviteKind): Promise<string> => {
@@ -79,6 +80,7 @@ export function createInvites(d: InviteDeps, hash: string) {
       const link = await linkOf(kind)
       target.hidden = false
       target.dataset.link = link
+      target.dataset.payload = link
       await d.renderQr(target, link)
     }
     const actions = (kind: InviteKind, target: HTMLElement): HTMLElement => el('div', { class: 'chips event-share' }, [
@@ -142,6 +144,8 @@ export function createInvites(d: InviteDeps, hash: string) {
       adv,
     )
     d.openSheet([box])
+    void showQr('personal', pQr)
+    void showQr('open', oQr)
   }
 
   /**
