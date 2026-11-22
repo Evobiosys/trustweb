@@ -8,6 +8,7 @@
 import type { ColourTag } from './colour_tags'
 import type { AppState, TwEvent } from './model'
 import { setEventFilter } from './event_filter_mode'
+import { setEveryone } from './event_bubble' // wave46 answers-45b
 import { openBulkInvite } from './bulk_invite_view' // wave45 bulk-invite-filter
 import { parseCommunity } from './ext/community-mighty/community_data'
 
@@ -25,6 +26,8 @@ export interface EventHostDeps {
   /** The Personal | Community switch set to Community (this session). */
   chooseCommunity: () => void
   showResources: () => void
+  /** wave46 answers-45b: the Web screen. */
+  showWeb: () => void
 }
 
 export function eventPageHooks(d: EventHostDeps) {
@@ -48,6 +51,8 @@ export function eventPageHooks(d: EventHostDeps) {
     messageAll: (ev: TwEvent): void => d.groupChat.open(ev.id),
     inviteMany: (ev: TwEvent, done: () => void): void => openBulkInvite(ev, d, done),
     eventResources: (ev: TwEvent): void => { setEventFilter(d.st(), ev.id); d.save(); d.showResources() },
+    /** wave46 answers-45b: "Web: just people from this event" = event mode on this event with the bubble on (a lift by Everyone ends), then the Web. */
+    webBubble: (ev: TwEvent): void => { const s = d.st(); setEventFilter(s, ev.id); setEveryone(s, false); d.save(); d.showWeb() },
     /** Registry (MCP): open the event's shared chat; send one message into it (1 = kept and sent or waiting, 0 = refused). */
     openEventChat: (id: string): void => d.groupChat.open(find(id).id),
     messageAllById: (id: string, text: string): Promise<number> => d.groupChat.send(find(id).id, text).then((item) => (item ? 1 : 0)),

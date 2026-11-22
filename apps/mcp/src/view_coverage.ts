@@ -44,7 +44,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'event_group_chat_view.ts': ['event_chat_open', 'event_chat_read', 'event_chat_send', 'event_chat_leave'], // wave45 event-group-chat
   'group_chat_view.ts': ['group_list', 'group_read', 'group_create', 'group_invite', 'group_open', 'group_send', 'group_leave', 'list_create', 'list_set_active', 'list_add_item', 'list_check', 'list_move', 'list_archive_done'], // wave45 group-chat-list
   'events_view.ts': ['events_list', 'event_get', 'event_create', 'event_settings_set', 'event_link_open', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'events_refetch'],
-  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add', 'invite_bulk'],
+  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add', 'invite_bulk', 'event_mode_set'], // wave46 answers-45b: Web just people from this event = event_mode_set
   'ext/calendar/at_event_view.ts': ['event_get', 'event_settings_set'],
   'ext/calendar/calendar_tags_view.ts': ['calendar_tag_toggle'],
   'ext/calendar/calendar_view.ts': ['events_list', 'calendar_add'],

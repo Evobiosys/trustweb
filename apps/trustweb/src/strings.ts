@@ -5687,7 +5687,7 @@ export const S = {
     demoAgain: 'Show the demo-content button again',
     demoAgainHint: 'Brings back the "Show demo content" button you closed with ×, on this device.',
     googleOnce: '',
-    webBubble: '',
+    webBubble: 'Web: just people from this event',
     closeFollow: '',
     closeFollowHint: '',
     closeFollowPeople: '',

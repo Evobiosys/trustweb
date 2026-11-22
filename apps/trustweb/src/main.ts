@@ -5556,7 +5556,7 @@ const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web)
 const eventChat = createEventChatView<Peer>({ st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 event-group-chat
 const eventHost = eventPageHooks({
   st, save, tags: loadColourTags, openSheet, closeSheet, toast: (m) => toast(m), groupChat: eventChat,
-  showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory),
+  showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory), showWeb: () => go(Screen.Web),
 })
 const eventsView = createEventsView({
   focusWeb: webFocus, ...eventHost,

@@ -77,6 +77,8 @@ export interface EventsViewHooks {
   /** wave45 bulk-invite-filter: the Invite many sheet; `done` redraws the page. */
   inviteMany?: (ev: TwEvent, done: () => void) => void
   eventResources?: (ev: TwEvent) => void
+  /** wave46 answers-45b: "Web: just people from this event" (a44d_event_host.ts). */
+  webBubble?: (ev: TwEvent) => void
 }
 
 /** answers-44d (memo: "Invite a new person" made the screen jump up): the event page keeps its scroll position across redraws. */
@@ -543,7 +545,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const ctag = communityOfEvent(ev)
     if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
     const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
-      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson }),
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson, webBubble: h.state().eventBubbleOff ? undefined : h.webBubble }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),
