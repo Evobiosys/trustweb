@@ -2380,3 +2380,7 @@ body[data-inapp] .phone{padding-top:var(--inapp-h,0px)}
 /* wave45 event-back-button */
 .rs-head{display:flex; align-items:center; gap:2px}
 .rs-head .rs-title{margin:8px 0 4px}
+/* wave45 event-mode-visible: event mode tints the header and the bottom bar in the event's colour */
+body[data-tw-event-mode] .hdr{background:color-mix(in srgb, var(--event-mode-colour) 18%, transparent); box-shadow:inset 0 -3px 0 var(--event-mode-colour)}
+body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-colour) 16%, var(--tab-bg)); border-top:3px solid var(--event-mode-colour)}
+.hdr-left .ev-mode-note{flex:0 1 auto; min-width:0; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:var(--event-mode-colour); color:#fff}
