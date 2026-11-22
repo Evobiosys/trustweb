@@ -148,6 +148,19 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),
   pin('qr-only', 'Pin the QR only button to the toolbar', 'A button beneath Settings.'),
+  /* wave45 settings-suggest: the feed and notification switches the record already holds, so a settings group can be suggested whole */
+  { id: 'feed.remote', section: 'general', label: 'Feed: also show posts from Mastodon / Pixelfed', type: 'boolean', default: false, simple: false,
+    get: (r) => obj(r.feed).remote === true, set: (r, v) => { const f = { ...obj(r.feed) }; if (v) f.remote = true; else delete f.remote; if (Object.keys(f).length) r.feed = f; else delete r.feed } },
+  { id: 'feed.images', section: 'general', label: 'Feed: show pictures in those posts', type: 'boolean', default: false, simple: false,
+    get: (r) => obj(r.feed).images === true, set: (r, v) => { const f = { ...obj(r.feed) }; if (v) f.images = true; else delete f.images; if (Object.keys(f).length) r.feed = f; else delete r.feed } },
+  ...(['connect', 'ask', 'chat'] as const).map((k): SettingDef => ({
+    id: `notify.${k}`, section: 'general', label: `Notify me: ${k === 'connect' ? 'someone wants to connect' : k === 'ask' ? 'an ask reaches me' : 'a chat message'}`, type: 'boolean', default: true, simple: false,
+    get: (r) => obj(r.notifyKinds)[k] !== false,
+    set: (r, v) => {
+      const kinds = { connect: true, ask: true, chat: true, reminder: true, event: true, ...obj(r.notifyKinds), [k]: v === true }
+      if (Object.values(kinds).every((x) => x !== false)) delete r.notifyKinds; else r.notifyKinds = kinds
+    },
+  })),
 ]
 
 export const settingById = (id: string): SettingDef | undefined => SETTINGS_REGISTRY.find((s) => s.id === id)

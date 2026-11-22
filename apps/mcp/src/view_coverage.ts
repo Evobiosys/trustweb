@@ -127,6 +127,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'scope_editor_view.ts': ['trusted_only_set', 'trust_override_set'],
   'seen_through_view.ts': ['people_seen_through_list', 'event_introduce_person'],
   'services_view.ts': ['import_sources', 'app_action'],
+  'settings_share_view.ts': ['settings_suggestions_list', 'settings_suggest', 'settings_follow', 'settings_suggestion_accept'], // wave45 settings-suggest
   'share_page_view.ts': ['resource_share'],
   'shared_notes_view.ts': ['list_notes'],
   'short_alias_view.ts': ['profile_get', 'app_action'],
