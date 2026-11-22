@@ -99,7 +99,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   // wave46 answers-45b: Closest / Close follow my shared settings groups without my Allow (settings_share.ts closeFollowAuto); off = everyone asks.
   { id: 'share.closeFollowAuto', section: 'general', label: 'Let Closest/Close follow my settings without asking', hint: 'Off: everyone who wants to follow one of your settings groups waits for your Allow. Per person: Settings > Share settings.', type: 'boolean', default: true, simple: false,
     get: (r) => obj(r.settingsShare).closeAsk !== true,
-    set: (r, v) => { const s = { ...obj(r.settingsShare) }; if (v === true) delete s.closeAsk; else s.closeAsk = true; r.settingsShare = s } },
+    set: (r, v) => { const s = { ...obj(r.settingsShare) }; if (v === true) delete s.closeAsk; else s.closeAsk = true; if (Object.keys(s).length) r.settingsShare = s; else delete r.settingsShare } },
   sparse('events.alertCommunity', 'general', 'Alert me about new events in my communities', 'eventAlerts', true, false, 'Off: a new event a community member shares is dropped silently, with no row and no badge.'),
   flag('web.ringNames', 'web', 'Show ring names on the web', 'showRingNames', false, false, 'Trust zone under each name.'),
   choice('web.queryStyle', 'web', 'How asks read', 'queryStyle', ['call', 'search'], 'call', 'Asks read as a call for help or as a search.'),
