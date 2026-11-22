@@ -38,6 +38,7 @@ import { introForm, setIntroTarget } from './intro_ask_view'
 import { createSeenThrough, knowWhoBox, showAskCard } from './seen_through_view' // wave44c seen-through
 import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
+import { createMergeView, defineEventMergeActions, mergedInto } from './event_merge_view' // wave45 merge-events
 import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
 import { createGroupView } from './group_chat_view' // wave45 group-chat-list
@@ -5530,6 +5531,7 @@ const eventEnv = createEventEnvelopes<Peer>({
   recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
 })
 announceDue = () => { eventEnv.announceDue() }
+const eventMerge = createMergeView({ st, openSheet, closeSheet, toast: (m) => toast(m), redraw: render, ...eventEnv.merge }) // wave45 merge-events
 setDraftHost({ state: st, save })   // wave44c event-autosave
 restoreRecordDraft()
 const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown, skip) => eventEnv.introduce(id, who, shown, skip) }) // wave44c seen-through
@@ -5553,7 +5555,7 @@ const eventsView = createEventsView({
   askSupport: () => supportSheet(supportIo),
   feedRow: (ev) => feed.eventRow(ev),
   plan: (ev) => [...eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }), ...openSpaceSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), push: (e) => { void eventEnv.pushOpenSpace(e) }, noteFor: (e, a) => coNotes?.activityNote?.(e, a) ?? null })],
-  extra: (ev) => [...[cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []), ...seenThrough.eventSection(ev)],
+  extra: (ev) => [...[cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []), ...seenThrough.eventSection(ev), ...eventMerge.eventSection(ev)],
   openInvitation: (i) => invitationSheet(invitationIo(), i),
   rsvp: (ev) => { void eventEnv.rsvp(ev) }, saved: (ev) => { void eventEnv.pushConference(ev) },   // wave44c event-autosave
 })
@@ -5733,6 +5735,7 @@ defineGroupActions(appActions, { ...groups, open: (gid) => { if (screen !== Scre
 defineHomeActions(appActions, { openDashboard, openRequest }) // wave44 home-dashboard
 defineSeenActions(appActions, { introduce: (e, p) => seenThrough.introducePerson(e, p) }) // review-44c: MCP event_introduce_person
 defineA44dActions(appActions, { openEventChat: (id) => { eventHost.openEventChat(id); if (screen !== Screen.Events) go(Screen.Events) }, messageAll: (id, text) => eventHost.messageAllById(id, text), leaveEventChat: (id, leave) => eventChat.leave(id, leave), answerAsk: answerAskById, sendChat: (personId, text) => { const peerId = st().people.find((p) => p.id === personId)?.peerId; return peerId ? submitText(chatIo(), peerId, text) : Promise.resolve(false) } }) // answers-44d: MCP ask_answer, chat_send
+defineEventMergeActions(appActions, eventEnv.merge) // wave45 merge-events: MCP event_merge, event_merge_answer
 /* wave44 answers-44b: Send to chat / Post to feed of a shared block; the link route as before */
 const resShareHost: Parameters<typeof resourceShare>[0] & Parameters<typeof defineResourceShareActions>[1] = {
   state: st, save, people: chatPeople, sheet: openSheet, closeSheet, toast: (m) => toast(m), canShare: (i) => canShareOn(i, loadColourTags()),
@@ -6071,6 +6074,7 @@ function maybeOpenPendingEvent(): void {
     ])
     return
   }
+  const kept = mergedInto(st(), ev.id); if (kept) { openEvents(kept); return } // wave45 merge-events: an old link opens the kept event
   if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id, linkOpensEdit(ev)); return }
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement

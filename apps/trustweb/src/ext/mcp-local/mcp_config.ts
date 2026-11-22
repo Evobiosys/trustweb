@@ -121,6 +121,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'group_open', write: true }, { name: 'group_send', write: true }, { name: 'group_leave', write: true }, { name: 'list_create', write: true },
   { name: 'list_set_active', write: true }, { name: 'list_add_item', write: true }, { name: 'list_check', write: true }, { name: 'list_move', write: true },
   { name: 'list_archive_done', write: true },
+  /* wave45 merge-events */
+  { name: 'event_merge_asks_list', write: false }, { name: 'event_merge', write: true }, { name: 'event_merge_answer', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

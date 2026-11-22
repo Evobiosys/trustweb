@@ -473,6 +473,8 @@ export interface EventEnvelope {
   /** wave45 group-chat-list: one op of a group (a chat independent of events, trustweb group_chat.ts): `g` = group id, `m` = op id, `by` = the actor's name,
    * `ts` = the actor's clock. msg / check carry `text`; join / leave none; list carries `list`, item carries `it`, roster carries `text` (group name) + `names`. */
   gg?: GroupOp
+  /** wave45 merge-events: two events become one (trustweb event_merge_flow.ts). `ask` (a host of `keep` asks a host of `gone`; `link` = the kept event), `yes` / `no` (the answer), `done` (a host of `gone` tells its people; `link` = the kept event). */
+  merge?: { step: 'ask' | 'yes' | 'no' | 'done'; keep: string; gone: string; link?: string }
 }
 /** wave45 group-chat-list: see EventEnvelope.gg. */
 export interface GroupOp {

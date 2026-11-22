@@ -36,6 +36,8 @@ export const ACTION_MCP: Readonly<Record<string, string>> = {
   /* wave45 group-chat-list */
   'group-open': 'group_open', 'group-send': 'group_send', 'group-leave': 'group_leave', 'list-create': 'list_create', 'list-set-active': 'list_set_active',
   'list-add-item': 'list_add_item', 'list-check': 'list_check', 'list-move': 'list_move', 'list-archive-done': 'list_archive_done',
+  /* wave45 merge-events (event_merge_actions.ts) */
+  'event-merge': 'event_merge', 'event-merge-answer': 'event_merge_answer',
 }
 
 /** The actions `app_action` accepts (derived, so a new entry above needs no second edit). */
