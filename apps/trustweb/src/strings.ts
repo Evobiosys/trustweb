@@ -5523,4 +5523,10 @@ export const S = {
   },
   /* wave45 outliner-quickadd */
   resQuick: { ph: 'Add a line… #tag @person', aria: 'Add a line; type # for tags, @ for people, Enter adds, Tab indents' },
+  /* wave45 resource-event-private */
+  w45rep: {
+    visibleTo: 'Visible to',
+    wholeCommunity: 'The whole community',
+    onlyEvent: (label: string) => `Only people at ${label}`,
+  },
 } as const
