@@ -7999,6 +7999,7 @@ function settingsSheet(): void {
     general: [
     settingsSection('drafts', S.drafts44c.title, draftsSettingsRows(s, save, settingsSheet)),   // wave44c event-autosave
     settingsSection('outbox', S.outbox.title, outboxRows(s)),   // wave45 offline-outbox
+    ...demoOverlayRows(s, () => { updateDemoToggle(); settingsSheet() }),   // wave46 answers-45b: on the short page, not under Advanced
     settingsSection('trash', S.a44cTrash.title, trashRows(s, { save, redraw: () => { render(); settingsSheet() }, toast })),   // wave44c answers-44c (A4)
     settingsSection('you', S.setSecYou, [
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [
@@ -8086,7 +8087,6 @@ function settingsSheet(): void {
       'data-remove-demo': '1',
       onclick: () => { removeDemoContent(); settingsSheet() },
     }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
-    ...demoOverlayRows(s, () => { updateDemoToggle(); settingsSheet() }),   // wave46 answers-45b
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     readersBlock({ state: st, save, redraw: settingsSheet, openSheet: (c) => openSheet(c), toast }),
     el('button', {
