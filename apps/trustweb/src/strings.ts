@@ -5491,4 +5491,10 @@ export const S = {
   demoOverlay: {
     close: 'Dismiss',
   },
+  /* wave45 mastodon-beta-events */
+  w45mastodon: {
+    title: 'Beta features',
+    hint: 'Mastodon instance per event: the event Feed also shows the public posts under the event tag on that instance (read-only, nothing is sent). Empty = the default while the event Feed is on.',
+    label: 'Mastodon instance',
+  },
 } as const

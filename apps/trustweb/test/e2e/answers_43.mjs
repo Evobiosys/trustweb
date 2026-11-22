@@ -57,11 +57,7 @@ try {
     const nick = page.locator('[data-event-my-nickname]')
     await nick.fill('Winterfox'); await nick.dispatchEvent('change'); await page.waitForTimeout(200)
     check(`${w}: my nickname at this event is stored`, (await store()).events[0].myNickname === 'Winterfox')
-    const mast = page.locator('[data-event-mastodon]')
-    await mast.fill('not a host'); await mast.dispatchEvent('change'); await page.waitForTimeout(200)
-    check(`${w}: a bad Mastodon host shows a line and stores nothing`, (await page.locator('[data-event-mastodon-bad]').isVisible()) && !(await store()).events[0].mastodonInstance)
-    await mast.fill('Mastodon.Social'); await mast.dispatchEvent('change'); await page.waitForTimeout(200)
-    check(`${w}: a good Mastodon host is stored lower-case`, (await store()).events[0].mastodonInstance === 'mastodon.social')
+    check(`${w}: the Mastodon field moved to Settings (wave 45)`, (await page.locator('[data-event-mastodon]').count()) === 0)
     await page.screenshot({ path: `${SHOTS}/answers-43-advanced-${w}.png` })
     // delta: focus the event in the Web, open the filter list, clear with Undo
     await openEvent()
