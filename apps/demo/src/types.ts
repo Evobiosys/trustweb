@@ -470,7 +470,21 @@ export interface EventEnvelope {
   joined?: { id: string }
   /** wave45 event-group-chat: one item of the event's ONE shared thread: a message (`text`), or a join / leave notice. `m` = the item id (dedupe), `by` = the author's name (a host forwards it on), `ts` = the author's clock. */
   gc?: { id: string; m: string; k: 'msg' | 'join' | 'leave'; by: string; ts: number; text?: string }
+  /** wave45 group-chat-list: one op of a group (a chat independent of events, trustweb group_chat.ts): `g` = group id, `m` = op id, `by` = the actor's name,
+   * `ts` = the actor's clock. msg / check carry `text`; join / leave none; list carries `list`, item carries `it`, roster carries `text` (group name) + `names`. */
+  gg?: GroupOp
 }
+/** wave45 group-chat-list: see EventEnvelope.gg. */
+export interface GroupOp {
+  g: string; m: string; k: 'msg' | 'join' | 'leave' | 'check' | 'list' | 'item' | 'roster'; by: string; ts: number; text?: string
+  list?: { id: string; name: string; act?: true }
+  it?: { id: string; l: string; text: string; o: number; done?: { by: string; at: number }; arc?: true }
+  names?: string[]
+}
+/** wave45 group-chat-list: bounds of a group op. */
+export const GROUP_NAME_MAX = 60
+export const GROUP_ITEM_TEXT_MAX = 200
+export const GROUP_ROSTER_MAX = 50
 /** wave45 event-group-chat: the longest text of one group-chat message (EventEnvelope.gc.text). */
 export const EVENT_CHAT_TEXT_MAX = 2000
 // ----- END TrustWeb wave 43c -----
