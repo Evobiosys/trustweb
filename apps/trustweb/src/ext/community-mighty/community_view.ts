@@ -12,6 +12,7 @@ import { addGroupPost } from '../../feed_sources'
 import type { AppState } from '../../model'
 import { randomId } from '../../../../demo/src/crypto' // answers-44d
 import { INTIMATE_MAX, isIntimate } from '../../event_community' // answers-44d
+import { eventAccessOf } from '../../community_event_access' // wave45 community-events-invite-only
 import { hasColourTag, loadColourTags, saveColourTags } from '../../colour_tags'
 import { contextPress } from '../../context_press'
 import { strikeOff } from '../../bw_mode'
@@ -470,6 +471,9 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       // answers-44d: intimate = everyone knows everyone (events list the members)
       pick(ctx.strings.a44d.intimateToggle, { 'data-community-intimate-toggle': '' }, isIntimate(st(), tag), (on) => save({ ...data(), meta: { ...data().meta, [tag]: { ...metaOf(data(), tag), intimate: on } } }), !can),
       el('p', { class: 'meta' }, [ctx.strings.a44d.intimateHint(INTIMATE_MAX)]),
+      // wave45 community-events-invite-only: on = only people invited personally see its events (members too)
+      pick(ctx.strings.w45ceio.toggle, { 'data-community-events-invited-toggle': '' }, eventAccessOf(st(), tag) === 'invited', (on) => save({ ...data(), meta: { ...data().meta, [tag]: { ...metaOf(data(), tag), eventAccess: on ? 'invited' : 'members' } } }), !can),
+      el('p', { class: 'meta' }, [ctx.strings.w45ceio.hint]),
       el('p', { class: 'chips-lbl' }, [w.leftColumn]),
       ...NAV.map((n) => pick(t.nav[n], { 'data-community-nav-toggle': n }, shown.includes(n), () => {
         const now = leftNav(data(), tag)

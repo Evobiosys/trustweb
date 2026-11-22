@@ -5634,4 +5634,11 @@ export const S = {
   askEvent: {
     hint: '#event:<name> = people who attended',
   },
+  /* wave45 community-events-invite-only */
+  w45ceio: {
+    toggle: 'Events: only people I invite',
+    hint: 'Off: the members see the community\'s events. On: nobody sees them unless invited personally. A non-member sees an event only through their own invitation, and then only that event.',
+    /** Same wording as wave45 bulk-invite-filter S.bulkInvite.notMembers: the chain builder keeps one of the two. */
+    notMembers: (n: number, community: string) => `${n} are not members of ${community}: they will see the community's events only through this invitation.`,
+  },
 } as const
