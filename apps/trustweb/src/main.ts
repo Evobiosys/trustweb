@@ -324,6 +324,7 @@ import { archivedPeopleView } from './archived_people_view'
 import { purgeDue, recentlyDeleted } from './deleted_people'
 import { purgeTrash, trashItems } from './trash' // wave44c answers-44c (A4)
 import { trashRows } from './trash_view' // wave44c answers-44c (A4)
+import { outboxRows } from './outbox_view' // wave45 offline-outbox
 import { trustZonesGroup, zoneSidebar } from './trustzones_view'
 import { ringShown } from './rings_filter'
 import { ownProfilePage } from './own_profile_view'
@@ -878,6 +879,7 @@ const net = new Net({
   save,
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
+  onQueued: (peer) => toast(S.outbox.queued(peer.displayName)), // wave45 offline-outbox
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
   inviteVerdict: (inv, did) => invites.verdict(inv, did), onInviteAccepted: (peer, inv) => invites.accepted(peer, inv),   // wave44 steer-invite-link
@@ -4665,7 +4667,7 @@ function chatIo(): ChatIo {
     send: async (peerId, text, sentAt, re) => {
       const peer = st().peers.find((p) => p.id === peerId)
       if (!peer) throw new Error('not connected')
-      await net.sendText(peer, text, sentAt, re)
+      await net.sendText(peer, text, sentAt, re, undefined, false) // the thread keeps its own waiting state (chat.ts)
     },
     now: Date.now,
   }
@@ -7992,6 +7994,7 @@ function settingsSheet(): void {
     ],
     general: [
     settingsSection('drafts', S.drafts44c.title, draftsSettingsRows(s, save, settingsSheet)),   // wave44c event-autosave
+    settingsSection('outbox', S.outbox.title, outboxRows(s)),   // wave45 offline-outbox
     settingsSection('trash', S.a44cTrash.title, trashRows(s, { save, redraw: () => { render(); settingsSheet() }, toast })),   // wave44c answers-44c (A4)
     settingsSection('you', S.setSecYou, [
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [

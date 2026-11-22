@@ -34,6 +34,7 @@ import { settingsShareTools } from './settings_share_tools.ts' // wave45 setting
 import { googleSyncTools } from './google_sync_tools.ts' // wave45 google-contacts-sync
 import { bulkInviteTools } from './bulk_invite_tools.ts' // wave45 bulk-invite-filter
 import { communityEventAccessTools } from './community_event_access_tools.ts' // wave45 community-events-invite-only
+import { outboxTools } from './outbox_tools.ts' // wave45 offline-outbox
 
 export interface AllToolsOptions extends RecordToolsOptions {
   /** The server the app talks to (billing tools). Default https://app.trustweb.one. */
@@ -69,6 +70,7 @@ export function allTools(o: AllToolsOptions, allow?: readonly string[]): Tool[] 
     /* wave45 google-contacts-sync */ ...googleSyncTools({ ...o, write }),
     /* wave45 bulk-invite-filter */ ...bulkInviteTools({ ...o, write }),
     /* wave45 community-events-invite-only */ ...(write ? communityEventAccessTools(o) : []),
+    /* wave45 offline-outbox */ ...outboxTools(o),
     ...(o.previewUrl ? previewTools({ url: o.previewUrl, write }) : []),
   ]
   const readOnly = new Set(build(false).map((t) => t.name))

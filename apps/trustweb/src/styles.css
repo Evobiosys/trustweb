@@ -2458,3 +2458,8 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 .bulk-invite .bulk-count{margin:8px 0 4px; font-weight:600}
 .bulk-invite .bulk-list{max-height:30vh; overflow:auto}
 .bulk-invite .chip.off{text-decoration:line-through}
+/* wave45 offline-outbox */
+.outbox-row{display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; padding:6px 0}
+.outbox-row .meta{flex:1 1 100%}
+.outbox-row[data-outbox-state=sent] em{opacity:.6}
+.outbox-row[data-outbox-state=failed] em{text-decoration:underline}
