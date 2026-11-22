@@ -143,3 +143,6 @@ details[open] > summary::after { content: ' \25B4'; }
 .rs-head { display: flex; align-items: center; gap: var(--s-1); }
 .rs-head .back { border: 0; background: none; font-size: 30px; line-height: 1; color: var(--trust-strong); cursor: pointer; padding: 0 var(--s-1) 4px 0; min-width: 36px; min-height: 36px; }
 .rs-head .rs-title { margin: var(--s-2) 0 var(--s-1); }
+
+/* wave45 community-documents */
+.community-docs { margin-top: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }

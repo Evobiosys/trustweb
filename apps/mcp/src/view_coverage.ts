@@ -55,7 +55,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'ext/co_notes/co_share_view.ts': NAV,
   'ext/co_notes/co_view.ts': ['list_notes', 'app_action'],
   'ext/community-mighty/community_calendar_view.ts': ['events_list', 'community_list'],
-  'ext/community-mighty/community_view.ts': ['community_list', 'community_menu_get', 'community_settings_get', 'community_settings_set', 'resources_list', 'community_intimate_set'],
+  'ext/community-mighty/community_view.ts': ['community_list', 'community_menu_get', 'community_settings_get', 'community_settings_set', 'resources_list', 'community_intimate_set', 'community_documents_list'],
   'ext/embeds/embeds_view.ts': ['community_menu_get', 'app_action'],
   'ext/events/events_view.ts': ['events_list', 'event_get'],
   'ext/feed/feed_view.ts': ['feed_list', 'feed_post'],

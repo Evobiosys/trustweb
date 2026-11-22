@@ -428,3 +428,21 @@ export function communityTree(d: CommunityData, rows: readonly CommunityRow[]): 
   for (const r of rows) walk(r, 0)   // a cycle has no root: show it flat rather than lose it
   return out
 }
+
+export interface ViewRow { item: Resource; state: 'shown' | 'new' | 'hidden' }
+
+/** My view over the shared list: my order first, then what others added since (new: greyed, with Add), then what I hid. */
+export function resolveView(resources: readonly Resource[], view: ResourceView | undefined): ViewRow[] {
+  const byId = new Map(resources.map((r) => [r.id, r]))
+  const order = (view?.order ?? []).filter((id) => byId.has(id))
+  const hidden = new Set(view?.hidden ?? [])
+  const placed = new Set([...order, ...hidden])
+  return [
+    ...order.filter((id) => !hidden.has(id)).map((id): ViewRow => ({ item: byId.get(id)!, state: 'shown' })),
+    ...resources.filter((r) => !placed.has(r.id)).map((item): ViewRow => ({ item, state: 'new' })),
+    ...resources.filter((r) => hidden.has(r.id)).map((item): ViewRow => ({ item, state: 'hidden' })),
+  ]
+}
+
+/** wave45 community-documents: the documents the Community view lists on its Home: the shared links as I see them (mine first, new ones, none I hid). */
+export const documentsOf = (d: CommunityData): Resource[] => resolveView(d.resources ?? [], d.mine).filter((r) => r.state !== 'hidden').map((r) => r.item)

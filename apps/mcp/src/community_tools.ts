@@ -5,7 +5,7 @@
  * The record has no network: support_ask writes the ask marked `queued`, and the app shows a card; the person's tap on Send sends it (support_flush.ts, I9);
  * support_cancel marks `cancelled`, and the app tells the people it went to. Counts come back, never names of recipients.
  */
-import { NAV, SUBCOMMUNITY_FREE_LIMIT, TILES, addMember, canAddSub, subCommunityCount, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
+import { NAV, documentsOf, SUBCOMMUNITY_FREE_LIMIT, TILES, addMember, canAddSub, subCommunityCount, canEditSettings, chatOnlyCommunity, connectEvents, homeTiles, isManager, menuItems, metaOf, parseCommunity, setChatOnly, setConnectEvents, setKind, setManagedTiles, setOwnTiles, setSettings, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import type { CommunityData, CommunityKind } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import { foreignCode, personQrLink } from '../../trustweb/src/person_qr_link.ts'
 import type { Ring } from '../../trustweb/src/model.ts'
@@ -109,6 +109,11 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
       name: 'community_menu_get', description: 'The Community menu as the app shows it: its entries in order (home, spaces, events, docs, chat, ask, timeline, members), the Home tiles (managed = set by a manager, own = mine), whether the chat page shows only this community\'s people, whether its events show in my calendar, and whether I am a manager.',
       inputSchema: schema({ community: S('community id') }, ['community']),
       run: (a) => { const r = e.load(); const id = need(r, a.community); const d = dataOf(r); return { id, items: menuItems(d, id), tiles: homeTiles(d, id), chatOnly: chatOnlyCommunity(d), connectEvents: connectEvents(d, id), manager: isManager(d, id) } },
+    },
+    {
+      name: 'community_documents_list', description: 'The documents (shared links) the Community view lists for one community: id, title, url, who added it; in my order, none I hid.',
+      inputSchema: schema({ community: S('community id') }, ['community']),
+      run: (a) => { const r = e.load(); need(r, a.community); return documentsOf(dataOf(r)).map(({ id, title, url, by }) => ({ id, title, url, by })) },
     },
     {
       name: 'support_inbox', description: 'Every open ask for support in one list: mine (with how many I asked and how many said they are here) and the ones sent to me.',
