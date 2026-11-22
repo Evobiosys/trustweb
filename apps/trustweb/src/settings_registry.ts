@@ -95,6 +95,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   feature('features.events', 'events', 'Events'),
   feature('features.inventory', 'inventory', 'Resources'),
   { id: 'web.colourMode', section: 'web', label: 'Full colours on the web', hint: 'Off: only the ring around a bubble carries its colour. On: bubbles are filled.', type: 'boolean', default: false, simple: false, get: (r) => r.colourMode === 'full', set: (r, v) => { if (v === true) r.colourMode = 'full'; else delete r.colourMode } },
+  sparse('events.autoBubble', 'events', 'Event mode narrows the Web to the event\'s people', 'eventBubbleOff', true, true, 'Off: event mode narrows Chat, Resources and Ask only; the Web keeps everyone.'),
   sparse('events.alertCommunity', 'general', 'Alert me about new events in my communities', 'eventAlerts', true, false, 'Off: a new event a community member shares is dropped silently, with no row and no badge.'),
   flag('web.ringNames', 'web', 'Show ring names on the web', 'showRingNames', false, false, 'Trust zone under each name.'),
   choice('web.queryStyle', 'web', 'How asks read', 'queryStyle', ['call', 'search'], 'call', 'Asks read as a call for help or as a search.'),
@@ -147,6 +148,19 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   pin('dnd', 'Pin Do not disturb to the toolbar', 'A button beneath Settings.'),
   pin('advanced', 'Pin Advanced to the toolbar', 'A button beneath Settings.'),
   pin('qr-only', 'Pin the QR only button to the toolbar', 'A button beneath Settings.'),
+  /* wave45 settings-suggest: the feed and notification switches the record already holds, so a settings group can be suggested whole */
+  { id: 'feed.remote', section: 'general', label: 'Feed: also show posts from Mastodon / Pixelfed', type: 'boolean', default: false, simple: false,
+    get: (r) => obj(r.feed).remote === true, set: (r, v) => { const f = { ...obj(r.feed) }; if (v) f.remote = true; else delete f.remote; if (Object.keys(f).length) r.feed = f; else delete r.feed } },
+  { id: 'feed.images', section: 'general', label: 'Feed: show pictures in those posts', type: 'boolean', default: false, simple: false,
+    get: (r) => obj(r.feed).images === true, set: (r, v) => { const f = { ...obj(r.feed) }; if (v) f.images = true; else delete f.images; if (Object.keys(f).length) r.feed = f; else delete r.feed } },
+  ...(['connect', 'ask', 'chat'] as const).map((k): SettingDef => ({
+    id: `notify.${k}`, section: 'general', label: `Notify me: ${k === 'connect' ? 'someone wants to connect' : k === 'ask' ? 'an ask reaches me' : 'a chat message'}`, type: 'boolean', default: true, simple: false,
+    get: (r) => obj(r.notifyKinds)[k] !== false,
+    set: (r, v) => {
+      const kinds = { connect: true, ask: true, chat: true, reminder: true, event: true, ...obj(r.notifyKinds), [k]: v === true }
+      if (Object.values(kinds).every((x) => x !== false)) delete r.notifyKinds; else r.notifyKinds = kinds
+    },
+  })),
 ]
 
 export const settingById = (id: string): SettingDef | undefined => SETTINGS_REGISTRY.find((s) => s.id === id)

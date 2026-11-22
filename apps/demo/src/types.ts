@@ -460,7 +460,7 @@ export interface EventEnvelope {
   show?: 'open' | 'discoverable' | 'off'
   announce?: true
   /** Wave 44 steer-open-space: the schedule of an online open space (instead of `want` / `link`): `open` = the sender, a host, says the event is an open space; `acts` are checked by the receiver (open_space.ts). */
-  os?: { id: string; open?: true; acts: unknown[] }
+  os?: { id: string; open?: true; acts: unknown[]; poll?: unknown }
   /** Wave 44c event-autosave: the guest's answer to the host (yes = "I will attend"), and the host's conference links, sent only after a yes. */
   rsvp?: { id: string; yes: boolean }
   conf?: { id: string; links: { provider: 'kmeet' | 'zoom' | 'jitsi' | 'custom'; url: string }[] }
@@ -468,7 +468,29 @@ export interface EventEnvelope {
   seen?: { id: string; shown: boolean; who?: string }
   /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
   joined?: { id: string }
+  /** wave45 event-group-chat: one item of the event's ONE shared thread: a message (`text`), or a join / leave notice. `m` = the item id (dedupe), `by` = the author's name (a host forwards it on), `ts` = the author's clock. */
+  gc?: { id: string; m: string; k: 'msg' | 'join' | 'leave'; by: string; ts: number; text?: string }
+  /** wave45 group-chat-list: one op of a group (a chat independent of events, trustweb group_chat.ts): `g` = group id, `m` = op id, `by` = the actor's name,
+   * `ts` = the actor's clock. msg / check carry `text`; join / leave none; list carries `list`, item carries `it`, roster carries `text` (group name) + `names`. */
+  gg?: GroupOp
+  /** wave45 merge-events: two events become one (trustweb event_merge_flow.ts). `ask` (a host of `keep` asks a host of `gone`; `link` = the kept event), `yes` / `no` (the answer), `done` (a host of `gone` tells its people; `link` = the kept event). */
+  merge?: { step: 'ask' | 'yes' | 'no' | 'done'; keep: string; gone: string; link?: string }
+  /** wave45 events-refetch: "send me the events you announced to my communities" (alone in the envelope). */
+  sync?: true
 }
+/** wave45 group-chat-list: see EventEnvelope.gg. */
+export interface GroupOp {
+  g: string; m: string; k: 'msg' | 'join' | 'leave' | 'check' | 'list' | 'item' | 'roster'; by: string; ts: number; text?: string
+  list?: { id: string; name: string; act?: true }
+  it?: { id: string; l: string; text: string; o: number; done?: { by: string; at: number }; arc?: true }
+  names?: string[]
+}
+/** wave45 group-chat-list: bounds of a group op. */
+export const GROUP_NAME_MAX = 60
+export const GROUP_ITEM_TEXT_MAX = 200
+export const GROUP_ROSTER_MAX = 50
+/** wave45 event-group-chat: the longest text of one group-chat message (EventEnvelope.gc.text). */
+export const EVENT_CHAT_TEXT_MAX = 2000
 // ----- END TrustWeb wave 43c -----
 
 // ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----

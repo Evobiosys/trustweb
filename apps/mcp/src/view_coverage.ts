@@ -18,6 +18,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'ask_escalation_view.ts': ['ask_escalation_get', 'ask_escalation_set', 'asks_incoming_list', 'ask_answer'],
   'ask_web_view.ts': ['ask_audience_get', 'ask_audience_set', 'settings_set'],
   'backup_view.ts': ['settings_keep_copy', 'app_action'],
+  'bulk_invite_view.ts': ['invite_bulk'],
   'bubble_connect_view.ts': ['introduce_people', 'introduce_link_create', 'handshake_status'],
   'bw_mode_view.ts': ['settings_get', 'settings_set'],
   'card_pages_view.ts': ['profile_get', 'profile_link_add', 'profile_link_remove'],
@@ -35,11 +36,14 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'contacts_sync_view.ts': ['sync_status', 'sync_now'],
   'dashboard_view.ts': ['dashboard_open', 'home_layout_get'],
   'desktop_view.ts': NAV,
+  'event_merge_view.ts': ['event_merge', 'event_merge_answer', 'event_merge_asks_list'], // wave45 merge-events
   'event_editor_view.ts': ['event_drafts_list', 'event_draft_save', 'event_details_set', 'event_times_set', 'event_invite'],
   'event_plan_view.ts': ['event_signup', 'event_resource_ask', 'event_resource_cover'],
   'event_roles_view.ts': ['event_roles_set', 'event_get'],
-  'events_view.ts': ['events_list', 'event_get', 'event_create', 'event_settings_set', 'event_link_open', 'event_share_audience_set', 'event_chat_open', 'event_message_all'],
-  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all'],
+  'event_group_chat_view.ts': ['event_chat_open', 'event_chat_read', 'event_chat_send', 'event_chat_leave'], // wave45 event-group-chat
+  'group_chat_view.ts': ['group_list', 'group_read', 'group_create', 'group_invite', 'group_open', 'group_send', 'group_leave', 'list_create', 'list_set_active', 'list_add_item', 'list_check', 'list_move', 'list_archive_done'], // wave45 group-chat-list
+  'events_view.ts': ['events_list', 'event_get', 'event_create', 'event_settings_set', 'event_link_open', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'events_refetch'],
+  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add', 'invite_bulk'],
   'ext/calendar/at_event_view.ts': ['event_get', 'event_settings_set'],
   'ext/calendar/calendar_tags_view.ts': ['calendar_tag_toggle'],
   'ext/calendar/calendar_view.ts': ['events_list', 'calendar_add'],
@@ -52,7 +56,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'ext/co_notes/co_share_view.ts': NAV,
   'ext/co_notes/co_view.ts': ['list_notes', 'app_action'],
   'ext/community-mighty/community_calendar_view.ts': ['events_list', 'community_list'],
-  'ext/community-mighty/community_view.ts': ['community_list', 'community_menu_get', 'community_settings_get', 'community_settings_set', 'resources_list', 'community_intimate_set'],
+  'ext/community-mighty/community_view.ts': ['community_list', 'community_menu_get', 'community_settings_get', 'community_settings_set', 'resources_list', 'community_intimate_set', 'community_documents_list', 'community_event_visibility'],
   'ext/embeds/embeds_view.ts': ['community_menu_get', 'app_action'],
   'ext/events/events_view.ts': ['events_list', 'event_get'],
   'ext/feed/feed_view.ts': ['feed_list', 'feed_post'],
@@ -67,7 +71,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'feed_ext_view.ts': ['feed_extension_set', 'feed_source_add', 'feed_source_remove', 'feed_refresh'],
   'feed_sources_view.ts': ['feed_sources_get', 'feed_source_toggle', 'feed_algorithm_set'],
   'feed_view.ts': ['feed_list', 'feed_post', 'feed_edit', 'feed_star', 'feed_post_read'],
-  'filter_bar_view.ts': ['web_filter_get', 'web_filter_set', 'event_mode_get', 'event_mode_set'],
+  'filter_bar_view.ts': ['web_filter_get', 'web_filter_set', 'event_mode_get', 'event_mode_set', 'event_bubble_set'],
   'five_rings_view.ts': ['list_people', 'set_ring'],
   'groups_view.ts': ['groups_list', 'create_group_tag'],
   'hide_from_view.ts': ['person_hide', 'ask_tamper_reports_list'],
@@ -100,6 +104,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'notify_popup_view.ts': ['notifications_inbox_list', 'notifications_popup_set'],
   'onboarding_whatsapp_view.ts': NAV,
   'open_space_view.ts': ['open_space_propose', 'open_space_join'],
+  'open_space_poll_view.ts': ['open_space_poll_get', 'open_space_poll_add', 'open_space_poll_vote', 'open_space_poll_use'],
   'own_profile_view.ts': ['profile_get', 'profile_set'],
   'pack_view.ts': NAV,
   'page_view.ts': NAV,
@@ -118,11 +123,13 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'relations_view.ts': ['relations_list', 'app_action'],
   'requests_list_view.ts': ['requests_list', 'home_open_request'],
   'resource_outline_view.ts': ['resources_list', 'resource_block_add', 'resource_block_edit', 'resource_block_move', 'resource_block_remove', 'resource_block_collapse'],
+  'resource_notion_view.ts': ['resources_list', 'resources_view_set'], // wave45 resources-notion-views
   'resource_scope_view.ts': ['resources_list', 'resource_mark_opened', 'resource_add'],
   'resource_views_view.ts': ['resources_list', 'resource_set_kind', 'resource_set_physical'],
   'scope_editor_view.ts': ['trusted_only_set', 'trust_override_set'],
   'seen_through_view.ts': ['people_seen_through_list', 'event_introduce_person'],
   'services_view.ts': ['import_sources', 'app_action'],
+  'settings_share_view.ts': ['settings_suggestions_list', 'settings_suggest', 'settings_follow', 'settings_suggestion_accept'], // wave45 settings-suggest
   'share_page_view.ts': ['resource_share'],
   'shared_notes_view.ts': ['list_notes'],
   'short_alias_view.ts': ['profile_get', 'app_action'],
@@ -140,10 +147,13 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'title_emoji_view.ts': ['settings_get', 'settings_set'],
   'transcription_view.ts': ['settings_get', 'settings_set'],
   'trash_view.ts': ['trash_list', 'trash_restore'],
+  'outbox_view.ts': ['outbox_list'],
   'trustzones_view.ts': ['trusted_only_set', 'trust_override_set'],
   'web_default_view.ts': ['web_default_view_get', 'web_default_view_set'],
   'web_view.ts': ['list_people', 'web_filter_get', 'web_filter_set', 'circles_layout'],
   'zone_share_link_view.ts': ['invite_link_create', 'app_action'],
+  /* wave45 google-contacts-sync */
+  'google_sync_view.ts': ['google_sync_status', 'google_sync_set'],
 }
 
 /** Every *_view.ts under `srcDir`, as paths relative to it (forward slashes), sorted. */

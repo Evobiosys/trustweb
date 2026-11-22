@@ -17,6 +17,7 @@ import type { AudienceFilter, Zone, Degree } from './audience_zones'
 import { addTagTo } from './card_small'
 import { createTag } from './tag_create'
 import { hideSealedLine } from './hide_from_view'
+import { eventTagLabel } from './event_tag'
 
 /** What a form adds to the stored filter: a community scope (its tag) and the support-only "not Closest few" switch. */
 export interface FilterExtras { only?: string; notClosest?: boolean }
@@ -35,11 +36,15 @@ export const zoneState = (z: Zone, cut: Zone | undefined): 'on' | 'in' | 'off' =
 /** I7: someone is hidden and the ask travels beyond my direct contacts (any reach but 1): a friend may still pass it on to the hidden person. */
 export const hideLeaks = (f: { exclude: readonly string[]; degree: number }): boolean => f.exclude.length > 0 && f.degree !== 1
 
-type Who = Pick<Person, 'id' | 'ring' | 'fields' | 'peerId'>
+type Who = Pick<Person, 'id' | 'ring' | 'fields' | 'peerId'> & Partial<Pick<Person, 'events'>>
+
+/** The ids a chip list names: a person, the holders of a tag, or (wave 45) the people who attended an event. */
+export const chipIds = <T extends Who>(chips: readonly string[], people: readonly T[], hasTag: (p: T, tag: string) => boolean): string[] =>
+  chips.flatMap((c) => (c.startsWith('person:') ? [c.slice(7)] : c.startsWith('event:') ? people.filter((p) => p.events?.includes(c.slice(6))).map((p) => p.id) : people.filter((p) => hasTag(p, c.slice(4))).map((p) => p.id)))
 
 /** The connected people the filter reaches: the zone cut (Closest few always in), plus the added people and tags, minus the hidden ones. */
 export function peopleFor<T extends Who>(f: AudienceFilter & FilterExtras, people: readonly T[], hasTag: (p: T, tag: string) => boolean): T[] {
-  const idsOf = (chips: readonly string[]): string[] => chips.flatMap((c) => (c.startsWith('person:') ? [c.slice(7)] : people.filter((p) => hasTag(p, c.slice(4))).map((p) => p.id)))
+  const idsOf = (chips: readonly string[]): string[] => chipIds(chips, people, hasTag)
   const exclude = idsOf(f.exclude)
   if (!f.zone) return people.filter((p) => p.peerId && !exclude.includes(p.id))
   return audience(people, { zone: f.only ? `tag:${f.only}` : `ring:${RING_OF[f.zone]}`, ...(f.notClosest ? { notClosest: true } : {}), include: idsOf(f.add), exclude }, hasTag)
@@ -51,16 +56,17 @@ export function degreeLabel(zone: Zone, degree: Degree): string {
   return Array.from({ length: degree }, () => w).join(' of ')
 }
 
-export interface Suggestion { kind: 'person' | 'tag' | 'create'; id?: string; label: string }
+export interface Suggestion { kind: 'person' | 'tag' | 'event' | 'create'; id?: string; label: string }
 
 /** What the box offers while typing: "@x" people, "#x" tags (plus a "Create tag" row when none is named exactly like it), plain text both. */
-export function suggest(q: string, people: readonly Pick<Person, 'id' | 'name'>[], tags: readonly ColourTag[], chosen: readonly string[] = []): Suggestion[] {
+export function suggest(q: string, people: readonly Pick<Person, 'id' | 'name'>[], tags: readonly ColourTag[], chosen: readonly string[] = [], events: readonly { id: string; name: string }[] = []): Suggestion[] {
   const mark = q.startsWith('@') ? '@' : q.startsWith('#') ? '#' : ''
   const raw = q.slice(mark.length).trim()
   const w = foldText(raw)
   const out: Suggestion[] = []
   if (mark !== '#') out.push(...people.filter((p) => !chosen.includes(`person:${p.id}`) && foldText(p.name).includes(w)).slice(0, 6).map((p) => ({ kind: 'person' as const, id: p.id, label: p.name })))
   if (mark !== '@') out.push(...tags.filter((t) => !chosen.includes(`tag:${t.id}`) && foldText(t.label ?? t.id).includes(w)).slice(0, 6).map((t) => ({ kind: 'tag' as const, id: t.id, label: t.label ?? t.id })))
+  if (mark !== '@') out.push(...events.filter((e) => !chosen.includes(`event:${e.id}`) && (foldText(eventTagLabel(e.name).slice(1)).includes(w) || foldText(e.name).includes(w))).slice(0, 6).map((e) => ({ kind: 'event' as const, id: e.id, label: eventTagLabel(e.name).slice(1) })))
   if (mark === '#' && raw && !tags.some((t) => foldText(t.label ?? t.id) === w)) out.push({ kind: 'create', label: raw })
   return out
 }
@@ -90,6 +96,8 @@ export interface FilterView {
   /** The filter as it stands (the form keeps it; the view edits it in place and calls `changed`). */
   filter: AudienceFilter & FilterExtras
   people: () => readonly Pick<Person, 'id' | 'name' | 'fields' | 'ring'>[]
+  /** Wave 45: the events a `#` can name (people who attended). Absent = no event chips offered. */
+  events?: () => readonly { id: string; name: string }[]
   changed: () => void
   /** Hints and intros: the zone can be un-picked (= everybody); support always has one. */
   zoneRequired: boolean
@@ -148,7 +156,7 @@ function chipRow(v: FilterView, kind: 'add' | 'exclude'): HTMLElement {
   const f = v.filter
   const chips = f[kind]
   const tags = loadColourTags()
-  const nameOf = (c: string): string => (c.startsWith('person:') ? v.people().find((p) => p.id === c.slice(7))?.name ?? '' : '#' + tagName(c.slice(4), tags))
+  const nameOf = (c: string): string => (c.startsWith('person:') ? v.people().find((p) => p.id === c.slice(7))?.name ?? '' : c.startsWith('event:') ? eventTagLabel(v.events?.().find((e) => e.id === c.slice(6))?.name ?? c.slice(6)) : '#' + tagName(c.slice(4), tags))
   const found = el('div', { class: 'afv-found', 'data-aud-found': kind })
   const input = el('input', { class: 'field', type: 'search', autocomplete: 'off', placeholder: S.askPage.typePh, 'aria-label': kind === 'add' ? S.askPage.addLbl : S.askPage.excludeLbl, 'data-aud-input': kind }) as HTMLInputElement
   const take = (chip: string): void => {
@@ -160,10 +168,10 @@ function chipRow(v: FilterView, kind: 'add' | 'exclude'): HTMLElement {
   }
   const draw = (): void => {
     const q = input.value.trim()
-    const rows = q ? suggest(q, v.people(), tags, [...f.add, ...f.exclude]) : []
+    const rows = q ? suggest(q, v.people(), tags, [...f.add, ...f.exclude], v.events?.()) : []
     found.replaceChildren(...rows.map((s) => s.kind === 'create'
       ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-aud-create': s.label, onclick: () => newTagSheet(v, s.label, (t) => take(`tag:${t.id}`)) }, [S.askPage.createTag(s.label)])
-      : el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-aud-pick': `${s.kind}:${s.id}`, onclick: () => take(`${s.kind}:${s.id}`) }, [(s.kind === 'tag' ? '#' : '@') + s.label])))
+      : el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-aud-pick': `${s.kind}:${s.id}`, onclick: () => take(`${s.kind}:${s.id}`) }, [(s.kind === 'person' ? '@' : '#') + s.label])))
   }
   input.addEventListener('input', draw)
   return el('div', { class: 'afv-row', 'data-aud-row': kind }, [
@@ -174,6 +182,7 @@ function chipRow(v: FilterView, kind: 'add' | 'exclude'): HTMLElement {
     }, [nameOf(c) + ' ×']))) : null,
     input,
     found,
+    kind === 'add' && v.events ? el('p', { class: 'hint', 'data-aud-event-hint': '' }, [S.askEvent.hint]) : null,
   ])
 }
 

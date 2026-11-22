@@ -7,7 +7,7 @@ import { eventModeToggle } from './filter_bar_view'
 import { el } from '../../demo/src/ui/dom'
 import type { EventOffers } from './events'
 import { EVENT_VISIBILITIES, communityOfEvent, listedAttendees, searchableAttendees, visibilityOf } from './event_visibility'
-import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, mayEdit, nameRevealOf, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
+import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, mayEdit, mayInvite, nameRevealOf, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import { eventForLink, isEventHost, mayApprove, relatedOthers } from './event_roles'
 import { createEventEditor } from './event_editor_view'
@@ -27,6 +27,7 @@ import { S } from './strings'
 import { attendChanged, conferenceLine } from './event_conference'
 import { emojiOn, emojiTitle, titleEmoji } from './title_emoji' // answers-44d
 import { eventTop, shareAudienceRow } from './event_page_top_view' // answers-44d
+import { onPullDown } from './events_refetch' // wave45 events-refetch
 
 export interface EventsViewHooks {
   state: () => AppState
@@ -44,6 +45,8 @@ export interface EventsViewHooks {
   newId: () => string
   /** Copies a text and says so (the app's toast, or `done` as its words). */
   copyLink: (text: string, done?: string) => void
+  /** Wave 45 events-refetch: asks the connected people for new events (true = a manual refresh, skips the 5-minute cache); resolves when the asking is done. */
+  refetch?: (explicit: boolean) => Promise<unknown>
   /** Opens the join sheet for a pasted event link; false when the text holds none. */
   joinLink: (text: string) => boolean
   origin: string
@@ -71,6 +74,8 @@ export interface EventsViewHooks {
   openCommunity?: (tag: string) => void
   communityView?: (tag: string) => void
   messageAll?: (ev: TwEvent) => void
+  /** wave45 bulk-invite-filter: the Invite many sheet; `done` redraws the page. */
+  inviteMany?: (ev: TwEvent, done: () => void) => void
   eventResources?: (ev: TwEvent) => void
 }
 
@@ -152,12 +157,26 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return el('div', {}, [input, error])
   }
 
+  /* wave45 events-refetch: the list's scroller takes a pull-down and shows a Refresh button; both ask the connected people for new events. */
+  function refetchable(scroller: HTMLElement, button: HTMLButtonElement): HTMLElement {
+    const run = (): void => {
+      if (!h.refetch || button.disabled) return
+      button.disabled = true
+      button.textContent = S.w45refetch.looking
+      void h.refetch(true).finally(() => { button.disabled = false; button.textContent = S.w45refetch.button })
+    }
+    button.onclick = run
+    onPullDown(scroller, run)
+    return scroller
+  }
+  const refetchButton = (): HTMLButtonElement => el('button', { class: 'mini', type: 'button', 'data-events-refetch': '', title: S.w45refetch.pull }, [S.w45refetch.button]) as HTMLButtonElement
+
   function list(): Node[] {
     const { upcoming, past } = eventsSorted(h.state(), Date.now())
     const add = el('button', { class: 'btn btn-electric wide', 'data-event-add': '', onclick: () => show({ kind: 'form' }) }, [S.eventsAdd])
     const invited = (): HTMLElement[] => invitationEventRows(h.state(), '').map(invitationRow)
     const drafts = draftsOf(h.state()).map(draftRow)
-    if (!upcoming.length && !past.length && !invited().length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [...drafts, el('p', { class: 'empty' }, [S.eventsEmpty]), add, pasteRow()])]
+    if (!upcoming.length && !past.length && !invited().length) { const b = refetchButton(); return [h.header(S.eventsTitle, { back: h.leave }), refetchable(el('div', { class: 'scroll' }, [...drafts, el('p', { class: 'empty' }, [S.eventsEmpty]), b, add, pasteRow()]), b)] }
     const rows = el('div', {}, [])
     const draw = (q: string): void => {
       const [up, pa] = [upcoming, past].map((l) => l.filter((e) => eventMatches(e, q)))
@@ -171,7 +190,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const filter = upcoming.length + past.length + invited().length > 0
       ? el('input', { class: 'field', placeholder: S.eventsFilter, 'aria-label': S.eventsFilter, 'data-event-filter': '', oninput: (e: Event) => draw((e.target as HTMLInputElement).value) })
       : null
-    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [...drafts, filter, rows, add, pasteRow()])]
+    const b = refetchButton()
+    return [h.header(S.eventsTitle, { back: h.leave }), refetchable(el('div', { class: 'scroll' }, [...drafts, filter, rows, b, add, pasteRow()]), b)]
   }
 
   function field(label: string, input: HTMLElement): Node[] {
@@ -333,16 +353,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return el('button', { class: 'chip' + (on ? ' on' : ' tw-off'), type: 'button', 'aria-pressed': String(on), [attr]: '', onclick }, [label])
   }
 
-  /** Wave 43 answers (zeta): the host names a Mastodon instance; the event Feed merges its public posts under the event tag. A change saves when the field loses focus; a bad host shows a line and keeps the old one. */
-  function mastodonInput(ev: TwEvent): HTMLElement {
-    const input = el('input', { class: 'field', value: ev.mastodonInstance ?? '', placeholder: S.w43answers.mastodonPh, 'aria-label': S.w43answers.mastodon, 'data-event-mastodon': '' }) as HTMLInputElement
-    const bad = el('p', { class: 'warn', 'data-event-mastodon-bad': '', hidden: true }, [S.w43answers.mastodonBad])
-    input.addEventListener('change', () => {
-      try { applyEventSettings(ev, { mastodonInstance: input.value }); bad.hidden = true; h.save(); input.value = ev.mastodonInstance ?? '' } catch { bad.hidden = false }
-    })
-    return el('div', {}, [input, bad])
-  }
-
   /** Wave 43 answers (iota): my nickname at this event; the Nickname reveal of this event uses it, else my first nickname. */
   function myNicknameInput(ev: TwEvent): HTMLInputElement {
     const input = el('input', { class: 'field', value: ev.myNickname ?? '', placeholder: nicknamesOf(h.state().me)[0] ?? '', 'aria-label': S.w43answers.myNickname, 'data-event-my-nickname': '' }) as HTMLInputElement
@@ -425,7 +435,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ]) : null,
       ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [
         ...field(S.w43answers.community, communityPick(ev.communityId, (id) => { applyEventSettings(ev, { communityId: id }); h.save() })), el('p', { class: 'meta' }, [S.w43answers.communityHint]),
-        ...field(S.w43answers.mastodon, mastodonInput(ev)), el('p', { class: 'meta' }, [S.w43answers.mastodonHint]),
       ] : []),
       // Wave 43b (B5): the host chooses what people see when they open this event's link.
       ...(mayEdit(ev, h.state().me.displayName, h.state().people) ? [el('div', { 'data-event-link-mode': ev.linkMode ?? 'full' }, [
@@ -534,7 +543,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const ctag = communityOfEvent(ev)
     if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
     const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
-      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, eventResources: h.eventResources, openPerson: h.curatorPerson }),
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),

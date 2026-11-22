@@ -13,7 +13,7 @@ import { allTools } from '../src/tools.ts'
 import { viewCoverage, viewFiles } from '../src/view_coverage.ts' // answers-44d
 
 /** Every file that defines registry actions (main.ts calls each define* on the one registry). */
-const ACTION_FILES = ['app_actions.ts', 'event_actions.ts', 'sync_actions.ts', 'home_actions.ts', 'resource_share_send.ts' /* wave44 answers-44b */, 'seen_through_actions.ts' /* review-44c */, 'a44d_actions.ts' /* answers-44d */].map((f) => fileURLToPath(new URL(`../../trustweb/src/${f}`, import.meta.url)))
+const ACTION_FILES = ['app_actions.ts', 'event_actions.ts', 'sync_actions.ts', 'home_actions.ts', 'resource_share_send.ts' /* wave44 answers-44b */, 'seen_through_actions.ts' /* review-44c */, 'a44d_actions.ts' /* answers-44d */, 'group_chat_actions.ts' /* wave45 group-chat-list */].map((f) => fileURLToPath(new URL(`../../trustweb/src/${f}`, import.meta.url)))
 
 export function parityReport() {
   const actions = ACTION_FILES.flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/reg\.define(?:<[^\n]*?>)?\(\{\s*type: '([a-z-]+)'/g)].map((m) => m[1]))

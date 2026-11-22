@@ -7,7 +7,7 @@
  * invitations, meetings (text only: contact channels and keys are never returned); chat_send queues 'chat-send'.
  */
 import type { HeldAsk } from '../../trustweb/src/model.ts'
-import { addScoped, type Scope } from '../../trustweb/src/resource_scope.ts'
+import { addEventPrivate, addScoped, type Scope } from '../../trustweb/src/resource_scope.ts'
 import { eventTagLabel, eventTagSlug } from '../../trustweb/src/event_tag.ts'
 import { parseCommunity, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import { announce } from './events.ts'
@@ -198,12 +198,12 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
       },
     },
     {
-      name: 'event_chat_open', description: 'Open "Message everyone" of an event on the open TrustWeb app (the composer whose text goes to every connected person at it). Queued.',
+      name: 'event_chat_open', description: 'Open the shared chat of an event on the open TrustWeb app (one thread for the hosts and the people joining; read it with event_chat_read). Queued.',
       inputSchema: schema({ event: S('event id or exact name') }, ['event']),
       run: (a) => { const e = findEvent(load(o.file), a.event); queue('event_chat_open', 'event-chat-open', { event: e.id }); return { queued: true, event: e.id } },
     },
     {
-      name: 'event_message_all', description: 'Send one message into the chat with every connected person at an event (the people joining and the hosts). Queued for the open TrustWeb app.',
+      name: 'event_message_all', description: 'Send one message into the shared chat of an event (same as event_chat_send; kept for older callers). Queued for the open TrustWeb app.',
       inputSchema: schema({ event: S('event id or exact name'), text: S('the message') }, ['event', 'text']),
       run: (a) => {
         const e = findEvent(load(o.file), a.event)
@@ -214,8 +214,8 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
       },
     },
     {
-      name: 'resource_add', description: 'Add a resource as the "+ Add resource" row does: into a community (its tag id; only that community sees it) or an event (id or exact name; tagged event_<slug>), else into my plain list. reference:true makes it a reference.',
-      inputSchema: schema({ title: S('the resource'), community: S('community tag id'), event: S('event id or exact name'), reference: { type: 'boolean', description: 'a reference (References page)' } }, ['title']),
+      name: 'resource_add', description: 'Add a resource as the "+ Add resource" row does: into a community (its tag id; only that community sees it) or an event (id or exact name; tagged event_<slug>), else into my plain list. reference:true makes it a reference. audience "event:<id>" keeps it private to that one event\'s participants (the event tag only; others see nothing) and still lists it in the event\'s community.',
+      inputSchema: schema({ title: S('the resource'), community: S('community tag id'), event: S('event id or exact name'), audience: S('event:<id> = private to that event\'s participants'), reference: { type: 'boolean', description: 'a reference (References page)' } }, ['title']),
       run: (a) => {
         const title = needText(a.title, 'title')
         let made: unknown = null
@@ -225,11 +225,17 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
           const page = a.reference === true ? 'references' as const : 'resources' as const
           const source = { kind: 'typed' } as never // Provenance.Typed (model.ts enum; not loadable under plain node)
           let sc: Scope | null = null
-          if (typeof a.event === 'string' && a.event.trim()) {
+          if (a.audience !== undefined) {
+            const m = /^event:(.+)$/.exec(String(a.audience).trim())
+            if (!m) throw new Error('audience: use event:<id>')
+            const e = findEvent(r, m[1])
+            made = addEventPrivate(inv, e as never, { slug: eventTagSlug, label: eventTagLabel }, page, title, id, now().getTime(), source)
+          } else if (typeof a.event === 'string' && a.event.trim()) {
             const e = findEvent(r, a.event)
             const n = (e as { tagName?: string }).tagName ?? e.name
             sc = { kind: 'event', id: e.id, label: eventTagLabel(n), tagIds: [eventTagSlug(n)] }
           } else if (typeof a.community === 'string' && a.community.trim()) sc = { kind: 'community', id: a.community.trim().slice(0, 80), label: a.community.trim() }
+          if (made) return
           if (sc) made = addScoped(inv, sc, page, title, id, now().getTime(), source)
           else { made = { id, text: title.slice(0, 120), audience: 'fof', included: true, createdAt: now().getTime(), source, ...(page === 'references' ? { kind: 'reference' } : {}) }; inv.push(made as never) }
         })

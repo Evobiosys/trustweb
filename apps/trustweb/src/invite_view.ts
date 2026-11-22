@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 44 steer-invite-link: the community invite in the app (rules and token: invite_policy.ts).
- *   inviter    Community > Members "Invite" opens the sheet: Personal (one person) and Open (can be passed on), each Copy + QR; Advanced (V
+ *   inviter    Community > Members "Invite" opens the sheet: Personal (one person) and Open (can be passed on), each Copy + its QR shown at once
+ *              (wave 45: the same .qrwrap + renderQr as the top-of-page share QR, payload = the signed link); Advanced (V
  *              expander): max uses of the open link, days of new links, revoke all. A connect-ack carrying a token is checked here
  *              (verdict) against this device's counter; an accepted one tags the new connection with the community (accepted).
  *   recipient  a link with `#inv=` shows the confirmation before anything is sent (gate): inviter name, community, "Only accept if <name>
@@ -18,6 +19,7 @@ import { tagPerson, createTag } from './tag_create'
 import { joinSpace } from './ext/community-mighty/community_model'
 import type { AppState, Peer, Person } from './model'
 import { S } from './strings'
+import { groupOfTag } from './group_store' // wave45 group-chat-list
 import {
   addInvite, createInvite, inviteLink, inviteOfHash, inviteSettingsOf, openInviteOf, redeemInvite, revokeInvites, setOpenMax, takeInvite,
   verifyInvite, type InviteEntry, type InviteKind, type InviteToken,
@@ -37,6 +39,8 @@ export interface InviteDeps {
   toast(msg: string): void
   tags(): ColourTag[]
   saveTags(tags: readonly ColourTag[]): void
+  /** wave45 group-chat-list: an invite whose tag is a group's (`grp:<id>`, group_store.ts) lets in to just that group, no community tag. */
+  group?: { joined(gid: string, name: string, personId: string): void; admitted(gid: string, personId: string): void }
 }
 
 const T = S.invite
@@ -47,10 +51,10 @@ export function createInvites(d: InviteDeps, hash: string) {
   let incoming = inviteOfHash(hash)
   const verifier = (did: string) => (bytes: Uint8Array, sig: string): boolean => verifyDidSignature(did, bytes, sig)
 
-  function make(kind: InviteKind, tag: string): InviteEntry {
+  function make(kind: InviteKind, tag: string, name?: string): InviteEntry {
     const s = d.state()
     const id = d.identity()
-    const label = d.tags().find((t) => t.id === tag)?.label ?? tag
+    const label = name ?? d.tags().find((t) => t.id === tag)?.label ?? tag
     const e = createInvite({ kind, tag, label, inviterDid: id.did, inviterName: s.me.displayName, id: toB64u(randomBytes(16)), now: Date.now(), settings: s.inviteSettings, sign: (b) => signBytes(id, b) })
     s.invites = addInvite(s.invites, e)
     d.save()
@@ -58,16 +62,16 @@ export function createInvites(d: InviteDeps, hash: string) {
   }
 
   /** The inviter's sheet for one community tag. */
-  function openSheet(tag: string): void {
-    const label = d.tags().find((t) => t.id === tag)?.label ?? tag
+  function openSheet(tag: string, name?: string): void {
+    const label = name ?? d.tags().find((t) => t.id === tag)?.label ?? tag
     let personal: InviteEntry | null = null
     let advOpen = false
     const box = el('div', { class: 'invite-sheet', 'data-invite-sheet': tag })
-    const qrBox = (attr: string): HTMLElement => el('div', { class: 'invite-qr', [attr]: '', hidden: '' })
+    const qrBox = (attr: string): HTMLElement => el('div', { class: 'qrwrap invite-qr', [attr]: '' })
     const pQr = qrBox('data-invite-qr-personal')
     const oQr = qrBox('data-invite-qr-open')
     const linkOf = async (kind: InviteKind): Promise<string> => {
-      const e = kind === 'personal' ? (personal ??= make('personal', tag)) : openInviteOf(d.state().invites, tag, Date.now()) ?? make('open', tag)
+      const e = kind === 'personal' ? (personal ??= make('personal', tag, name)) : openInviteOf(d.state().invites, tag, Date.now()) ?? make('open', tag, name)
       const link = inviteLink(await d.connectLink(), e)
       draw()
       return link
@@ -76,6 +80,7 @@ export function createInvites(d: InviteDeps, hash: string) {
       const link = await linkOf(kind)
       target.hidden = false
       target.dataset.link = link
+      target.dataset.payload = link
       await d.renderQr(target, link)
     }
     const actions = (kind: InviteKind, target: HTMLElement): HTMLElement => el('div', { class: 'chips event-share' }, [
@@ -139,6 +144,8 @@ export function createInvites(d: InviteDeps, hash: string) {
       adv,
     )
     d.openSheet([box])
+    void showQr('personal', pQr)
+    void showQr('open', oQr)
   }
 
   /**
@@ -186,6 +193,8 @@ export function createInvites(d: InviteDeps, hash: string) {
   function join(tok: string, link: ConnectLinkParams, person: Person): void {
     const v = verifyInvite(tok, link.did, Date.now(), verifier(link.did))
     if (!v.ok) return
+    const gid = groupOfTag(v.inv.t)
+    if (gid) { d.group?.joined(gid, v.inv.l, person.id); d.toast(T.joined(v.inv.l)); return }   // wave45 group-chat-list
     ensureTag(v.inv.t, v.inv.l)
     tagPerson(person, v.inv.t)
     joinSpace(d.state(), d.tags(), v.inv.t, Date.now())
@@ -210,6 +219,8 @@ export function createInvites(d: InviteDeps, hash: string) {
     const e = (s.invites ?? []).find((x) => x.tok === inv)
     const person = s.people.find((p) => p.peerId === peer.id)
     if (!e || !person) return
+    const gid = groupOfTag(e.tag)
+    if (gid) { d.group?.admitted(gid, person.id); d.render(); return }   // wave45 group-chat-list
     tagPerson(person, e.tag)
     d.save()
     d.render()

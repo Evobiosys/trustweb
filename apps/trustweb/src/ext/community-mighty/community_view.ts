@@ -12,6 +12,7 @@ import { addGroupPost } from '../../feed_sources'
 import type { AppState } from '../../model'
 import { randomId } from '../../../../demo/src/crypto' // answers-44d
 import { INTIMATE_MAX, isIntimate } from '../../event_community' // answers-44d
+import { eventAccessOf } from '../../community_event_access' // wave45 community-events-invite-only
 import { hasColourTag, loadColourTags, saveColourTags } from '../../colour_tags'
 import { contextPress } from '../../context_press'
 import { strikeOff } from '../../bw_mode'
@@ -19,7 +20,7 @@ import { ICONS } from '../../icons'
 import type { TwCtx } from '../tw_registry'
 import {
   MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
-  joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
+  documentsOf, joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
   adoptMetaTags, canEditSettings, createCommunity, leftNav, listCommunities, metaOf, setKind, setSettings, type CommunityKind,
 } from './community_model'
 import { SUBCOMMUNITY_FREE_LIMIT, canAddSub, communityTree, descendantsOf, legacyLinksPatch, rootOf, subCommunityCount, TILES, type TileId } from './community_data'
@@ -199,8 +200,22 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       tag ? (syncAggregate(tag), socialCard(tag)) : null,
       managed.length ? el('section', { class: 'tiles-managed', 'data-community-tiles-managed': '' }, [el('h4', { class: 'eyebrow' }, [w43.homeManaged]), el('div', { class: 'grid' }, managed.map((x) => tileCard(x, tag, true)))]) : null,
       own.length ? el('div', { class: 'grid', 'data-community-tiles': '' }, own.map((x) => tileCard(x, tag, false))) : el('p', { class: 'empty' }, [w43.homeNoTiles]),
+      documentsSection(d),
       choose,
     ]
+  }
+
+  /** wave45 community-documents: the community's documents on its Home, so "by <community>" shows them at once; the Docs page keeps the editing. */
+  function documentsSection(d: CommunityData): HTMLElement {
+    const w = ctx.strings.w45cd
+    const list = documentsOf(d)
+    return el('section', { class: 'community-docs', 'data-community-documents': String(list.length) }, [
+      el('h4', { class: 'eyebrow' }, [`${w.title} · ${w.count(list.length)}`]),
+      list.length
+        ? el('ul', { class: 'res-list' }, list.map((r) => el('li', { class: 'res shown', 'data-community-document': r.id }, [el('div', { class: 'res-main' }, [el('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' }, [r.title]), el('span', { class: 'meta' }, [t.by(r.by)])])])))
+        : el('p', { class: 'empty' }, [w.none]),
+      btn(w.all, () => go('docs'), { 'data-community-documents-all': '' }, 'lnk strong'),
+    ])
   }
 
   // ---- Spaces --------------------------------------------------------------
@@ -327,7 +342,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const found = tags.find((x) => x.id === tag)
     const scope = scopeOf(st(), tags, st().events ?? [], EVENT_TAG) ?? (found ? { kind: 'community' as const, id: found.id, label: found.label ?? found.id } : null)
     if (!scope) return [el('p', { class: 'empty' }, [ctx.strings.w44cr.none])]
-    return scopedResources({ items: st().inventory, tags, events: st().events ?? [], scope, page, emoji: st().titleEmojiOff !== true, nameOf: (id) => st().people.find((p) => p.id === id)?.name, newId: () => randomId(8) /* answers-44d */, open: (id) => ctx.bus.emit('open-item', id), save: () => ctx.bus.emit('save'), render: draw })
+    return scopedResources({ items: st().inventory, tags, events: st().events ?? [], scope, page, emoji: st().titleEmojiOff !== true, nameOf: (id) => st().people.find((p) => p.id === id)?.name, newId: () => randomId(8) /* answers-44d */, state: st() /* wave45 resources-notion-views */, open: (id) => ctx.bus.emit('open-item', id), save: () => ctx.bus.emit('save'), render: draw, back: () => go('home') /* wave45 event-back-button */ })
   }
 
   /** The pane environment of the embeds module: this community's tag, redraw after a change, a note under the section. */
@@ -456,6 +471,9 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
       // answers-44d: intimate = everyone knows everyone (events list the members)
       pick(ctx.strings.a44d.intimateToggle, { 'data-community-intimate-toggle': '' }, isIntimate(st(), tag), (on) => save({ ...data(), meta: { ...data().meta, [tag]: { ...metaOf(data(), tag), intimate: on } } }), !can),
       el('p', { class: 'meta' }, [ctx.strings.a44d.intimateHint(INTIMATE_MAX)]),
+      // wave45 community-events-invite-only: on = only people invited personally see its events (members too)
+      pick(ctx.strings.w45ceio.toggle, { 'data-community-events-invited-toggle': '' }, eventAccessOf(st(), tag) === 'invited', (on) => save({ ...data(), meta: { ...data().meta, [tag]: { ...metaOf(data(), tag), eventAccess: on ? 'invited' : 'members' } } }), !can),
+      el('p', { class: 'meta' }, [ctx.strings.w45ceio.hint]),
       el('p', { class: 'chips-lbl' }, [w.leftColumn]),
       ...NAV.map((n) => pick(t.nav[n], { 'data-community-nav-toggle': n }, shown.includes(n), () => {
         const now = leftNav(data(), tag)

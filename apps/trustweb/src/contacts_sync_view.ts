@@ -4,11 +4,10 @@
  * the rules are in google_contacts.ts and contacts_export.ts. The token lives in sessionStorage, never in the record or an export.
  */
 import { el } from '../../demo/src/ui/dom'
-import type { ImportedContact } from '../../crm/src/import/types'
 import { toCsv, toJson, toVCard } from './contacts_export'
 import { lastContact } from './engagement'
 import {
-  CLIENT_ID_KEY, buildAuthUrl, clearToken, exchangeCode, fetchAllContacts, loadClientId, loadClientSecret, loadToken, makePkce, parseRedirect, revokeToken, saveClientId, saveClientSecret, saveToken,
+  CLIENT_ID_KEY, buildAuthUrl, clearToken, exchangeCode, loadClientId, loadClientSecret, loadToken, makePkce, parseRedirect, revokeToken, saveClientId, saveClientSecret, saveToken,
 } from './google_contacts'
 import { GOOGLE_FLAG_KEY, NUDGE_KEY, dismissNudge, googleConnectOn, nudgeShown } from './google_flag'
 import { Ring } from './model'
@@ -16,6 +15,8 @@ import type { AppState } from './model'
 import type { Pages } from './page_view'
 import { S } from './strings'
 import { alphaSub } from './alpha_heading'
+import { googleSyncPart, runGoogleSync, startGoogleAutoSync } from './google_sync_view'
+import type { ServicesHooks } from './services_view'
 
 export interface SyncHooks {
   state: () => AppState
@@ -35,8 +36,9 @@ const local = (): Storage | null => { try { return localStorage } catch { return
 /** Wave 40: Connect Google shows only with the flag (Settings > Advanced > Flags) or once a client id is configured. */
 export const googleOn = (): boolean => { const l = local(); return l ? googleConnectOn(l, loadClientId(l)) : false }
 
-/** Settings > import: client id field, Connect / Fetch again / Disconnect. `offer` hands the fetched contacts to the import summary. */
-export function googleGroup(offer: (contacts: ImportedContact[]) => void, toast: (msg: string) => void): HTMLElement {
+/** Settings > Import > Google: client id field, Connect / Disconnect; once connected the sync part (wave 45: Sync now, Keep in sync, Review new). */
+export function googleGroup(h: ServicesHooks): HTMLElement {
+  const toast = h.toast
   const box = el('div', { 'data-google-sync': '1' })
   const ss = store()
   const draw = (): void => {
@@ -65,9 +67,9 @@ export function googleGroup(offer: (contacts: ImportedContact[]) => void, toast:
           class: 'btn btn-ghost', style: 'text-decoration:underline', 'data-google-connect': '1', 'aria-disabled': String(!ready), ...(ready ? {} : { disabled: true }),
           onclick: () => { void connect(clientId).catch(() => toast(S.googleFailed)) },
         }, [S.googleConnect]),
-        token ? el('button', { class: 'btn btn-ghost', style: 'text-decoration:underline', 'data-google-again': '1', onclick: () => { void load(token).then(offer).catch(() => { toast(S.googleFailed) }) } }, [S.googleAgain]) : null,
-        token ? el('button', { class: 'btn btn-ghost', style: 'text-decoration:underline', 'data-google-disconnect': '1', onclick: () => { void disconnect(token); draw() } }, [S.googleDisconnect]) : null,
+        token ? el('button', { class: 'btn btn-ghost', style: 'text-decoration:underline', 'data-google-disconnect': '1', onclick: () => { void disconnect(h, token); draw() } }, [S.googleDisconnect]) : null,
       ] as (Node | null)[]).filter((x): x is Node => x !== null)),
+      token ? googleSyncPart(h, token, draw) : null,
     ]
     box.replaceChildren(...parts.filter((x): x is Node => x !== null))
   }
@@ -81,11 +83,10 @@ async function connect(clientId: string): Promise<void> {
   location.assign(buildAuthUrl({ clientId, redirectUri: redirectUri(), challenge: p.challenge, state: p.state }))
 }
 
-async function load(token: string): Promise<ImportedContact[]> {
-  return (await fetchAllContacts(fetchFn, token)).contacts
-}
-
-async function disconnect(token: string): Promise<void> {
+async function disconnect(h: ServicesHooks, token: string): Promise<void> {
+  // Wave 45: the sync token belongs to this Google account; the base values stay, so a later reconnect still knows what the owner edited.
+  const gs = h.state().googleSync
+  if (gs) { delete gs.syncToken; gs.on = false; h.save() }
   const ss = store()
   if (ss) { clearToken(ss); saveClientSecret(ss, '') }
   await revokeToken(fetchFn, token)
@@ -103,8 +104,12 @@ export async function forgetGoogle(o: { device?: boolean } = {}): Promise<void> 
   if (token) await revokeToken(fetchFn, token)
 }
 
-/** Called once at start with the address as opened (main.ts cleans the live one first): when Google sent the browser back with a code, finish the sign-in and offer the contacts. Cleans only Google's own query parameters. */
-export async function resumeGoogle(h: SyncHooks, offer: (contacts: ImportedContact[]) => void, href: string = location.href): Promise<void> {
+/**
+ * Called once at start with the address as opened (main.ts cleans the live one first): when Google sent the browser back with a code, finish the sign-in and
+ * run the first sync, which offers the contacts in the import preview. Cleans only Google's own query parameters. Wave 45: also starts the automatic sync.
+ */
+export async function resumeGoogle(h: ServicesHooks, href: string = location.href): Promise<void> {
+  startGoogleAutoSync(h)
   const ss = store()
   const pending = ss?.getItem(PKCE_KEY)
   if (!ss || !pending) return
@@ -126,7 +131,7 @@ export async function resumeGoogle(h: SyncHooks, offer: (contacts: ImportedConta
     const token = await exchangeCode(fetchFn, { clientId, clientSecret: loadClientSecret(ss) ?? '', redirectUri: redirectUri(), code: r.code, verifier })
     saveClientSecret(ss, '')   // review wave 40: needed for this one step only
     saveToken(ss, token)
-    offer(await load(token))
+    await runGoogleSync(h, token, true)
   } catch {
     saveClientSecret(ss, '')
     h.toast(S.googleFailed)

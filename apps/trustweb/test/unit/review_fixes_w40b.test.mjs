@@ -256,10 +256,12 @@ describe('Google: coming back from Google with the switch off (or no client id) 
     return calls
   }
   const pending = JSON.stringify({ verifier: 'v'.repeat(43), state: 's1' })
+  // wave45 google-contacts-sync: resumeGoogle(h, href); the first sync after sign-in needs the record hooks
+  const gHooks = () => ({ toast: () => {}, state: () => ({ people: [] }), save: () => {}, changed: () => {} })
   it('flag off: no request, the pending sign-in is dropped', async () => {
     const { resumeGoogle } = await import('../../src/contacts_sync_view.ts')
     const calls = setup({ 'tw-google-connect': '0', tw_google_client_id: '123.apps.googleusercontent.com' }, { tw_google_pkce: pending, tw_google_client_secret: 'sec' })
-    await resumeGoogle({ toast: () => {} }, () => {}, globalThis.location.href)
+    await resumeGoogle(gHooks(), globalThis.location.href)
     expect(calls).toEqual([])
     expect(globalThis.sessionStorage.getItem('tw_google_pkce')).toBeNull()
     expect(globalThis.sessionStorage.getItem('tw_google_client_secret')).toBeNull()
@@ -267,13 +269,13 @@ describe('Google: coming back from Google with the switch off (or no client id) 
   it('flag on but no client id: no request', async () => {
     const { resumeGoogle } = await import('../../src/contacts_sync_view.ts')
     const calls = setup({ 'tw-google-connect': '1' }, { tw_google_pkce: pending })
-    await resumeGoogle({ toast: () => {} }, () => {}, globalThis.location.href)
+    await resumeGoogle(gHooks(), globalThis.location.href)
     expect(calls).toEqual([])
   })
   it('a damaged pending entry is dropped, never thrown at start', async () => {
     const { resumeGoogle } = await import('../../src/contacts_sync_view.ts')
     const calls = setup({ 'tw-google-connect': '1', tw_google_client_id: '123' }, { tw_google_pkce: '{not json' })
-    await expect(resumeGoogle({ toast: () => {} }, () => {}, globalThis.location.href)).resolves.toBeUndefined()
+    await expect(resumeGoogle(gHooks(), globalThis.location.href)).resolves.toBeUndefined()
     expect(calls).toEqual([])
     expect(globalThis.sessionStorage.getItem('tw_google_pkce')).toBeNull()
   })
@@ -281,7 +283,7 @@ describe('Google: coming back from Google with the switch off (or no client id) 
     const { resumeGoogle } = await import('../../src/contacts_sync_view.ts')
     setup({ 'tw-google-connect': '1', tw_google_client_id: '123' }, { tw_google_pkce: pending, tw_google_client_secret: 'sec' })
     globalThis.fetch = async (u) => ({ ok: true, status: 200, json: async () => (String(u).includes('token') ? { access_token: 'tok' } : {}) })
-    await resumeGoogle({ toast: () => {} }, () => {}, globalThis.location.href)
+    await resumeGoogle(gHooks(), globalThis.location.href)
     expect(globalThis.sessionStorage.getItem('tw_google_client_secret')).toBeNull()
   })
   it('forgetGoogle: token and secret gone, the grant revoked, the device keys removed', async () => {

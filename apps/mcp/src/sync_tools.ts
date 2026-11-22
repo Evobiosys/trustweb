@@ -6,6 +6,7 @@
  */
 import { announce } from './events.ts'
 import { load, schema, type RecordToolsOptions } from './record_tools.ts'
+import { SYNC_HINT, type SyncCause } from '../../trustweb/src/sync_error.ts'
 import type { Tool } from './protocol.ts'
 
 type Status = { devices: number; lastAt: number; unacked: number; held: number }
@@ -17,12 +18,14 @@ const statusOf = (r: Record<string, unknown>): Status | null => {
 export function syncTools(o: RecordToolsOptions): Tool[] {
   const now = o.now ?? (() => new Date())
   const read: Tool = {
-    name: 'sync_status', description: 'Device sync: how many of my devices are linked, when the last sync with any of them was (ISO time or null), whether Auto sync is on, how many linked devices still owe an acknowledgement of my last send (unacked) and how many newer items wait for an update of this device (held).',
+    name: 'sync_status', description: 'Device sync: the last error (cause + first fix, or null), how many of my devices are linked, when the last sync with any of them was (ISO time or null), whether Auto sync is on, how many linked devices still owe an acknowledgement of my last send (unacked) and how many newer items wait for an update of this device (held).',
     inputSchema: schema({}),
     run: () => {
       const r = load(o.file) as Record<string, unknown>
       const s = statusOf(r)
-      return { devices: s?.devices ?? 0, lastAt: s?.lastAt ? new Date(s.lastAt).toISOString() : null, auto: r.syncAutoOff !== true, unacked: s?.unacked ?? 0, held: s?.held ?? 0 }
+      const cause = (r.syncStatus as { error?: unknown } | undefined)?.error as SyncCause
+      const error = typeof cause === 'string' && Object.hasOwn(SYNC_HINT, cause) ? { cause, hint: SYNC_HINT[cause] } : null
+      return { error, devices: s?.devices ?? 0, lastAt: s?.lastAt ? new Date(s.lastAt).toISOString() : null, auto: r.syncAutoOff !== true, unacked: s?.unacked ?? 0, held: s?.held ?? 0 }
     },
   }
   if (!o.write) return [read]

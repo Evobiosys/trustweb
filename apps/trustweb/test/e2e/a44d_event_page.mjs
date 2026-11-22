@@ -41,14 +41,14 @@ try {
     }
     await openEvent('e1')
     const order = await page.locator('.events-page > *').evaluateAll((n) => n.slice(0, 7).map((x) => Object.keys(x.dataset)[0] ?? x.className))
-    check(`${w}: top order: mode note, cover, hosted by, by community, joining, community row`, JSON.stringify(order.slice(0, 6)) === JSON.stringify(['eventModeNote', 'eventCover', 'eventHostedBy', 'eventByCommunity', 'eventJoining', 'eventCommunityMembers']), JSON.stringify(order))
+    check(`${w}: top order: mode note, cover, hosted by, by community, joining, community row`, JSON.stringify(order.slice(0, 6)) === JSON.stringify(['eventModeNote', 'eventCover', 'eventHostedBy', 'eventByCommunity', 'eventPeople', 'eventCommunityMembers']), JSON.stringify(order))
     check(`${w}: the mode note says Community view: IYG`, (await page.locator('[data-event-mode-note]').textContent()) === 'Community view: IYG')
     check(`${w}: the cover has the first sentence and the share icons`, (await page.locator('[data-event-what]').textContent()) === 'Three days in the snow together.' && (await page.locator('[data-event-cover] [data-event-qr-top]').count()) === 1)
-    check(`${w}: Hosted by Hanna Host; Joining lists Ben`, (await page.locator('[data-event-hosted-by]').textContent()) === 'Hosted by Hanna Host' && (await page.locator('[data-event-joining-list] [data-person-chip="b"]').count()) === 1)
+    check(`${w}: Hosted by Hanna Host; Joining lists Ben`, (await page.locator('[data-event-hosted-by]').textContent()) === 'Hosted by Hanna Host' && (await page.locator('[data-event-people-list] [data-person-chip="b"]').count()) === 1)
     check(`${w}: the intimate community's other members are listed (Hanna as host is not "joining")`, (await page.locator('[data-event-community-list] [data-person-chip]').evaluateAll((n) => n.map((x) => x.dataset.personChip).sort().join())) === 'c,h')
-    check(`${w}: Message everyone and Resources of #event:Winter OG`, (await page.locator('[data-event-message-all]').count()) === 1 && /Resources of/.test(await page.locator('[data-event-resources]').textContent()))
+    check(`${w}: Message everyone and Resources of #event:Winter OG`, (await page.locator('[data-event-chat]').count()) === 1 && /Resources of/.test(await page.locator('[data-event-resources]').textContent()))
     check(`${w}: the share controls also at the very bottom, with the audience (default: become community members)`, (await page.locator('.events-page > *').last().getAttribute('data-event-share-bottom')) === '' && (await page.locator('[data-event-share-audience]').getAttribute('data-event-share-audience')) === 'community')
-    const boxes = await Promise.all(['[data-event-mode-note]', '[data-event-cover]', '[data-event-hosted-by]', '[data-event-by-community]', '[data-event-joining]'].map((s) => page.locator(s).first().boundingBox()))
+    const boxes = await Promise.all(['[data-event-mode-note]', '[data-event-cover]', '[data-event-hosted-by]', '[data-event-by-community]', '[data-event-people]'].map((s) => page.locator(s).first().boundingBox()))
     check(`${w}: no control of the top overlays another`, boxes.every((a, i) => boxes.every((b, j) => i === j || !overlap(a, b))))
     await page.screenshot({ path: `${SHOTS}/answers-44d-event-top-${w}.png` })
     // 4a: Choose later is stored
@@ -69,7 +69,7 @@ try {
     check(`${w}: after opening the community event the switch reads Community`, mode === 'community', String(mode))
     // big community: only joiners, no Community row
     await openEvent('e2')
-    check(`${w}: a big community lists no members`, (await page.locator('[data-event-community-members]').count()) === 0 && (await page.locator('[data-event-joining]').getAttribute('data-event-joining')) === '0')
+    check(`${w}: a big community lists no members`, (await page.locator('[data-event-community-members]').count()) === 0 && (await page.locator('[data-event-people]').getAttribute('data-event-people')) === '1')
     // by <community> opens the community view
     await openEvent('e1')
     await page.locator('[data-event-by-community]').click(); await page.waitForTimeout(800)

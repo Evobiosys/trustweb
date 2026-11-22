@@ -69,9 +69,9 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'birthdayNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
   'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
-  'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
+  'atEvent', 'eventMergeAsks' /* wave45 merge-events: peer ids */, 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',
   'serverTranscriptionConsent', 'apkVersion', 'apkCheckedAt', 'apkUpdates', 'tabOrder', 'tabRow', 'shareMode', 'demo', 'demoHidden', 'demoOffered',
-  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', 'agent',
+  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport', 'serviceImports', /* wave45 google-contacts-sync */ 'googleSync', 'agent',
   // wave 36 groups-to-join: the groups I could join or help and their ranking stay on this phone ("Only on this phone")
   'groups',
   // wave 42 push-popup: the notification inbox mirror stays on this phone
@@ -86,6 +86,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   'discoverable', 'discoverOpen', 'hosted', 'nameCache', 'intentsIn',
   /* wave44c event-autosave */ 'drafts',
   /* wave44c answers-44c: tombstones travel as their own entities (x:<kind>:<id>) */ 'trash',
+  /* review-45: the outbox holds unsealed envelopes for this device's pair keys; settings suggestions in/out and the follow book are this device's */ 'sendQueue', 'settingsShare',
 ])
 
 /** A setting that merges by its own rule instead of newest-wins as a whole (wave 36: co-created notes merge document by document). Registered by the module that owns the field. */

@@ -14,6 +14,7 @@ import { parseCommunity, withMeta } from './ext/community-mighty/community_data'
 import { attendees, tagPerson } from './events'
 import { communityOfEvent, listedAttendees } from './event_visibility'
 import { eventOrganizers } from './event_roles'
+import { eventAccessOf } from './community_event_access'
 
 /** A community of up to this many members counts as intimate unless its settings say otherwise. */
 export const INTIMATE_MAX = 30
@@ -75,12 +76,13 @@ const UNPLACED: readonly string[] = [Ring.Unsorted, Ring.None, Ring.Intending]
  * A connected person (`peerId`) accepted the invitation to my event `eventId`: they join it on my device. A community event shared to the
  * community also places them as an acquainted community member (Choose later: left as they are). True when anything changed.
  */
-export function applyJoined(s: Pick<AppState, 'people' | 'events'>, peerId: string, eventId: string): boolean {
+export function applyJoined(s: Pick<AppState, 'people' | 'events'> & Partial<Pick<AppState, 'extData'>>, peerId: string, eventId: string): boolean {
   const ev = s.events?.find((e) => e.id === eventId)
   const who = s.people.find((p) => p.peerId === peerId && live(p))
   if (!ev || !who || who.events?.includes(eventId)) return false
   const tag = communityOfEvent(ev)
-  if (tag && shareAudienceOf(ev) === 'later') { who.events = [...(who.events ?? []), eventId]; return true }   // Choose later: the event only, no community tag
+  // wave45 community-events-invite-only: in mode invited a non-member who accepts joins this event only, never the community
+  if (tag && (shareAudienceOf(ev) === 'later' || (eventAccessOf(s, tag) === 'invited' && !holds(who, tag)))) { who.events = [...(who.events ?? []), eventId]; return true }   // Choose later: the event only, no community tag
   tagPerson(s as AppState, who.id, eventId)
   if (tag) {
     who.fields = { ...who.fields, [tag]: 'true' }

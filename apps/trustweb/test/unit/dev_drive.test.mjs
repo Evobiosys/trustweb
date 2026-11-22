@@ -24,8 +24,21 @@ describe('stepMove', () => {
     expect(stepMove({ text: 'tap ⓘ', selector: '[data-map-credit-toggle]' }, false, true, plan, 'map')).toEqual({ kind: 'missing', ring: '[data-go="web"]', note: 'navigate to Web > Map first' })
   })
 
-  it('missing although on the right screen already: the ring goes to the row\'s own tab', () => {
-    expect(stepMove({ text: 'x', selector: '.gone' }, false, false, navPlan('chat', 'chat'), 'chat')).toEqual({ kind: 'missing', ring: '[data-go="chat"]', note: 'navigate to Chat first' })
+  it('missing although on the right screen already: no "navigate first" (it is there), the card says the target is not on this screen', () => {
+    expect(stepMove({ text: 'x', selector: '.gone' }, false, false, navPlan('chat', 'chat'), 'chat')).toEqual({ kind: 'missing', ring: null, note: 'not on this screen: x' })
+  })
+
+  it('wave45: a step never says "navigate to X first" when the app is already on X', () => {
+    for (const [ctx, screen, view] of [['chat', 'chat'], ['events', 'events'], ['settings', 'settings'], ['map', 'web', 'map'], ['web', 'web', 'rings']]) {
+      const m = stepMove({ text: 't', selector: '.gone' }, false, true, navPlan(ctx, screen, view), ctx)
+      expect(m.note).toBe('not on this screen: t')
+    }
+  })
+
+  it('wave45: from any other screen the step navigates (nav move), whatever the row\'s view', () => {
+    for (const ctx of ['chat', 'events', 'inventory', 'settings', 'map', 'network', 'people', 'web']) {
+      expect(stepMove({ text: 't', selector: '.gone' }, false, false, navPlan(ctx, 'elsewhere'), ctx).kind).toBe('nav')
+    }
   })
 
   it('a row without a known view: no ring, the card names the missing step', () => {

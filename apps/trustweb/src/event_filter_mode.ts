@@ -9,6 +9,7 @@ import { eventTagLabel } from './event_tag'
 import { tagLabel } from './events'
 import { filterByChips } from './tag_filter'
 import { intimateEventChips } from './event_community' // answers-44d
+import { bubbleOn } from './event_bubble' // wave45 event-bubble
 
 type UiEvents = Pick<AppState, 'uiRings'> & { events?: readonly TwEvent[] }
 
@@ -18,18 +19,19 @@ export const eventFilterOf = (s: Pick<AppState, 'uiRings'>): string | null => s.
 export function setEventFilter(s: Pick<AppState, 'uiRings'>, id: string | null): boolean {
   if (eventFilterOf(s) === id) return false
   const ui = { ...s.uiRings }
+  delete ui.eventEveryone   // wave45 event-bubble: a lift ends with the mode or the event
   if (id) ui.eventMode = id; else delete ui.eventMode
   s.uiRings = ui
   return true
 }
 
 /** The Web's `show` list with the event chip added while the mode is on (the chip filterByChips already understands). */
-export function eventModeShow(s: Pick<AppState, 'uiRings'> & Partial<Pick<AppState, 'people' | 'events' | 'extData'>>): string[] {
+export function eventModeShow(s: Pick<AppState, 'uiRings' | 'eventBubbleOff'> & Partial<Pick<AppState, 'people' | 'events' | 'extData'>>): string[] {
   const show = s.uiRings?.show ?? []
-  const id = eventFilterOf(s)
+  const id = bubbleOn(s) ? eventFilterOf(s) : null   // wave45 event-bubble: Everyone or the setting lifts the Web
   const out = id && !show.includes(`event:${id}`) ? [...show, `event:${id}`] : [...show]
   // answers-44d: an intimate community's event shows the community's members too
-  for (const c of s.people ? intimateEventChips(s as Pick<AppState, 'people'> & typeof s) : []) if (!out.includes(c)) out.push(c)
+  for (const c of s.people && id ? intimateEventChips(s as Pick<AppState, 'people'> & typeof s) : []) if (!out.includes(c)) out.push(c)
   return out
 }
 

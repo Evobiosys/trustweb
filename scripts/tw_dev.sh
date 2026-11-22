@@ -10,6 +10,7 @@
 #   scripts/tw_dev.sh --stop     stop the dev server this script started
 #   TW_PORT=5191 scripts/tw_dev.sh   another port (default 5190)
 #
+# Personal runs write the shared live record, so they are refused outside a registered preview port (answers-45a, below); e2e: TW_STOCK=1.
 # All local previews open as Jakob with his record: TW_DEV_RECORD (a record file, outside the repo) or, when unset, the
 # path in ~/.cache/trustweb-dev/dev-record.path seeds every fresh origin instead of the welcome screen (About shows "dev record: <file>").
 #
@@ -54,6 +55,20 @@ for arg in "$@"; do
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+
+# answers-45a (review-45 Q10): Jakob's shared live record (TW_DEV_LIVE, and dev-events.json beside the record in dev-record.path) is written only
+# from a registered preview port (bin/preview registry, ~/.cache/trustweb-dev/previews/*.json) or the integration window port 5192
+# (bin/tw_windows.sh personal). Any other personal run (an e2e, a builder) is refused: TW_STOCK=1, or its own TW_DEV_RECORD + TW_DEV_LIVE files.
+if [ -z "${TW_STOCK:-}" ] && [ -n "$TW_DEV_RECORD" ]; then
+  shared=0
+  [ "$TW_DEV_LIVE" = "$STATE/dev-record.live.json" ] && shared=1
+  [ -f "$STATE/dev-record.path" ] && [ "$TW_DEV_RECORD" = "$(cat "$STATE/dev-record.path")" ] && shared=1
+  if [ "$shared" = 1 ] && [ "$PORT" != 5192 ] && ! grep -qsE "\"port\": *$PORT([^0-9]|\$)" "${TW_PREVIEWS_DIR:-$STATE/previews}"/*.json; then
+    echo "refused: port $PORT is no registered preview port, and this run would write Jakob's shared live record ($TW_DEV_LIVE)." >&2
+    echo "  e2e and builders: TW_STOCK=1 (or their own TW_DEV_RECORD + TW_DEV_LIVE files); Jakob: a preview (bin/preview) or bin/tw_windows.sh personal." >&2
+    exit 3
+  fi
+fi
 
 answers() { curl -fsS -m 2 -o /dev/null "$URL" 2>/dev/null; }
 

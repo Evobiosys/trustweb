@@ -35,6 +35,8 @@ export interface CommunityMeta {
   parent?: string
   /** answers-44d: everyone knows everyone here (events list the members); absent = by size (event_community.ts INTIMATE_MAX). */
   intimate?: boolean
+  /** Wave 45 community-events-invite-only (community_event_access.ts): who sees its events; absent = members. */
+  eventAccess?: 'members' | 'invited'
 }
 export const REMEMBER_MAX = 5
 /** Wave 43c: an anonymous slot is random lower-case hex, 16 to 64 characters (the server's check is the same). */
@@ -90,7 +92,7 @@ function parseMeta(v: unknown): Record<string, CommunityMeta> | undefined {
     out[id] = {
       kind: o.kind === 'managed' ? 'managed' : 'informal', organizers: strs(o.organizers),
       ...(Array.isArray(o.tiles) ? { tiles } : {}), ...(managedTiles.length ? { managedTiles } : {}), ...(o.connectEvents === true ? { connectEvents: true as const } : {}), ...(typeof o.shareLayout === 'boolean' ? { shareLayout: o.shareLayout } : {}), ...(isStr(o.slot) && SLOT_RE.test(o.slot) ? { slot: o.slot } : {}),
-      ...(o.group === 'otherGroup' ? { group: 'otherGroup' as const } : {}), ...(isStr(o.parent) && o.parent ? { parent: o.parent } : {}), ...(typeof o.intimate === 'boolean' ? { intimate: o.intimate } : {}),
+      ...(o.group === 'otherGroup' ? { group: 'otherGroup' as const } : {}), ...(isStr(o.parent) && o.parent ? { parent: o.parent } : {}), ...(typeof o.intimate === 'boolean' ? { intimate: o.intimate } : {}), ...(o.eventAccess === 'members' || o.eventAccess === 'invited' ? { eventAccess: o.eventAccess } : {}),
       ...(nav.length ? { nav } : {}), ...(o.ask === false ? { ask: false } : {}), ...(audiences.length ? { audiences } : {}), ...(isStr(o.name) && o.name ? { name: o.name } : {}),
     }
   }
@@ -428,3 +430,21 @@ export function communityTree(d: CommunityData, rows: readonly CommunityRow[]): 
   for (const r of rows) walk(r, 0)   // a cycle has no root: show it flat rather than lose it
   return out
 }
+
+export interface ViewRow { item: Resource; state: 'shown' | 'new' | 'hidden' }
+
+/** My view over the shared list: my order first, then what others added since (new: greyed, with Add), then what I hid. */
+export function resolveView(resources: readonly Resource[], view: ResourceView | undefined): ViewRow[] {
+  const byId = new Map(resources.map((r) => [r.id, r]))
+  const order = (view?.order ?? []).filter((id) => byId.has(id))
+  const hidden = new Set(view?.hidden ?? [])
+  const placed = new Set([...order, ...hidden])
+  return [
+    ...order.filter((id) => !hidden.has(id)).map((id): ViewRow => ({ item: byId.get(id)!, state: 'shown' })),
+    ...resources.filter((r) => !placed.has(r.id)).map((item): ViewRow => ({ item, state: 'new' })),
+    ...resources.filter((r) => hidden.has(r.id)).map((item): ViewRow => ({ item, state: 'hidden' })),
+  ]
+}
+
+/** wave45 community-documents: the documents the Community view lists on its Home: the shared links as I see them (mine first, new ones, none I hid). */
+export const documentsOf = (d: CommunityData): Resource[] => resolveView(d.resources ?? [], d.mine).filter((r) => r.state !== 'hidden').map((r) => r.item)

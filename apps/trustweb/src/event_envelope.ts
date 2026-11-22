@@ -13,6 +13,7 @@ import { decodeEventLink } from './event_link'
 import type { LinkedEvent } from './event_link'
 import { isEventHost } from './event_roles'
 import { mergeActivities } from './open_space'
+import { mergePoll } from './open_space_poll'
 import { addItem } from './notify_inbox'
 import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
 import { S } from './strings'
@@ -21,6 +22,10 @@ import { namedHost } from './event_conference'
 import { addSeenThrough } from './seen_through' // wave44c seen-through
 import { randomId } from '../../demo/src/crypto'
 import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
+import { createEventMerge } from './event_merge_flow' // wave45 merge-events
+import { resolveEvent } from './event_merge'
+import { mayAnnounce, seesEvent } from './community_event_access' // wave45 community-events-invite-only; answers-45a: seesEvent
+import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -65,7 +70,7 @@ export function receiveAnnounce(s: Pick<AppState, 'events' | 'notifInbox'>, ev: 
 }
 
 export interface EnvelopeHost<P extends { id: string }> {
-  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts'>>
+  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts' | 'extData'>>
   /** Wave 44: the connected peers of the people who carry this community tag (the ones an announce goes to). */
   members?(tag: string): P[]
   /** Wave 44 steer-open-space: the connected people at this event (tagged or invited): the schedule of an open space goes to them. */
@@ -89,12 +94,19 @@ export type EnvelopeOutcome = 'answered' | 'filled' | 'pending' | 'ignored'
 
 export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHost<P>) {
   let shown: { id: string; at: number } | null = null
+  const merge = createEventMerge(host) // wave45 merge-events
   const held = (id: string): TwEvent | undefined => host.state().events?.find((e) => e.id === id)
   const waiting = (id: string): boolean => { const e = held(id) ?? (host.pending()?.id === id ? host.pending() : null); return !!e && isIncomplete(e) }
 
+  /** answers-45a (review-45 Q5): the read filter of a community event. Outside the QR window a host gives it only to whom seesEvent lets see it
+   *  (invited personally, or a member while the community's mode is members); someone I cannot name as a person sees no community event. */
+  const QR_ONLY = { id: '' }
   async function giveTo(peer: P, id: string): Promise<boolean> {
     const ev = held(id)
-    if (!ev || !mayAnswer(host.state(), id, shown, host.now())) return false
+    const st = host.state()
+    if (!ev || !mayAnswer(st, id, shown, host.now())) return false
+    const viaQr = shown?.id === id && host.now() - shown.at <= EVENT_SHOW_WINDOW_MS
+    if (!viaQr && !seesEvent(st, ev, st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined) ?? QR_ONLY)) return false
     await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev) })
     if (ev.openSpace) await host.send(peer, osEnvelope(ev)).catch(() => undefined)
     return true
@@ -103,7 +115,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   /** The schedule as an envelope; a host also says the event is an open space (receivers accept that only from a host). */
   const osEnvelope = (ev: TwEvent): EventEnvelope => {
     const st = host.state()
-    return { v: 1, t: 'event', os: { id: ev.id, ...(isEventHost(ev, st.me.displayName, st.people) ? { open: true as const } : {}), acts: ev.openSpace?.acts ?? [] } }
+    return { v: 1, t: 'event', os: { id: ev.id, ...(isEventHost(ev, st.me.displayName, st.people) ? { open: true as const } : {}), acts: ev.openSpace?.acts ?? [], ...(ev.openSpace?.poll ? { poll: ev.openSpace.poll } : {}) } }
   }
   const pushOs = async (ev: TwEvent, except?: string): Promise<void> => {
     if (!ev.openSpace) return
@@ -120,6 +132,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     let changed = false
     if (!ev.openSpace && os.open && who && isEventHost(ev, who.name, st.people)) { ev.openSpace = { acts: [] }; changed = true }
     if (mergeActivities(ev, os.acts)) changed = true
+    if (os.poll !== undefined && mergePoll(ev, os.poll, !!who && isEventHost(ev, who.name, st.people))) changed = true   // wave 45 open-space-date-poll
     if (!changed) return false
     host.save()
     host.changed()
@@ -170,8 +183,10 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   /* wave44c answers-44d: an accepted invitation. The inviter / a host marks the guest joined; a host of an intimate community's event introduces them to the others there (accepting such an invitation says so in the join sheet). */
   async function onJoined(peer: P, j: NonNullable<EventEnvelope['joined']>): Promise<boolean> {
     const st = host.state()
-    const ev = held(j.id)
-    if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, j.id)) return false
+    const id = resolveEvent(st, j.id) // wave45 merge-events: a joined record for a merged event lands on the kept one; the joiner is told
+    const ev = held(id)
+    if (ev && id !== j.id) await merge.tell(peer, ev, j.id)
+    if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, id)) return false
     host.save()
     host.changed()
     const tag = communityOfEvent(ev)
@@ -183,7 +198,26 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     return true
   }
 
+  /* wave45 events-refetch: a connected person asks for what I announced; the announce envelopes go again (their receiver skips events it holds). Only members of the community, at most once per REPLAY_GAP_MS. */
+  const askedAt = new Map<string, number>()
+  async function replay(peer: P): Promise<boolean> {
+    const t = host.now()
+    if (t - (askedAt.get(peer.id) ?? -Infinity) < REPLAY_GAP_MS) return false
+    askedAt.set(peer.id, t)
+    let any = false
+    for (const ev of host.state().events ?? []) {
+      const tag = communityOfEvent(ev)
+      if (ev.announcedAt === undefined || ev.shareCommunity !== true || !tag || !mayAnnounce(host.state(), tag) || !host.members?.(tag).some((m) => m.id === peer.id)) continue   // review-45: mode invited replays nothing
+      await host.send(peer, { v: 1, t: 'event', link: host.link(ev), show: visibilityOf(ev), announce: true })
+      if (ev.openSpace) await host.send(peer, osEnvelope(ev))
+      any = true
+    }
+    return any
+  }
+
   return {
+    /** wave45 merge-events: start a merge (event_merge_flow.ts) or answer the other host's ask. */
+    merge: { start: merge.start, answer: merge.answer },
     /** answers-44d: I accepted the invitation: the person whose link or code I took (`by`) and the hosts I am connected to are told, sealed. */
     async joined(ev: TwEvent, by?: { name: string; did?: string }): Promise<void> {
       const st = host.state()
@@ -216,7 +250,8 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       for (const ev of due) {
         ev.announcedAt = host.now()
         const link = host.link(ev)
-        for (const peer of host.members?.(communityOfEvent(ev) ?? '') ?? []) {
+        const tag = communityOfEvent(ev) ?? ''
+        for (const peer of mayAnnounce(host.state(), tag) ? host.members?.(tag) ?? [] : []) {   // wave45: mode invited tells nobody
           void host.send(peer, { v: 1, t: 'event', link, show: visibilityOf(ev), announce: true }).then(() => (ev.openSpace ? host.send(peer, osEnvelope(ev)) : undefined)).catch(() => undefined)
         }
       }
@@ -244,7 +279,9 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     },
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
+      if (env.sync) return (await replay(peer).catch(() => false)) ? 'answered' : 'ignored' // wave45 events-refetch
       if (env.seen) return onSeen(peer, env.seen) ? 'filled' : 'ignored' // wave44c seen-through
+      if (env.merge) return (await merge.onEnvelope(peer, env.merge).catch(() => false)) ? 'filled' : 'ignored' // wave45 merge-events
       if (env.joined) return (await onJoined(peer, env.joined).catch(() => false)) ? 'filled' : 'ignored' // wave44c answers-44d
       if (env.os) return (await onOpenSpace(peer, env.os)) ? 'filled' : 'ignored'
       if (env.rsvp) return (await onRsvp(peer, env.rsvp).catch(() => false)) ? 'answered' : 'ignored'   // wave44c event-autosave

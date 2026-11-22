@@ -10,17 +10,17 @@ export const ZONES: readonly Zone[] = ['closest', 'close', 'friend']
 
 export type Degree = 1 | 2 | 3
 
-/** Chips are `person:<id>` or `tag:<id>`. `zone` absent = every connected person (hints and intros ask everybody by default). */
+/** Chips are `person:<id>`, `tag:<id>` or `event:<id>` (the people who attended that event). `zone` absent = every connected person (hints and intros ask everybody by default). */
 export interface AudienceFilter { zone?: Zone; add: string[]; exclude: string[]; degree: Degree }
 
 export const DEFAULT_FILTER: AudienceFilter = { zone: undefined, add: [], exclude: [], degree: 1 }
 
-const chipOk = (c: unknown): c is string => typeof c === 'string' && /^(person|tag):.+/.test(c)
+const chipOk = (c: unknown): c is string => typeof c === 'string' && /^(person|tag|event):.+/.test(c)
 
 function chipList(v: unknown): string[] {
   if (v === undefined) return []
   if (!Array.isArray(v)) throw new Error('add and exclude are a list')
-  for (const c of v) if (!chipOk(c)) throw new Error('chips are person:<id> or tag:<id>')
+  for (const c of v) if (!chipOk(c)) throw new Error('chips are person:<id>, tag:<id> or event:<id>')
   return [...new Set(v as string[])]
 }
 

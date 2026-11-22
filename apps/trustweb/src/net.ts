@@ -77,6 +77,8 @@ import { NAMELESS_PEER, cleanHelloName } from './hello'
 import { addHeldAsk, dropHeldAsk, liveHeldAsks } from './held_asks'
 import { addLateAnswer, addSentAsk, addShownAnswer, forgetSentAsk, LATE_KEEP_MS, openWindowUntil, releaseLateAnswers, sentAskFor } from './late_answers'
 import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
+import { dueItems, enqueue, holdDue, markFailed, markSent, nextDueAt } from './outbox' // wave45 offline-outbox
+import type { OutboxKind } from './outbox'
 import { LogOutcome, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
 import { askPeers, isBlocked } from './non_responsive'
@@ -197,6 +199,8 @@ export interface NetHooks {
   state(): AppState
   save(): void
   onStatus(status: RelayStatus): void
+  /** Wave 45 offline-outbox: a send the relay did not take now waits in the outbox (outbox.ts) and goes out when it is back. */
+  onQueued?(peer: Peer): void
   /** Wave 11: the relay's answer to this phone's push subscription (push.ts shows "unavailable" as a hint). */
   onPush?(outcome: 'kept' | 'forgotten' | 'rejected' | 'unavailable'): void
   /** A matching ask arrived: show the consent prompt, wherever the person is. */
@@ -424,7 +428,7 @@ export class Net {
     channel.onStatus((status) => {
       if (this.channel !== channel) return // a channel this tab already closed
       this.hooks.onStatus(status)
-      if (status === 'connected') { this.noteConnected(Date.now()); void this.resendAcks(); void this.flushLateYes(); void this.flushAskAgain() }
+      if (status === 'connected') { this.noteConnected(Date.now()); void this.resendAcks(); void this.flushLateYes(); void this.flushAskAgain(); void this.flushOutbox() }
     })
     channel.onPush((outcome) => { if (this.channel === channel) this.hooks.onPush?.(outcome) })
     if (this.pushSub !== undefined) channel.setPush(this.pushSub)
@@ -680,17 +684,15 @@ export class Net {
    * A short text to one connected peer, sealed with the pair key (apps/demo's chat envelope, 500 characters at most). `ts` defaults to now;
    * a retry of a waiting chat message passes its ORIGINAL ts so the receiver can drop a duplicate (chat.ts).
    */
-  async sendText(peer: Peer, text: string, ts: number = Date.now(), re?: ChatRe, pic?: string): Promise<void> {
+  async sendText(peer: Peer, text: string, ts: number = Date.now(), re?: ChatRe, pic?: string, queue = true): Promise<void> {
     // Wave 15: nothing leaves for a blocked person (links, profile, agreements, events, chat): one choke point, no notice.
     if (this.blockedPeer(peer)) throw new Error('blocked')
     await this.start()
     // Wave 6i: `re`, the ask this message answers (chat_re.ts makeRe built it), travels inside the same sealed envelope.
     const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts, ...(re ? { re } : {}), ...(pic ? { pic } : {}) }
-    const key = await this.pairKey(peer)
-    if (!this.channel) throw new Error('relay not connected')
-    await this.channel.send(peer.did, env, key)
+    await this.deliver(peer, env, 'text', queue)
     // Wave 43c: the same text to each of their other devices (best effort; the message key is the same, so their sync unites it).
-    for (const did of peer.alsoDids ?? []) await this.channel.send(did, env, await this.keyFor(did)).catch(() => { /* their own device got it */ })
+    for (const did of peer.alsoDids ?? []) await this.channel?.send(did, env, await this.keyFor(did)).catch(() => { /* their own device got it */ })
   }
 
   /**
@@ -715,19 +717,66 @@ export class Net {
   /** Wave 43c: one small hosting message (social_hosting.ts HostMsg) to one connected peer, sealed with the pair key; nothing leaves for a blocked person. */
   async sendHost(peer: Peer, m: HostEnvelope['m']): Promise<void> {
     if (this.blockedPeer(peer)) throw new Error('blocked')
-    await this.start()
-    const key = await this.pairKey(peer)
-    if (!this.channel) throw new Error('relay not connected')
-    await this.channel.send(peer.did, { v: 1, t: 'host', m }, key)
+    await this.deliver(peer, { v: 1, t: 'host', m }, 'host')
   }
 
   /** Wave 43c: a sealed event envelope (types.ts EventEnvelope) to one connected peer; the same choke point as sendText (a blocked person gets nothing). */
   async sendEvent(peer: Peer, env: EventEnvelope): Promise<void> {
     if (this.blockedPeer(peer)) throw new Error('blocked')
-    await this.start()
-    const key = await this.pairKey(peer)
-    if (!this.channel) throw new Error('relay not connected')
-    await this.channel.send(peer.did, env, key)
+    await this.deliver(peer, env, 'event')
+  }
+
+  /**
+   * Wave 45 offline-outbox: sends one envelope; when the relay does not take it, it waits in the outbox (outbox.ts) instead of failing
+   * (`queue` false: the caller keeps its own waiting state, as the chat thread does).
+   */
+  private async deliver(peer: Peer, env: Envelope, kind: OutboxKind, queue = true): Promise<void> {
+    try {
+      await this.start()
+      const key = await this.pairKey(peer)
+      if (!this.channel) throw new Error('relay not connected')
+      await this.channel.send(peer.did, env, key)
+    } catch (e) {
+      if (!queue) throw e
+      enqueue(this.hooks.state(), { peerId: peer.id, kind, env }, Date.now())
+      this.hooks.save()
+      this.scheduleOutbox()
+      this.hooks.onQueued?.(peer)
+    }
+  }
+
+  private outboxTimer: ReturnType<typeof setTimeout> | undefined
+  private flushingOutbox = false
+
+  /** Wakes flushOutbox when the next waiting item is due. */
+  private scheduleOutbox(): void {
+    clearTimeout(this.outboxTimer)
+    const at = nextDueAt(this.hooks.state())
+    if (at !== undefined) this.outboxTimer = setTimeout(() => { void this.flushOutbox() }, Math.max(1000, at - Date.now()))
+  }
+
+  /** Sends the due outbox items, oldest first; the first one the relay refuses ends the round (the others are not due either). */
+  async flushOutbox(): Promise<void> {
+    if (this.flushingOutbox || !this.channel) return
+    this.flushingOutbox = true
+    try {
+      const s = this.hooks.state()
+      for (const item of dueItems(s, Date.now())) {
+        const peer = s.peers.find((p) => p.id === item.peerId)
+        if (!peer || this.blockedPeer(peer)) { markFailed(s, item.id, Date.now()); continue } // gone or blocked: waits out its horizon, never sent
+        try {
+          await this.channel.send(peer.did, item.env as Envelope, await this.pairKey(peer))
+          markSent(s, item.id, Date.now())
+          this.hooks.save() // review-45: saved per item, so a reload after this send never sends it again
+        } catch {
+          const now = Date.now()
+          markFailed(s, item.id, now)
+          holdDue(s, now, s.sendQueue?.find((x) => x.id === item.id)?.nextAt ?? now)
+          break
+        }
+      }
+      this.hooks.save()
+    } finally { this.flushingOutbox = false; this.scheduleOutbox() }
   }
 
   /** Logs an ask the moment it is decided (before its answer leaves, as apps/demo's answer_log.ts does). */

@@ -68,7 +68,8 @@ async function main() {
     await setRecord(a.page, `r.events = [{ id: 'e1', name: 'Winter OG', from: '2026-12-30', to: '2027-01-02', where: 'Alm', createdAt: 1, attended: true, hosts: ['Anna'], communityId: 'iyg' }]; r.extData = { ...(r.extData || {}), 'community-mighty': { meta: { iyg: { kind: 'informal', organizers: ['me'] } } } }`)
     await a.page.reload(); await a.page.waitForTimeout(1200)
     await openEventPage(a.page, 'e1')
-    t.ok('A: before: nobody joins', (await a.page.locator('[data-event-joining]').getAttribute('data-event-joining')) === '0')
+    // review-45: wave45 event-people-list lists the hosts first, so the host Anna counts; nobody joins = Ben is not there yet
+    t.ok('A: before: nobody joins', (await a.page.locator('[data-event-people]').getAttribute('data-event-people')) === '1' && !/Ben/.test(await a.page.locator('[data-event-people]').innerText()))
     await a.page.locator('[data-event-qr]').click(); await a.page.waitForTimeout(1200)
     const payload = await a.page.getAttribute('[data-qr-modes]', 'data-payload')
     const b = await newPhone(browser, server)
@@ -85,7 +86,7 @@ async function main() {
     await a.page.reload(); await a.page.waitForTimeout(1200)
     await a.page.evaluate(() => document.querySelectorAll('.overlay.on').forEach((n) => n.classList.remove('on')))
     await openEventPage(a.page, 'e1')
-    t.ok('A: the event page lists Ben under Joining', (await a.page.locator('[data-event-joining-list] [data-person-chip]').count()) === 1 && /Ben/.test(await a.page.locator('[data-event-joining-list]').innerText()))
+    t.ok('A: the event page lists Ben under Joining', (await a.page.locator('[data-event-people-list] [data-person-chip]').count()) === 2 && /Ben/.test(await a.page.locator('[data-event-people-list]').innerText()))   // review-45: host Anna + Ben
     await shot(a.page, 'answers-44d-joined-a-page.png')
     t.ok('no page errors', errors.length === 0, errors.join(' | '))
   } finally {

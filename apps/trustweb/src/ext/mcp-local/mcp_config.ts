@@ -11,7 +11,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'bar_list', write: false }, { name: 'bar_set', write: true }, { name: 'bar_hide', write: true }, { name: 'bar_show', write: true },
   { name: 'web_filter_get', write: false }, { name: 'web_filter_set', write: true },
   /* wave44b filters-communities */
-  { name: 'filter_state_list', write: false }, { name: 'event_mode_get', write: false }, { name: 'filter_state_save', write: true }, { name: 'filter_state_apply', write: true }, { name: 'filter_state_pin', write: true }, { name: 'event_mode_set', write: true },
+  { name: 'filter_state_list', write: false }, { name: 'event_mode_get', write: false }, { name: 'filter_state_save', write: true }, { name: 'filter_state_apply', write: true }, { name: 'filter_state_pin', write: true }, { name: 'event_mode_set', write: true }, { name: 'event_bubble_set', write: true },
   { name: 'remove_person', write: true }, { name: 'restore_person', write: true },
   { name: 'introduce_people', write: true }, // wave 44 steer-bubble-connect
   { name: 'introduce_link_create', write: true }, // wave 44 steer-bubble-connect-3
@@ -78,6 +78,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'invite_link_create', write: true }, { name: 'invite_link_revoke', write: true }, { name: 'invite_link_status', write: false },
   /* wave44 steer-open-space */
   { name: 'open_space_propose', write: true }, { name: 'open_space_join', write: true },
+  /* wave45 open-space-date-poll */
+  { name: 'open_space_poll_get', write: false }, { name: 'open_space_poll_add', write: true }, { name: 'open_space_poll_vote', write: true }, { name: 'open_space_poll_use', write: true },
 
   /* wave44b profile-page */
   { name: 'profile_get', write: false }, { name: 'profile_set', write: true }, { name: 'profile_link_add', write: true }, { name: 'profile_link_remove', write: true },
@@ -89,6 +91,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'profile_link_check', write: true },
   /* wave44 steer-circles-view */
   { name: 'circles_layout', write: false },
+  /* wave45 community-documents */
+  { name: 'community_documents_list', write: false },
   /* wave44c community-resources */
   { name: 'resource_mark_opened', write: true },
   /* wave44c home-default */
@@ -112,6 +116,31 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'ask_answer', write: true }, { name: 'chat_send', write: true },
   { name: 'resource_add', write: true },
   { name: 'event_share_audience_set', write: true }, { name: 'community_intimate_set', write: true }, { name: 'event_chat_open', write: true }, { name: 'event_message_all', write: true },
+  /* wave45 event-people-list */
+  { name: 'event_people_list', write: false }, { name: 'event_people_add', write: true },
+  /* wave45 event-group-chat */
+  { name: 'event_chat_read', write: false }, { name: 'event_chat_send', write: true }, { name: 'event_chat_leave', write: true },
+  /* wave45 group-chat-list */
+  { name: 'group_list', write: false }, { name: 'group_read', write: false }, { name: 'group_create', write: true }, { name: 'group_invite', write: true },
+  { name: 'group_open', write: true }, { name: 'group_send', write: true }, { name: 'group_leave', write: true }, { name: 'list_create', write: true },
+  { name: 'list_set_active', write: true }, { name: 'list_add_item', write: true }, { name: 'list_check', write: true }, { name: 'list_move', write: true },
+  { name: 'list_archive_done', write: true },
+  /* wave45 merge-events */
+  { name: 'event_merge_asks_list', write: false }, { name: 'event_merge', write: true }, { name: 'event_merge_answer', write: true },
+  /* wave45 resources-notion-views */
+  { name: 'resources_view_set', write: true },
+  /* wave45 settings-suggest */
+  { name: 'settings_suggestions_list', write: false }, { name: 'settings_suggest', write: true }, { name: 'settings_follow', write: true }, { name: 'settings_suggestion_accept', write: true },
+  /* wave45 google-contacts-sync */
+  { name: 'google_sync_status', write: false }, { name: 'google_sync_set', write: true },
+  /* wave45 bulk-invite-filter */
+  { name: 'invite_bulk', write: true },
+  /* wave45 community-events-invite-only */
+  { name: 'community_event_visibility', write: true },
+  /* wave45 offline-outbox */
+  { name: 'outbox_list', write: false },
+  /* wave45 events-refetch */
+  { name: 'events_refetch', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

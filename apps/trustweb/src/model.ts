@@ -9,16 +9,20 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
+import type { OutboxItem } from './outbox'
 import type { IntroInbox, IntroPending, IntroQueued } from './bubble_connect'
 import type { AssistantCfg } from './ext/assistant/providers'
 import type { AlgoCfg, SourceCfg } from './feed_sources_page'
 import type { ExtFollow } from './feed_ext_sources'   // wave44c feed-ext
 import type { HideReportEntry } from './hide_reports'
+import type { GoogleSync } from './google_sync'   // wave45 google-contacts-sync
 import type { InboxItem } from './notify_inbox'
+import type { MergeAsk } from './event_merge' // wave45 merge-events
 import type { StatedRelation } from './relations_model'
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
+import type { ResViews } from './resource_notion'   // wave45 resources-notion-views
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { HandshakeLogEntry, HandshakeMode } from './handshake_status'
@@ -28,6 +32,8 @@ import type { SignalProvider } from './channel'
 import type { CalendarPrefs, ConferenceLink, EventDraft, Repeat } from './event_draft'
 import type { Draft } from './drafts'
 import type { TrashEntry } from './trash' // wave44c answers-44c
+import type { EventChats } from './event_group_chat' // wave45 event-group-chat
+import type { ChatGroups } from './group_store' // wave45 group-chat-list
 import type { Intent, NameRecord } from './name_record'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -38,6 +44,7 @@ import type { CoMsg } from './ext/co_notes/co_chat'
 import type { Profile } from './profile_fields'
 import type { EmbedRecord } from './feed_embed'
 import type { HomeLayout } from './home_layout'
+import type { SettingsShare } from './settings_share' // wave45 settings-suggest
 import type { SavedFilter } from './saved_filters'
 import type { CoDoc } from './ext/co_notes/co_doc'
 import type { CoGuest, CoInvite } from './ext/co_notes/co_invite'
@@ -362,7 +369,11 @@ export interface TwTask {
  */
 /** Wave 44 steer-open-space: one proposed activity; joins = token of a person (open_space.ts tokenOf) -> time of the last change, positive joined, negative left. */
 export interface OsActivity { id: string; title: string; slot: string; by: string; description?: string; joins: Record<string, number> }
-export interface OpenSpace { acts: OsActivity[] }
+/** Wave 45 open-space-date-poll: a proposed date (same shape as the event's from/to, one day); votes = token of a person -> yes/maybe/no with the time of the last change (the later wins). */
+export type PollVote = 'yes' | 'maybe' | 'no'
+export interface DatePollOption { id: string; from: string; to?: string; votes: Record<string, { v: PollVote; at: number }> }
+export interface DatePoll { options: DatePollOption[]; chosen?: string }
+export interface OpenSpace { acts: OsActivity[]; poll?: DatePoll }
 
 export interface TwEvent {
   id: string
@@ -1218,7 +1229,7 @@ export interface AppState {
   /** Wave 43c sync-devices: Auto sync with my linked devices is on unless this is true (Settings > My devices). This device only. */
   syncAutoOff?: true
   /** Wave 43c: what Settings shows and MCP sync_status reads: linked devices and the last sync with any of them. This device only. */
-  syncStatus?: { devices: number; lastAt: number; /** Wave 44c: pairings with a send not yet acknowledged, and items held for an update of this device. */ unacked?: number; held?: number }
+  syncStatus?: { devices: number; lastAt: number; /** Wave 44c: pairings with a send not yet acknowledged, and items held for an update of this device. */ unacked?: number; held?: number; /** Wave 45: the cause of the last failed sync (sync_error.ts), until a sync works. */ error?: string }
   /** Wave 42: mirror of this phone's notification inbox (the store is IndexedDB, shared with the worker); MCP lists and marks it. This phone only. */
   notifInbox?: InboxItem[]
   /** Wave 43b (notify_center.ts): when the bell's notifications were last all marked read (ms). This phone only. */
@@ -1279,6 +1290,12 @@ export interface AppState {
   drafts?: Record<string, Draft>
   /** Wave 44c answers-44c (A4): deleted events, resources, tasks, meetings and invitations for 30 days (trash.ts); travels to my devices as tombstones. Absent = none. */
   trash?: TrashEntry[]
+  /** wave45 merge-events (event_merge.ts): merged event ids, gone -> kept; an old id (a link, a joined record) opens the kept event. Travels to my devices as a setting. Absent = none. */
+  eventMerged?: Record<string, string>
+  /** wave45 merge-events: merge asks between hosts (in: to me; out: mine, waiting). They name peer ids, so THIS DEVICE ONLY (sync_core.ts SYNC_EXCLUDED). */
+  eventMergeAsks?: MergeAsk[]
+  /** Wave 45 offline-outbox: envelopes the relay did not take yet, sent when it is back (outbox.ts). THIS DEVICE ONLY: never synced, exported or asked. */
+  sendQueue?: OutboxItem[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
   calendars?: CalendarPrefs
   /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
@@ -1301,6 +1318,8 @@ export interface AppState {
   uiViews?: { webDefault?: string }
   /** Wave 44 home-dashboard (home_layout.ts): the Home tile board's columns. Absent: the default (Web centre, others' requests left, mine right). Syncs with the record. */
   homeLayout?: HomeLayout
+  /** Wave 45 settings-suggest (settings_share.ts): suggestions in, the follow book (liquid delegation), what waits to go out. Absent: none. This device only. */
+  settingsShare?: SettingsShare
   /** Wave 44b filters-communities: saved filter states (in / out chips), some pinned above the filter row (saved_filters.ts; schema 4). */
   savedFilters?: SavedFilter[]
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
@@ -1316,11 +1335,15 @@ export interface AppState {
   /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
   expanse?: string[]
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; /** Wave 44b filters-communities: EVENT MODE, the id of the event whose people Web, Chat, Resources and Ask are narrowed to (event_filter_mode.ts). */ eventMode?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 39: radii (layout px) the user dragged the ring lines to; absent = the default spacing. */ radii?: Partial<Record<Ring, number>>; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; /** Wave 44b filters-communities: EVENT MODE, the id of the event whose people Web, Chat, Resources and Ask are narrowed to (event_filter_mode.ts). */ eventMode?: string; /** Wave 45 event-bubble: the chip "Everyone" lifted the Web narrowing for this event mode (event_bubble.ts); ends with the mode. */ eventEveryone?: true; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean; closedGroups?: string[]; closest150?: boolean; closestN?: number; perRingLimitOff?: boolean; expandButtons?: boolean; rankBy?: 'recent' | 'frequent'; pinnedId?: string; /** Wave 37: rings re-apply the recent-N rule after a move (absent: off, a move changes only the moved dot). */ autoAdjust?: boolean; /** Wave 39: radii (layout px) the user dragged the ring lines to; absent = the default spacing. */ radii?: Partial<Record<Ring, number>>; /** Wave 37: the dots each ring showed when the last manual move happened, valid while `key` (ring_shown.ts shownKey) still matches; `at` = when, so people added later still show. */ shown?: { key: string; ids: string[]; at?: number } }
   /** Wave 32 (skins.ts): the chosen skin id. Absent: the default skin ("trustweb"). */
   skin?: string
   /** answers-44d: Settings > Appearance "Emoji before titles" switched off (title_emoji.ts). */
   titleEmojiOff?: true
+  /** Wave 45 event-bubble: Settings > Events "Event mode narrows the Web" switched off (event_bubble.ts). */
+  eventBubbleOff?: true
+  /** Wave 45 resources-notion-views: the Resources view (List, Table, Board, Gallery, ...) and each view's filter and sort, per scope key (resource_notion.ts scopeKey). Absent: List. */
+  resViews?: ResViews
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
@@ -1559,6 +1582,8 @@ export interface AppState {
   imports?: ImportBatch[]
   /** Wave 27: imports from other services (WhatsApp, LinkedIn, contact files), newest first. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). Absent: none. */
   serviceImports?: ServiceBatch[]
+  /** Wave 45 google-contacts-sync: the People API sync state (sync token, the last Google version of each contact, what Google last wrote per person). THIS DEVICE ONLY. Absent: never synced. */
+  googleSync?: GoogleSync
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
@@ -1584,6 +1609,10 @@ export interface AppState {
   coGuest?: CoGuest
   coChats?: Record<string, CoMsg[]>
   coDevice?: string
+  /** wave45 event-group-chat (event_group_chat.ts): event id -> the event's ONE shared thread. Travels to my devices as a setting (merged item by item). Absent: none. No schema bump. */
+  eventChats?: EventChats
+  /** wave45 group-chat-list (group_store.ts, group_chat.ts): group id -> a group (a chat with members, independent of events, with its lists). Travels to my devices as a setting (merged item by item). Absent: none. No schema bump. */
+  chatGroups?: ChatGroups
 }
 
 /** A named list of people (and tags) an ask can be narrowed to. */

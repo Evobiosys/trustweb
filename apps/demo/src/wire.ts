@@ -11,8 +11,8 @@
  * fields).
  */
 
-import type { AnswerEnvelope, AskAgainEnvelope, HideReportEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
-import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION, HIDE_BLOB_MAX_JSON, HIDE_KEY_RE, HIDE_REPORT_MAX_JSON } from './types'
+import type { GroupOp, AnswerEnvelope, AskAgainEnvelope, HideReportEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, DevicesEnvelope, EventEnvelope, HostEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
+import { ANSWER_WINDOW_MS_MAX, DEVICES_MAX, EVENT_CHAT_TEXT_MAX, GROUP_ITEM_TEXT_MAX, GROUP_NAME_MAX, GROUP_ROSTER_MAX, EVENT_LINK_MAX, FREE_TEXT_MAX_LEN, HOST_KINDS, HOST_MAX_JSON, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION, HIDE_BLOB_MAX_JSON, HIDE_KEY_RE, HIDE_REPORT_MAX_JSON } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
@@ -161,10 +161,14 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   if ('os' in o) return hasWant || hasLink ? null : parseOpenSpace(o.os)
   if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
   if ('seen' in o) return hasWant || hasLink ? null : parseSeen(o.seen) // wave44c seen-through
+  if ('gc' in o) return hasWant || hasLink ? null : parseGroupChat(o.gc) // wave45 event-group-chat
+  if ('gg' in o) return hasWant || hasLink ? null : parseGroupOp(o.gg) // wave45 group-chat-list
   if ('joined' in o) { // answers-44d: {id} only
     const j = o.joined as Record<string, unknown> | null
     return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id } }
   }
+  if ('merge' in o) return hasWant || hasLink ? null : parseMerge(o.merge) // wave45 merge-events
+  if ('sync' in o) return hasWant || hasLink || o.sync !== true ? null : { v: WIRE_VERSION, t: 'event', sync: true } // wave45 events-refetch
   if (hasWant === hasLink) return null
   if (hasWant) return typeof o.want === 'string' && QID_RE.test(o.want) ? { v: WIRE_VERSION, t: 'event', want: o.want } : null
   if (!isNonEmptyString(o.link) || o.link.length > EVENT_LINK_MAX) return null
@@ -175,12 +179,15 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
 // ----- BEGIN TrustWeb wave 44 (steer-open-space): the open-space schedule (types.ts EventEnvelope.os) -----
 const OS_ACTS_MAX = 60
 const OS_BYTES_MAX = 24_000
+const OS_POLL_BYTES_MAX = 16_000   // wave 45 open-space-date-poll
 /** An event id and at most 60 activities in at most 24 KB; each activity is checked by the receiver (open_space.ts), not here. */
 function parseOpenSpace(v: unknown): EventEnvelope | null {
   if (typeof v !== 'object' || v === null) return null
   const os = v as Record<string, unknown>
   if (typeof os.id !== 'string' || !QID_RE.test(os.id) || !Array.isArray(os.acts) || os.acts.length > OS_ACTS_MAX || JSON.stringify(os.acts).length > OS_BYTES_MAX) return null
-  return { v: WIRE_VERSION, t: 'event', os: { id: os.id, ...(os.open === true ? { open: true as const } : {}), acts: os.acts } }
+  const poll = typeof os.poll === 'object' && os.poll !== null ? os.poll : undefined   // wave 45: the date poll, checked by the receiver (open_space_poll.ts)
+  if (poll && JSON.stringify(poll).length > OS_POLL_BYTES_MAX) return null
+  return { v: WIRE_VERSION, t: 'event', os: { id: os.id, ...(os.open === true ? { open: true as const } : {}), acts: os.acts, ...(poll ? { poll } : {}) } }
 }
 // ----- END TrustWeb wave 44 -----
 
@@ -214,6 +221,66 @@ function parseSeen(v: unknown): EventEnvelope | null {
   if (typeof x.id !== 'string' || !QID_RE.test(x.id) || typeof x.shown !== 'boolean') return null
   if ('who' in x && (!x.shown || !isNonEmptyString(x.who) || x.who.length > VIA_NAME_MAX)) return null
   return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}) } }
+}
+
+/* wave45 event-group-chat */
+/** Event id, item id, kind, author name (1..VIA_NAME_MAX), a finite time; `text` (1..EVENT_CHAT_TEXT_MAX) exactly on a msg. Anything else is null. */
+function parseGroupChat(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  if (typeof x.id !== 'string' || !QID_RE.test(x.id) || typeof x.m !== 'string' || !QID_RE.test(x.m)) return null
+  if ((x.k !== 'msg' && x.k !== 'join' && x.k !== 'leave') || !isNonEmptyString(x.by) || x.by.length > VIA_NAME_MAX || typeof x.ts !== 'number' || !Number.isFinite(x.ts)) return null
+  if ((x.k === 'msg') !== ('text' in x)) return null
+  if (x.k === 'msg' && (!isNonEmptyString(x.text) || x.text.length > EVENT_CHAT_TEXT_MAX)) return null
+  return { v: WIRE_VERSION, t: 'event', gc: { id: x.id, m: x.m, k: x.k, by: x.by, ts: x.ts, ...(x.k === 'msg' ? { text: x.text as string } : {}) } }
+}
+
+/* wave45 group-chat-list */
+const nameOk = (v: unknown, max: number): v is string => isNonEmptyString(v) && v.length <= max
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+/** One group op (types.ts GroupOp): ids, kind, actor name, a finite time, and exactly the payload its kind needs. Anything else is null. */
+function parseGroupOp(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  const kinds = ['msg', 'join', 'leave', 'check', 'list', 'item', 'roster'] as const
+  const k = kinds.find((y) => y === x.k)
+  if (!k || typeof x.g !== 'string' || !QID_RE.test(x.g) || typeof x.m !== 'string' || !QID_RE.test(x.m) || !nameOk(x.by, VIA_NAME_MAX) || !finite(x.ts)) return null
+  const wantsText = k === 'msg' || k === 'check' || k === 'roster'
+  if (wantsText !== ('text' in x) || (k === 'list') !== ('list' in x) || (k === 'item') !== ('it' in x) || (k === 'roster') !== ('names' in x)) return null
+  const op: GroupOp = { g: x.g, m: x.m, k, by: x.by, ts: x.ts }
+  if (wantsText) {
+    if (!nameOk(x.text, k === 'msg' ? EVENT_CHAT_TEXT_MAX : k === 'check' ? GROUP_ITEM_TEXT_MAX : GROUP_NAME_MAX)) return null
+    op.text = x.text
+  }
+  if (k === 'list') {
+    const l = x.list as Record<string, unknown> | null
+    if (typeof l !== 'object' || l === null || typeof l.id !== 'string' || !QID_RE.test(l.id) || !nameOk(l.name, GROUP_NAME_MAX) || (l.act !== undefined && l.act !== true)) return null
+    op.list = { id: l.id, name: l.name, ...(l.act ? { act: true as const } : {}) }
+  }
+  if (k === 'item') {
+    const i = x.it as Record<string, unknown> | null
+    if (typeof i !== 'object' || i === null || typeof i.id !== 'string' || !QID_RE.test(i.id) || typeof i.l !== 'string' || !QID_RE.test(i.l) || !nameOk(i.text, GROUP_ITEM_TEXT_MAX) || !finite(i.o)) return null
+    const d = i.done as Record<string, unknown> | null | undefined
+    if (d !== undefined && (typeof d !== 'object' || d === null || !nameOk(d.by, VIA_NAME_MAX) || !finite(d.at))) return null
+    if (i.arc !== undefined && i.arc !== true) return null
+    op.it = { id: i.id, l: i.l, text: i.text, o: i.o, ...(d ? { done: { by: d.by as string, at: d.at as number } } : {}), ...(i.arc ? { arc: true as const } : {}) }
+  }
+  if (k === 'roster') {
+    if (!Array.isArray(x.names) || x.names.length > GROUP_ROSTER_MAX || !x.names.every((n) => nameOk(n, VIA_NAME_MAX))) return null
+    op.names = x.names as string[]
+  }
+  return { v: WIRE_VERSION, t: 'event', gg: op }
+}
+/* wave45 merge-events: {step, keep, gone, link?}; ask and done need the kept event's link, yes and no carry none. */
+const MERGE_STEPS = ['ask', 'yes', 'no', 'done'] as const
+function parseMerge(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const m = v as Record<string, unknown>
+  const step = MERGE_STEPS.find((x) => x === m.step)
+  if (!step || typeof m.keep !== 'string' || typeof m.gone !== 'string' || !QID_RE.test(m.keep) || !QID_RE.test(m.gone) || m.keep === m.gone) return null
+  const needsLink = step === 'ask' || step === 'done'
+  if (needsLink !== ('link' in m) || (needsLink && (!isNonEmptyString(m.link) || m.link.length > EVENT_LINK_MAX))) return null
+  return { v: WIRE_VERSION, t: 'event', merge: { step, keep: m.keep, gone: m.gone, ...(needsLink ? { link: m.link as string } : {}) } }
 }
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----

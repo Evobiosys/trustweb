@@ -79,6 +79,12 @@ async function main() {
     const sheet = await ina.locator('[data-invite-sheet]').innerText()
     ok('1. sheet: Personal invite (only for one person) and Open invite (can be passed on)', /Personal invite \(only for one person\)/.test(sheet) && /Open invite \(can be passed on\)/.test(sheet), sheet.slice(0, 160))
     ok('1. each has Copy and QR', (await ina.locator('[data-invite-copy-personal], [data-invite-copy-open], [data-invite-qr-personal-btn], [data-invite-qr-open-btn]').count()) === 4)
+    // wave45 invite-qr-same: both QRs are on the sheet at once, the same .qrwrap component as the top-of-page share QR, payload = the signed link
+    for (const k of ['personal', 'open']) {
+      const q = ina.locator(`.qrwrap[data-invite-qr-${k}]`)
+      await q.locator('canvas').waitFor({ timeout: 15_000 })
+      ok(`1. ${k} QR shows without a tap, as .qrwrap, payload is the #inv link`, /#inv=/.test((await q.getAttribute('data-payload')) ?? '') && (await q.getAttribute('data-payload')) === (await q.getAttribute('data-link')))
+    }
     const personal = await linkFrom(ina, 'personal', vite.base)
     const open = await linkFrom(ina, 'open', vite.base)
     ok('1. both links carry the QR key and the token in the fragment', [personal, open].every((l) => new URL(l).searchParams.get('k') && /^#inv=/.test(new URL(l).hash)) && personal !== open)

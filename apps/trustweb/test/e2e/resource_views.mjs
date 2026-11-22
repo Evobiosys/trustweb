@@ -28,7 +28,7 @@ try {
     await page.evaluate((r) => localStorage.setItem('trustweb.v1.me', r), record)
     await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(600)
     await page.locator('[data-go="inventory"]').first().click(); await page.waitForTimeout(500)
-    check(`${name}: three views offered`, (await page.locator('[data-rv-view]').count()) === 3)
+    check(`${name}: six views offered (wave45: + Table, Board, Gallery)`, (await page.locator('[data-rv-view]').count()) === 6)
     const heads = await page.locator('[data-rv-section] h3').allInnerTexts()
     check(`${name}: My Resources first, then Suggested by others`, heads[0] === 'My Resources' && heads[1] === 'Suggested by others')
     check(`${name}: Dune sits under Suggested by others`, (await page.locator('[data-rv-section="suggested"] [data-rv-item="i2"]').count()) === 1)
