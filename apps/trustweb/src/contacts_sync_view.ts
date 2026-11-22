@@ -9,7 +9,7 @@ import { lastContact } from './engagement'
 import {
   CLIENT_ID_KEY, buildAuthUrl, clearToken, exchangeCode, loadClientId, loadClientSecret, loadToken, makePkce, parseRedirect, revokeToken, saveClientId, saveClientSecret, saveToken,
 } from './google_contacts'
-import { GOOGLE_FLAG_KEY, NUDGE_KEY, dismissNudge, googleConnectOn, nudgeShown } from './google_flag'
+import { GOOGLE_FLAG_KEY, NUDGE_KEY, clientIdOf, dismissNudge, googleConnectOn, nudgeShown } from './google_flag'
 import { Ring } from './model'
 import type { AppState } from './model'
 import type { Pages } from './page_view'
@@ -34,7 +34,7 @@ const store = (): Storage | null => { try { return sessionStorage } catch { retu
 const local = (): Storage | null => { try { return localStorage } catch { return null } }
 
 /** Wave 40: Connect Google shows only with the flag (Settings > Advanced > Flags) or once a client id is configured. */
-export const googleOn = (): boolean => { const l = local(); return l ? googleConnectOn(l, loadClientId(l)) : false }
+export const googleOn = (): boolean => { const l = local(); return l ? googleConnectOn(l, clientIdOf(loadClientId(l))) : false }
 
 /** Settings > Import > Google: client id field, Connect / Disconnect; once connected the sync part (wave 45: Sync now, Keep in sync, Review new). */
 export function googleGroup(h: ServicesHooks): HTMLElement {
@@ -42,7 +42,7 @@ export function googleGroup(h: ServicesHooks): HTMLElement {
   const box = el('div', { 'data-google-sync': '1' })
   const ss = store()
   const draw = (): void => {
-    const clientId = (local() ? loadClientId(local()!) : null) ?? ''
+    const clientId = clientIdOf(local() ? loadClientId(local()!) : null) ?? ''   // wave46 answers-45b: else TrustWeb's own (google_flag.ts)
     const token = ss ? loadToken(ss) : null
     const input = el('input', { class: 'field', value: clientId, placeholder: S.googleClientId, 'aria-label': S.googleClientId, 'data-google-clientid': '1', style: 'width:100%;box-sizing:border-box' }) as HTMLInputElement
     input.addEventListener('change', () => { if (local()) saveClientId(local()!, input.value.trim()); draw() })
@@ -54,6 +54,7 @@ export function googleGroup(h: ServicesHooks): HTMLElement {
     const parts: (Node | null)[] = [
       el('h4', { class: 'eyebrow' }, [S.googleTitle, ' ', alphaSub()]),
       el('p', { class: 'meta' }, [S.googleHint]),
+      el('p', { class: 'meta', 'data-google-once': '' }, [S.w46b.googleOnce]),   // wave46 answers-45b
       el('label', { class: 'meta' }, [S.googleClientId, ' ', input]),
       el('label', { class: 'meta' }, [S.googleClientSecret, ' ', secretInput]),
       el('p', { class: 'meta' }, [S.googleSecretHint]),

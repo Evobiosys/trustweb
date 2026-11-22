@@ -17,6 +17,7 @@ import { bubbleOn } from '../../src/event_bubble.ts'
 import { answer, closeFollowAuto, follow, receive, setCloseFollow, shareOf } from '../../src/settings_share.ts'
 import { readSetting, writeSetting } from '../../src/settings_registry.ts'
 import { allTools } from '../../../mcp/src/tools.ts'
+import { TRUSTWEB_GOOGLE_CLIENT_ID, clientIdOf } from '../../src/google_flag.ts'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
@@ -194,5 +195,13 @@ describe('6 Google contacts: one-time import wording', () => {
   it('the import sheet shows Jakob\'s line', () => {
     expect(S.w46b.googleOnce).toBe('Ideally this is a one-time import. We understand if letting go of Google takes longer, so the sync keeps your contacts in step.')
     expect(src('contacts_sync_view.ts')).toMatch(/S\.w46b\.googleOnce/)
+  })
+  it('the client id: typed one first, else TrustWeb\'s own constant (empty until registered); none = null', () => {
+    expect(TRUSTWEB_GOOGLE_CLIENT_ID).toBe('')
+    expect(clientIdOf(null)).toBeNull()
+    expect(clientIdOf('  ')).toBeNull()
+    expect(clientIdOf(null, 'tw.apps.googleusercontent.com')).toBe('tw.apps.googleusercontent.com')
+    expect(clientIdOf(' mine.apps ', 'tw.apps')).toBe('mine.apps')
+    expect(src('contacts_sync_view.ts')).toMatch(/clientIdOf\(/)
   })
 })

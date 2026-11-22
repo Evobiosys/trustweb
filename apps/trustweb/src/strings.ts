@@ -5686,7 +5686,8 @@ export const S = {
     queued: 'Waiting for being online again',
     demoAgain: 'Show the demo-content button again',
     demoAgainHint: 'Brings back the "Show demo content" button you closed with ×, on this device.',
-    googleOnce: '',
+    /** Import sheet (Settings > Import > Google); the view speaks English, so no German copy. */
+    googleOnce: 'Ideally this is a one-time import. We understand if letting go of Google takes longer, so the sync keeps your contacts in step.',
     webBubble: 'Web: just people from this event',
     closeFollow: 'Let Closest/Close follow my settings without asking',
     closeFollowHint: 'On: someone in your Closest or Close ring who asks to follow a settings group gets it at once. Everyone else waits for your Allow. They still decide what to take.',
