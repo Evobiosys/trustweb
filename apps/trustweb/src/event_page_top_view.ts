@@ -27,6 +27,8 @@ export interface EventTopHooks {
   messageAll?: (ev: TwEvent) => void
   /** wave45: the person picker that tags a chosen person with the event (events_view's picker). */
   addPeople?: (ev: TwEvent) => HTMLElement
+  /** wave45 bulk-invite-filter: the Invite many sheet; absent when I may not invite. */
+  inviteMany?: (ev: TwEvent) => void
   eventResources?: (ev: TwEvent) => void
   openPerson?: (id: string) => void
 }
@@ -82,7 +84,10 @@ export function eventTop(ev: TwEvent, h: EventTopHooks): (Node | null)[] {
     tag ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm ev-by-community', 'data-event-by-community': tag, onclick: () => h.openCommunity?.(tag) }, [el('u', {}, [S.a44d.byCommunity(name(tag))])]) : null,
     peopleSection(ev, h, colour),
     members.length ? el('div', { class: 'ev-joining', 'data-event-community-members': String(members.length) }, [el('b', {}, [S.a44d.communityRow]), chipsOf(members, 'data-event-community-list', h.openPerson)]) : null,
-    h.eventResources ? el('div', { class: 'chips' }, [el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-resources': '', onclick: () => h.eventResources?.(ev) }, [el('u', {}, [S.a44d.resourcesOf(eventTagLabel(tagLabel(ev)))])])]) : null,
+    h.inviteMany || h.eventResources ? el('div', { class: 'chips' }, [
+      h.inviteMany ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-invite-many': '', onclick: () => h.inviteMany?.(ev) }, [el('u', {}, [S.bulkInvite.open])]) : null,
+      h.eventResources ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-event-resources': '', onclick: () => h.eventResources?.(ev) }, [el('u', {}, [S.a44d.resourcesOf(eventTagLabel(tagLabel(ev)))])]) : null,
+    ]) : null,
   ]
 }
 

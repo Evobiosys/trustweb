@@ -131,6 +131,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'settings_suggestions_list', write: false }, { name: 'settings_suggest', write: true }, { name: 'settings_follow', write: true }, { name: 'settings_suggestion_accept', write: true },
   /* wave45 google-contacts-sync */
   { name: 'google_sync_status', write: false }, { name: 'google_sync_set', write: true },
+  /* wave45 bulk-invite-filter */
+  { name: 'invite_bulk', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

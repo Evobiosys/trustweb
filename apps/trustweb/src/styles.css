@@ -2453,3 +2453,8 @@ body[data-tw-event-mode] .tabs{background:color-mix(in srgb, var(--event-mode-co
 .gsync-part .gsync-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
 .gsync-part .btn,.gsync-part .chip{text-decoration:underline}
 .gsync-part .chip.tw-off{text-decoration:underline line-through}
+/* wave45 bulk-invite-filter */
+.bulk-invite .bulk-row{margin:8px 0}
+.bulk-invite .bulk-count{margin:8px 0 4px; font-weight:600}
+.bulk-invite .bulk-list{max-height:30vh; overflow:auto}
+.bulk-invite .chip.off{text-decoration:line-through}
