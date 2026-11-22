@@ -35,7 +35,7 @@ const devlog = path.join(dir, 'DEVLOG')
 mkdirSync(path.join(devlog, 'wave1'), { recursive: true })
 
 const feature = (key, over = {}) => ({ key, ref: 'r' + key, branch: 'wave46/' + key, title: key, requires: [], selector: '.page-dock', where: 'Home page', steps: [], repo: 'vanilla', checked: true, verdict: null, ...over })
-const reg = () => ({ id: 'rbfix', project: 'tw', short: 'rbfix', created: new Date().toISOString(), base: 'main', baseSha: '0379fb8', worktree: dir, branch: 'preview/rbfix', port: PORT, stockPort: PORT + 1, mode: 'personal', features: [feature('panel-rows-back'), feature('answers-45b')], assembled: { sha: 'aaa1111', at: new Date().toISOString(), error: null, restart: false } })
+const reg = () => ({ id: 'rbfix', project: 'tw', short: 'rbfix', created: new Date().toISOString(), base: 'main', baseSha: '0379fb8', worktree: dir, branch: 'preview/rbfix', port: PORT, stockPort: PORT + 1, mode: 'personal', features: [{ key: 'meta', title: 'Meta: the preview itself', branch: null, ref: null, requires: [], checked: true, meta: true }, feature('panel-rows-back'), feature('answers-45b')], assembled: { sha: 'aaa1111', at: new Date().toISOString(), error: null, restart: false } })
 writeFileSync(registry, JSON.stringify(reg()))
 
 const vite = spawn(process.execPath, [process.env.TW_VITE || path.join(TW_ROOT, '../crm/node_modules/vite/bin/vite.js'), '--strictPort', '--port', String(PORT)], {
