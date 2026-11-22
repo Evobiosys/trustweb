@@ -95,6 +95,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   feature('features.events', 'events', 'Events'),
   feature('features.inventory', 'inventory', 'Resources'),
   { id: 'web.colourMode', section: 'web', label: 'Full colours on the web', hint: 'Off: only the ring around a bubble carries its colour. On: bubbles are filled.', type: 'boolean', default: false, simple: false, get: (r) => r.colourMode === 'full', set: (r, v) => { if (v === true) r.colourMode = 'full'; else delete r.colourMode } },
+  sparse('events.autoBubble', 'events', 'Event mode narrows the Web to the event\'s people', 'eventBubbleOff', true, true, 'Off: event mode narrows Chat, Resources and Ask only; the Web keeps everyone.'),
   sparse('events.alertCommunity', 'general', 'Alert me about new events in my communities', 'eventAlerts', true, false, 'Off: a new event a community member shares is dropped silently, with no row and no badge.'),
   flag('web.ringNames', 'web', 'Show ring names on the web', 'showRingNames', false, false, 'Trust zone under each name.'),
   choice('web.queryStyle', 'web', 'How asks read', 'queryStyle', ['call', 'search'], 'call', 'Asks read as a call for help or as a search.'),
