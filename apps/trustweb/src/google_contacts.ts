@@ -130,26 +130,30 @@ export function mapPerson(p: any, file: string, n: number, groupName: (resourceN
   return c
 }
 
-async function listAll(fetchFn: FetchFn, token: string, base: string, key: string): Promise<any[]> {
-  const out: any[] = []
+/** Pages through a People API list. Wave 45: also hands back the last page's nextSyncToken; a 410 is Google's "sync token expired, list everything again". */
+async function listPages(fetchFn: FetchFn, token: string, base: string, key: string): Promise<{ items: any[]; nextSyncToken?: string }> {
+  const items: any[] = []
   let pageToken: string | undefined
+  let nextSyncToken: string | undefined
   do {
     const r = await fetchFn(pageToken ? `${base}&pageToken=${encodeURIComponent(pageToken)}` : base, {
       headers: { Authorization: `Bearer ${token}` },
     })
+    if (r.status === 410) throw new SyncTokenExpired()
     if (!r.ok) throw new Error(`Google contacts request failed (${r.status})`)
     const body = await r.json()
-    out.push(...(body?.[key] ?? []))
+    items.push(...(body?.[key] ?? []))
     pageToken = body?.nextPageToken
+    if (typeof body?.nextSyncToken === 'string') nextSyncToken = body.nextSyncToken
   } while (pageToken)
-  return out
+  return { items, ...(nextSyncToken ? { nextSyncToken } : {}) }
 }
 
 /** Resource name -> label for the owner's own contact groups; Google's system groups ("My Contacts", "Starred") are no labels. */
 async function groupLabels(fetchFn: FetchFn, token: string): Promise<(resourceName: string) => string | undefined> {
   const names = new Map<string, string>()
   try {
-    for (const g of await listAll(fetchFn, token, `${PEOPLE}/contactGroups?groupFields=name&pageSize=1000`, 'contactGroups')) {
+    for (const g of (await listPages(fetchFn, token, `${PEOPLE}/contactGroups?groupFields=name&pageSize=1000`, 'contactGroups')).items) {
       if (g?.groupType === 'USER_CONTACT_GROUP' && g.resourceName && (g.formattedName || g.name)) names.set(g.resourceName, g.formattedName || g.name)
     }
   } catch { /* labels are a bonus: the people still come through */ }
@@ -157,18 +161,37 @@ async function groupLabels(fetchFn: FetchFn, token: string): Promise<(resourceNa
 }
 
 export async function fetchAllContacts(fetchFn: FetchFn, token: string): Promise<{ contacts: ImportedContact[] }> {
+  return { contacts: (await fetchChanges(fetchFn, token)).contacts }
+}
+
+/** Wave 45: Google's sync token is too old; the caller lists everything again (a full resync). */
+export class SyncTokenExpired extends Error {
+  constructor() { super('Google sync token expired') }
+}
+
+/** A Google contact as the sync keeps it: the import shape plus its photo; `deleted` when Google reports it gone (sync runs only). */
+export type GContact = ImportedContact & { photo?: string; deleted?: true }
+
+/** The owner's own photo of the contact; Google's generated letter avatar (default: true) is no photo. */
+const photoOf = (p: any): string | undefined => (p.photos ?? []).find((x: any) => x?.url && !x.default)?.url
+
+/**
+ * Wave 45: without `syncToken` the whole list (the first run, or a full resync), with it only what changed since; either way Google
+ * hands back the next sync token. `changes` keeps deleted contacts (flag only, no data); `contacts` is what the import preview takes.
+ */
+export async function fetchChanges(fetchFn: FetchFn, token: string, syncToken?: string): Promise<{ changes: GContact[]; contacts: ImportedContact[]; nextSyncToken?: string }> {
   const label = await groupLabels(fetchFn, token)
-  const people = await listAll(
-    fetchFn, token,
-    `${PEOPLE}/people/me/connections?personFields=names,emailAddresses,phoneNumbers,organizations,birthdays,biographies,memberships&pageSize=1000`,
-    'connections',
-  )
-  const contacts: ImportedContact[] = []
-  people.forEach((p, i) => {
+  const q = new URLSearchParams({ personFields: 'names,emailAddresses,phoneNumbers,organizations,birthdays,biographies,memberships,photos', pageSize: '1000', requestSyncToken: 'true', ...(syncToken ? { syncToken } : {}) })
+  const { items, nextSyncToken } = await listPages(fetchFn, token, `${PEOPLE}/people/me/connections?${q}`, 'connections')
+  const changes: GContact[] = []
+  items.forEach((p, i) => {
+    if (p?.metadata?.deleted && p.resourceName) { changes.push({ source: ContactSource.GoogleApi, file: FILE, sourceRef: p.resourceName, name: '', phones: [], emails: [], labels: [], deleted: true }); return }
     const c = mapPerson(p, FILE, i, label)
-    if (c) contacts.push(c)
+    if (!c) return
+    const photo = photoOf(p)
+    changes.push(photo ? { ...c, photo } : c)
   })
-  return { contacts }
+  return { changes, contacts: changes.filter((c) => !c.deleted).map(({ photo: _p, deleted: _d, ...c }) => c), ...(nextSyncToken ? { nextSyncToken } : {}) }
 }
 
 /** Best effort: a failed revoke must never block disconnecting. */

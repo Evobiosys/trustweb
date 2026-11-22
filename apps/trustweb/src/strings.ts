@@ -5599,4 +5599,16 @@ export const S = {
     off: 'off',
     someone: 'someone',
   },
+  /* wave45 google-contacts-sync */
+  gsync: {
+    syncNow: 'Sync now',
+    keep: 'Keep in sync',
+    keepHint: 'TrustWeb follows changes in your Google contacts. A field you changed here stays as you have it; everything else follows Google. Nothing is deleted here when it goes in Google.',
+    keepWaits: 'Automatic sync waits for TrustWeb\'s own Google sign-in (not set up yet). Sync now works.',
+    never: 'Not synced yet.',
+    last: (when: string, updated: number, kept: number, fresh: number, gone: number) => `Synced ${when}: ${updated} updated, ${kept} kept as you edited them, ${fresh} new, ${gone} gone in Google (kept here).`,
+    reviewNew: (n: number) => `Review ${n} new from Google`,
+    upToDate: 'Google contacts are up to date.',
+  },
+
 } as const

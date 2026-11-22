@@ -5,6 +5,9 @@
  */
 import type { KeyValueStore } from './google_contacts'
 
+/** Wave 45 google-contacts-sync. External: TrustWeb has no Google OAuth client id of its own yet (and no server to refresh a token), so nothing syncs by itself. Flip once it exists. Here (node-safe) so the MCP server reads the same value. */
+export const GOOGLE_CONTACTS_SYNC_ENABLED = false
+
 export const GOOGLE_FLAG_KEY = 'tw-google-connect'
 export const NUDGE_KEY = 'tw-google-nudge-dismissed'
 

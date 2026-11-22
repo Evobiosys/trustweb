@@ -125,7 +125,7 @@ describe('fetchAllContacts', () => {
     expect(calls.every((c) => c.auth === 'Bearer tok')).toBe(true)
     expect(calls.some((c) => c.url.includes('otherContacts'))).toBe(false)
     const first = new URL(calls.find((c) => c.url.includes('/people/me/connections')).url)
-    expect(first.searchParams.get('personFields')).toBe('names,emailAddresses,phoneNumbers,organizations,birthdays,biographies,memberships')
+    expect(first.searchParams.get('personFields')).toBe('names,emailAddresses,phoneNumbers,organizations,birthdays,biographies,memberships,photos') // wave45: photos for the sync
     expect(first.searchParams.get('pageSize')).toBe('1000')
   })
   it('turns contact groups into labels and leaves out Google system groups', async () => {
