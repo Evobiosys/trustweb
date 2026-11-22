@@ -105,6 +105,22 @@ describe('dev preview collapse store and PR status', () => {
     expect(collapseStore(dead).get()).toBe(false)
     expect(() => collapseStore(dead).set(true)).not.toThrow()
   })
+  // wave46 panel-rows-back (Jakob 2026-11-23 00:03, "bring back the line by line approver on the top left, I can't approve them"):
+  // the × (hide for this tab) had no way back; show() brings the rows back, and the hidden state leaves a pill the owner can tap.
+  it('a hidden panel comes back with show(), per storage', () => {
+    const a = mem(), b = mem()
+    expect(collapseStore(a).hidden()).toBe(false)
+    collapseStore(a).hide()
+    expect(collapseStore(a).hidden()).toBe(true)
+    expect(collapseStore(b).hidden()).toBe(false)
+    collapseStore(a).show()
+    expect(collapseStore(a).hidden()).toBe(false)
+    expect(collapseStore(a).get()).toBe(false)   // showing never collapses it to the id pill
+  })
+  it('show() on unavailable storage never throws', () => {
+    const dead = { getItem: () => { throw new Error('x') }, setItem: () => { throw new Error('x') } }
+    expect(() => collapseStore(dead).show()).not.toThrow()
+  })
   it('a PR flow runs while the step is none of none, ready, failed', () => {
     expect(['none', 'ready', 'failed'].map(prRunning)).toEqual([false, false, false])
     expect(prRunning('ci')).toBe(true)

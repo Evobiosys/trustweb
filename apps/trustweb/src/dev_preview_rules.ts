@@ -542,13 +542,14 @@ export function setMap(features: PreviewFeature[]): Record<string, boolean> {
 }
 
 /** The panel's per-tab flags in a per-tab store (sessionStorage): collapsed to a pill, hidden by its x. A new tab or a fresh load starts expanded and shown. Unavailable storage = not remembered. */
-export function collapseStore(storage: Pick<Storage, 'getItem' | 'setItem'>): { get(): boolean; set(on: boolean): void; hidden(): boolean; hide(): void } {
+// wave46 panel-rows-back (Jakob 2026-11-23): hide() (the ×, "hide for this tab") had no way back for the tab's lifetime; show() is that way back, the panel draws a "rows" pill while hidden.
+export function collapseStore(storage: Pick<Storage, 'getItem' | 'setItem'>): { get(): boolean; set(on: boolean): void; hidden(): boolean; hide(): void; show(): void } {
   const flag = (key: string) => ({
     get: (): boolean => { try { return storage.getItem(key) === '1' } catch { return false } },
     set: (on: boolean): void => { try { storage.setItem(key, on ? '1' : '') } catch { /* not remembered */ } },
   })
   const [fold, gone] = [flag('twp-collapsed'), flag('twp-hidden')]
-  return { get: fold.get, set: fold.set, hidden: gone.get, hide: () => { gone.set(true) } }
+  return { get: fold.get, set: fold.set, hidden: gone.get, hide: () => { gone.set(true) }, show: () => { gone.set(false) } }
 }
 
 /** True while the personal-view PR flow works: its /__tw/status step is neither none, ready nor failed. */
