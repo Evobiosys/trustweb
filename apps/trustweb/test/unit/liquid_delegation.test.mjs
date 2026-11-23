@@ -36,9 +36,9 @@ describe('liquid-delegation', () => {
   it('resolve: depth 1 now stops at the direct delegate and says the chain went on', () => {
     expect(MAX_DEPTH).toBe(1)
     const b = [d('a', 'b', 'privacy'), d('b', 'c', 'privacy')]
-    expect(resolve(b, 'a', 'privacy')).toEqual({ chain: ['a', 'b'], final: 'b', cycle: false, truncated: true })
-    expect(resolve(b, 'b', 'privacy')).toEqual({ chain: ['b', 'c'], final: 'c', cycle: false, truncated: false })
-    expect(resolve(b, 'c', 'privacy')).toEqual({ chain: ['c'], final: null, cycle: false, truncated: false })
+    expect(resolve(b, 'a', 'privacy', MAX_DEPTH)).toEqual({ chain: ['a', 'b'], final: 'b', cycle: false, truncated: true })
+    expect(resolve(b, 'b', 'privacy', MAX_DEPTH)).toEqual({ chain: ['b', 'c'], final: 'c', cycle: false, truncated: false })
+    expect(resolve(b, 'c', 'privacy', MAX_DEPTH)).toEqual({ chain: ['c'], final: null, cycle: false, truncated: false })
   })
   it('resolve: the API already walks A->B->C with a deeper limit, and stops on a cycle', () => {
     const b = [d('a', 'b', 'privacy'), d('b', 'c', 'privacy'), d('c', 'a', 'feed')]
