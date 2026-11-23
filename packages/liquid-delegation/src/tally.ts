@@ -35,7 +35,7 @@ export function tally({ book, topic, voters, votes, now }: TallyInput): TallyRes
   let total = 0
   for (const [voter, w] of Object.entries(weights)) {
     total += w
-    const carrier = resolve(book, voter, topic, Infinity, now).chain.find((p) => p in weights && Object.hasOwn(votes, p))
+    const carrier = resolve(book, voter, topic, Infinity, now).chain.find((p) => p in weights && Object.prototype.hasOwnProperty.call(votes, p))
     if (carrier === undefined) { lost[voter] = w; continue }
     carriedBy[voter] = carrier
     counts[votes[carrier]] = (counts[votes[carrier]] ?? 0) + w
