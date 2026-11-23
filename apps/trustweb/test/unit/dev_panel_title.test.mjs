@@ -10,6 +10,11 @@ describe('panelTitle', () => {
   it('ignores unloaded and merged rows, then falls back to any shown row, then to the id', () => {
     expect(panelTitle('tw1', [f('a', 'wave36/a'), f('b', 'wave37/b', { checked: false }), f('c', 'wave38/c', { merged: true })])).toBe('tw1 wave36')
     expect(panelTitle('tw1', [f('b', 'wave37/b', { checked: false })])).toBe('tw1 wave37')
+  })
+  // wave46 panel-rows-back (Jakob 2026-11-23: no panel at all): wave45's pinned meta row has branch null; the title crashed render() on it -> an empty .twp.
+  it('ignores the meta row (branch null) instead of crashing, and still names the newest wave', () => {
+    expect(panelTitle('tw1', [{ key: 'meta', title: 'Meta: the preview itself', branch: null, ref: null, requires: [], checked: true, meta: true }, f('a', 'wave46/a')])).toBe('tw1 wave46')
+    expect(panelTitle('tw1', [{ key: 'meta', title: 'Meta: the preview itself', branch: null, ref: null, requires: [], checked: true, meta: true }])).toBe('tw1')
     expect(panelTitle('tw1', [])).toBe('tw1')
     expect(panelTitle('tw1', [f('a', 'misc/a')])).toBe('tw1 misc')
   })

@@ -388,13 +388,17 @@ export const loadOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id:
 /** Focus mode: the wave name (branch prefix before the slash), the focused row and the other rows; null when nothing is focused or the row is gone/merged. */
 export function focusSplit(features: PreviewFeature[], key: string | null): { wave: string; row: PreviewFeature; rest: PreviewFeature[] } | null {
   const rows = visible(features), row = rows.find((f) => f.key === key)
-  return row ? { wave: row.branch.split('/')[0], row, rest: rows.filter((f) => f !== row) } : null
+  return row ? { wave: waveOf(row), row, rest: rows.filter((f) => f !== row) } : null
 }
 
-/** Panel header (wave 37): the preview id and the wave of the newest loaded row (any shown row when none is loaded). */
+/** The wave prefix of a row's branch; '' for the pinned meta row (wave45 ops-meta-first-row: branch null at runtime, the type says string). */
+export const waveOf = (f: PreviewFeature): string => (f.branch ?? '').split('/')[0]
+
+/** Panel header (wave 37): the preview id and the wave of the newest loaded row (any shown row when none is loaded).
+ *  wave46 panel-rows-back: the meta row (branch null) crashed this and left an empty panel (Jakob 2026-11-23: no panel at all); it is skipped. */
 export function panelTitle(id: string, features: PreviewFeature[]): string {
   const rows = visible(features), loaded = rows.filter((f) => f.checked)
-  const waves = (loaded.length ? loaded : rows).map((f) => f.branch.split('/')[0])
+  const waves = (loaded.length ? loaded : rows).map(waveOf).filter(Boolean)
   const num = (w: string): number => Number(/\d+/.exec(w)?.[0] ?? -1)
   const newest = waves.reduce<string | undefined>((a, w) => (a === undefined || num(w) > num(a) ? w : a), undefined)
   return newest ? `${id} ${newest}` : id
@@ -542,13 +546,14 @@ export function setMap(features: PreviewFeature[]): Record<string, boolean> {
 }
 
 /** The panel's per-tab flags in a per-tab store (sessionStorage): collapsed to a pill, hidden by its x. A new tab or a fresh load starts expanded and shown. Unavailable storage = not remembered. */
-export function collapseStore(storage: Pick<Storage, 'getItem' | 'setItem'>): { get(): boolean; set(on: boolean): void; hidden(): boolean; hide(): void } {
+// wave46 panel-rows-back (Jakob 2026-11-23): hide() (the ×, "hide for this tab") had no way back for the tab's lifetime; show() is that way back, the panel draws a "rows" pill while hidden.
+export function collapseStore(storage: Pick<Storage, 'getItem' | 'setItem'>): { get(): boolean; set(on: boolean): void; hidden(): boolean; hide(): void; show(): void } {
   const flag = (key: string) => ({
     get: (): boolean => { try { return storage.getItem(key) === '1' } catch { return false } },
     set: (on: boolean): void => { try { storage.setItem(key, on ? '1' : '') } catch { /* not remembered */ } },
   })
   const [fold, gone] = [flag('twp-collapsed'), flag('twp-hidden')]
-  return { get: fold.get, set: fold.set, hidden: gone.get, hide: () => { gone.set(true) } }
+  return { get: fold.get, set: fold.set, hidden: gone.get, hide: () => { gone.set(true) }, show: () => { gone.set(false) } }
 }
 
 /** True while the personal-view PR flow works: its /__tw/status step is neither none, ready nor failed. */

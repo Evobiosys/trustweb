@@ -3127,6 +3127,9 @@ export const S = {
   panelAssembleWhy: 'Assembling now, one moment.',
   panelPopOut: 'Pop out',
   panelPopOutTip: 'Move this panel to its own window (second screen)',
+  // wave46 panel-rows-back: the pill left by the × (hide for this tab)
+  panelRowsBack: '≡ rows',
+  panelRowsBackTip: 'Show the preview rows again (approve them one by one)',
   panelPopBlocked: 'The browser blocked the new window: allow pop-ups for this page.',
   themeLabel: 'Appearance',
   themeSystem: 'Follow the system',
