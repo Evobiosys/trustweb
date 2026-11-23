@@ -19,3 +19,9 @@ export function demoOverlayDismissed(store: Store, s: Pick<AppState, 'me'>): boo
 export function dismissDemoOverlay(store: Store, s: Pick<AppState, 'me'>): void {
   try { store.setItem(DEMO_OVERLAY_KEY, s.me.id) } catch { /* not remembered */ }
 }
+
+/* wave46 answers-45b */
+/** Settings "Show the demo-content button again": undoes the X on this device. */
+export function restoreDemoOverlay(store: Pick<Storage, 'removeItem'>): void {
+  try { store.removeItem(DEMO_OVERLAY_KEY) } catch { /* stays dismissed */ }
+}

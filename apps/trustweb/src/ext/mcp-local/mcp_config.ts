@@ -141,6 +141,8 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'outbox_list', write: false },
   /* wave45 events-refetch */
   { name: 'events_refetch', write: true },
+  /* wave46 answers-45b */
+  { name: 'settings_close_follow_set', write: true },
 ]
 
 export interface McpSettings { write: boolean; /** Tools switched off. */ off: string[] }

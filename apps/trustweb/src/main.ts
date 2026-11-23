@@ -266,6 +266,7 @@ import { startMcpLive } from './mcp_live'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { demoOverlayDismissed, dismissDemoOverlay } from './demo_overlay'
+import { demoOverlayRows } from './demo_overlay_view' // wave46 answers-45b
 import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement } from './agreements'
 import { agreementsSection } from './agreements_view'
@@ -884,7 +885,7 @@ const net = new Net({
   save,
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
-  onQueued: (peer) => toast(S.outbox.queued(peer.displayName)), // wave45 offline-outbox
+  onQueued: () => toast(S.w46b.queued), // wave45 offline-outbox; wave46 answers-45b (Q2): both toasts stay, this one says it waits
   onHeard: (did) => social.onHeard(did),
   onHost: (did, m) => social.onHost(did, m),
   inviteVerdict: (inv, did) => invites.verdict(inv, did), onInviteAccepted: (peer, inv) => invites.accepted(peer, inv),   // wave44 steer-invite-link
@@ -5555,7 +5556,7 @@ const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web)
 const eventChat = createEventChatView<Peer>({ st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 event-group-chat
 const eventHost = eventPageHooks({
   st, save, tags: loadColourTags, openSheet, closeSheet, toast: (m) => toast(m), groupChat: eventChat,
-  showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory),
+  showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory), showWeb: () => go(Screen.Web),
 })
 const eventsView = createEventsView({
   focusWeb: webFocus, ...eventHost,
@@ -7998,6 +7999,7 @@ function settingsSheet(): void {
     general: [
     settingsSection('drafts', S.drafts44c.title, draftsSettingsRows(s, save, settingsSheet)),   // wave44c event-autosave
     settingsSection('outbox', S.outbox.title, outboxRows(s)),   // wave45 offline-outbox
+    ...demoOverlayRows(s, () => { updateDemoToggle(); settingsSheet() }),   // wave46 answers-45b: on the short page, not under Advanced
     settingsSection('trash', S.a44cTrash.title, trashRows(s, { save, redraw: () => { render(); settingsSheet() }, toast })),   // wave44c answers-44c (A4)
     settingsSection('you', S.setSecYou, [
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { closeSheet(); openWebPage({ kind: 'me' }) } }, [

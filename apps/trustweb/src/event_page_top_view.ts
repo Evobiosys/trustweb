@@ -32,6 +32,8 @@ export interface EventTopHooks {
   inviteMany?: (ev: TwEvent) => void
   eventResources?: (ev: TwEvent) => void
   openPerson?: (id: string) => void
+  /** wave46 answers-45b: the Web with this event's bubble on; absent when Settings > Events switched the bubble off. */
+  webBubble?: (ev: TwEvent) => void
 }
 
 const chipsOf = (people: readonly Person[], attr: string, open?: (id: string) => void): HTMLElement =>
@@ -65,6 +67,7 @@ function peopleSection(ev: TwEvent, h: EventTopHooks, colour: string): HTMLEleme
     el('div', { class: 'chips ev-people-actions' }, [
       h.messageAll ? act('data-event-chat', S.w45.eventChat, () => h.messageAll?.(ev), false, eventChatUnread(h.state(), ev.id)) : null,
       h.addPeople ? act('data-event-add-people', S.w45.addPeople, () => { flip(adding, ev.id); h.redraw() }, adding.has(ev.id)) : null,
+      h.webBubble ? act('data-event-web-bubble', S.w46b.webBubble, () => h.webBubble?.(ev)) : null,   // wave46 answers-45b
     ]),
     h.addPeople && adding.has(ev.id) ? h.addPeople(ev) : null,
   ])

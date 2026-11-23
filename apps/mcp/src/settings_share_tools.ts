@@ -4,7 +4,7 @@
  * What goes out waits in the record's outbox; the open app seals it for the person and posts it on the relay (an MCP server holds no key).
  */
 import { randomUUID } from 'node:crypto'
-import { SHARE_GROUPS, answer, diffOf, follow, followers, follows, setFollowAuto, shareOf, suggest, unfollow, type ShareGroup } from '../../trustweb/src/settings_share.ts'
+import { SHARE_GROUPS, answer, diffOf, follow, followers, follows, setCloseFollow, setFollowAuto, shareOf, suggest, unfollow, type ShareGroup } from '../../trustweb/src/settings_share.ts'
 import { settingById } from '../../trustweb/src/settings_registry.ts'
 import { commitTo, findPerson, load, needText, schema, S, type Rec, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
@@ -47,7 +47,7 @@ export function settingsShareTools(o: RecordToolsOptions): Tool[] {
     },
   }, {
     name: 'settings_follow',
-    description: 'Follow a person\'s settings group: they are asked to allow it; then I get their group now and whenever they change it, applied at once when auto is true, else as a suggestion. Without person: auto switches auto-apply of my follow on that group; on:false stops following that group.',
+    description: 'Follow a person\'s settings group: they are asked to allow it (someone who has me in their Closest/Close ring allows it at once unless they switched that off); then I get their group now and whenever they change it, applied at once when auto is true, else as a suggestion. Without person: auto switches auto-apply of my follow on that group; on:false stops following that group.',
     inputSchema: schema({ group: GROUP, person: S('id or exact name; omit to change or stop the current follow'), auto: { type: 'boolean', description: 'auto-apply (default false)' }, on: { type: 'boolean', description: 'false = stop following this group' } }, ['group']),
     run: (a) => {
       const group = a.group as ShareGroup
@@ -77,6 +77,29 @@ export function settingsShareTools(o: RecordToolsOptions): Tool[] {
       let applied: string[] = []
       commit((r) => { applied = answer(r as unknown as Share, id, accepted, now().getTime(), newId).applied })
       return { id, accepted, applied }
+    },
+  }]
+}
+
+/* wave46 answers-45b */
+/** Closest / Close follow my settings without my Allow (default on): per person or for everyone (settings_share.ts setCloseFollow). */
+export function closeFollowTools(o: RecordToolsOptions): Tool[] {
+  if (!o.write) return []
+  const now = o.now ?? (() => new Date())
+  return [{
+    name: 'settings_close_follow_set',
+    description: 'Whether people in my Closest or Close ring may follow one of my settings groups without my Allow (default true; everyone else always asks). With person: just that person; without: everyone in Closest/Close (same as settings_set share.closeFollowAuto).',
+    inputSchema: schema({ person: S('id or exact name; omit for everyone'), allow: { type: 'boolean', description: 'false = they ask first' } }, ['allow']),
+    run: (a) => {
+      if (typeof a.allow !== 'boolean') throw new Error('allow must be true or false')
+      const allow = a.allow
+      let res: Record<string, unknown> = {}
+      commitTo(o.file, now, (r) => {
+        const person = a.person === undefined ? null : findPerson(r, needText(a.person, 'person')).id
+        setCloseFollow(r as unknown as Share, person, allow)
+        res = person ? { person, allow } : { everyone: true, allow }
+      })
+      return res
     },
   }]
 }
