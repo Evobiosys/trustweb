@@ -1,8 +1,12 @@
 {
   "name": "@resource-web/liquid-delegation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later",
   "type": "module",
-  "private": true,
-  "exports": { ".": "./src/index.ts" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./trustweb": "./src/adapters/trustweb_settings.ts",
+    "./meta-party": "./src/adapters/meta_party.ts"
+  },
+  "private": true
 }
