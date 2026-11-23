@@ -35,6 +35,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'contact_box_view.ts': ['get_person', 'set_field'],
   'contacts_sync_view.ts': ['sync_status', 'sync_now'],
   'dashboard_view.ts': ['dashboard_open', 'home_layout_get'],
+  'demo_overlay_view.ts': NAV, // wave46 answers-45b: device-local (localStorage), reached by app_action tap
   'desktop_view.ts': NAV,
   'event_merge_view.ts': ['event_merge', 'event_merge_answer', 'event_merge_asks_list'], // wave45 merge-events
   'event_editor_view.ts': ['event_drafts_list', 'event_draft_save', 'event_details_set', 'event_times_set', 'event_invite'],
@@ -43,7 +44,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'event_group_chat_view.ts': ['event_chat_open', 'event_chat_read', 'event_chat_send', 'event_chat_leave'], // wave45 event-group-chat
   'group_chat_view.ts': ['group_list', 'group_read', 'group_create', 'group_invite', 'group_open', 'group_send', 'group_leave', 'list_create', 'list_set_active', 'list_add_item', 'list_check', 'list_move', 'list_archive_done'], // wave45 group-chat-list
   'events_view.ts': ['events_list', 'event_get', 'event_create', 'event_settings_set', 'event_link_open', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'events_refetch'],
-  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add', 'invite_bulk'],
+  'event_page_top_view.ts': ['event_get', 'event_share_audience_set', 'event_chat_open', 'event_message_all', 'event_people_list', 'event_people_add', 'invite_bulk', 'event_mode_set'], // wave46 answers-45b: Web just people from this event = event_mode_set
   'ext/calendar/at_event_view.ts': ['event_get', 'event_settings_set'],
   'ext/calendar/calendar_tags_view.ts': ['calendar_tag_toggle'],
   'ext/calendar/calendar_view.ts': ['events_list', 'calendar_add'],
@@ -129,7 +130,7 @@ export const VIEW_TOOLS: Readonly<Record<string, readonly string[]>> = {
   'scope_editor_view.ts': ['trusted_only_set', 'trust_override_set'],
   'seen_through_view.ts': ['people_seen_through_list', 'event_introduce_person'],
   'services_view.ts': ['import_sources', 'app_action'],
-  'settings_share_view.ts': ['settings_suggestions_list', 'settings_suggest', 'settings_follow', 'settings_suggestion_accept'], // wave45 settings-suggest
+  'settings_share_view.ts': ['settings_suggestions_list', 'settings_suggest', 'settings_follow', 'settings_suggestion_accept', 'settings_close_follow_set'], // wave45 settings-suggest; wave46 answers-45b
   'share_page_view.ts': ['resource_share'],
   'shared_notes_view.ts': ['list_notes'],
   'short_alias_view.ts': ['profile_get', 'app_action'],

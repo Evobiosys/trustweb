@@ -80,6 +80,7 @@ const CSS = `
 .twp .sec{font:700 10px system-ui;letter-spacing:.04em;opacity:.7;margin:4px 0 2px}
 .see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}
+.twp .tag.rows{font:600 11px system-ui,sans-serif;text-decoration:underline;opacity:.85}
 /* wave 42 review-panel: header = text block + a fixed 44 px button strip, never overlapping; every row at one level */
 .twp .hl{flex:1 1 0;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;padding:12px 0;overflow-wrap:anywhere}
 .twp .hbtns{flex:none;display:flex;height:44px;align-items:center}.twp .hbtns button{width:34px;height:44px;padding:0;border-radius:0;display:flex;align-items:center;justify-content:center}
@@ -636,15 +637,21 @@ export function initDevPreview(): void {
   function render(): void {
     const q = p!
     related = new Set(lit ? relatedRows(q.features, lit) : [])
-    root.hidden = tab.hidden() || popped()
+    root.hidden = popped()
+    const gone = tab.hidden()   // wave46 panel-rows-back: the × leaves a "rows" pill top-left that brings the line-by-line approver back (Jakob 2026-11-23: "I can't approve them")
     const pill = collapsed()
-    root.className = 'twp' + (pill ? ' pill' : '')
+    root.className = 'twp' + (pill || gone ? ' pill' : '')
     document.documentElement.classList.toggle('twp-devmode', mode !== 'personal')   // stock/dev: the overlays use inverse colours
     root.replaceChildren()
     // The Approve box (dev_feature.ts) hides while this panel is a pill or shows a single row (wave 36b).
     const boxOn = (focused: boolean, ready = false): void => { document.documentElement.classList.toggle('twp-compact', !approveBoxVisible({ collapsed: pill, focused, ready })) }
     boxOn(false)
-    if (pill) {
+    if (gone) {
+      const tag = root.appendChild(h('div', { className: 'tag rows', textContent: S.panelRowsBack, title: S.panelRowsBackTip }))
+      tag.dataset.panelShow = ''
+      const state = drag(tag)
+      tag.addEventListener('click', () => { if (!state.moved) { tab.show(); render() } })
+    } else if (pill) {
       const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand · double-click copies the id' }))
       const state = drag(tag)
       tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false) })
@@ -652,6 +659,7 @@ export function initDevPreview(): void {
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       const close = h('button', { className: 'x', textContent: '×', title: 'Hide for this tab' })
+      close.dataset.panelHide = ''
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
       const idEl = h('b', { textContent: panelTitle(q.id, q.features), title: 'Double-click copies the id' })

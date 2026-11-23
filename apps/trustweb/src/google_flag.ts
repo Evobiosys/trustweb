@@ -36,3 +36,11 @@ export function nudgeShown(store: KeyValueStore, token: string | null): boolean 
 export function dismissNudge(store: KeyValueStore): void {
   try { store.setItem(NUDGE_KEY, '1') } catch { /* not remembered */ }
 }
+
+/* wave46 answers-45b */
+/** TrustWeb's own Google OAuth client id (Web application, People API, contacts.readonly). External: empty until Jakob registers it
+ *  (DEVLOG/wave46/google_oauth_steps_for_jakob.txt in trustweb-ops); paste it here, then flip GOOGLE_CONTACTS_SYNC_ENABLED above. */
+export const TRUSTWEB_GOOGLE_CLIENT_ID = ''
+
+/** The client id in force: the one typed in Settings > Import > Google on this device, else TrustWeb's own; null when neither. */
+export const clientIdOf = (stored: string | null, builtIn: string = TRUSTWEB_GOOGLE_CLIENT_ID): string | null => stored?.trim() || builtIn.trim() || null

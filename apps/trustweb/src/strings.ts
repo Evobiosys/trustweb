@@ -3127,6 +3127,9 @@ export const S = {
   panelAssembleWhy: 'Assembling now, one moment.',
   panelPopOut: 'Pop out',
   panelPopOutTip: 'Move this panel to its own window (second screen)',
+  // wave46 panel-rows-back: the pill left by the × (hide for this tab)
+  panelRowsBack: '≡ rows',
+  panelRowsBackTip: 'Show the preview rows again (approve them one by one)',
   panelPopBlocked: 'The browser blocked the new window: allow pop-ups for this page.',
   themeLabel: 'Appearance',
   themeSystem: 'Follow the system',
@@ -5680,4 +5683,19 @@ export const S = {
   },
   /* wave45 sync-errors-retry */
   syncErr: { ...SYNC_HINT, retry: 'Retry' },
+  /* wave46 answers-45b */
+  w46b: {
+    /** Q2: the "sent" toast stays; the queued one (net.ts onQueued) says this. Settings > Pending keeps its own line (S.outbox). */
+    queued: 'Waiting for being online again',
+    demoAgain: 'Show the demo-content button again',
+    demoAgainHint: 'Brings back the "Show demo content" button you closed with ×, on this device.',
+    /** Import sheet (Settings > Import > Google); the view speaks English, so no German copy. */
+    googleOnce: 'Ideally this is a one-time import. We understand if letting go of Google takes longer, so the sync keeps your contacts in step.',
+    webBubble: 'Web: just people from this event',
+    closeFollow: 'Let Closest/Close follow my settings without asking',
+    closeFollowHint: 'On: someone in your Closest or Close ring who asks to follow a settings group gets it at once. Everyone else waits for your Allow. They still decide what to take.',
+    closeFollowPeople: 'Per person',
+    closeFollowPeopleHint: 'Struck through: this person asks first, like everyone outside Closest and Close.',
+    followAllowed: (name: string, group: string) => `${name} (Closest/Close) now follows your ${group} settings.`,
+  },
 } as const
