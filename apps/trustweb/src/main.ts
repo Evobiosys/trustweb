@@ -59,7 +59,8 @@ import { planFlush } from './support_flush'
 import { communityChatLive } from './ext/community_mode/chat_row'
 import { addMember, metaOf, parseCommunity, rememberAudience } from './ext/community-mighty/community_data'
 import type { SupportIo } from './support_ask_view'
-import { ASK_MODES, AskMode, closeText, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
+import { relayPeers, relayText, parseViaHere, viaHereText } from './support_relay'   // wave46 iyg-ask-reach
+import { ASK_MODES, AskMode, closeText, isOpen, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
 import { PROVIDERS, guessProvider, validateEmail, composeHref, senderHint, providerLabel, type PrimaryEmail } from './primary_email'
@@ -4981,7 +4982,10 @@ function onSupportText(peer: Peer, text: string): void {
   const person = personOf(s.people, peer.id)
   if (ask) {
     if (!person || ask.until <= Date.now()) return
-    s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id }, Date.now())
+    if ((s.supportIn ?? []).some((x) => x.id === ask.id && x.peerId !== peer.id)) return   // wave46 iyg-ask-reach: the same ask came another way already
+    const fwd = relayPeers(s, ask, peer.id)   // wave46 iyg-ask-reach: a host passes a scoped ask on, once
+    s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id, ...(fwd.length ? { relayedTo: fwd.map((x) => x.id) } : {}) }, Date.now())
+    if (fwd.length && ask.scope) { const text = relayText(APP_URL, { ...ask, scope: ask.scope }, person.name); for (const x of fwd) void net.sendText(x, text).catch(() => undefined) }   // wave46 iyg-ask-reach
     save()
     if (sourceNotifies(s, { kind: 'support', peerId: peer.id })) toast(S.supportGotOne(person.name))
     if (screen === Screen.Web) render()
@@ -4990,7 +4994,14 @@ function onSupportText(peer: Peer, text: string): void {
   const closed = parseCloseText(APP_URL, text)
   if (closed) { s.supportIn = applyCancel(s.supportIn, closed, peer.id); save(); if (screen === Screen.Web) render(); return }
   const id = parseHereText(APP_URL, text)
-  if (id && recordHere(s.supportAsks ?? [], id, peer.id, Date.now())) { save(); if (screen === Screen.Web) render() }
+  if (id && recordHere(s.supportAsks ?? [], id, peer.id, Date.now())) { save(); if (screen === Screen.Web) render(); return }
+  // wave46 iyg-ask-reach: "I'm here" from someone I passed an ask on to goes to its asker, by name; the asker's "who answered" line shows it
+  const relayed = id ? (s.supportIn ?? []).find((x) => x.id === id && x.relayedTo?.includes(peer.id)) : undefined
+  const asker = relayed ? s.peers.find((x) => x.id === relayed.peerId) : undefined
+  if (id && asker && person) void net.sendText(asker, viaHereText(APP_URL, id, person.name)).catch(() => undefined)
+  const via = parseViaHere(APP_URL, text)
+  const mine = via ? (s.supportAsks ?? []).find((x) => x.id === via.id && x.to.includes(peer.id) && isOpen(x, Date.now())) : undefined
+  if (via && mine && !(mine.hereVia ?? []).includes(via.name)) { mine.hereVia = [...(mine.hereVia ?? []), via.name]; save(); if (screen === Screen.Web) render() }
 }
 
 /** Wave 42 (support_flush.ts): asks the MCP server wrote into the record are sent now; cancelled ones are withdrawn. */
@@ -5567,7 +5578,7 @@ const eventsView = createEventsView({
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
   showQr: (ev, host) => eventQr(ev, false, host),
-  askSupport: () => supportSheet(supportIo),
+  askSupport: (eventId) => supportSheet(supportIo, eventId),   // wave46 iyg-ask-reach: the event scope preselected
   feedRow: (ev) => feed.eventRow(ev),
   plan: (ev) => [...eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }), ...openSpaceSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), push: (e) => { void eventEnv.pushOpenSpace(e) }, noteFor: (e, a) => coNotes?.activityNote?.(e, a) ?? null })],
   extra: (ev) => [...[cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []), ...seenThrough.eventSection(ev), ...eventMerge.eventSection(ev)],

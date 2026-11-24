@@ -65,7 +65,7 @@ export interface EventsViewHooks {
   /** Wave 27: the QR page of an event (qr_modes.ts): the event and my connect code in one code. */
   showQr?: (ev: TwEvent, host?: boolean) => void
   /** Wave 43: opens the ask-for-support sheet (an event that offers support shows its button). */
-  askSupport?: () => void
+  askSupport?: (eventId: string) => void
   /** Wave 43 web-focus-filter: show the Web with only this event's people. */
   focusWeb?: (ev: TwEvent) => void
   /** Wave 44c event-autosave: my answer ("I will attend" or not) goes to the hosts; a saved event's conference link to the guests who accepted. */
@@ -559,7 +559,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.conditions ? editable(el('p', { 'data-event-conditions': '' }, [ev.conditions]), ev, 'conditions') : null,
       ...(h.plan?.(ev) ?? []),
       h.feedRow?.(ev) ?? null,
-      offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.() }, [S.w43press.askSupport]) : null,
+      offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.(ev.id) }, [S.w43press.askSupport]) : null,
       el('div', { class: 'chips' }, [attended, notify, eventModeToggle({ state: h.state, save: h.save, redraw: h.redraw }, ev.id)]),
       notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,
       nameReveal(ev),
