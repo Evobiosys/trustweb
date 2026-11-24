@@ -369,3 +369,36 @@ describe('F9 an ask reaches only hosts who can relay that scope', () => {
     expect(relayHostPeople(s(), { event: 'zz' })).toEqual([])
   })
 })
+
+import { rosterWork } from '../../src/event_roster.ts'
+
+describe('F10 the roster does no work on a save that changed nothing', () => {
+  const big = () => {
+    const people = Array.from({ length: 683 }, (_, i) => P('p' + i, 'Person ' + i, { events: ['e' + (i % 20)], peerId: i < 40 ? 'q' + i : undefined }))
+    return phone('Hanna', people, Array.from({ length: 20 }, (_, k) => ev({ id: 'e' + k, showAll: true })))
+  }
+  it('second call: no roster computed (counter), a changed input recomputes', async () => {
+    const h = big()
+    rosterWork.names = 0
+    await h.env.rosterSync()
+    expect(rosterWork.names).toBe(20)
+    const sentAfterFirst = h.sent.length
+    rosterWork.names = 0
+    await h.env.rosterSync()
+    expect(rosterWork.names).toBe(0)
+    expect(h.sent.length).toBe(sentAfterFirst)
+    h.state.people[100].eventShow = { e0: 'off' }
+    await h.env.rosterSync()
+    expect(rosterWork.names).toBe(20)
+  })
+  it('a new connection, a rename and a showAll switch each count as a change', async () => {
+    const h = big()
+    await h.env.rosterSync()
+    for (const change of [() => { h.state.people[100].peerId = 'qnew'; h.state.peers.push({ id: 'qnew', displayName: 'Person 100' }) }, () => { h.state.people[5].name = 'Renamed' }, () => { delete h.state.events[3].showAll }]) {
+      rosterWork.names = 0
+      change()
+      await h.env.rosterSync()
+      expect(rosterWork.names).toBeGreaterThan(0)
+    }
+  })
+})

@@ -14,6 +14,8 @@ import { mayAnnounce } from './community_event_access'
 import { parseCommunity } from './ext/community-mighty/community_data'
 
 export const ROSTER_NAME_MAX = 40
+/** wave46 iyg-reviewfix F10: how many rosters were really computed (a perf guard in the tests counts it; a save that changed nothing computes none). */
+export const rosterWork = { names: 0 }
 type Rec = Pick<AppState, 'people' | 'me'> & Partial<Pick<AppState, 'extData' | 'events'>>
 
 /** Each name once (case-insensitive), cut to the wire limit, nameless ones left out. */
@@ -34,6 +36,7 @@ const rosterListed = (p: Person, id: string, showAll: boolean): boolean => (show
 
 /** The names this device, as a host of `ev`, may tell the people at it: the listed attendees, when the event shows all or belongs to an intimate community. */
 export function rosterNames(s: Rec, ev: TwEvent): string[] {
+  rosterWork.names++
   const tag = communityOfEvent(ev)
   if (!isEventHost(ev, s.me.displayName, s.people) || !(ev.showAll === true || (tag && isIntimate(s, tag)))) return []
   return named(attendees(s as AppState, ev.id).filter((p) => rosterListed(p, ev.id, ev.showAll === true) && firstHand(p)))
@@ -41,12 +44,20 @@ export function rosterNames(s: Rec, ev: TwEvent): string[] {
 
 /** The members of an intimate community I organize (mode members): the names that go to its connected members. */
 export function communityRosterNames(s: Rec, tag: string): string[] {
+  rosterWork.names++
   const mine = parseCommunity(s.extData?.['community-mighty']).meta?.[tag]?.organizers.includes('me') === true
   return mine && mayAnnounce(s, tag) && isIntimate(s, tag) ? named(membersOf(s, tag)) : []
 }
 
 /** The communities this device may roster. */
 export const rosterTags = (s: Pick<AppState, 'extData'>): string[] => Object.keys(parseCommunity(s.extData?.['community-mighty']).meta ?? {})
+
+/** wave46 iyg-reviewfix F10: everything a roster is made of, in one cheap pass: a save that leaves it equal skips the whole sync. */
+export function rosterSignature(s: Rec & Partial<Pick<AppState, 'peers'>>): string {
+  const p = s.people.map((x) => `${x.id}|${x.name}|${x.peerId ?? ''}|${x.deleted_at ?? ''}|${x.via ?? ''}|${x.events?.join(',') ?? ''}|${JSON.stringify(x.eventShow ?? '')}|${JSON.stringify(x.fields ?? '')}`).join('\n')
+  const e = (s.events ?? []).map((x) => `${x.id}|${x.showAll ?? ''}|${x.communityId ?? ''}|${x.community ?? ''}|${x.fromLink ?? ''}|${x.hosts?.join(',') ?? ''}|${x.people?.join(',') ?? ''}|${x.organizers?.join(',') ?? ''}`).join('\n')
+  return [s.me.displayName, p, e, (s.peers ?? []).map((x) => `${x.id}|${x.displayName}`).join(','), JSON.stringify(s.extData?.['community-mighty'] ?? '')].join('\n#\n')
+}
 
 /** What this recipient has not been told yet: never their own name. */
 export function rosterDue(sent: readonly string[] | undefined, names: readonly string[], to: string): string[] {

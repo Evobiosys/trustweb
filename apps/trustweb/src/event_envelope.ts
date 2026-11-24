@@ -27,7 +27,7 @@ import { resolveEvent } from './event_merge'
 import { mayAnnounce, seesEvent } from './community_event_access' // wave45 community-events-invite-only; answers-45a: seesEvent
 import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
 import { parseCommunity } from './ext/community-mighty/community_data' // wave46 iyg-reviewfix F2
-import { communityRosterNames, rosterDue, rosterNames, rosterTags } from './event_roster' // wave46 iyg-roster
+import { communityRosterNames, rosterDue, rosterNames, rosterSignature, rosterTags } from './event_roster' // wave46 iyg-roster
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -216,11 +216,14 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
 
   /* wave46 iyg-roster: tell each connected recipient the names it has not heard (event_roster.ts); on a join, an edit of showAll, a save, app start. One run at a time. */
   let rostering = false
+  let rosterSeen = '' // F10: the inputs of the last finished run
   async function rosterSync(): Promise<void> {
     if (rostering) return
+    const st = host.state()
+    const sig = rosterSignature(st)
+    if (sig === rosterSeen) return
     rostering = true
     try {
-      const st = host.state()
       const personOf = (id: string): Person | undefined => st.people.find((p) => p.peerId === id && p.deleted_at === undefined)
       const sendNames = async (key: string, names: string[], to: P[], envOf: (who: string, gone?: true) => EventEnvelope): Promise<void> => {
         const now = new Set(names.map((n) => n.toLowerCase()))
@@ -241,6 +244,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       for (const tag of rosterTags(st)) {
         await sendNames('tag:' + tag, communityRosterNames(st, tag), host.members?.(tag) ?? [], (who, gone) => ({ v: 1, t: 'event', seen: { tag, shown: true, who, ...(gone ? { gone } : {}) } }))
       }
+      rosterSeen = sig
     } finally { rostering = false }
   }
 
