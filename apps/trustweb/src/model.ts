@@ -780,6 +780,14 @@ export interface InventoryItem {
   blocks?: ResBlock[]
   /** Wave 44c community-resources: when I first opened a received (sharedBy) resource; absent = still new. */
   openedAt?: number
+  /** wave46 iyg-shared-resource (resource_sync.ts): one resource in a community AND these events (the first is `eventId`); synced to the people of both. Absent = a private or single-scope item. */
+  eventIds?: string[]
+  synced?: true
+  /** The author's last edit (the author's clock; last writer wins). Absent = createdAt. */
+  updatedAt?: number
+  /** Mine: the content last sent (fingerprint), so an edit is noticed. Received: the person (id) whose device delivered it first, the only one besides the author who may update it. This phone only. */
+  syncFp?: string
+  sharedFrom?: string
 }
 
 /** One bullet of a resource's outline; shared as a whole subtree or as its line alone. */

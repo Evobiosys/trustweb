@@ -40,6 +40,8 @@ import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
 import { installEventMerge } from './event_merge_view' // wave45 merge-events
 import { installEventsRefetch } from './events_refetch_actions' // wave45 events-refetch
+import { createResourceSync } from './resource_sync' // wave46 iyg-shared-resource
+import { receivedSheet } from './resource_sync_view' // wave46 iyg-shared-resource
 import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
 import { installGroupChat } from './group_chat_view' // wave45 group-chat-list
@@ -744,8 +746,10 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
+let sweepResources: () => void = () => undefined   // wave46 iyg-shared-resource: set once resSync exists
 function save(): void {
   if (state && !superseded) {
+    sweepResources()   // wave46 iyg-shared-resource
     announceDue()
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
@@ -926,6 +930,7 @@ const net = new Net({
     save()
     sendHelloTo(peer)
     void eventEnv.connected(peer)   // wave 43c: the event whose QR was just shown goes to the person who scanned it
+    void resSync.catchUp(peer)   // wave46 iyg-shared-resource
     void autoShareProfile(peer, 'public')
     applyHeldContact(peer, person)
     closeSheet()
@@ -973,7 +978,7 @@ const net = new Net({
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
-  onEvent: (peer, env) => { if (env.gg) void groups.onEnvelope(peer, env.gg); else if (env.gc) void eventChat.onEnvelope(peer, env.gc); else void eventEnv.onEnvelope(peer, env).then((o) => eventChat.afterEnvelope(peer, env, o)) },   // wave45 event-group-chat
+  onEvent: (peer, env) => { if (env.gg) void groups.onEnvelope(peer, env.gg); else if (env.gc) void eventChat.onEnvelope(peer, env.gc); else if (env.res) void resSync.onEnvelope(peer, env.res); else void eventEnv.onEnvelope(peer, env).then((o) => { void eventChat.afterEnvelope(peer, env, o); if (env.joined || env.rsvp?.yes) void resSync.catchUp(peer) }) },   // wave45 event-group-chat
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -3903,6 +3908,7 @@ function itemSheet(itemId: string): void {
   const s = st()
   const item = s.inventory.find((i) => i.id === itemId)
   if (!item) return
+  if (item.sharedFrom) { openSheet(receivedSheet(item, emojiOn(s), closeSheet)); return }   // wave46 iyg-shared-resource: someone else's, read-only
   const redraw = (): void => { save(); render(); itemSheet(item.id) }
   openSheet([
     // Jakob's sketch (10-07, #21/#22): the X top right, the on/off switch below it on the right; then who, then how far.
@@ -5554,6 +5560,9 @@ const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
 const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
 /** answers-44d: the event page's community, chat and resources hooks (also the registry's, a44d_actions.ts). */
 const eventChat = createEventChatView<Peer>({ st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 event-group-chat
+/** wave46 iyg-shared-resource: one resource in a community and its events, synced (resource_sync.ts; also MCP resource_add audience both:<event>). */
+const resSync = createResourceSync<Peer>({ state: st, save, now: Date.now, peers: () => st().peers, send: (p, e) => net.sendEvent(p, e), holdsCommunity: (tag) => loadColourTags().some((t) => t.id === tag), changed: render })
+sweepResources = () => { void resSync.sweep() }
 const eventHost = eventPageHooks({
   st, save, tags: loadColourTags, openSheet, closeSheet, toast: (m) => toast(m), groupChat: eventChat,
   showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory), showWeb: () => go(Screen.Web),

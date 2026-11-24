@@ -162,6 +162,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
   if ('seen' in o) return hasWant || hasLink ? null : parseSeen(o.seen) // wave44c seen-through
   if ('gc' in o) return hasWant || hasLink ? null : parseGroupChat(o.gc) // wave45 event-group-chat
+  if ('res' in o) return hasWant || hasLink ? null : parseRes(o.res) // wave46 iyg-shared-resource
   if ('gg' in o) return hasWant || hasLink ? null : parseGroupOp(o.gg) // wave45 group-chat-list
   if ('joined' in o) { // answers-44d: {id} only
     const j = o.joined as Record<string, unknown> | null
@@ -233,6 +234,25 @@ function parseGroupChat(v: unknown): EventEnvelope | null {
   if ((x.k === 'msg') !== ('text' in x)) return null
   if (x.k === 'msg' && (!isNonEmptyString(x.text) || x.text.length > EVENT_CHAT_TEXT_MAX)) return null
   return { v: WIRE_VERSION, t: 'event', gc: { id: x.id, m: x.m, k: x.k, by: x.by, ts: x.ts, ...(x.k === 'msg' ? { text: x.text as string } : {}) } }
+}
+
+/* wave46 iyg-shared-resource */
+const RES_TEXT_MAX = 120
+const RES_EVENTS_MAX = 8
+const RES_BLOCKS_BYTES_MAX = 16_000
+const RES_KINDS = ['book', 'publication', 'reference', 'recording', 'link', 'other']
+/** id, title (1..120), community tag id, 1..8 event ids, the author's clock, author name (1..VIA_NAME_MAX); optional kind, https link, outline (array, at most 16 KB; its blocks are checked by the receiver), retracted. Anything else is null. */
+function parseRes(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  if (typeof x.id !== 'string' || !QID_RE.test(x.id) || !isNonEmptyString(x.text) || x.text.length > RES_TEXT_MAX) return null
+  if (!isNonEmptyString(x.communityId) || x.communityId.length > 80 || !Array.isArray(x.eventIds) || x.eventIds.length < 1 || x.eventIds.length > RES_EVENTS_MAX || !x.eventIds.every((e) => typeof e === 'string' && QID_RE.test(e))) return null
+  if (typeof x.updatedAt !== 'number' || !Number.isFinite(x.updatedAt) || !isNonEmptyString(x.by) || x.by.length > VIA_NAME_MAX) return null
+  if ('kind' in x && !RES_KINDS.includes(x.kind as string)) return null
+  if ('link' in x && !isHttps(x.link)) return null
+  if ('blocks' in x && (!Array.isArray(x.blocks) || JSON.stringify(x.blocks).length > RES_BLOCKS_BYTES_MAX)) return null
+  return { v: WIRE_VERSION, t: 'event', res: { id: x.id, text: x.text, communityId: x.communityId, eventIds: x.eventIds as string[], updatedAt: x.updatedAt, by: x.by,
+    ...('kind' in x ? { kind: x.kind as string } : {}), ...('link' in x ? { link: x.link as string } : {}), ...('blocks' in x ? { blocks: x.blocks as unknown[] } : {}), ...(x.retracted === true ? { retracted: true as const } : {}) } }
 }
 
 /* wave45 group-chat-list */

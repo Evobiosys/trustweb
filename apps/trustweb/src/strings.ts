@@ -5698,4 +5698,11 @@ export const S = {
     closeFollowPeopleHint: 'Struck through: this person asks first, like everyone outside Closest and Close.',
     followAllowed: (name: string, group: string) => `${name} (Closest/Close) now follows your ${group} settings.`,
   },
+  /* wave46 iyg-shared-resource */
+  w46sr: {
+    onlyEvent: 'Only for this event',
+    both: 'For the event and its community',
+    bothWith: (event: string) => `${event} and its community`,
+    readOnly: (name: string) => `Shared by ${name}. Only they can change it; it updates here by itself.`,
+  },
 } as const

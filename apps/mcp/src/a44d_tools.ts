@@ -7,7 +7,7 @@
  * invitations, meetings (text only: contact channels and keys are never returned); chat_send queues 'chat-send'.
  */
 import type { HeldAsk } from '../../trustweb/src/model.ts'
-import { addEventPrivate, addScoped, type Scope } from '../../trustweb/src/resource_scope.ts'
+import { addBoth, addEventPrivate, addScoped, type Scope } from '../../trustweb/src/resource_scope.ts'
 import { eventTagLabel, eventTagSlug } from '../../trustweb/src/event_tag.ts'
 import { parseCommunity, withMeta } from '../../trustweb/src/ext/community-mighty/community_data.ts'
 import { announce } from './events.ts'
@@ -214,8 +214,8 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
       },
     },
     {
-      name: 'resource_add', description: 'Add a resource as the "+ Add resource" row does: into a community (its tag id; only that community sees it) or an event (id or exact name; tagged event_<slug>), else into my plain list. reference:true makes it a reference. audience "event:<id>" keeps it private to that one event\'s participants (the event tag only; others see nothing) and still lists it in the event\'s community.',
-      inputSchema: schema({ title: S('the resource'), community: S('community tag id'), event: S('event id or exact name'), audience: S('event:<id> = private to that event\'s participants'), reference: { type: 'boolean', description: 'a reference (References page)' } }, ['title']),
+      name: 'resource_add', description: 'Add a resource as the "+ Add resource" row does: into a community (its tag id; only that community sees it) or an event (id or exact name; tagged event_<slug>), else into my plain list. reference:true makes it a reference. audience "event:<id>" keeps it private to that one event\'s participants (the event tag only; others see nothing) and still lists it in the event\'s community. audience "both:<id>" (wave46) puts ONE synced resource in the event AND its community: everyone in either sees it, and your edits reach them.',
+      inputSchema: schema({ title: S('the resource'), community: S('community tag id'), event: S('event id or exact name'), audience: S('event:<id> = private to that event\'s participants; both:<id> = one synced resource in the event and its community'), reference: { type: 'boolean', description: 'a reference (References page)' } }, ['title']),
       run: (a) => {
         const title = needText(a.title, 'title')
         let made: unknown = null
@@ -226,15 +226,16 @@ export function a44dTools(o: RecordToolsOptions): Tool[] {
           const source = { kind: 'typed' } as never // Provenance.Typed (model.ts enum; not loadable under plain node)
           let sc: Scope | null = null
           if (a.audience !== undefined) {
-            const m = /^event:(.+)$/.exec(String(a.audience).trim())
-            if (!m) throw new Error('audience: use event:<id>')
-            const e = findEvent(r, m[1])
-            made = addEventPrivate(inv, e as never, { slug: eventTagSlug, label: eventTagLabel }, page, title, id, now().getTime(), source)
+            const m = /^(event|both):(.+)$/.exec(String(a.audience).trim())
+            if (!m) throw new Error('audience: use event:<id> or both:<id>')
+            const e = findEvent(r, m[2])
+            made = m[1] === 'both' ? addBoth(inv, [e as never], { slug: eventTagSlug, label: eventTagLabel }, page, title, id, now().getTime(), source) : addEventPrivate(inv, e as never, { slug: eventTagSlug, label: eventTagLabel }, page, title, id, now().getTime(), source)
           } else if (typeof a.event === 'string' && a.event.trim()) {
             const e = findEvent(r, a.event)
             const n = (e as { tagName?: string }).tagName ?? e.name
             sc = { kind: 'event', id: e.id, label: eventTagLabel(n), tagIds: [eventTagSlug(n)] }
           } else if (typeof a.community === 'string' && a.community.trim()) sc = { kind: 'community', id: a.community.trim().slice(0, 80), label: a.community.trim() }
+          if (a.audience !== undefined && !made) throw new Error('both:<id> needs an event that belongs to a community, and a title')
           if (made) return
           if (sc) made = addScoped(inv, sc, page, title, id, now().getTime(), source)
           else { made = { id, text: title.slice(0, 120), audience: 'fof', included: true, createdAt: now().getTime(), source, ...(page === 'references' ? { kind: 'reference' } : {}) }; inv.push(made as never) }
