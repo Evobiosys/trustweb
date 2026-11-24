@@ -1304,6 +1304,8 @@ export interface AppState {
   eventMergeAsks?: MergeAsk[]
   /** wave46 iyg-roster (event_roster.ts): the names this device already sent each peer per event id (or `tag:<community>`), so a roster goes once. Peer ids: THIS DEVICE ONLY. */
   rosterSent?: Record<string, Record<string, string[]>>
+  /** wave46 iyg-assemble (resource_sync.ts): my synced resources as last sent, by id; a removed one stays as a retracted tombstone for 30 days. THIS DEVICE ONLY. */
+  resKnown?: Record<string, import('../../demo/src/types').EventEnvelope['res'] & object>
   /** Wave 45 offline-outbox: envelopes the relay did not take yet, sent when it is back (outbox.ts). THIS DEVICE ONLY: never synced, exported or asked. */
   sendQueue?: OutboxItem[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */

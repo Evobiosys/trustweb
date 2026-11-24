@@ -27,6 +27,7 @@ export type Outcome = 'new' | 'updated' | 'ignored'
 type Rec = Pick<AppState, 'people' | 'me' | 'inventory'> & Partial<Pick<AppState, 'events'>>
 
 const SKEW_MS = 5 * 60_000
+const TOMBSTONE_MS = 30 * 86_400_000
 const TEXT_MAX = 120
 const NAME_MAX = 40
 const KINDS: readonly string[] = ['book', 'publication', 'reference', 'recording', 'link', 'other']
@@ -115,8 +116,8 @@ export function createResourceSync<P extends { id: string }>(h: ResourceSyncHost
   /** peer id -> item id -> the updatedAt last sent there (this session). */
   const sent = new Map<string, Map<string, number>>()
   const askedAt = new Map<string, number>()
-  /** My synced items as of the last sweep: one that vanishes from the list is retracted for the others. */
-  const known = new Map<string, Res>()
+  /** My synced items as of the last sweep (AppState.resKnown, this device only, so it survives a reload): one that vanishes from the list is retracted for the others; a retracted entry stays as the tombstone catch-up re-sends (30 days). */
+  const known = (): Record<string, Res> => (h.state().resKnown ??= {})
   const myName = (): string => cleanName(h.state().me.displayName) || 'TrustWeb'
 
   async function push(r: Res, to: readonly Person[]): Promise<number> {
@@ -138,19 +139,21 @@ export function createResourceSync<P extends { id: string }>(h: ResourceSyncHost
       const mine = s.inventory.filter(syncedMine)
       for (const i of mine) {
         const fp = fingerprint(i)
-        if (fp === i.syncFp) continue
+        if (fp === i.syncFp && (!known()[i.id]?.retracted || retracted(i))) continue // a removed item that came back (restored from the trash) goes out again
         i.updatedAt = i.syncFp === undefined ? i.updatedAt ?? i.createdAt : Math.max(h.now(), (i.updatedAt ?? i.createdAt) + 1)
         i.syncFp = fp
         h.save()
         const r = payloadOf(i, myName())
-        known.set(i.id, r)
+        known()[i.id] = r
         n += await push(r, recipientsOf(s, r))
       }
-      for (const [id, last] of [...known]) {
+      for (const [id, last] of Object.entries(known())) {
         if (mine.some((i) => i.id === id)) continue
-        known.delete(id)
+        if (h.now() - last.updatedAt > TOMBSTONE_MS) { delete known()[id]; continue }
         if (last.retracted) continue
         const r: Res = { ...last, retracted: true, updatedAt: Math.max(h.now(), last.updatedAt + 1) }
+        known()[id] = r
+        h.save()
         n += await push(r, recipientsOf(s, r))
       }
       return n
@@ -179,6 +182,10 @@ export function createResourceSync<P extends { id: string }>(h: ResourceSyncHost
         if (!(syncedMine(i) || (i.sharedBy && i.communityId && iHostAny(eventIdsOf(i))))) continue
         const r = payloadOf(i, i.sharedBy ?? myName())
         if (!r.communityId || sameName(who.name, r.by) || !inScope(s, who, r.communityId, r.eventIds) || (sent.get(peer.id)?.get(r.id) ?? -Infinity) >= r.updatedAt) continue
+        n += await push(r, [who])
+      }
+      for (const r of Object.values(known())) { // an item I removed: its retraction reaches whoever was offline
+        if (!r.retracted || sameName(who.name, r.by) || !inScope(s, who, r.communityId, r.eventIds) || (sent.get(peer.id)?.get(r.id) ?? -Infinity) >= r.updatedAt || s.inventory.some((i) => i.id === r.id)) continue
         n += await push(r, [who])
       }
       return n
