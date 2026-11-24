@@ -61,6 +61,8 @@ export function addSeenThrough(s: People, x: SeenInput): string | undefined {
   const sameSeen = (p: Person): boolean => p.seen?.source === x.source && p.seen?.resource === seen.resource && p.seen?.event === seen.event && p.seen?.tag === seen.tag
   const hit = s.people.find((p) => alive(p) && p.via === x.via && (name ? same(p.name, name) : p.anonymous === true && sameSeen(p)))
     ?? (name ? s.people.find((p) => alive(p) && p.via === x.via && p.anonymous === true && sameSeen(p)) : undefined)
+  const other = hit ? undefined : name ? s.people.find((p) => alive(p) && p.via && same(p.name, name)) : undefined
+  if (other) return other.id // the same name told by a second friend: one card
   if (hit) {
     hit.seen = { ...seen, ...(!seen.event && hit.seen?.event ? { event: hit.seen.event } : {}), ...(!seen.tag && hit.seen?.tag ? { tag: hit.seen.tag } : {}) } // wave46: a second source keeps the first
     if (name) { hit.name = name; delete hit.anonymous }
