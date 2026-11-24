@@ -1,0 +1,188 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+/**
+ * wave46 iyg-shared-resource (Jakob: "one resource visible in an event AND in a community, with synced updates"): a resource added "for the event and
+ * its community" (resource_scope.ts addBoth, `synced`) travels as a sealed `event` envelope with `res` (apps/demo wire.ts parseRes), pair key per
+ * connected person, over the existing relay (net.ts sendEvent). No server holds it.
+ *   - Sent: my device sends a new, edited, switched-off or removed item to the connected people of the community and of its events. An edit is
+ *     noticed by `syncFp` (a fingerprint of what travels), so no edit site needs a hook: `sweep()` runs after a save.
+ *   - Passed on: guests are usually connected to the host only, so a HOST's device passes a new item on once to the others it is connected to (never
+ *     back to the sender or the author); an unchanged item (same id, same time) is dropped, so hosts never loop.
+ *   - Taken: only when I hold the community or the event and the sender belongs to either; last writer wins on the author's clock (a tie keeps what I
+ *     hold); an update comes only from the author or from whoever delivered the item first; an item of mine is never overwritten; retracted = hidden
+ *     (retractedAt), never deleted. A received item is read-only for me. An event-private item (wave45) is never sent: only `synced` items are.
+ * Pure rules plus one engine whose transport the app hands in (main.ts), so the rules test without a relay.
+ */
+import type { EventEnvelope } from '../../demo/src/types'
+import { QID_RE } from '../../demo/src/types'
+import type { AppState, InventoryItem, Person, ResBlock, ResourceKind, TwEvent } from './model'
+import { isEventHost } from './event_roles'
+import { namedHost } from './event_conference'
+import { cleanHelloName } from './hello'
+import { stripUnsafe } from './safe_text'
+import { BLOCK_TEXT_MAX } from './resource_blocks'
+import { REPLAY_GAP_MS } from './events_refetch'
+
+export type Res = NonNullable<EventEnvelope['res']>
+export type Outcome = 'new' | 'updated' | 'ignored'
+type Rec = Pick<AppState, 'people' | 'me' | 'inventory'> & Partial<Pick<AppState, 'events'>>
+
+const SKEW_MS = 5 * 60_000
+const TEXT_MAX = 120
+const NAME_MAX = 40
+const KINDS: readonly string[] = ['book', 'publication', 'reference', 'recording', 'link', 'other']
+const BLOCKS_MAX = 200
+const BLOCK_DEPTH = 6
+
+const live = (p: Person): boolean => p.deleted_at === undefined && !p.via
+const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
+const cleanName = (raw: unknown): string => cleanHelloName(String(raw ?? '')).slice(0, NAME_MAX)
+const cleanText = (raw: unknown): string => stripUnsafe(String(raw ?? '')).replace(/\s+/g, ' ').trim().slice(0, TEXT_MAX)
+const eventsOf = (s: Rec, ids: readonly string[]): TwEvent[] => (s.events ?? []).filter((e) => ids.includes(e.id))
+const eventIdsOf = (i: Pick<InventoryItem, 'eventId' | 'eventIds'>): string[] => i.eventIds ?? (i.eventId ? [i.eventId] : [])
+
+/** Mine and sent: a both-scoped item I made (never a received one, never an event-private one). */
+export const syncedMine = (i: InventoryItem): boolean => i.synced === true && !i.sharedBy
+
+const retracted = (i: InventoryItem): boolean => i.retractedAt !== undefined || (!i.sharedBy && !i.included)
+
+/** What travels, as a short fingerprint: any change of it is an edit. */
+export function fingerprint(i: InventoryItem): string {
+  const s = JSON.stringify([i.text, i.link, i.kind, i.blocks, retracted(i), i.communityId, eventIdsOf(i)])
+  let h = 0x811c9dc5
+  for (let k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 0x01000193) }
+  return (h >>> 0).toString(16) + s.length.toString(16)
+}
+
+export const payloadOf = (i: InventoryItem, by: string): Res => ({
+  id: i.id, text: i.text, communityId: i.communityId as string, eventIds: eventIdsOf(i), updatedAt: i.updatedAt ?? i.createdAt, by,
+  ...(i.kind ? { kind: i.kind } : {}), ...(i.link ? { link: i.link } : {}), ...(i.blocks?.length ? { blocks: i.blocks } : {}), ...(retracted(i) ? { retracted: true as const } : {}),
+})
+
+/** Someone belongs to a scope: holds the community tag, is tagged with one of its events, or is named host of one. */
+function inScope(s: Rec, p: Person, communityId: string, eventIds: readonly string[]): boolean {
+  return live(p) && (String(p.fields?.[communityId]) === 'true' || eventIds.some((id) => p.events?.includes(id)) || eventsOf(s, eventIds).some((e) => namedHost(e, p.name, s.people)))
+}
+/** The connected people (a device to send to) of a scope. */
+export const recipientsOf = (s: Rec, r: Pick<Res, 'communityId' | 'eventIds'>): Person[] => s.people.filter((p) => p.peerId && inScope(s, p, r.communityId, r.eventIds))
+
+function cleanBlocks(v: unknown, depth = 0, budget = { n: BLOCKS_MAX }): ResBlock[] {
+  if (!Array.isArray(v) || depth >= BLOCK_DEPTH) return []
+  const out: ResBlock[] = []
+  for (const b of v as Record<string, unknown>[]) {
+    if (budget.n <= 0) break
+    if (typeof b !== 'object' || b === null || typeof b.id !== 'string' || !QID_RE.test(b.id)) continue
+    budget.n--
+    out.push({ id: b.id, text: stripUnsafe(String(b.text ?? '')).replace(/\s+/g, ' ').trim().slice(0, BLOCK_TEXT_MAX), children: cleanBlocks(b.children, depth + 1, budget), ...(b.collapsed === true ? { collapsed: true as const } : {}) })
+  }
+  return out
+}
+const isHttps = (v: unknown): v is string => { try { return typeof v === 'string' && new URL(v).protocol === 'https:' } catch { return false } }
+
+/** A sealed res from `who` (a person of mine): stored or updated on my device. `holds` = I hold this community (its tag exists in my record). */
+export function applyIncoming(s: Rec, who: Person, p: Res, now: number, holds: (tag: string) => boolean): Outcome {
+  const mine = eventsOf(s, p.eventIds).filter((e) => e.attended || isEventHost(e, s.me.displayName, s.people))
+  if (!live(who) || (!holds(p.communityId) && mine.length === 0) || !inScope(s, who, p.communityId, p.eventIds)) return 'ignored'
+  const text = cleanText(p.text)
+  if (!text) return 'ignored'
+  const at = Math.min(p.updatedAt, now + SKEW_MS)
+  const have = s.inventory.find((i) => i.id === p.id)
+  const by = (eventsOf(s, p.eventIds).some((e) => namedHost(e, who.name, s.people)) && cleanName(p.by)) || cleanName(who.name) || 'TrustWeb'
+  if (have && (!have.sharedBy || (have.sharedFrom !== who.id && !sameName(who.name, have.sharedBy)) || at <= (have.updatedAt ?? have.createdAt))) return 'ignored'
+  const blocks = p.blocks ? cleanBlocks(p.blocks) : []
+  const fields: Partial<InventoryItem> = {
+    text, communityId: p.communityId, eventId: p.eventIds[0], eventIds: [...p.eventIds], updatedAt: at, included: !p.retracted,
+    ...(p.kind && KINDS.includes(p.kind) ? { kind: p.kind as ResourceKind } : {}), ...(isHttps(p.link) ? { link: p.link } : {}), ...(blocks.length ? { blocks } : {}), ...(p.retracted ? { retractedAt: at } : {}),
+  }
+  if (!have) { s.inventory.push({ id: p.id, audience: 'me', createdAt: now, sharedBy: by, sharedFrom: who.id, ...fields } as InventoryItem); return 'new' }
+  for (const k of ['kind', 'link', 'blocks', 'retractedAt'] as const) delete have[k]
+  Object.assign(have, fields)
+  return 'updated'
+}
+
+export interface ResourceSyncHost<P extends { id: string }> {
+  state(): AppState
+  save(): void
+  now(): number
+  peers(): P[]
+  send(peer: P, env: EventEnvelope): Promise<void>
+  /** The community (colour tag id) exists in my record. */
+  holdsCommunity(tag: string): boolean
+  /** A received item changed: redraw what shows it. */
+  changed(): void
+}
+
+export function createResourceSync<P extends { id: string }>(h: ResourceSyncHost<P>) {
+  /** peer id -> item id -> the updatedAt last sent there (this session). */
+  const sent = new Map<string, Map<string, number>>()
+  const askedAt = new Map<string, number>()
+  /** My synced items as of the last sweep: one that vanishes from the list is retracted for the others. */
+  const known = new Map<string, Res>()
+  const myName = (): string => cleanName(h.state().me.displayName) || 'TrustWeb'
+
+  async function push(r: Res, to: readonly Person[]): Promise<number> {
+    let n = 0
+    for (const who of to) {
+      const peer = h.peers().find((x) => x.id === who.peerId)
+      if (!peer) continue
+      await h.send(peer, { v: 1, t: 'event', res: r }).then(() => { (sent.get(peer.id) ?? sent.set(peer.id, new Map()).get(peer.id)!).set(r.id, r.updatedAt); n++ }, () => undefined)
+    }
+    return n
+  }
+  const iHostAny = (ids: readonly string[]): boolean => eventsOf(h.state(), ids).some((e) => isEventHost(e, h.state().me.displayName, h.state().people))
+
+  return {
+    /** After a save: new, edited, switched-off and removed items of mine go out. How many sends went. */
+    async sweep(): Promise<number> {
+      const s = h.state()
+      let n = 0
+      const mine = s.inventory.filter(syncedMine)
+      for (const i of mine) {
+        const fp = fingerprint(i)
+        if (fp === i.syncFp) continue
+        i.updatedAt = i.syncFp === undefined ? i.updatedAt ?? i.createdAt : Math.max(h.now(), (i.updatedAt ?? i.createdAt) + 1)
+        i.syncFp = fp
+        h.save()
+        const r = payloadOf(i, myName())
+        known.set(i.id, r)
+        n += await push(r, recipientsOf(s, r))
+      }
+      for (const [id, last] of [...known]) {
+        if (mine.some((i) => i.id === id)) continue
+        known.delete(id)
+        if (last.retracted) continue
+        const r: Res = { ...last, retracted: true, updatedAt: Math.max(h.now(), last.updatedAt + 1) }
+        n += await push(r, recipientsOf(s, r))
+      }
+      return n
+    },
+    /** A sealed res from a connected peer. True when it was new or newer and kept (a host then passes it on once). */
+    async onEnvelope(peer: { id: string }, r: Res): Promise<boolean> {
+      const s = h.state()
+      const who = s.people.find((p) => p.peerId === peer.id && live(p))
+      if (!who || applyIncoming(s, who, r, h.now(), h.holdsCommunity) === 'ignored') return false
+      h.save()
+      h.changed()
+      if (iHostAny(r.eventIds)) {
+        const kept = payloadOf(s.inventory.find((i) => i.id === r.id) as InventoryItem, s.inventory.find((i) => i.id === r.id)?.sharedBy ?? r.by)
+        await push(kept, recipientsOf(s, kept).filter((p) => p.id !== who.id && !sameName(p.name, kept.by)))
+      }
+      return true
+    },
+    /** A person just connected or joined: they get what changed since the last send, from the author's and a host's device; at most once per REPLAY_GAP_MS. */
+    async catchUp(peer: { id: string }): Promise<number> {
+      const s = h.state()
+      const who = s.people.find((p) => p.peerId === peer.id && live(p))
+      if (!who || h.now() - (askedAt.get(peer.id) ?? -Infinity) < REPLAY_GAP_MS) return 0
+      askedAt.set(peer.id, h.now())
+      let n = 0
+      for (const i of s.inventory) {
+        if (!(syncedMine(i) || (i.sharedBy && i.communityId && iHostAny(eventIdsOf(i))))) continue
+        const r = payloadOf(i, i.sharedBy ?? myName())
+        if (!r.communityId || sameName(who.name, r.by) || !inScope(s, who, r.communityId, r.eventIds) || (sent.get(peer.id)?.get(r.id) ?? -Infinity) >= r.updatedAt) continue
+        n += await push(r, [who])
+      }
+      return n
+    },
+  }
+}
+export type ResourceSync = ReturnType<typeof createResourceSync>

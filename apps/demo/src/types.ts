@@ -477,6 +477,8 @@ export interface EventEnvelope {
   merge?: { step: 'ask' | 'yes' | 'no' | 'done'; keep: string; gone: string; link?: string }
   /** wave45 events-refetch: "send me the events you announced to my communities" (alone in the envelope). */
   sync?: true
+  /** wave46 iyg-shared-resource: one resource shared into a community AND its event(s), synced (trustweb resource_sync.ts). `updatedAt` = the author's clock (last writer wins), `by` = the author's name (a host forwards it on), `retracted` = hidden for everyone. */
+  res?: { id: string; text: string; communityId: string; eventIds: string[]; updatedAt: number; by: string; kind?: string; link?: string; blocks?: unknown[]; retracted?: true }
 }
 /** wave45 group-chat-list: see EventEnvelope.gg. */
 export interface GroupOp {

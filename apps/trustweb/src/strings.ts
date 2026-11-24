@@ -5706,4 +5706,11 @@ export const S = {
     hereVia: (names: string) => `Also here, through the host: ${names}.`,
     hereSent: (from: string) => `${from} will see that you are here.`,
   },
+  /* wave46 iyg-shared-resource */
+  w46sr: {
+    onlyEvent: 'Only for this event',
+    both: 'For the event and its community',
+    bothWith: (event: string) => `${event} and its community`,
+    readOnly: (name: string) => `Shared by ${name}. Only they can change it; it updates here by itself.`,
+  },
 } as const
