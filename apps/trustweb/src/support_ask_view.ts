@@ -6,7 +6,7 @@ import { Ring } from './model'
 import type { AppState, Peer, Person } from './model'
 import { askPeers } from './non_responsive'
 import { loadColourTags } from './colour_tags'
-import { DEFAULT_FILTER, audienceFilterView, peopleFor, ringOfZone, zoneOfRing } from './audience_filter'
+import { DEFAULT_FILTER, audienceFilterView, chipIds, peopleFor, ringOfZone, zoneOfRing } from './audience_filter'
 import type { AudienceFilter, FilterExtras } from './audience_filter'
 import { tagTester } from './ask_audience'
 import { S } from './strings'
@@ -16,10 +16,13 @@ import { planDelivery, sentVia } from './support_delivery'
 import {
   SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, buildSupport, closeText, emergencyNumber, hereText, isOpen, openAsks, supportText,
 } from './support_ask'
-import type { SupportIn } from './support_ask'
+import type { SupportIn, SupportScope } from './support_ask'
 import { cancelAsk, inboxRows } from './support_inbox'
 import { agentAsks, approveAgentAsk, discardAgentAsk } from './support_flush'
 import { draftable } from './drafts_dom'
+import { eventHostPeople, scopeOfFilter } from './support_relay'  // wave46 iyg-ask-reach
+import { tagLabel as eventLabel } from './events'  // wave46 iyg-ask-reach
+import { roleLabels, eventOrganizers } from './event_roles'  // wave46 iyg-ask-reach
 
 export interface SupportIo {
   st: () => AppState
@@ -39,7 +42,12 @@ export interface SupportIo {
 function recipients(io: SupportIo, f: AudienceFilter & FilterExtras): { peer: Peer; name: string; person: Person }[] {
   const s = io.st()
   const open = new Set(askPeers(s).map((p) => p.id))
-  return peopleFor(f, s.people.filter((p) => p.peerId && open.has(p.peerId)), tagTester(s.people, loadColourTags()))
+  const reached = peopleFor(f, s.people.filter((p) => p.peerId && open.has(p.peerId)), tagTester(s.people, loadColourTags()))
+  // wave46 iyg-ask-reach: an event chip also reaches the event's hosts (unless hidden): they pass the ask on to the people the asker does not know
+  const hidden = chipIds(f.exclude, s.people, tagTester(s.people, loadColourTags()))
+  const chip = f.add.find((c) => c.startsWith('event:'))
+  const hosts = chip ? eventHostPeople(s, chip.slice(6)).filter((p) => p.peerId && open.has(p.peerId) && !hidden.includes(p.id) && !reached.includes(p)) : []
+  return [...reached, ...hosts]
     .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name, person: p }))
 }
 
@@ -49,10 +57,22 @@ export interface AskScope { tag: string; remembered: readonly string[]; used: (k
 /** An audience as one remembered key: "ring:<ring>" or, for a community scope, "tag:<id>" (older keys may carry bundle suffixes after a "+": ignored). */
 const audienceKey = (f: AudienceFilter & FilterExtras): string => (f.only ? `tag:${f.only}` : `ring:${ringOfZone(f.zone ?? 'closest')}`)
 
+/** Wave 46 iyg-ask-reach: under the recipients, when the ask is scoped: the host passes it on to the people there the asker does not know. */
+function passOnLine(io: SupportIo, scope: SupportScope | undefined): HTMLElement | null {
+  if (!scope) return null
+  const s = io.st()
+  const ev = scope.event ? s.events?.find((e) => e.id === scope.event) : undefined
+  const host = (ev ? roleLabels(s, ev.hosts?.length ? ev.hosts : eventOrganizers(ev))[0] : undefined) ?? S.w46ask.hostFallback
+  return el('p', { class: 'hint', 'data-support-passon': '' }, [S.w46ask.passOn(host, scope.name ?? scope.event ?? scope.tag ?? '')])
+}
+
 /** The send form: the sheet and the Ask dock both show it; `sent` runs after a send. */
-export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): HTMLElement {
+export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope, eventId?: string): HTMLElement {
   // The zone is always one of the three (Closest few by default); a community scope starts as its tag inside the Friends zone.
   const f: AudienceFilter & FilterExtras = { ...DEFAULT_FILTER, zone: scope ? 'friend' : 'closest', add: [], exclude: [], ...(scope ? { only: scope.tag } : {}) }
+  if (eventId && io.st().events?.some((e) => e.id === eventId)) f.add.push(`event:${eventId}`)   // wave46 iyg-ask-reach: opened from the event page
+  const events = (): { id: string; name: string }[] => (io.st().events ?? []).map((e) => ({ id: e.id, name: eventLabel(e) }))   // wave46 iyg-ask-reach
+  const scopeNow = (): SupportScope | undefined => scopeOfFilter(f, (kind, id) => (kind === 'event' ? events().find((e) => e.id === id)?.name : loadColourTags().find((x) => x.id === id)?.label) ?? id)   // wave46 iyg-ask-reach
   const chosen = new Set<string>()
   let window: SupportWindow = SupportWindow.Today
   const note = el('textarea', { class: 'field', rows: '2', maxlength: '200', placeholder: S.supportNotePh, 'aria-label': S.supportNotePh, 'data-support-note': '' }) as HTMLTextAreaElement
@@ -70,13 +90,14 @@ export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): 
     body.replaceChildren(...[
       // One filter view for every "who may see it": the zones, Also include / Hide from, Advanced (the Closest-few switch).
       audienceFilterView({
-        filter: f, people: () => io.st().people.filter((p) => p.peerId), zoneRequired: true, openSheet: io.openSheet, closeSheet: io.closeSheet,
+        filter: f, people: () => io.st().people.filter((p) => p.peerId), events, zoneRequired: true, openSheet: io.openSheet, closeSheet: io.closeSheet,
         changed: () => { io.save(); draw() },
         advanced: [el('label', { class: 'support-not-closest' }, [
           el('input', { type: 'checkbox', 'data-support-not-closest': '', ...(f.notClosest ? { checked: '' } : {}), onchange: (e) => { f.notClosest = (e.target as HTMLInputElement).checked; draw() } }),
           el('span', {}, [S.supportNotClosest]),
         ])],
       }),
+      passOnLine(io, scopeNow()),   // wave46 iyg-ask-reach
       scope?.remembered.length ? el('div', { class: 'chips', 'data-support-remembered': '' }, [
         el('span', { class: 'chips-lbl' }, [S.w42.recent]),
         ...scope.remembered.map((k) => el('button', { class: 'chip', type: 'button', 'data-support-remembered-key': k, onclick: () => applyKey(k) }, [zoneName(k.split('+')[0])])),
@@ -99,7 +120,7 @@ export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): 
   }
   const send = (to: { peer: Peer; person: Person }[]): void => {
     const s = io.st()
-    const ask = buildSupport({ chips: [...chosen], note: note.value, window, ids: to.map((t) => t.peer.id) }, Date.now(), randomId(12))
+    const ask = buildSupport({ chips: [...chosen], note: note.value, window, ids: to.map((t) => t.peer.id), scope: scopeNow() }, Date.now(), randomId(12))
     s.supportAsks = [ask, ...openAsks(s.supportAsks, Date.now())]
     io.save()
     const text = supportText(io.appUrl, ask)
@@ -117,8 +138,8 @@ export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope): 
   return body
 }
 
-export function supportSheet(io: SupportIo): void {
-  io.openSheet([el('h3', {}, [S.supportTitle]), supportForm(io, io.closeSheet)])
+export function supportSheet(io: SupportIo, eventId?: string): void {
+  io.openSheet([el('h3', {}, [S.supportTitle]), supportForm(io, io.closeSheet, undefined, eventId)])
 }
 
 /** The small underlined line under the rings, only while the sender has an ask open: until when and who answered. */
@@ -131,6 +152,7 @@ export function supportLine(io: SupportIo): HTMLElement | null {
   return el('p', { class: 'hint support-line', 'data-support-line': '', 'data-support-mine': mine.id }, [
     S.supportOpenUntil(new Date(mine.until).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })) + ' ',
     mine.here.length ? S.supportHereNames(mine.here.map(name).filter(Boolean).join(', ')) : S.supportNobodyYet,
+    ...(mine.hereVia?.length ? [' ' + S.w46ask.hereVia(mine.hereVia.join(', '))] : []),   // wave46 iyg-ask-reach
     // Wave 40: "who saw it" is the app only; the messengers and mail only say when they were opened.
     ...sentVia(mine).map((v) => el('span', { class: 'support-via', 'data-support-via': v.via }, [
       ' ' + S.supportSentVia(S.supportViaLabel[v.via], new Date(v.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }), v.peerIds.map(name).filter(Boolean).join(', ')),
@@ -206,13 +228,14 @@ export function supportCards(io: SupportIo): HTMLElement[] {
     if (!person || !peer) return []
     const drop = (): void => { s.supportIn = (s.supportIn ?? []).filter((x) => x !== a); io.save(); io.render() }
     return [el('div', { class: 'card support-card', 'data-support-card': a.id }, [
-      el('p', {}, [S.supportCard(person.name, a.chips.map((c) => S.supportChip[c]).join(', '))]),
+      el('p', {}, [a.scope?.relayed ? S.w46ask.cardVia(a.scope.from ?? person.name, a.chips.map((c) => S.supportChip[c]).join(', '), person.name) : S.supportCard(person.name, a.chips.map((c) => S.supportChip[c]).join(', '))]),   // wave46 iyg-ask-reach
       a.note ? el('p', { class: 'hint' }, [a.note]) : null,
       el('div', { class: 'row' }, [
         el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-support-here': a.id, onclick: () => {
           void io.send(peer, hereText(io.appUrl, a.id)).catch(() => { /* the chat opens anyway */ })
           drop()
-          io.openChat(person.id)
+          if (a.scope?.relayed) io.toast(S.w46ask.hereSent(a.scope.from ?? person.name))   // wave46 iyg-ask-reach: the asker is no contact of mine, the host passes it on
+          else io.openChat(person.id)
         } }, [S.supportHere]),
         el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-support-notnow': a.id, onclick: drop }, [S.supportNotNow]),
       ]),

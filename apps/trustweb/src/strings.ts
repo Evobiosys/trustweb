@@ -5698,4 +5698,12 @@ export const S = {
     closeFollowPeopleHint: 'Struck through: this person asks first, like everyone outside Closest and Close.',
     followAllowed: (name: string, group: string) => `${name} (Closest/Close) now follows your ${group} settings.`,
   },
+  /* wave46 iyg-ask-reach */
+  w46ask: {
+    passOn: (host: string, where: string) => `${host} passes it on to everyone at ${where} you are not connected to, as long as their device is online.`,
+    hostFallback: 'The host',
+    cardVia: (from: string, chips: string, via: string) => `${from} could use support${chips ? ': ' + chips : ''} (via ${via})`,
+    hereVia: (names: string) => `Also here, through the host: ${names}.`,
+    hereSent: (from: string) => `${from} will see that you are here.`,
+  },
 } as const
