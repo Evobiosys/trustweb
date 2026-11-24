@@ -402,3 +402,26 @@ describe('F10 the roster does no work on a save that changed nothing', () => {
     }
   })
 })
+
+import { supportTextFor } from '../../src/support_relay.ts'
+
+describe('D3 the scope name goes only to people inside the scope', () => {
+  const APP = 'https://app.example.test/'
+  const a = (scope) => ({ id: 'ask1', chips: ['listen'], note: 'hi', until: NOW + 1e6, scope })
+  const s = { people: [P('in', 'Ina', { events: ['e1'] }), P('out', 'Otto'), P('mem', 'Mia', { fields: { iyg: 'true' } })], events: [ev({ id: 'e1', hosts: ['Hanna'] })] }
+  it('an event ask: attendees get the name, others get the ids only', () => {
+    const scope = { event: 'e1', name: 'Secret retreat' }
+    expect(supportTextFor(APP, s, a(scope), s.people[0])).toContain('Secret%20retreat')
+    const other = supportTextFor(APP, s, a(scope), s.people[1])
+    expect(decodeURIComponent(other)).not.toContain('Secret retreat')
+    expect(decodeURIComponent(other)).toContain('"event":"e1"')
+  })
+  it('a community ask: members get the name, others do not', () => {
+    const scope = { tag: 'iyg', name: 'Inner circle' }
+    expect(decodeURIComponent(supportTextFor(APP, s, a(scope), s.people[2]))).toContain('Inner circle')
+    expect(decodeURIComponent(supportTextFor(APP, s, a(scope), s.people[1]))).not.toContain('Inner circle')
+  })
+  it('no scope: unchanged', () => {
+    expect(supportTextFor(APP, s, a(undefined), s.people[1])).not.toContain('scope')
+  })
+})

@@ -14,14 +14,14 @@ import { deliveryPanel } from './support_delivery_view'
 import type { DeliveryIo } from './support_delivery_view'
 import { planDelivery, sentVia } from './support_delivery'
 import {
-  SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, buildSupport, closeText, emergencyNumber, hereText, isOpen, openAsks, supportText,
+  SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, buildSupport, closeText, emergencyNumber, hereText, isOpen, openAsks,
   noteOf, // wave46 iyg-reviewfix F7
 } from './support_ask'
 import type { SupportIn, SupportScope } from './support_ask'
 import { cancelAsk, inboxRows } from './support_inbox'
 import { agentAsks, approveAgentAsk, discardAgentAsk } from './support_flush'
 import { draftable } from './drafts_dom'
-import { relayHostPeople, scopeOfFilter } from './support_relay'  // wave46 iyg-ask-reach
+import { relayHostPeople, scopeOfFilter, supportTextFor } from './support_relay'  // wave46 iyg-ask-reach
 import { tagLabel as eventLabel } from './events'  // wave46 iyg-ask-reach
 
 export interface SupportIo {
@@ -125,8 +125,7 @@ export function supportForm(io: SupportIo, sent: () => void, scope?: AskScope, e
     const ask = buildSupport({ chips: [...chosen], note: note.value, window, ids: to.map((t) => t.peer.id), scope: scopeNow() }, Date.now(), randomId(12))
     s.supportAsks = [ask, ...openAsks(s.supportAsks, Date.now())]
     io.save()
-    const text = supportText(io.appUrl, ask)
-    for (const t of to) void io.send(t.peer, text).catch(() => { /* the card shows who answered; nobody else is told */ })
+    for (const t of to) void io.send(t.peer, supportTextFor(io.appUrl, s, ask, t.person)).catch(() => { /* the card shows who answered; nobody else is told */ })
     scope?.used(audienceKey(f))
     kept.clear()
     sent()
@@ -211,7 +210,7 @@ export function agentAskCards(io: SupportIo): HTMLElement[] {
         s.supportAsks = out.asks
         io.save()
         const sent = out.ask
-        for (const peerId of sent.to) { const peer = s.peers.find((p) => p.id === peerId); if (peer) void io.send(peer, supportText(io.appUrl, sent)).catch(() => undefined) }
+        for (const peerId of sent.to) { const peer = s.peers.find((p) => p.id === peerId); const to = s.people.find((p) => p.peerId === peerId && p.deleted_at === undefined); if (peer && to) void io.send(peer, supportTextFor(io.appUrl, s, sent, to)).catch(() => undefined) }   // D3
         io.toast(S.w42.agentSent)
         io.render()
       } }, [S.w42.agentSend]),

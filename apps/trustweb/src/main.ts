@@ -61,7 +61,7 @@ import { planFlush } from './support_flush'
 import { communityChatLive } from './ext/community_mode/chat_row'
 import { addMember, metaOf, parseCommunity, rememberAudience } from './ext/community-mighty/community_data'
 import type { SupportIo } from './support_ask_view'
-import { relayPeers, relayText, parseViaHere, viaHereText } from './support_relay'   // wave46 iyg-ask-reach
+import { relayPeers, relayText, parseViaHere, supportTextFor, viaHereText } from './support_relay'   // wave46 iyg-ask-reach
 import { ASK_MODES, AskMode, closeText, isOpen, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
@@ -5024,9 +5024,9 @@ function flushQueuedAsks(): void {
   const s = st()
   const plan = planFlush(s.supportAsks, Date.now())
   if (!plan.send.length && !plan.withdraw.length && plan.keep.length === (s.supportAsks?.length ?? 0)) return
-  const tell = (ids: readonly string[], text: string): void => { for (const id of ids) { const peer = s.peers.find((p) => p.id === id); if (peer) void net.sendText(peer, text).catch(() => undefined) } }
-  for (const a of plan.send) tell(a.to, supportText(APP_URL, a))
-  for (const a of plan.withdraw) tell(a.to, closeText(APP_URL, a.id))
+  const tell = (ids: readonly string[], text: (to: Person | undefined) => string): void => { for (const id of ids) { const peer = s.peers.find((p) => p.id === id); if (peer) void net.sendText(peer, text(s.people.find((p) => p.peerId === id && p.deleted_at === undefined))).catch(() => undefined) } }
+  for (const a of plan.send) tell(a.to, (to) => (to ? supportTextFor(APP_URL, s, a, to) : supportText(APP_URL, { ...a, scope: a.scope && { ...a.scope, name: undefined } })))   // wave46 iyg-reviewfix D3: the scope name only to people inside it
+  for (const a of plan.withdraw) tell(a.to, () => closeText(APP_URL, a.id))
   s.supportAsks = plan.keep
   save()
 }

@@ -42,6 +42,17 @@ export function relayHostPeople(s: Pick<AppState, 'people' | 'events' | 'extData
   return s.people.filter((p) => p.deleted_at === undefined && p.peerId && organizers.includes(p.id))
 }
 
+/** wave46 iyg-reviewfix D3: the text of my ask for one recipient: the scope's NAME (an event or community label) only when that person is inside the scope; others get the ids without it. */
+export function supportTextFor(appUrl: string, s: Pick<AppState, 'people' | 'events'>, ask: Pick<SupportAsk, 'id' | 'chips' | 'note' | 'until' | 'scope'>, to: Person): string {
+  const sc = ask.scope
+  if (!sc?.name) return supportText(appUrl, ask)
+  const ev = sc.event ? (s.events ?? []).find((e) => e.id === sc.event) : undefined
+  const inside = (sc.tag !== undefined && String(to.fields?.[sc.tag]) === 'true') || (!!sc.event && (!!to.events?.includes(sc.event) || !!ev?.people?.includes(to.id) || (!!ev && eventHostPeople(s, ev.id).some((p) => p.id === to.id))))
+  if (inside) return supportText(appUrl, ask)
+  const { name: _name, ...rest } = sc
+  return supportText(appUrl, { ...ask, scope: rest })
+}
+
 /** The peers this device passes an incoming scoped ask on to; empty unless I host/announce the scope, the sender belongs to it, and the ask is new and not relayed already. */
 export function relayPeers(s: RelayState, ask: { id: string; scope?: SupportScope }, senderPeerId: string): Peer[] {
   const scope = ask.scope
