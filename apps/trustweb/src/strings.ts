@@ -3962,6 +3962,7 @@ export const S = {
       resources_list: 'List your resources, filtered by kind, who shared them or community, in a list, outliner or by person; scope community or event adds the sections Shared by me, New and General',
       resource_set_kind: 'Say whether a resource is a book, publication, reference, recording or link',
       resource_set_suggester: 'Say who suggested a resource to you',
+      /* wave46 iyg-assemble */ resource_edit: 'Change the title and link of a resource of yours that is shared with an event and its community',
       /* wave45 community-documents */ community_documents_list: 'List the documents (shared links) of a community',
       /* wave44c community-resources */ resource_mark_opened: 'Mark a resource shared with you as opened (it leaves the New section)',
       feed_list: 'Read the Feed',
