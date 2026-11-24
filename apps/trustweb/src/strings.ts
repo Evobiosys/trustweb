@@ -5713,4 +5713,12 @@ export const S = {
     bothWith: (event: string) => `${event} and its community`,
     readOnly: (name: string) => `Shared by ${name}. Only they can change it; it updates here by itself.`,
   },
+  /* wave46 iyg-assemble */
+  w46asm: {
+    editTitle: 'Title',
+    editLink: 'Link (https, optional)',
+    editSave: 'Save change',
+    editSaved: 'Saved. Everyone in the event and its community gets the change.',
+    editBad: 'Needs a title; a link must start with https://',
+  },
 } as const

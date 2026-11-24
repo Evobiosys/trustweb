@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 43b resources-views (POLICY P02, MCP parity): the Resources page's views, filters, kind and "recommended by", as tools over the record file. */
 import { listResources, setKind, setRecommender } from '../../trustweb/src/resource_views.ts'
+import { editSynced } from '../../trustweb/src/resource_edit.ts' // wave46 iyg-assemble
 import { setPhysical } from '../../trustweb/src/physical_place.ts'
 import { forPage, itemTags, markOpened, partitionScope, scopedList } from '../../trustweb/src/resource_scope.ts'
 import type { Scope } from '../../trustweb/src/resource_scope.ts'
@@ -60,6 +61,14 @@ export function resourceTools(e: ResourceToolsEnv): { read: Tool[]; write: Tool[
       name: 'resource_set_kind', description: `Say what kind a resource is: ${KIND}.`,
       inputSchema: schema({ id: S('resource id'), kind: S(KIND) }, ['id', 'kind']),
       run: (a) => { e.commit((r) => { setKind({ inventory: r.inventory ?? [] }, str(a.id), str(a.kind)) }); return { id: str(a.id), kind: str(a.kind) } },
+    },
+    { // wave46 iyg-assemble (G1)
+      name: 'resource_edit', description: 'Change the title and link of a resource of mine that is shared with an event and its community (audience both:<event>); the next save sends the change to everyone there. link: https only, empty = none. Others\' items and non-shared ones are refused.',
+      inputSchema: schema({ id: S('resource id'), title: S('new title'), link: S('https link, empty = none') }, ['id', 'title']),
+      run: (a) => {
+        e.commit((r) => { if (!editSynced({ inventory: r.inventory ?? [] }, str(a.id), str(a.title), str(a.link))) throw new Error('nothing changed: only my own shared resource, a title, and an https link (or none)') })
+        return { id: str(a.id), title: str(a.title).trim(), link: str(a.link).trim() }
+      },
     },
     {
       name: 'resource_set_suggester', description: 'Say who recommended a resource: a person (id or exact name) or a free name; empty clears it.',

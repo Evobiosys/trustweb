@@ -41,7 +41,7 @@ import { defineA44dActions } from './a44d_actions' // answers-44d
 import { installEventMerge } from './event_merge_view' // wave45 merge-events
 import { installEventsRefetch } from './events_refetch_actions' // wave45 events-refetch
 import { createResourceSync } from './resource_sync' // wave46 iyg-shared-resource
-import { receivedSheet } from './resource_sync_view' // wave46 iyg-shared-resource
+import { editSection, receivedSheet } from './resource_sync_view' // wave46 iyg-shared-resource
 import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
 import { installGroupChat } from './group_chat_view' // wave45 group-chat-list
@@ -3920,6 +3920,7 @@ function itemSheet(itemId: string): void {
         onOffSwitch(item.included, () => { item.included = !item.included; redraw() }, { 'data-item-switch': item.id }),
       ]),
     ]),
+    item.synced ? editSection(item, (ok) => { if (ok) { save(); render(); itemSheet(item.id); toast(S.w46asm.editSaved) } else toast(S.w46asm.editBad) }) : null,   // wave46 iyg-assemble: G1
     el('p', { class: 'meta' }, [S.itemSheetLead]),
     el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience] ?? S.audienceLabel[Audience.OnlyMe]) : S.itemPaused]),
     ...itemAudienceChooser(item),

@@ -4,6 +4,7 @@ import { el } from '../../demo/src/ui/dom'
 import type { InventoryItem, ResBlock } from './model'
 import { emojiTitle } from './title_emoji'
 import { S } from './strings'
+import { editSynced } from './resource_edit'
 
 const outline = (blocks: readonly ResBlock[]): HTMLElement => el('ul', { class: 'rs-outline' }, blocks.map((b) => el('li', {}, [b.text, b.children.length ? outline(b.children) : null])))
 
@@ -16,4 +17,14 @@ export function receivedSheet(item: InventoryItem, emoji: boolean, close: () => 
     item.blocks?.length ? outline(item.blocks) : null,
     el('button', { class: 'btn btn-ghost', onclick: close }, [S.close]),
   ].filter((n): n is HTMLElement => n !== null)
+}
+
+/** wave46 iyg-assemble (G1): the author edits title and link of a resource shared with an event and its community; the next save sends it (resource_sync.ts sweep). */
+export function editSection(item: InventoryItem, done: (saved: boolean) => void): HTMLElement {
+  const title = el('input', { class: 'field', type: 'text', maxlength: '120', value: item.text, 'aria-label': S.w46asm.editTitle, 'data-rs-edit-title': '' }) as HTMLInputElement
+  const link = el('input', { class: 'field', type: 'url', value: item.link ?? '', placeholder: S.w46asm.editLink, 'aria-label': S.w46asm.editLink, 'data-rs-edit-link': '' }) as HTMLInputElement
+  return el('div', { class: 'rs-edit', 'data-rs-edit': item.id }, [
+    title, link,
+    el('button', { class: 'btn btn-ghost', type: 'button', 'data-rs-edit-save': '', onclick: () => done(editSynced({ inventory: [item] }, item.id, title.value, link.value)) }, [S.w46asm.editSave]),
+  ])
 }
