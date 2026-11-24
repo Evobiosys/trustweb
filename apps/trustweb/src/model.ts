@@ -19,7 +19,7 @@ import type { GoogleSync } from './google_sync'   // wave45 google-contacts-sync
 import type { InboxItem } from './notify_inbox'
 import type { MergeAsk } from './event_merge' // wave45 merge-events
 import type { StatedRelation } from './relations_model'
-import type { ChatThread, SharedItem } from '../../demo/src/types'
+import type { ChatThread, EventEnvelope, ResRetraction, SharedItem } from '../../demo/src/types' // wave46 iyg-shared-resource: EventEnvelope, ResRetraction
 import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
 import type { ResViews } from './resource_notion'   // wave45 resources-notion-views
@@ -1307,7 +1307,7 @@ export interface AppState {
   /** wave46 iyg-roster (event_roster.ts): the names this device already sent each peer per event id (or `tag:<community>`), so a roster goes once. Peer ids: THIS DEVICE ONLY. */
   rosterSent?: Record<string, Record<string, string[]>>
   /** wave46 iyg-assemble (resource_sync.ts): my synced resources as last sent, by id; a removed one stays as a retracted tombstone for 30 days. THIS DEVICE ONLY. */
-  resKnown?: Record<string, Exclude<import('../../demo/src/types').EventEnvelope['res'], import('../../demo/src/types').ResRetraction | undefined>>
+  resKnown?: Record<string, Exclude<EventEnvelope['res'], ResRetraction | undefined>>
   /** Wave 45 offline-outbox: envelopes the relay did not take yet, sent when it is back (outbox.ts). THIS DEVICE ONLY: never synced, exported or asked. */
   sendQueue?: OutboxItem[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */
