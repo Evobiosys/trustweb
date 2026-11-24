@@ -316,7 +316,7 @@ import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { connectedPlaces } from './connected_places'
 import { resourceList, recentChip } from './resource_list'
-import { scopeOf, itemTags } from './resource_scope'
+import { scopeOf, itemTags, hideReceived } from './resource_scope'
 import { EVENT_TAG, scopedResources, tagRow } from './resource_scope_view'
 import { addPeerItem, peerItems } from './peer_items'
 import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
@@ -3909,7 +3909,7 @@ function itemSheet(itemId: string): void {
   const s = st()
   const item = s.inventory.find((i) => i.id === itemId)
   if (!item) return
-  if (item.sharedFrom) { openSheet(receivedSheet(item, emojiOn(s), closeSheet)); return }   // wave46 iyg-shared-resource: someone else's, read-only
+  if (item.sharedFrom) { openSheet(receivedSheet(item, emojiOn(s), closeSheet, () => { hideReceived(s.inventory, item.id); save(); closeSheet(); render() })); return }   // iyg-reviewfix F4: Hide   // wave46 iyg-shared-resource: someone else's, read-only
   const redraw = (): void => { save(); render(); itemSheet(item.id) }
   openSheet([
     // Jakob's sketch (10-07, #21/#22): the X top right, the on/off switch below it on the right; then who, then how far.

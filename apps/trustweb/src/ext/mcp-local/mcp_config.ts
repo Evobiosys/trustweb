@@ -33,7 +33,7 @@ export const MCP_TOOLS: readonly { name: string; write: boolean }[] = [
   { name: 'notifications_list', write: false }, { name: 'notifications_mark_read', write: true },
   /* wave44 steer-notify-dismiss */ { name: 'notification_dismiss', write: true },
   // Wave 43b resources-views
-  { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_edit', write: true } /* wave46 iyg-assemble */, { name: 'resource_set_suggester', write: true },
+  { name: 'resources_list', write: false }, { name: 'resource_set_kind', write: true }, { name: 'resource_edit', write: true } /* wave46 iyg-assemble */, { name: 'resource_hide', write: true } /* wave46 iyg-reviewfix */, { name: 'resource_set_suggester', write: true },
   // Wave 43 event-feed
   { name: 'feed_list', write: false }, { name: 'feed_post', write: true }, { name: 'feed_edit', write: true }, { name: 'feed_star', write: true },
   // Wave 44 feed-embed

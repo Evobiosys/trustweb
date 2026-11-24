@@ -88,3 +88,131 @@ describe('F2 a tag roster counts only from an organizer or a host of one of the 
     expect(t.people[1].name).toHaveLength(40)
   })
 })
+
+import { applyIncoming, createResourceSync, payloadOf } from '../../src/resource_sync.ts'
+import { hideReceived, partitionScope } from '../../src/resource_scope.ts'
+import { filterResources, listResources } from '../../src/resource_views.ts'
+import { allTools } from '../../../mcp/src/tools.ts'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+const NOW = Date.parse('2026-11-24T10:00:00Z')
+const rp = (id, name, extra = {}) => ({ id, name, ring: 'friend', peerId: `peer-${id}`, lines: [], fields: { iyg: 'true' }, ...extra })
+const rres = (over = {}) => ({ id: 'r1', text: 'Sled guide', communityId: 'iyg', eventIds: ['e1'], updatedAt: NOW, by: 'Hanna', ...over })
+const rrec = (over = {}) => ({
+  me: { displayName: 'Gus' },
+  people: [rp('ph', 'Hanna'), rp('pa', 'Anna'), rp('pb', 'Ben')],
+  events: [{ id: 'e1', name: 'Winter', communityId: 'iyg', attended: true, hosts: ['Hanna'], createdAt: 1 }, { id: 'e2', name: 'Summer', communityId: 'iyg', attended: true, hosts: ['Anna'], createdAt: 1 }],
+  inventory: [], ...over,
+})
+const anyTag = () => true
+function rworld(over = {}, clock = { t: NOW }) {
+  const s = rrec(over)
+  const sent = []
+  const peers = s.people.map((p) => ({ id: p.peerId }))
+  const sync = createResourceSync({ state: () => s, save: () => {}, now: () => clock.t, peers: () => peers, send: async (p, e) => { sent.push([p.id, e]) }, holdsCommunity: anyTag, changed: () => {} })
+  return { s, sent, sync, clock }
+}
+
+describe('F3 a res stays inside its own scope', () => {
+  const hanna = rp('ph', 'Hanna')
+  it('an event of another community cannot be claimed into this one', () => {
+    const s = rrec({ events: [{ id: 'e1', name: 'Other', communityId: 'zzz', attended: true, hosts: ['Hanna'], createdAt: 1 }] })
+    expect(applyIncoming(s, hanna, rres(), NOW, anyTag)).toBe('ignored')
+    expect(s.inventory).toEqual([])
+  })
+  it('a sender who is not in the community must attend or host every listed event I know', () => {
+    const s = rrec()
+    const plain = rp('px', 'Xena', { fields: {}, events: ['e1'] })
+    expect(applyIncoming(s, plain, rres({ eventIds: ['e1', 'e2'] }), NOW, anyTag)).toBe('ignored')
+    expect(applyIncoming(s, plain, rres({ eventIds: ['e1'] }), NOW, anyTag)).toBe('new')
+  })
+  it('a community holder is taken for its events', () => {
+    expect(applyIncoming(rrec(), rp('pm', 'Mia'), rres({ eventIds: ['e1', 'e2'] }), NOW, anyTag)).toBe('new')
+  })
+  it('a host forwards only into the scopes the sender belongs to', async () => {
+    const people = [rp('px', 'Xena', { fields: {}, events: ['e1'] }), rp('pc', 'Cleo'), rp('pe', 'Eve', { fields: {}, events: ['e1'] })]
+    const w = rworld({ me: { displayName: 'Hanna' }, people, events: [{ id: 'e1', name: 'Winter', communityId: 'iyg', attended: true, hosts: ['Hanna'], createdAt: 1 }] })
+    expect(await w.sync.onEnvelope({ id: 'peer-px' }, rres())).toBe(true)
+    expect(w.sent.map(([p]) => p)).toEqual(['peer-pe'])
+  })
+})
+
+describe('F4 caps, forward rate limit, Hide', () => {
+  const sender = (n) => rp('p' + n, 'S' + n)
+  it('at most 100 new items per sender and 300 per community', () => {
+    const s = rrec({ people: Array.from({ length: 5 }, (_, k) => sender(k)) })
+    for (let i = 0; i < 120; i++) applyIncoming(s, s.people[0], rres({ id: 'a' + i, text: 'A' + i }), NOW, anyTag)
+    expect(s.inventory).toHaveLength(100)
+    expect(applyIncoming(s, s.people[0], rres({ id: 'a0', text: 'edited', updatedAt: NOW + 5 }), NOW, anyTag)).toBe('updated')
+    for (let k = 1; k < 5; k++) for (let i = 0; i < 100; i++) applyIncoming(s, s.people[k], rres({ id: `b${k}-${i}`, text: 'B' }), NOW, anyTag)
+    expect(s.inventory).toHaveLength(300)
+  })
+  it('a host forwards at most 20 items per sender per 10 minutes', async () => {
+    const w = rworld({ me: { displayName: 'Hanna' }, events: [{ id: 'e1', name: 'Winter', communityId: 'iyg', attended: true, hosts: ['Hanna'], createdAt: 1 }], people: [rp('ps', 'Sender'), rp('pa', 'Anna')] })
+    for (let i = 0; i < 25; i++) await w.sync.onEnvelope({ id: 'peer-ps' }, rres({ id: 'r' + i, by: 'Sender' }))
+    expect(w.s.inventory).toHaveLength(25)
+    expect(w.sent.filter(([p]) => p === 'peer-pa')).toHaveLength(20)
+    w.clock.t += 11 * 60_000
+    await w.sync.onEnvelope({ id: 'peer-ps' }, rres({ id: 'late', by: 'Sender' }))
+    expect(w.sent.filter(([p]) => p === 'peer-pa')).toHaveLength(21)
+  })
+  const held = (over = {}) => ({ id: 'r1', text: 'T', audience: 'me', included: true, createdAt: 1, sharedBy: 'Hanna', sharedFrom: 'ph', communityId: 'iyg', eventId: 'e1', eventIds: ['e1'], ...over })
+  it('Hide: local flag, gone from the views, stays hidden on a later update, never deleted; own items refused', () => {
+    const items = [held(), { ...held({ id: 'mine' }), sharedBy: undefined }]
+    expect(hideReceived(items, 'r1')).toBe(true)
+    expect(hideReceived(items, 'mine')).toBe(false)
+    expect(items[0].hidden).toBe(true)
+    expect(partitionScope(items, { kind: 'community', id: 'iyg', label: 'x' }).fresh).toEqual([])
+    expect(filterResources(items, {}).map((i) => i.id)).toEqual(['mine'])
+    const s = rrec({ inventory: items })
+    expect(applyIncoming(s, rp('ph', 'Hanna'), rres({ text: 'Newer', updatedAt: NOW + 9 }), NOW, anyTag)).toBe('updated')
+    expect(s.inventory[0]).toMatchObject({ text: 'Newer', hidden: true })
+    expect(s.inventory).toHaveLength(2)
+  })
+  it('MCP resource_hide hides a received resource', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tw-w46-rf-'))
+    const file = path.join(dir, 'record.json')
+    writeFileSync(file, JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Ana' }, people: [], inventory: [held()], events: [] }))
+    writeFileSync(path.join(dir, 'colourtags.json'), '[]')
+    const by = Object.fromEntries(allTools({ file, write: true, now: () => new Date(NOW) }).map((t) => [t.name, t]))
+    by.resource_hide.run({ id: 'r1' })
+    expect(JSON.parse(readFileSync(file, 'utf8')).inventory[0].hidden).toBe(true)
+    expect(() => by.resource_hide.run({ id: 'nope' })).toThrow()
+  })
+})
+
+describe('F5 a retraction carries no content', () => {
+  const full = { id: 'r1', text: 'Secret title', communityId: 'iyg', eventIds: ['e1'], updatedAt: NOW, by: 'Hanna', link: 'https://x.org', blocks: [{ id: 'b', text: 'private', children: [] }], retracted: true }
+  it('wire: a retraction is {id, retracted, updatedAt, communityId} only', () => {
+    const got = parse(JSON.stringify({ v: 1, t: 'event', res: full }))
+    expect(got.res).toEqual({ id: 'r1', retracted: true, updatedAt: NOW, communityId: 'iyg' })
+    expect(parse(JSON.stringify({ v: 1, t: 'event', res: { id: 'r1', retracted: true, updatedAt: NOW } }))).toBeNull()
+  })
+  it('the sender strips a retraction before it leaves the device', async () => {
+    const w = rworld({ me: { displayName: 'Hanna' }, inventory: [{ id: 'r1', text: 'Secret title', audience: 'me', included: true, createdAt: NOW, synced: true, communityId: 'iyg', eventId: 'e1', eventIds: ['e1'], link: 'https://x.org' }] })
+    await w.sync.sweep()
+    w.clock.t += 10
+    w.s.inventory[0].included = false
+    w.sent.length = 0
+    await w.sync.sweep()
+    expect(w.sent.length).toBeGreaterThan(0)
+    for (const [, e] of w.sent) expect(Object.keys(e.res).sort()).toEqual(['communityId', 'id', 'retracted', 'updatedAt'])
+    expect(JSON.stringify(w.sent)).not.toContain('Secret')
+  })
+  it('a retraction for an item I do not hold is ignored; for one I hold it hides it', () => {
+    const s = rrec()
+    const r = { id: 'r1', retracted: true, updatedAt: NOW + 5, communityId: 'iyg' }
+    expect(applyIncoming(s, rp('ph', 'Hanna'), r, NOW, anyTag)).toBe('ignored')
+    expect(s.inventory).toEqual([])
+    applyIncoming(s, rp('ph', 'Hanna'), rres(), NOW, anyTag)
+    expect(applyIncoming(s, rp('ph', 'Hanna'), r, NOW, anyTag)).toBe('updated')
+    expect(s.inventory[0]).toMatchObject({ included: false, retractedAt: NOW + 5 })
+  })
+  it('a received retracted item is hidden in the Resources list and the MCP list', () => {
+    const items = [{ id: 'r1', text: 'T', audience: 'me', included: false, createdAt: 1, sharedBy: 'Hanna', communityId: 'iyg', retractedAt: 5 }, { id: 'r2', text: 'U', audience: 'me', included: true, createdAt: 1, sharedBy: 'Hanna', communityId: 'iyg' }]
+    expect(filterResources(items, {}).map((i) => i.id)).toEqual(['r2'])
+    expect(listResources(items, [], {}).items.map((i) => i.id)).toEqual(['r2'])
+  })
+})

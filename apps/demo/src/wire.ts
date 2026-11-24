@@ -251,6 +251,10 @@ const RES_KINDS = ['book', 'publication', 'reference', 'recording', 'link', 'oth
 function parseRes(v: unknown): EventEnvelope | null {
   if (typeof v !== 'object' || v === null) return null
   const x = v as Record<string, unknown>
+  if (x.retracted === true) { // wave46 iyg-reviewfix F5: nothing but the four fields is read
+    return typeof x.id === 'string' && QID_RE.test(x.id) && isNonEmptyString(x.communityId) && x.communityId.length <= 80 && typeof x.updatedAt === 'number' && Number.isFinite(x.updatedAt)
+      ? { v: WIRE_VERSION, t: 'event', res: { id: x.id, retracted: true, updatedAt: x.updatedAt, communityId: x.communityId } } : null
+  }
   if (typeof x.id !== 'string' || !QID_RE.test(x.id) || !isNonEmptyString(x.text) || x.text.length > RES_TEXT_MAX) return null
   if (!isNonEmptyString(x.communityId) || x.communityId.length > 80 || !Array.isArray(x.eventIds) || x.eventIds.length < 1 || x.eventIds.length > RES_EVENTS_MAX || !x.eventIds.every((e) => typeof e === 'string' && QID_RE.test(e))) return null
   if (typeof x.updatedAt !== 'number' || !Number.isFinite(x.updatedAt) || !isNonEmptyString(x.by) || x.by.length > VIA_NAME_MAX) return null

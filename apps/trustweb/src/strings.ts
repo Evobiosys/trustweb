@@ -5722,4 +5722,10 @@ export const S = {
     editSaved: 'Saved. Everyone in the event and its community gets the change.',
     editBad: 'Needs a title; a link must start with https://',
   },
+  /* wave46 iyg-reviewfix */
+  w46rf: {
+    hide: 'Hide this resource',
+    sharedWith: (community: string, events: string) => `Shared with ${community}${events ? ` and ${events}` : ''}`,
+    askFrom: (asker: string) => `${asker}: `,
+  },
 } as const

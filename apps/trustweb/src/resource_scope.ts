@@ -38,8 +38,11 @@ export function itemTags(i: InventoryItem, tags: readonly Tag[], events: readonl
 const carries = (i: InventoryItem, sc: Scope): boolean =>
   sc.kind === 'event' ? i.eventId === sc.id || (i.eventIds ?? []).includes(sc.id) || (i.tagAudience ?? []).some((t) => sc.tagIds?.includes(t)) : i.communityId === sc.id || (i.tagAudience ?? []).includes(sc.id)
 
+/** wave46 iyg-reviewfix F4/F5: a received item that is retracted by its author or hidden by me: out of every view (never deleted). */
+export const goneFromView = (i: Pick<InventoryItem, 'sharedBy' | 'retractedAt' | 'hidden'>): boolean => !!i.sharedBy && (i.retractedAt !== undefined || i.hidden === true)
+
 export function partitionScope(items: readonly InventoryItem[], sc: Scope): Sections {
-  const tagged = items.filter((i) => carries(i, sc) && !(i.sharedBy && i.retractedAt !== undefined)) // wave46: a retracted received item is hidden
+  const tagged = items.filter((i) => carries(i, sc) && !goneFromView(i)) // wave46: a retracted or hidden received item is out
   return {
     shared: tagged.filter((i) => !i.sharedBy || i.openedAt !== undefined),
     fresh: tagged.filter((i) => i.sharedBy && i.openedAt === undefined).sort((a, b) => b.createdAt - a.createdAt),
@@ -142,5 +145,14 @@ export function editSynced(items: readonly InventoryItem[], id: string, title: s
   try { if (url) new URL(url) } catch { return false }
   item.text = text
   if (url) item.link = url; else delete item.link
+  return true
+}
+
+/* wave46 iyg-reviewfix (F4) */
+/** Hide a resource somebody else shared: local flag only; false for my own item or an unknown id. */
+export function hideReceived(items: readonly InventoryItem[], id: string): boolean {
+  const item = items.find((i) => i.id === id)
+  if (!item?.sharedBy) return false
+  item.hidden = true
   return true
 }

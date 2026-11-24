@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 43b resources-views (POLICY P02, MCP parity): the Resources page's views, filters, kind and "recommended by", as tools over the record file. */
 import { listResources, setKind, setRecommender } from '../../trustweb/src/resource_views.ts'
-import { editSynced } from '../../trustweb/src/resource_scope.ts' // wave46 iyg-assemble
+import { editSynced, hideReceived } from '../../trustweb/src/resource_scope.ts' // wave46 iyg-assemble; iyg-reviewfix: hideReceived
 import { setPhysical } from '../../trustweb/src/physical_place.ts'
 import { forPage, itemTags, markOpened, partitionScope, scopedList } from '../../trustweb/src/resource_scope.ts'
 import type { Scope } from '../../trustweb/src/resource_scope.ts'
@@ -68,6 +68,14 @@ export function resourceTools(e: ResourceToolsEnv): { read: Tool[]; write: Tool[
       run: (a) => {
         e.commit((r) => { if (!editSynced(r.inventory ?? [], str(a.id), str(a.title), str(a.link))) throw new Error('nothing changed: only my own shared resource, a title, and an https link (or none)') })
         return { id: str(a.id), title: str(a.title).trim(), link: str(a.link).trim() }
+      },
+    },
+    { // wave46 iyg-reviewfix (F4)
+      name: 'resource_hide', description: 'Hide a resource somebody else shared into an event and its community: it disappears from my lists and stays hidden when its author updates it. Local only, nothing is deleted or sent.',
+      inputSchema: schema({ id: S('resource id') }, ['id']),
+      run: (a) => {
+        e.commit((r) => { if (!hideReceived(r.inventory ?? [], str(a.id))) throw new Error('nothing changed: only a resource somebody else shared can be hidden') })
+        return { id: str(a.id), hidden: true }
       },
     },
     {

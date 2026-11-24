@@ -77,8 +77,9 @@ describe('what is synced', () => {
 describe('wire', () => {
   const env = (r) => ({ v: 1, t: 'event', res: r })
   it('round-trips and bounds', () => {
-    const r = res({ kind: 'link', link: 'https://x.org/a', blocks: [{ id: 'b', text: 't', children: [] }], retracted: true })
+    const r = res({ kind: 'link', link: 'https://x.org/a', blocks: [{ id: 'b', text: 't', children: [] }] })
     expect(decodeFromQr(encodeForQr(env(r)))).toEqual(env(r))
+    expect(decodeFromQr(encodeForQr(env({ ...r, retracted: true }))).res).toEqual({ id: 'r1', retracted: true, updatedAt: NOW, communityId: 'iyg' }) // iyg-reviewfix F5
     for (const bad of [res({ text: '' }), res({ text: 'x'.repeat(121) }), res({ eventIds: [] }), res({ eventIds: ['a b'] }), res({ by: '' }), res({ updatedAt: 'x' }), res({ kind: 'nope' }), res({ link: 'javascript:alert(1)' }), res({ blocks: 'x' }), res({ id: '../x' })])
       expect(decodeFromQr(encodeForQr(env(bad)))).toBeNull()
   })
