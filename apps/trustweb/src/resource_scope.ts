@@ -131,3 +131,16 @@ export function addBoth(items: InventoryItem[], evs: readonly (Ev & { communityI
   item.updatedAt = now
   return item
 }
+
+/* wave46 iyg-assemble (G1) */
+/** Edit title and link of my own synced resource; false (nothing changed) for a received item, an empty title or a link that is not https. Empty link = none. */
+export function editSynced(items: readonly InventoryItem[], id: string, title: string, link: string): boolean {
+  const item = items.find((i) => i.id === id)
+  const text = title.trim().slice(0, TITLE_MAX)
+  const url = link.trim()
+  if (!item || !item.synced || item.sharedBy || !text || (url && !/^https:\/\//i.test(url))) return false
+  try { if (url) new URL(url) } catch { return false }
+  item.text = text
+  if (url) item.link = url; else delete item.link
+  return true
+}

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { allTools } from '../../../mcp/src/tools.ts'
-import { editSynced } from '../../src/resource_edit.ts'
+import { editSynced } from '../../src/resource_scope.ts'
 import { createResourceSync, recipientsOf } from '../../src/resource_sync.ts'
 import { addSeenThrough } from '../../src/seen_through.ts'
 import { relayPeers } from '../../src/support_relay.ts'
@@ -28,18 +28,18 @@ function session(s, sent, clock) {
 describe('G1 editSynced', () => {
   it('changes title and link of my own synced item', () => {
     const s = base({ inventory: [mine()] })
-    expect(editSynced(s, 'r1', '  Sled guide ', 'https://example.test/sled')).toBe(true)
+    expect(editSynced(s.inventory, 'r1', '  Sled guide ', 'https://example.test/sled')).toBe(true)
     expect(s.inventory[0]).toMatchObject({ text: 'Sled guide', link: 'https://example.test/sled' })
-    expect(editSynced(s, 'r1', 'Sled guide', '')).toBe(true)
+    expect(editSynced(s.inventory, 'r1', 'Sled guide', '')).toBe(true)
     expect(s.inventory[0].link).toBeUndefined()
   })
   it('refuses a received item, an empty title, an http link, an unknown id', () => {
     const s = base({ inventory: [mine(), mine({ id: 'r2', sharedBy: 'Zed', synced: undefined })] })
-    expect(editSynced(s, 'r2', 'Mine now', '')).toBe(false)
-    expect(editSynced(s, 'r1', '   ', '')).toBe(false)
-    expect(editSynced(s, 'r1', 'Sled', 'http://example.test')).toBe(false)
-    expect(editSynced(s, 'r1', 'Sled', 'javascript:alert(1)')).toBe(false)
-    expect(editSynced(s, 'nope', 'x', '')).toBe(false)
+    expect(editSynced(s.inventory, 'r2', 'Mine now', '')).toBe(false)
+    expect(editSynced(s.inventory, 'r1', '   ', '')).toBe(false)
+    expect(editSynced(s.inventory, 'r1', 'Sled', 'http://example.test')).toBe(false)
+    expect(editSynced(s.inventory, 'r1', 'Sled', 'javascript:alert(1)')).toBe(false)
+    expect(editSynced(s.inventory, 'nope', 'x', '')).toBe(false)
     expect(s.inventory[0]).toMatchObject({ text: 'Sled' })
   })
   it('the next sweep bumps updatedAt and sends the new title and link', async () => {
@@ -49,7 +49,7 @@ describe('G1 editSynced', () => {
     const sync = session(s, sent, clock)
     await sync.sweep()
     clock.t += 5000
-    editSynced(s, 'r1', 'Sled guide', 'https://example.test/sled')
+    editSynced(s.inventory, 'r1', 'Sled guide', 'https://example.test/sled')
     expect(await sync.sweep()).toBe(2)
     expect(s.inventory[0].updatedAt).toBe(NOW + 5000)
     expect(sent.at(-1)[1].res).toMatchObject({ text: 'Sled guide', link: 'https://example.test/sled', updatedAt: NOW + 5000 })

@@ -4,7 +4,7 @@ import { el } from '../../demo/src/ui/dom'
 import type { InventoryItem, ResBlock } from './model'
 import { emojiTitle } from './title_emoji'
 import { S } from './strings'
-import { editSynced } from './resource_edit'
+import { editSynced } from './resource_scope'
 
 const outline = (blocks: readonly ResBlock[]): HTMLElement => el('ul', { class: 'rs-outline' }, blocks.map((b) => el('li', {}, [b.text, b.children.length ? outline(b.children) : null])))
 
@@ -25,6 +25,6 @@ export function editSection(item: InventoryItem, done: (saved: boolean) => void)
   const link = el('input', { class: 'field', type: 'url', value: item.link ?? '', placeholder: S.w46asm.editLink, 'aria-label': S.w46asm.editLink, 'data-rs-edit-link': '' }) as HTMLInputElement
   return el('div', { class: 'rs-edit', 'data-rs-edit': item.id }, [
     title, link,
-    el('button', { class: 'btn btn-ghost', type: 'button', 'data-rs-edit-save': '', onclick: () => done(editSynced({ inventory: [item] }, item.id, title.value, link.value)) }, [S.w46asm.editSave]),
+    el('button', { class: 'btn btn-ghost', type: 'button', 'data-rs-edit-save': '', onclick: () => done(editSynced([item], item.id, title.value, link.value)) }, [S.w46asm.editSave]),
   ])
 }
