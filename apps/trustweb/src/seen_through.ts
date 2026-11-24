@@ -42,7 +42,7 @@ export function readSeen(it: unknown): { text: string; context: string; shown: b
 const alive = (p: Person): boolean => p.deleted_at === undefined
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
 
-export interface SeenInput { via: string; who?: string; shown: boolean; source: SeenSource; resource?: string; event?: string; now: number; id: string }
+export interface SeenInput { via: string; who?: string; shown: boolean; source: SeenSource; resource?: string; event?: string; tag?: string; now: number; id: string }
 
 /**
  * Adds (or updates) the person `via` my friend told me about. Returns their id; undefined when `via` is nobody I know.
@@ -57,12 +57,12 @@ export function addSeenThrough(s: People, x: SeenInput): string | undefined {
     const mine = s.people.find((p) => alive(p) && !p.via && same(p.name, name))
     if (mine) return mine.id
   }
-  const seen = { source: x.source, at: x.now, ...(x.resource ? { resource: x.resource.slice(0, 200) } : {}), ...(x.event ? { event: x.event } : {}) }
-  const sameSeen = (p: Person): boolean => p.seen?.source === x.source && p.seen?.resource === seen.resource && p.seen?.event === seen.event
+  const seen = { source: x.source, at: x.now, ...(x.resource ? { resource: x.resource.slice(0, 200) } : {}), ...(x.event ? { event: x.event } : {}), ...(x.tag ? { tag: x.tag } : {}) }
+  const sameSeen = (p: Person): boolean => p.seen?.source === x.source && p.seen?.resource === seen.resource && p.seen?.event === seen.event && p.seen?.tag === seen.tag
   const hit = s.people.find((p) => alive(p) && p.via === x.via && (name ? same(p.name, name) : p.anonymous === true && sameSeen(p)))
     ?? (name ? s.people.find((p) => alive(p) && p.via === x.via && p.anonymous === true && sameSeen(p)) : undefined)
   if (hit) {
-    hit.seen = seen
+    hit.seen = { ...seen, ...(!seen.event && hit.seen?.event ? { event: hit.seen.event } : {}), ...(!seen.tag && hit.seen?.tag ? { tag: hit.seen.tag } : {}) } // wave46: a second source keeps the first
     if (name) { hit.name = name; delete hit.anonymous }
     return hit.id
   }

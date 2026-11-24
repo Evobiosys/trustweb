@@ -19,7 +19,7 @@ import { strikeOff } from '../../bw_mode'
 import { ICONS } from '../../icons'
 import type { TwCtx } from '../tw_registry'
 import {
-  MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
+  MODULE_ID, NAV, addResource, addToView, buildEvents, buildMembers, buildViaMembers, buildPosts, buildSpaces, communityTagOf, forkView, hideInView,
   documentsOf, joinSpace, leaveSpace, moveInView, parseCommunity, resolveView, type CommunityData, type NavId, type ResourceView,
   adoptMetaTags, canEditSettings, createCommunity, leftNav, listCommunities, metaOf, setKind, setSettings, type CommunityKind,
 } from './community_model'
@@ -133,7 +133,7 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const tags = loadColourTags()
     if (tile === 'events') return buildEvents(s.events, Date.now(), s.people).filter((c) => !c.past).length
     if (tile === 'spaces') return buildSpaces(s, tags).length
-    if (tile === 'members') return buildMembers(s.people, tag).length
+    if (tile === 'members') return buildMembers(s.people, tag).length + buildViaMembers(s.people, tag, s.events, s).length   // wave46 iyg-roster
     if (tile === 'timeline') return buildPosts(s, tags).length
     return (data().resources ?? []).length
   }
@@ -278,17 +278,21 @@ export function mountCommunity(hostEl: HTMLElement, ctx: TwCtx): () => void {
     const tag = communityTagOf(data(), s, tags)
     if (!tag) return [el('p', { class: 'empty' }, [t.noTag])]
     const list = buildMembers(s.people, tag)
+    const viaList = buildViaMembers(s.people, tag, s.events, s)   // wave46 iyg-roster: people I see only through a friend, after the direct ones
     const name = tags.find((x) => x.id === tag)?.label ?? tag
     return [
-      el('p', { class: 'meta' }, [t.membersOf(name, list.length)]),
+      el('p', { class: 'meta' }, [t.membersOf(name, list.length + viaList.length)]),
       // wave44 steer-invite-link: the invite links (personal / open), placed like the event's share row; the app opens the sheet.
       el('div', { class: 'row invite-row' }, [btn(`${ctx.strings.w43press.iconLink} ${ctx.strings.invite.button}`, () => ctx.bus.emit('community-invite', { tag }), { 'data-community-invite': '' }, 'lnk strong')]),
-      list.length ? null : el('p', { class: 'empty' }, [t.membersEmpty]),
+      list.length || viaList.length ? null : el('p', { class: 'empty' }, [t.membersEmpty]),
       // Wave 42: the add tile has the size of a member tile, only a centred "+", last in the grid; it opens the add-person flow for this community.
       el('div', { class: 'grid members' }, [
         ...list.map((m) => el('button', {
           class: 'card member', type: 'button', 'data-community-member': m.id, onclick: () => ctx.bus.emit('open-person', m.id),
         }, [avatar(m.name, 'ava big'), el('span', { class: 'name' }, [m.name]), el('span', { class: 'chip ring' }, [ctx.strings.peopleZone[m.ring] ?? m.ring])])),
+        ...viaList.map((m) => el('button', {
+          class: 'card member', type: 'button', 'data-community-member': m.id, 'data-community-member-via': m.via ?? '', onclick: () => ctx.bus.emit('open-seen', m.id),
+        }, [avatar(m.name, 'ava big'), el('span', { class: 'name' }, [m.name]), el('span', { class: 'chip ring' }, [ctx.strings.seenThrough.via(m.via ?? '')])])),
         el('button', { class: 'card member add-tile', type: 'button', 'aria-label': ctx.strings.w42.addMember, 'data-community-add-member': '', onclick: () => ctx.bus.emit('add-member', { tag }) }, ['+']),
       ]),
     ]

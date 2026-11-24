@@ -465,7 +465,7 @@ export interface EventEnvelope {
   rsvp?: { id: string; yes: boolean }
   conf?: { id: string; links: { provider: 'kmeet' | 'zoom' | 'jitsi' | 'custom'; url: string }[] }
   /** Wave 44c seen-through: a host introduces a person at event `id` to its attendees; `who` (the name) only when that person's device said yes (`shown`). */
-  seen?: { id: string; shown: boolean; who?: string }
+  seen?: { id?: string; shown: boolean; who?: string; tag?: string } // wave46 iyg-roster: `tag` without `id` = a community roster name (event_roster.ts)
   /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
   joined?: { id: string }
   /** wave45 event-group-chat: one item of the event's ONE shared thread: a message (`text`), or a join / leave notice. `m` = the item id (dedupe), `by` = the author's name (a host forwards it on), `ts` = the author's clock. */

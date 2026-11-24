@@ -39,6 +39,8 @@ export interface EventsViewHooks {
   redraw: () => void
   /** The per-person Web Curator page (the default tap on an attendee). */
   curatorPerson: (personId: string) => void
+  /** wave46 iyg-roster: the seen-through card of a person I see via a friend. */
+  openSeen?: (personId: string) => void
   avatar: (name: string, id: string) => HTMLElement
   /** A card with an Undo button. */
   undoNotice: (title: string, onUndo: () => void) => void
@@ -545,7 +547,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const ctag = communityOfEvent(ev)
     if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
     const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
-      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson, webBubble: h.state().eventBubbleOff ? undefined : h.webBubble }),
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson, openSeen: h.openSeen, webBubble: h.state().eventBubbleOff ? undefined : h.webBubble }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),

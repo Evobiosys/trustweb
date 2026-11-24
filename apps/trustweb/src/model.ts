@@ -505,7 +505,7 @@ export interface Person {
   /** Wave 44: either side asked to keep this second-hand person anonymous: drawn without a name. Local only. */
   anonymous?: boolean
   /** Wave 44c seen-through (seen_through.ts): how I came to see this second-hand person: an event introduction, an intro ask, a resource ask; the ask text (the resource chip) and the event. Local only. */
-  seen?: { source: 'event' | 'intro' | 'ask'; at: number; resource?: string; event?: string }
+  seen?: { source: 'event' | 'intro' | 'ask'; at: number; resource?: string; event?: string; tag?: string /* wave46 iyg-roster */ }
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
   /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
@@ -1294,6 +1294,8 @@ export interface AppState {
   eventMerged?: Record<string, string>
   /** wave45 merge-events: merge asks between hosts (in: to me; out: mine, waiting). They name peer ids, so THIS DEVICE ONLY (sync_core.ts SYNC_EXCLUDED). */
   eventMergeAsks?: MergeAsk[]
+  /** wave46 iyg-roster (event_roster.ts): the names this device already sent each peer per event id (or `tag:<community>`), so a roster goes once. Peer ids: THIS DEVICE ONLY. */
+  rosterSent?: Record<string, Record<string, string[]>>
   /** Wave 45 offline-outbox: envelopes the relay did not take yet, sent when it is back (outbox.ts). THIS DEVICE ONLY: never synced, exported or asked. */
   sendQueue?: OutboxItem[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */

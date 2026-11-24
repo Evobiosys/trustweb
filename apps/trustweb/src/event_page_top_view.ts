@@ -12,8 +12,9 @@ import { eventColour } from './event_cluster'
 import { eventTagLabel, eventTagSlug } from './event_tag'
 import { tagLabel } from './events'
 import { communityOfEvent } from './event_visibility'
+import { resolveEvent } from './event_merge'
 import { communityRowOf, firstSentence, hostedBy, joiningOf, setShareAudience, shareAudienceOf, type ShareAudience } from './event_community'
-import { peopleAtEvent, visiblePeople, PEOPLE_COLLAPSE_AT } from './event_people_list' // wave45 event-people-list
+import { peopleAtEvent, viaPeopleAt, visiblePeople, PEOPLE_COLLAPSE_AT } from './event_people_list' // wave45 event-people-list
 import { eventChatUnread } from './event_group_chat' // answers-45a: unread badge on Event chat
 import { S } from './strings'
 
@@ -32,6 +33,8 @@ export interface EventTopHooks {
   inviteMany?: (ev: TwEvent) => void
   eventResources?: (ev: TwEvent) => void
   openPerson?: (id: string) => void
+  /** wave46 iyg-roster: a person I see through a friend (the seen-through card: Ask <friend> to introduce). */
+  openSeen?: (id: string) => void
   /** wave46 answers-45b: the Web with this event's bubble on; absent when Settings > Events switched the bubble off. */
   webBubble?: (ev: TwEvent) => void
 }
@@ -52,10 +55,10 @@ const flip = (set: Set<string>, id: string): void => { if (!set.delete(id)) set.
 
 /** wave45 event-people-list: "People at this event" (hosts first), the first 10 of a long list with Show all (N) / Show fewer, then [Event chat] [Add people]. */
 function peopleSection(ev: TwEvent, h: EventTopHooks, colour: string): HTMLElement {
-  const all = peopleAtEvent(h.state().people, hostedBy(ev), joiningOf(h.state(), ev))
+  const all = peopleAtEvent(h.state().people, hostedBy(ev), joiningOf(h.state(), ev), viaPeopleAt(h.state().people, (e) => resolveEvent(h.state(), e) === ev.id))   // wave46 iyg-roster
   const open = showAll.has(ev.id)
   const long = all.length > PEOPLE_COLLAPSE_AT
-  const chip = (x: (typeof all)[number]): HTMLElement => el('button', { type: 'button', class: x.host ? 'chip on' : 'chip', 'data-person-chip': x.id ?? '', ...(x.id ? {} : { disabled: true }), onclick: () => { if (x.id) h.openPerson?.(x.id) } }, [x.name])
+  const chip = (x: (typeof all)[number]): HTMLElement => el('button', { type: 'button', class: x.host ? 'chip on' : 'chip', 'data-person-chip': x.id ?? '', ...(x.id ? {} : { disabled: true }), onclick: () => { if (!x.id) return; if (x.via !== undefined) h.openSeen?.(x.id); else h.openPerson?.(x.id) } }, [x.name, x.via ? el('small', { class: 'meta', 'data-person-via': x.via }, [` ${S.seenThrough.via(x.via)}`]) : null])
   const act = (attr: string, label: string, fn: () => void, on = false, badge = 0): HTMLElement => el('button', { type: 'button', class: 'chip ev-act', 'aria-pressed': String(on), [attr]: '', onclick: fn }, [
     el('u', {}, [label]),
     badge > 0 ? el('span', { class: 'ec-unread', role: 'img', 'aria-label': S.chatTabUnread(badge), 'data-event-chat-unread': String(badge) }, [badge > 99 ? '99+' : String(badge)]) : null,
