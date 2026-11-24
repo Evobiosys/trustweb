@@ -8,9 +8,10 @@ import { MAX_FANOUT } from './hops'
 import { parseCommunity, isManager } from './ext/community-mighty/community_data.ts'
 import { mayAnnounce } from './community_event_access.ts'
 import { eventOrganizers, isEventHost } from './event_roles'
+import { offersOf } from './event_press'
 import { askPeers } from './non_responsive'
 import { SCOPE_TEXT_MAX, SUPPORT_NOTE_MAX, VIA_PARAM, supportText } from './support_ask'
-import type { AppState, Peer, Person } from './model'
+import type { AppState, Peer, Person, TwEvent } from './model'
 import type { SupportAsk, SupportScope } from './support_ask'
 
 type RelayState = Pick<AppState, 'people' | 'peers' | 'events' | 'extData' | 'me' | 'supportIn'>
@@ -28,6 +29,10 @@ export function eventHostPeople(s: Pick<AppState, 'people' | 'events'>, eventId:
   const refs = [...(ev?.hosts ?? []), ...(ev ? eventOrganizers(ev) : [])].map((r) => r.trim().toLowerCase())
   return s.people.filter((p) => p.deleted_at === undefined && p.peerId && (refs.includes(p.id.toLowerCase()) || refs.includes(p.name.trim().toLowerCase())))
 }
+
+/** wave46 iyg-event-ask: the event page offers "Ask the people here for support" when the host switched it on (my own event), or when I attend an event I joined by link/QR and a host I am connected to can pass the ask on: a guest copy never held the host's switch, and the host decides whether to relay (relayPeers). */
+export const canAskHere = (s: Pick<AppState, 'people' | 'events'>, ev: Pick<TwEvent, 'id' | 'offers' | 'attended' | 'fromLink' | 'hosts' | 'organizers'>): boolean =>
+  offersOf(ev).support || (ev.attended && ev.fromLink === true && eventHostPeople(s, ev.id).length > 0)
 
 /** wave46 iyg-assemble (G3b): the connected hosts of the events of a community (any ring): an ask limited to the community must reach them, they pass it on. */
 export function communityHostPeople(s: Pick<AppState, 'people' | 'events'>, tag: string): Person[] {
@@ -61,6 +66,7 @@ export function relayPeers(s: RelayState, ask: { id: string; scope?: SupportScop
   const live = s.people.filter((p) => p.deleted_at === undefined)
   let inScope: (p: Person) => boolean
   const ev = scope.event ? (s.events ?? []).find((e) => e.id === scope.event) : undefined
+  if (ev && isEventHost(ev, s.me.displayName, s.people) && !offersOf(ev).support) return []   // wave46 iyg-event-ask: the host who did not switch "Ask for support" on passes nothing on
   if (ev && isEventHost(ev, s.me.displayName, s.people)) inScope = (p) => !!ev.people?.includes(p.id) || !!p.events?.includes(ev.id)
   else if (scope.tag && isManager(parseCommunity(s.extData?.['community-mighty']), scope.tag) && mayAnnounce(s, scope.tag)) inScope = (p) => String(p.fields?.[scope.tag as string]) === 'true'
   else return []

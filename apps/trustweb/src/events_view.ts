@@ -7,6 +7,7 @@ import { eventModeToggle } from './filter_bar_view'
 import { el } from '../../demo/src/ui/dom'
 import type { EventOffers } from './events'
 import { EVENT_VISIBILITIES, communityOfEvent, listedAttendees, searchableAttendees, visibilityOf } from './event_visibility'
+import { canAskHere } from './support_relay'   // wave46 iyg-event-ask
 import { DEFAULT_INVITE_POLICY, INVITE_POLICIES, NAME_REVEALS, applyEventSettings, attendees, coreLabel, deleteEvent, eventLabel, eventMatches, eventTagLabel, eventTagSlug, eventsSorted, inWeb, mayEdit, mayInvite, nameRevealOf, notifyOn, offersOf, restoreEvent, revealedBy, setEventTimes, sinceLabel, tagLabel, tagPerson, todayIso, untagPerson, untilLabel, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import { eventForLink, isEventHost, mayApprove, relatedOthers } from './event_roles'
@@ -559,7 +560,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.conditions ? editable(el('p', { 'data-event-conditions': '' }, [ev.conditions]), ev, 'conditions') : null,
       ...(h.plan?.(ev) ?? []),
       h.feedRow?.(ev) ?? null,
-      offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.(ev.id) }, [S.w43press.askSupport]) : null,
+      canAskHere(h.state(), ev) && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.(ev.id) }, [S.w43press.askSupport]) : null,
       el('div', { class: 'chips' }, [attended, notify, eventModeToggle({ state: h.state, save: h.save, redraw: h.redraw }, ev.id)]),
       notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,
       nameReveal(ev),
