@@ -221,17 +221,22 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   }
 
   /* wave46 iyg-guest-path: the organizer tells a member the community's name, organizer and events (community_meta.ts); once per change, `force` for a joiner. */
-  async function sendComm(peer: P, tag: string, force = false): Promise<void> {
+  async function sendComm(peer: P, tag: string, force = false): Promise<boolean> {
     const st = host.state()
     const c = commOut(st, tag, host.tagName?.(tag))
-    if (!c || !host.members?.(tag).some((m) => m.id === peer.id)) return
+    if (!c || !host.members?.(tag).some((m) => m.id === peer.id)) return true
     const json = JSON.stringify(c)
     const key = 'comm:' + tag
-    if (!force && st.rosterSent?.[key]?.[peer.id]?.[0] === json) return
+    if (!force && st.rosterSent?.[key]?.[peer.id]?.[0] === json) return true
+    if (retryWait(key, peer.id)) return false
+    try { await host.send(peer, { v: 1, t: 'event', comm: c }) } catch { failedAt.set(key + '|' + peer.id, host.now()); return false } // P1-2: marked only once sent
     st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [json] } }
     host.save()
-    await host.send(peer, { v: 1, t: 'event', comm: c }).catch(() => undefined)
+    return true
   }
+  /** wave46 iyg-guest-path-fix P1-2: a failed roster/comm send is tried again on the next trigger, at most once per REPLAY_GAP_MS per peer and key. */
+  const failedAt = new Map<string, number>()
+  const retryWait = (key: string, peerId: string): boolean => host.now() - (failedAt.get(key + '|' + peerId) ?? -Infinity) < REPLAY_GAP_MS
   function onComm(peer: P, c: NonNullable<EventEnvelope['comm']>): boolean {
     const st = host.state()
     const who = st.people.find((p) => p.peerId === peer.id)
@@ -250,6 +255,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const sig = rosterSignature(st)
     if (sig === rosterSeen) return
     rostering = true
+    let failed = false
     try {
       const personOf = (id: string): Person | undefined => st.people.find((p) => p.peerId === id && p.deleted_at === undefined)
       const sendNames = async (key: string, names: string[], to: P[], envOf: (who: string, gone?: true) => EventEnvelope): Promise<void> => {
@@ -259,10 +265,13 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
           const gone = sent.filter((n) => !now.has(n.toLowerCase())) // F8: told once, no longer on the roster: taken back
           const due = rosterDue(sent, names, ownName(st, personOf(peer.id) ?? {})).slice(0, ROSTER_CAP)
           if (!due.length && !gone.length) continue
-          st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [...sent.filter((n) => !gone.includes(n)), ...due] } }   // marked first: a failed send is not retried in a storm
+          if (retryWait(key, peer.id)) { failed = true; continue }
+          let told = sent
+          try {   // P1-2: a name is marked told only once its send resolved; a failure stops this peer until the next trigger
+            for (const who of gone) { await host.send(peer, envOf(who, true)); told = told.filter((n) => n !== who); st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: told } } }
+            for (const who of due) { await host.send(peer, envOf(who)); told = [...told, who]; st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: told } } }
+          } catch { failedAt.set(key + '|' + peer.id, host.now()); failed = true }
           host.save()
-          for (const who of gone) await host.send(peer, envOf(who, true)).catch(() => undefined)
-          for (const who of due) await host.send(peer, envOf(who)).catch(() => undefined)
         }
       }
       for (const ev of st.events ?? []) {
@@ -271,8 +280,8 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       for (const tag of rosterTags(st)) {
         await sendNames('tag:' + tag, communityRosterNames(st, tag), host.members?.(tag) ?? [], (who, gone) => ({ v: 1, t: 'event', seen: { tag, shown: true, who, ...(gone ? { gone } : {}) } }))
       }
-      for (const tag of rosterTags(st)) for (const peer of host.members?.(tag) ?? []) await sendComm(peer, tag) // wave46 iyg-guest-path
-      rosterSeen = sig
+      for (const tag of rosterTags(st)) for (const peer of host.members?.(tag) ?? []) if (!(await sendComm(peer, tag))) failed = true // wave46 iyg-guest-path
+      if (!failed) rosterSeen = sig
     } finally { rostering = false }
   }
 

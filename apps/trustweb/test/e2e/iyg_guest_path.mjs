@@ -62,8 +62,7 @@ const reopen = async (page) => { await page.reload(); await page.waitForTimeout(
 async function community(page, nav) {
   await page.locator('.tabs [data-go="web"]').first().evaluate((n) => n.click()); await page.waitForTimeout(500)
   await page.locator('[data-mode="community"]').click({ timeout: 8000 })
-  // Known quirk (open point in the report): joining a community event already puts the pill on Community with no view loaded, so the first tap on it does nothing; Personal, then Community loads it.
-  if (!(await page.locator('[data-community]').waitFor({ timeout: 4000 }).then(() => true, () => false))) { await page.locator('[data-mode="personal"]').click(); await page.waitForTimeout(800); await page.locator('[data-mode="community"]').click() }
+  // wave46 iyg-guest-path-fix: the first tap on Community loads it (joining a community event marks the pill before the view exists); no Personal detour.
   await page.locator('[data-community]').waitFor({ timeout: 20_000 })
   await page.waitForTimeout(700)
   if (nav) {
@@ -87,15 +86,19 @@ async function main() {
     await setRecord(h.page, `r.events = [{ id: 'e1', name: 'Winter IYG', from: '2025-12-30', to: '2036-01-02', where: 'Alm', createdAt: 1, attended: true, hosts: ['Hanna'], communityId: 'iyg', showAll: true, offers: { support: true } }]; r.extData = { ...(r.extData || {}), 'community-mighty': { tag: 'iyg', meta: { iyg: { kind: 'managed', organizers: ['me'], intimate: true } } } }; r.twSettings = { ...(r.twSettings || {}), extensions: { 'community-mighty': true, 'community-mode': true } }`)
     await reopen(h.page)
     const guests = []
-    for (const name of ['Anna', 'Ben', 'Cleo']) {
+  const inviteLink = async (kind = 'open') => {
       // the community invite link, as Hanna's Invite sheet shows it
       await h.page.locator('[data-mode="community"]').click(); await h.page.locator('[data-community]').waitFor({ timeout: 15_000 }); await h.page.waitForTimeout(400)
       if (await h.page.locator('[data-community-menu]').isVisible().catch(() => false)) { await h.page.locator('[data-community-menu]').click(); await h.page.waitForTimeout(150) }
       await h.page.locator('[data-community-nav="members"]').click(); await h.page.waitForTimeout(300)
       await h.page.locator('[data-community-invite]').click(); await h.page.locator('[data-invite-sheet]').waitFor({ timeout: 10_000 })
-      const q = h.page.locator('.qrwrap[data-invite-qr-open]'); await q.locator('canvas, svg, img').first().waitFor({ timeout: 15_000 })
+      const q = h.page.locator(`.qrwrap[data-invite-qr-${kind}]`); if (kind === 'personal') await h.page.locator('[data-invite-qr-personal-btn]').click(); await q.locator('canvas, svg, img').first().waitFor({ timeout: 15_000 })
       const link = (await q.getAttribute('data-link')).replace(/^https?:\/\/[^/]+\//, ORIGIN + '/')
       await h.page.locator('.sheet.on .sheet-home').click().catch(() => {})
+      return link
+  }
+    for (const name of ['Anna', 'Ben', 'Cleo']) {
+      const link = await inviteLink()
       const g = await newPhone(browser, server)
       await startPhone(g.page, name)
       await g.page.goto(link)
@@ -103,7 +106,7 @@ async function main() {
       await acceptAdd(g.page).catch(() => {})
       t.ok(`H: ${name} joined the community by the invite link`, !!(await until(async () => (await record(h.page)).people.find((p) => p.name === name && String(p.fields?.iyg) === 'true'), 40_000)), JSON.stringify((await record(h.page)).people.map((p) => [p.name, p.fields])))
       await g.page.waitForTimeout(1500)
-      guests.push({ name, ...g })
+      guests.push({ name, link, ...g })
       await reopen(h.page)
     }
     for (const g of guests) {
@@ -118,9 +121,14 @@ async function main() {
       await reopen(h.page)
     }
     const [a, b, c] = guests
-    // Cleo joined BEFORE this build: she holds nothing of the community data a new build adds (healing: she only reopens the app).
+    // Cleo joined BEFORE this build: she holds nothing of the community data a new build adds. Without joinedVia nothing is trusted (P0-1): she heals by opening the community invite link again.
     await c.page.evaluate(() => { const r = JSON.parse(localStorage.getItem('trustweb.v1.me')); delete r.extData; r.events.forEach((e) => { delete e.communityId }); localStorage.setItem('trustweb.v1.me', JSON.stringify(r)); location.reload() })
     await c.page.waitForTimeout(1800)
+    const fresh = await inviteLink('personal')  // a fresh personal link: the open link is used up on her phone
+    await c.page.goto('about:blank'); await c.page.goto(fresh)
+    await c.page.locator('[data-invite-accept-join]').evaluate((n) => n.click(), null, { timeout: 20_000 })
+    await acceptAdd(c.page).catch(() => {})
+    await c.page.waitForTimeout(1500)
     await h.page.evaluate(() => { const r = JSON.parse(localStorage.getItem('trustweb.v1.me')); delete r.rosterSent; localStorage.setItem('trustweb.v1.me', JSON.stringify(r)); location.reload() })   // the deploy: Hanna's new app starts with nothing sent
     await h.page.waitForTimeout(1800)
 

@@ -12,7 +12,7 @@ import { isEventHost } from './event_roles'
 import { communityOfEvent } from './event_visibility'
 
 /** The wire form (types.ts EventEnvelope.comm): `ev` = the community's events the sender hosts. */
-export interface CommMeta { tag: string; name?: string; intimate?: boolean; ev: string[] }
+export interface CommMeta { tag: string; name?: string; kind?: 'managed' | 'informal'; intimate?: boolean; ev: string[] }
 export const COMM_NAME_MAX = 40
 export const COMM_EVENTS_MAX = 50
 const MOD = 'community-mighty'
@@ -27,7 +27,7 @@ export function commOut(s: Rec, tag: string, name?: string): CommMeta | null {
   if (!m?.organizers.includes('me')) return null
   const nm = (name ?? m.name)?.slice(0, COMM_NAME_MAX)
   const ev = (s.events ?? []).filter((e) => communityOfEvent(e) === tag && isEventHost(e, s.me.displayName, s.people)).map((e) => e.id).slice(0, COMM_EVENTS_MAX)
-  return { tag, ...(nm ? { name: nm } : {}), intimate: isIntimate(s, tag), ev }
+  return { tag, ...(nm ? { name: nm } : {}), kind: m.kind, intimate: isIntimate(s, tag), ev }
 }
 
 /** A connected person's community data lands on my device when the gates hold. True when anything changed. */
@@ -35,15 +35,14 @@ export function applyComm(s: Rec, sender: Person, c: CommMeta): boolean {
   if (!firstHand(sender) || !holds(sender, c.tag)) return false
   const d = parseCommunity(s.extData?.[MOD])
   const known = d.meta?.[c.tag]?.organizers ?? []
-  const first = s.people.filter((p) => firstHand(p) && holds(p, c.tag)).reduce<Person | undefined>((a, p) => (!a || p.metAt < a.metAt ? p : a), undefined)
-  if (known.length ? !known.includes(sender.id) : first?.id !== sender.id) return false
+  if (known.length ? !known.includes(sender.id) : d.meta?.[c.tag]?.joinedVia !== sender.id) return false // P0-1: a first claim only from whom I joined through; a tag of my own has no joinedVia
   const name = c.name?.slice(0, COMM_NAME_MAX)
-  const next = parseCommunity(withMeta({ ...d, tag: d.tag ?? c.tag }, c.tag, { kind: 'managed', organizers: [...new Set([...known, sender.id])], ...(name ? { name } : {}), ...(typeof c.intimate === 'boolean' ? { intimate: c.intimate } : {}) }))
+  const next = parseCommunity(withMeta({ ...d, tag: d.tag ?? c.tag }, c.tag, { kind: c.kind ?? (known.length ? metaOf(d, c.tag).kind : 'managed'), organizers: [...new Set([...known, sender.id])], ...(name ? { name } : {}), ...(typeof c.intimate === 'boolean' ? { intimate: c.intimate } : {}) }))
   let changed = JSON.stringify(next) !== JSON.stringify(d)
   if (changed) s.extData = { ...s.extData, [MOD]: next }
   for (const id of c.ev.slice(0, COMM_EVENTS_MAX)) {
     const e = s.events?.find((x) => x.id === id)
-    if (e && !communityOfEvent(e) && isEventHost(e, sender.name, s.people)) { e.communityId = c.tag; changed = true }
+    if (e && e.fromLink && !communityOfEvent(e) && !isEventHost(e, s.me.displayName, s.people) && isEventHost(e, sender.name, s.people)) { e.communityId = c.tag; changed = true }
   }
   return changed
 }
@@ -52,6 +51,7 @@ export function applyComm(s: Rec, sender: Person, c: CommMeta): boolean {
 export function joinedCommunity(s: Rec, tag: string, label: string, inviter: Person, organizer: boolean): void {
   let d = parseCommunity(s.extData?.[MOD])
   if (!d.tag) d = { ...d, tag }
-  if (organizer) d = withMeta(d, tag, { kind: 'managed', organizers: [...new Set([...metaOf(d, tag).organizers, inviter.id])], name: label.slice(0, COMM_NAME_MAX) })
+  const known = metaOf(d, tag).organizers
+  d = withMeta(d, tag, { joinedVia: inviter.id, ...(organizer && !known.length ? { kind: 'managed' as const, organizers: [inviter.id], name: label.slice(0, COMM_NAME_MAX) } : {}) })
   s.extData = { ...s.extData, [MOD]: d }
 }

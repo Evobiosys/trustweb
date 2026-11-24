@@ -10,11 +10,12 @@ const ev = (over = {}) => ({ id: 'e1', name: 'IYG', from: '2026-12-01', where: '
 const slice = (s) => s.extData?.['community-mighty']
 const guest = (people, events = [ev()], extData) => ({ me: { id: 'm', displayName: 'Anna' }, people, peers: [], events, ...(extData ? { extData } : {}) })
 const hanna = (over = {}) => P('h', 'Hanna', { peerId: 'ph', fields: { iyg: 'true' }, metAt: 1, ...over })
+const via = { 'community-mighty': { tag: 'iyg', meta: { iyg: { kind: 'informal', organizers: [], joinedVia: 'h' } } } } // accepted the invite through Hanna
 
 describe('applyComm (guest phone)', () => {
   const c = { tag: 'iyg', name: 'IYG', intimate: true, ev: ['e1'] }
   it('no organizer recorded: the person I joined through becomes it; community named, selected, managed; the event is marked', () => {
-    const s = guest([hanna()], [ev({ fromLink: true })])
+    const s = guest([hanna()], [ev({ fromLink: true })], via)
     expect(applyComm(s, s.people[0], c)).toBe(true)
     expect(slice(s).tag).toBe('iyg')
     expect(slice(s).meta.iyg).toMatchObject({ kind: 'managed', organizers: ['h'], name: 'IYG', intimate: true })
@@ -26,13 +27,13 @@ describe('applyComm (guest phone)', () => {
     expect(applyComm(s, s.people[0], c)).toBe(false)
   })
   it('a plain member cannot claim organizer when one is recorded', () => {
-    const s = guest([hanna(), P('x', 'Xavier', { peerId: 'px', fields: { iyg: 'true' }, metAt: 5 })])
+    const s = guest([hanna(), P('x', 'Xavier', { peerId: 'px', fields: { iyg: 'true' }, metAt: 5 })], [ev()], via)
     applyComm(s, s.people[0], c)
     expect(applyComm(s, s.people[1], { ...c, name: 'Evil' })).toBe(false)
     expect(slice(s).meta.iyg.organizers).toEqual(['h'])
     expect(slice(s).meta.iyg.name).toBe('IYG')
   })
-  it('no organizer recorded yet: only the first person I met in it may claim, not a later member', () => {
+  it('no organizer recorded yet: only the person I joined through may claim, not another member', () => {
     const s = guest([hanna(), P('x', 'Xavier', { peerId: 'px', fields: { iyg: 'true' }, metAt: 5 })])
     expect(applyComm(s, s.people[1], c)).toBe(false)
     expect(slice(s)).toBeUndefined()
@@ -47,7 +48,7 @@ describe('applyComm (guest phone)', () => {
     expect(applyComm(s, s.people[0], c)).toBe(false)
   })
   it('name is cut to 40; an event only where the sender is a named host and none is set', () => {
-    const s = guest([hanna()], [ev({ id: 'e1' }), ev({ id: 'e2', hosts: ['Other'] }), ev({ id: 'e3', communityId: 'zzz' })])
+    const s = guest([hanna()], [ev({ id: 'e1', fromLink: true }), ev({ id: 'e2', hosts: ['Other'], fromLink: true }), ev({ id: 'e3', communityId: 'zzz', fromLink: true })], via)
     applyComm(s, s.people[0], { ...c, name: 'n'.repeat(60), ev: ['e1', 'e2', 'e3', 'nope'] })
     expect(slice(s).meta.iyg.name).toHaveLength(40)
     expect(s.events.map((e) => e.communityId)).toEqual(['iyg', undefined, 'zzz'])
@@ -57,7 +58,7 @@ describe('applyComm (guest phone)', () => {
 describe('commOut (organizer phone)', () => {
   const host = (m) => ({ me: { id: 'm', displayName: 'Hanna' }, people: [], events: [ev({ communityId: 'iyg' }), ev({ id: 'e2', hosts: ['Other'], communityId: 'iyg', fromLink: true }), ev({ id: 'e3' })], extData: { 'community-mighty': { meta: { iyg: { kind: 'managed', organizers: ['me'], ...m } } } } })
   it('organizer: tag, name, intimate, the community events I host', () => {
-    expect(commOut(host({ intimate: true }), 'iyg', 'IYG')).toEqual({ tag: 'iyg', name: 'IYG', intimate: true, ev: ['e1'] })
+    expect(commOut(host({ intimate: true }), 'iyg', 'IYG')).toEqual({ tag: 'iyg', name: 'IYG', kind: 'managed', intimate: true, ev: ['e1'] })
   })
   it('not an organizer: nothing', () => {
     expect(commOut(host({ organizers: [] }), 'iyg', 'IYG')).toBeNull()
@@ -127,7 +128,7 @@ describe('envelope: send once per change, receive', () => {
     const h = phone('Hanna', members(), [ev({ communityId: 'iyg' })], meta({}), () => 'IYG')
     await h.env.rosterSync()
     expect(comms(h).map(([p]) => p).sort()).toEqual(['pa', 'pb'])
-    expect(comms(h)[0][1]).toEqual({ tag: 'iyg', name: 'IYG', intimate: true, ev: ['e1'] })
+    expect(comms(h)[0][1]).toEqual({ tag: 'iyg', name: 'IYG', kind: 'managed', intimate: true, ev: ['e1'] })
     h.sent.length = 0
     await h.env.rosterSync()
     expect(comms(h)).toEqual([])
@@ -148,9 +149,70 @@ describe('envelope: send once per change, receive', () => {
     expect(comms(h)).toEqual([])
   })
   it('the guest side applies it from a connected person only', async () => {
-    const g = phone('Anna', [hanna()], [ev({ fromLink: true })])
+    const g = phone('Anna', [hanna()], [ev({ fromLink: true })], via)
     expect(await g.env.onEnvelope({ id: 'unknown' }, { v: 1, t: 'event', comm: { tag: 'iyg', ev: ['e1'] } })).toBe('ignored')
     expect(await g.env.onEnvelope({ id: 'ph' }, { v: 1, t: 'event', comm: { tag: 'iyg', ev: ['e1'] } })).toBe('filled')
     expect(g.state.events[0].communityId).toBe('iyg')
+  })
+})
+
+describe('iyg-guest-path-fix', () => {
+  const c = { tag: 'yoga', name: 'Hanna Yoga', ev: ['e1'] }
+  const yogaHanna = (over = {}) => P('h', 'Hanna', { peerId: 'ph', fields: { yoga: 'true' }, metAt: 1, ...over })
+  it('P0-1: my own tag with no joinedVia cannot be taken over by a first claim', () => {
+    const s = guest([yogaHanna()], [])
+    expect(applyComm(s, s.people[0], c)).toBe(false)
+    expect(slice(s)).toBeUndefined()
+    const t = guest([yogaHanna()], [], { 'community-mighty': { tag: 'yoga', meta: { yoga: { kind: 'informal', organizers: [] } } } })
+    expect(applyComm(t, t.people[0], c)).toBe(false)
+    expect(slice(t).meta.yoga.kind).toBe('informal')
+  })
+  it('P0-1: the first claim comes only from the person I joined through', () => {
+    const s = guest([yogaHanna(), P('x', 'Xavier', { peerId: 'px', fields: { yoga: 'true' }, metAt: 0 })], [])
+    joinedCommunity(s, 'yoga', 'Hanna Yoga', s.people[0], false)
+    expect(slice(s).meta.yoga.joinedVia).toBe('h')
+    expect(applyComm(s, s.people[1], c)).toBe(false)
+    expect(applyComm(s, s.people[0], c)).toBe(true)
+    expect(slice(s).meta.yoga).toMatchObject({ kind: 'managed', organizers: ['h'] })
+  })
+  it('P1-1: an event I host myself is never pulled into the community', () => {
+    const s = guest([hanna()], [ev({ fromLink: true, hosts: ['Hanna', 'Anna'] }), ev({ id: 'e2', fromLink: true }), ev({ id: 'e3' })])
+    joinedCommunity(s, 'iyg', 'IYG', s.people[0], true)
+    applyComm(s, s.people[0], { tag: 'iyg', ev: ['e1', 'e2', 'e3'] })
+    expect(s.events.map((e) => e.communityId)).toEqual([undefined, 'iyg', undefined])
+  })
+  it('P2-1: an inviter is not added when I am an organizer already', () => {
+    const s = guest([hanna()], [], { 'community-mighty': { tag: 'iyg', meta: { iyg: { kind: 'managed', organizers: ['me'] } } } })
+    joinedCommunity(s, 'iyg', 'IYG', s.people[0], true)
+    expect(slice(s).meta.iyg.organizers).toEqual(['me'])
+  })
+  it('P2-1: an inviter is not added when another organizer is recorded', () => {
+    const s = guest([hanna()], [], { 'community-mighty': { tag: 'iyg', meta: { iyg: { kind: 'managed', organizers: ['q'] } } } })
+    joinedCommunity(s, 'iyg', 'IYG', s.people[0], true)
+    expect(slice(s).meta.iyg.organizers).toEqual(['q'])
+  })
+  it('P2-2: kind rides the wire and is applied; absent keeps mine', () => {
+    expect(parse(JSON.stringify({ v: 1, t: 'event', comm: { tag: 'iyg', kind: 'informal', ev: [] } })).comm.kind).toBe('informal')
+    expect(parse(JSON.stringify({ v: 1, t: 'event', comm: { tag: 'iyg', kind: 'bogus', ev: [] } }))).toBeNull()
+    const s = guest([hanna()], [])
+    joinedCommunity(s, 'iyg', 'IYG', s.people[0], true)
+    applyComm(s, s.people[0], { tag: 'iyg', kind: 'informal', ev: [] })
+    expect(slice(s).meta.iyg.kind).toBe('informal')
+    applyComm(s, s.people[0], { tag: 'iyg', name: 'N', ev: [] })
+    expect(slice(s).meta.iyg.kind).toBe('informal')
+    expect(commOut(guest([], [], meta({ kind: 'informal' })), 'iyg').kind).toBe('informal')
+  })
+  it('P1-2: a roster or community send that failed goes again on the next trigger', async () => {
+    const h = phone('Hanna', [P('a', 'Anna', { peerId: 'pa', fields: { iyg: 'true' }, events: ['e1'] }), P('b', 'Ben', { peerId: 'pb', fields: { iyg: 'true' }, events: ['e1'] })], [ev({ communityId: 'iyg', showAll: true })], meta({}), () => 'IYG')
+    let fail = true
+    const ok = []
+    h.env = createEventEnvelopes({ ...{}, state: () => h.state, save: () => {}, now: (() => { let t = 1000; return () => (t += 120000) })(), link: () => '', send: async (p, e) => { if (fail) throw new Error('offline'); ok.push([p.id, e]) }, tagName: () => 'IYG', recipients: (e) => h.state.people.filter((x) => x.peerId && x.events?.includes(e.id)).map((x) => ({ id: x.peerId })), members: (tag) => h.state.people.filter((x) => x.peerId && String(x.fields?.[tag]) === 'true').map((x) => ({ id: x.peerId })), pending: () => null, setPending: () => {}, changed: () => {}, later: () => {}, peers: () => [] })
+    await h.env.rosterSync()
+    expect(ok).toEqual([])
+    fail = false
+    h.state.people[0].name = 'Anna'; h.state.log.push('x') // a later trigger; the roster inputs are unchanged
+    await h.env.rosterSync()
+    expect(ok.filter(([, e]) => e.comm).length).toBe(2)
+    expect(ok.filter(([, e]) => e.seen).length).toBeGreaterThan(0)
   })
 })

@@ -252,7 +252,8 @@ function parseComm(v: unknown): EventEnvelope | null {
   if (typeof x.tag !== 'string' || !QID_RE.test(x.tag) || !Array.isArray(x.ev) || x.ev.length > 50 || !x.ev.every((e) => typeof e === 'string' && QID_RE.test(e))) return null
   if ('name' in x && (!isNonEmptyString(x.name) || x.name.length > VIA_NAME_MAX)) return null
   if ('intimate' in x && typeof x.intimate !== 'boolean') return null
-  return { v: WIRE_VERSION, t: 'event', comm: { tag: x.tag, ...(typeof x.name === 'string' ? { name: x.name } : {}), ...(typeof x.intimate === 'boolean' ? { intimate: x.intimate } : {}), ev: [...x.ev] as string[] } }
+  if ('kind' in x && x.kind !== 'managed' && x.kind !== 'informal') return null
+  return { v: WIRE_VERSION, t: 'event', comm: { tag: x.tag, ...(typeof x.name === 'string' ? { name: x.name } : {}), ...(x.kind === 'managed' || x.kind === 'informal' ? { kind: x.kind } : {}), ...(typeof x.intimate === 'boolean' ? { intimate: x.intimate } : {}), ev: [...x.ev] as string[] } }
 }
 
 /* wave46 iyg-shared-resource */

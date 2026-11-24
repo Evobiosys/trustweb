@@ -486,6 +486,7 @@ const modeShell = createModeShell({
   tabsEl: () => tabs, changed: () => { renderTabs(); render() }, settings: () => settingsSheet(),
   openItem: (item) => { if (item === 'web') { go(Screen.Web); return } openExtView('community'); twBus.emit('community-go', item) },
   openPersonal: () => go(Screen.Web),
+  inCommunity: () => screen === Screen.Ext && extViewId === 'community', // wave46 iyg-guest-path-fix
 })
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */

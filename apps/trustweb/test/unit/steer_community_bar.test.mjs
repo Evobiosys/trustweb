@@ -10,7 +10,7 @@ globalThis.sessionStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k,
 
 const host = (state) => ({
   state: () => state, save() {}, overview: () => true, tabButton: () => { throw new Error('the shell must not build tab buttons') }, tabsEl: () => ({ querySelectorAll: () => [] }),
-  changed() {}, openItem() {}, openPersonal() {}, settings() {}, newId: () => 'x', guest: () => false, toast() {},
+  changed() {}, openItem() {}, openPersonal() {}, inCommunity: () => false, settings() {}, newId: () => 'x', guest: () => false, toast() {},
 })
 
 describe('Community mode bottom bar', () => {
