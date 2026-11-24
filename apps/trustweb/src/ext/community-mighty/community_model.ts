@@ -14,6 +14,7 @@ import { Ring } from '../../model'
 import { localDay } from '../../engagement'
 import { groupPosts, groupsOf } from '../../feed_sources'
 import { communityTags } from '../../trustzones'
+import { resolveEvent } from '../../event_merge'
 import { removeZoneTag, zoneTagIds } from '../../zone_tags'
 import { NAV, safeUrl, type CommunityData, type NavId, type ResourceView } from './community_data'
 
@@ -67,7 +68,7 @@ export function leaveSpace(s: AppState, id: string, now: number): void {
   removeZoneTag(s, SELF, id, now)
 }
 
-export interface Member { id: string; name: string; ring: Ring; initial: string }
+export interface Member { id: string; name: string; ring: Ring; initial: string; /** wave46 iyg-roster: the friend I see this member through. */ via?: string }
 
 const RING_ORDER: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Family, Ring.Friend, Ring.Acquaintance, Ring.Intending, Ring.Unsorted, Ring.None]
 
@@ -77,6 +78,17 @@ export function buildMembers(people: readonly Person[], tag: string | null): Mem
   return visible(people).filter((p) => hasColourTag(p, tag))
     .sort((a, b) => rank(a.ring) - rank(b.ring) || a.name.localeCompare(b.name))
     .map((p) => ({ id: p.id, name: p.name, ring: p.ring, initial: (p.name.trim()[0] ?? '?').toUpperCase() }))
+}
+
+/** wave46 iyg-roster: members I see only through a friend (named, listed after the direct ones): told by name for this community, or seen at one of its events. */
+export function buildViaMembers(people: readonly Person[], tag: string | null, events: readonly Pick<TwEvent, 'id' | 'communityId' | 'community'>[] = [], merged: Pick<AppState, 'eventMerged'> = {}): Member[] {
+  if (!tag) return []
+  const mine = new Set(events.filter((e) => (e.communityId || e.community) === tag).map((e) => e.id))
+  const direct = new Set(buildMembers(people, tag).map((m) => m.name.trim().toLowerCase()))
+  return visible(people).filter((p) => typeof p.via === 'string' && !p.anonymous && p.name.trim() !== '' && !direct.has(p.name.trim().toLowerCase())
+    && (p.seen?.tag === tag || (p.seen?.event !== undefined && mine.has(resolveEvent({ events: events as TwEvent[], eventMerged: merged.eventMerged }, p.seen.event)))))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) => ({ id: p.id, name: p.name, ring: p.ring, initial: (p.name.trim()[0] ?? '?').toUpperCase(), via: people.find((f) => f.id === p.via)?.name ?? '' }))
 }
 
 export interface EventCard { id: string; name: string; day: string; month: string; from: string; to?: string; where: string; host?: string; going: boolean; past: boolean }

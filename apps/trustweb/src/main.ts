@@ -5542,7 +5542,8 @@ const eventEnv = createEventEnvelopes<Peer>({
   members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
   recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
 })
-announceDue = () => { eventEnv.announceDue() }
+announceDue = () => { eventEnv.announceDue(); void eventEnv.rosterSync() }   // wave46 iyg-roster: also on every save (joins, showAll switched on, a peer connects)
+setTimeout(() => { void eventEnv.rosterSync() }, 8000)   // wave46 iyg-roster: catch-up on app start
 const eventMerge = installEventMerge(appActions, { st, openSheet, closeSheet, toast: (m) => toast(m), redraw: render, ...eventEnv.merge }) // wave45 merge-events (+ MCP event_merge, event_merge_answer)
 refetchEvents = installEventsRefetch(appActions, { now: Date.now, peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 events-refetch (+ MCP events_refetch)
 setDraftHost({ state: st, save })   // wave44c event-autosave
@@ -5560,7 +5561,7 @@ const eventHost = eventPageHooks({
 })
 const eventsView = createEventsView({
   focusWeb: webFocus, ...eventHost,
-  state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
+  state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar, openSeen: (id) => seenThrough.open(id),   // wave46 iyg-roster
   undoNotice, refetch: (explicit) => refetchEvents(explicit),   // wave45 events-refetch
 
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
@@ -5609,6 +5610,7 @@ const extHooks: ExtHooks = {
 const twBus = createBus()
 twBus.on('save', () => save())
 twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
+twBus.on('open-seen', (id) => { if (typeof id === 'string') seenThrough.open(id) })   // wave46 iyg-roster
 twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
 twBus.on('open-item', (id) => { if (typeof id === 'string') itemSheet(id) })   // wave44c community-resources
 twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[]; name: string }; offerContacts({ state: st, save, toast: (msg) => toast(msg), changed: render, pages }, x.contacts, x.name) })

@@ -218,7 +218,11 @@ function parseReveal(o: Record<string, unknown>): EventEnvelope | null {
 function parseSeen(v: unknown): EventEnvelope | null {
   if (typeof v !== 'object' || v === null) return null
   const x = v as Record<string, unknown>
-  if (typeof x.id !== 'string' || !QID_RE.test(x.id) || typeof x.shown !== 'boolean') return null
+  if (typeof x.shown !== 'boolean') return null
+  if (!('id' in x) && typeof x.tag === 'string' && QID_RE.test(x.tag)) { // wave46 iyg-roster: a community roster name, always with a yes
+    return x.shown && isNonEmptyString(x.who) && x.who.length <= VIA_NAME_MAX ? { v: WIRE_VERSION, t: 'event', seen: { tag: x.tag, shown: true, who: x.who } } : null
+  }
+  if (typeof x.id !== 'string' || !QID_RE.test(x.id)) return null
   if ('who' in x && (!x.shown || !isNonEmptyString(x.who) || x.who.length > VIA_NAME_MAX)) return null
   return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}) } }
 }
