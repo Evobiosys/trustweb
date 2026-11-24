@@ -7,7 +7,7 @@
  */
 import type { AppState, Person, TwEvent } from './model'
 import { attendees } from './events'
-import { communityOfEvent, listedAttendees } from './event_visibility'
+import { DEFAULT_EVENT_VISIBILITY, communityOfEvent, isVisibility } from './event_visibility'
 import { isEventHost } from './event_roles'
 import { isIntimate, membersOf } from './event_community'
 import { mayAnnounce } from './community_event_access'
@@ -28,11 +28,15 @@ function named(people: readonly Person[]): string[] {
 }
 const firstHand = (p: Person): boolean => p.deleted_at === undefined && !p.via
 
+/** wave46 iyg-reviewfix F1: a guest who never announced a mode counts as the default (discoverable): listed under showAll only; off never. The host's own attendee list (listedAttendees) is unchanged. */
+const rosterMode = (p: Person, id: string): string => (isVisibility(p.eventShow?.[id]) ? p.eventShow![id] : DEFAULT_EVENT_VISIBILITY)
+const rosterListed = (p: Person, id: string, showAll: boolean): boolean => (showAll ? rosterMode(p, id) !== 'off' : rosterMode(p, id) === 'open')
+
 /** The names this device, as a host of `ev`, may tell the people at it: the listed attendees, when the event shows all or belongs to an intimate community. */
 export function rosterNames(s: Rec, ev: TwEvent): string[] {
   const tag = communityOfEvent(ev)
   if (!isEventHost(ev, s.me.displayName, s.people) || !(ev.showAll === true || (tag && isIntimate(s, tag)))) return []
-  return named(listedAttendees(attendees(s as AppState, ev.id), ev.id, ev.showAll === true).filter(firstHand))
+  return named(attendees(s as AppState, ev.id).filter((p) => rosterListed(p, ev.id, ev.showAll === true) && firstHand(p)))
 }
 
 /** The members of an intimate community I organize (mode members): the names that go to its connected members. */

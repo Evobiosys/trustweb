@@ -151,6 +151,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const ev = held(r.id)
     const st = host.state()
     if (!ev || !isEventHost(ev, st.me.displayName, st.people)) return false
+    if (r.show) { const g = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined); if (g) { noteShow(g, r.id, r.show); host.save() } }   // wave46 iyg-reviewfix F1
     const rest = (ev.confTo ?? []).filter((id) => id !== peer.id)
     const to = r.yes && ev.conference?.length ? [...rest, peer.id] : rest
     if (to.length) ev.confTo = to; else delete ev.confTo
@@ -196,6 +197,8 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const id = resolveEvent(st, j.id) // wave45 merge-events: a joined record for a merged event lands on the kept one; the joiner is told
     const ev = held(id)
     if (ev && id !== j.id) await merge.tell(peer, ev, j.id)
+    const guest = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined)
+    if (ev && guest && j.show) { noteShow(guest, id, j.show); host.save() }   // wave46 iyg-reviewfix F1
     if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, id)) return false
     host.save()
     host.changed()
@@ -256,13 +259,13 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     async joined(ev: TwEvent, by?: { name: string; did?: string }): Promise<void> {
       const st = host.state()
       const ids = st.people.filter((p) => p.peerId && p.deleted_at === undefined && !p.via && ((by && ((by.did && p.did === by.did) || p.name.trim() === by.name.trim())) || namedHost(ev, p.name, st.people))).map((p) => p.peerId as string)
-      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', joined: { id: ev.id } }).catch(() => undefined) }
+      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', joined: { id: ev.id, show: visibilityOf(ev) } }).catch(() => undefined) }
     },
     /** Wave 44c: my "I will attend" (or not) goes to the hosts of the event I am connected to. */
     async rsvp(ev: TwEvent): Promise<void> {
       const st = host.state()
       const ids = st.people.filter((p) => p.peerId && namedHost(ev, p.name, st.people)).map((p) => p.peerId as string)
-      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', rsvp: { id: ev.id, yes: ev.attended } }).catch(() => undefined) }
+      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', rsvp: { id: ev.id, yes: ev.attended, show: visibilityOf(ev) } }).catch(() => undefined) }
     },
     /** Wave 44c: the host changed the conference link: the guests who accepted get the new one. */
     async pushConference(ev: TwEvent): Promise<void> {

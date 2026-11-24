@@ -154,6 +154,8 @@ function parseAskAgain(): AskAgainEnvelope {
 // ----- END TrustWeb wave 6i -----
 
 // ----- BEGIN TrustWeb wave 43c (connect-extras): the event envelope (types.ts EventEnvelope) -----
+/** wave46 iyg-reviewfix F1: a visibility mode on a joined / rsvp envelope. */
+const isShow = (v: unknown): v is 'open' | 'discoverable' | 'off' => v === 'open' || v === 'discoverable' || v === 'off'
 /** Exactly one of `want` (an event id) or `link` (bounded text); anything else is null. Nothing else a sender put in is read. */
 function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   const hasWant = 'want' in o
@@ -166,7 +168,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   if ('gg' in o) return hasWant || hasLink ? null : parseGroupOp(o.gg) // wave45 group-chat-list
   if ('joined' in o) { // answers-44d: {id} only
     const j = o.joined as Record<string, unknown> | null
-    return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id } }
+    return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id, ...(isShow(j.show) ? { show: j.show } : {}) } }   // wave46 iyg-reviewfix F1: show kept when valid
   }
   if ('merge' in o) return hasWant || hasLink ? null : parseMerge(o.merge) // wave45 merge-events
   if ('sync' in o) return hasWant || hasLink || o.sync !== true ? null : { v: WIRE_VERSION, t: 'event', sync: true } // wave45 events-refetch
@@ -202,7 +204,7 @@ function parseReveal(o: Record<string, unknown>): EventEnvelope | null {
   if (('rsvp' in o) === ('conf' in o)) return null
   const v = (o.rsvp ?? o.conf) as Record<string, unknown> | null
   if (typeof v !== 'object' || v === null || typeof v.id !== 'string' || !QID_RE.test(v.id)) return null
-  if ('rsvp' in o) return typeof v.yes === 'boolean' ? { v: WIRE_VERSION, t: 'event', rsvp: { id: v.id, yes: v.yes } } : null
+  if ('rsvp' in o) return typeof v.yes === 'boolean' ? { v: WIRE_VERSION, t: 'event', rsvp: { id: v.id, yes: v.yes, ...(isShow(v.show) ? { show: v.show } : {}) } } : null   // wave46 iyg-reviewfix F1
   if (!Array.isArray(v.links) || v.links.length > CONF_LINKS_MAX) return null
   const links: NonNullable<EventEnvelope['conf']>['links'] = []
   for (const l of v.links as unknown[]) {

@@ -462,12 +462,12 @@ export interface EventEnvelope {
   /** Wave 44 steer-open-space: the schedule of an online open space (instead of `want` / `link`): `open` = the sender, a host, says the event is an open space; `acts` are checked by the receiver (open_space.ts). */
   os?: { id: string; open?: true; acts: unknown[]; poll?: unknown }
   /** Wave 44c event-autosave: the guest's answer to the host (yes = "I will attend"), and the host's conference links, sent only after a yes. */
-  rsvp?: { id: string; yes: boolean }
+  rsvp?: { id: string; yes: boolean; show?: 'open' | 'discoverable' | 'off' /* wave46 iyg-reviewfix F1 */ }
   conf?: { id: string; links: { provider: 'kmeet' | 'zoom' | 'jitsi' | 'custom'; url: string }[] }
   /** Wave 44c seen-through: a host introduces a person at event `id` to its attendees; `who` (the name) only when that person's device said yes (`shown`). */
   seen?: { id?: string; shown: boolean; who?: string; tag?: string } // wave46 iyg-roster: `tag` without `id` = a community roster name (event_roster.ts)
   /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
-  joined?: { id: string }
+  joined?: { id: string; show?: 'open' | 'discoverable' | 'off' /* wave46 iyg-reviewfix F1: how the guest shows at this event */ }
   /** wave45 event-group-chat: one item of the event's ONE shared thread: a message (`text`), or a join / leave notice. `m` = the item id (dedupe), `by` = the author's name (a host forwards it on), `ts` = the author's clock. */
   gc?: { id: string; m: string; k: 'msg' | 'join' | 'leave'; by: string; ts: number; text?: string }
   /** wave45 group-chat-list: one op of a group (a chat independent of events, trustweb group_chat.ts): `g` = group id, `m` = op id, `by` = the actor's name,

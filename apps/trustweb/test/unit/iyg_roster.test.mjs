@@ -10,7 +10,7 @@ const P = (id, name, over = {}) => ({ id, name, ring: 'friend', lines: [], metAt
 const ev = (over = {}) => ({ id: 'e1', name: 'IYG', from: '2026-12-01', where: 'Alm', createdAt: 1, attended: true, hosts: ['Hanna'], ...over })
 const meta = (m) => ({ 'community-mighty': { meta: { iyg: { kind: 'informal', organizers: [], ...m } } } })
 const rec = (people, extData) => ({ me: { id: 'm', displayName: 'Hanna' }, people, events: [], ...(extData ? { extData } : {}) })
-const guests = () => [P('a', 'Anna', { events: ['e1'] }), P('b', 'Ben', { events: ['e1'], eventShow: { e1: 'discoverable' } }), P('c', 'Cleo', { events: ['e1'], eventShow: { e1: 'off' } }), P('d', 'Dora', { events: ['e1'], via: 'a' }), P('g', 'Gone', { events: ['e1'], deleted_at: '2026-01-01' })]
+const guests = () => [P('a', 'Anna', { events: ['e1'], eventShow: { e1: 'open' } }), P('b', 'Ben', { events: ['e1'], eventShow: { e1: 'discoverable' } }), P('c', 'Cleo', { events: ['e1'], eventShow: { e1: 'off' } }), P('d', 'Dora', { events: ['e1'], via: 'a' }), P('g', 'Gone', { events: ['e1'], deleted_at: '2026-01-01' })]
 
 describe('rosterNames', () => {
   it('showAll: open + discoverable, never off, via, deleted', () => {

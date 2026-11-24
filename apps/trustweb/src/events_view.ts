@@ -373,7 +373,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       el('label', { class: 'meta' }, [V.showMe]),
       el('div', { class: 'seg', role: 'group', 'aria-label': V.showMe }, EVENT_VISIBILITIES.map((m) => el('button', {
         type: 'button', class: m === mode ? 'on' : '', 'aria-pressed': String(m === mode), 'data-event-visibility-opt': m,
-        onclick: () => { applyEventSettings(ev, { showMe: m }); h.save(); h.redraw() },
+        onclick: () => { applyEventSettings(ev, { showMe: m }); if (ev.attended) h.rsvp?.(ev); h.save(); h.redraw() },   // wave46 iyg-reviewfix F1: the hosts hear my new mode
       }, [V.modes[m]]))),
       el('p', { class: 'meta' }, [V.modeHints[mode]]),
       host ? el('div', { class: 'chips', 'data-event-share-community-row': '' }, [toggle(ev.shareCommunity === true, V.share, 'data-event-share-community', () => { applyEventSettings(ev, { shareCommunity: ev.shareCommunity !== true }); h.save(); h.redraw() })]) : null,
