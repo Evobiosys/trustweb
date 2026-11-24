@@ -39,7 +39,7 @@ export type InviteKind = 'personal' | 'open'
 export type InviteRefusal = 'tampered' | 'expired' | 'used' | 'limit' | 'revoked' | 'unknown' | 'rate'
 
 /** What the token says (signed). */
-export interface InviteToken { v: 1; k: 'p' | 'o'; id: string; t: string; l: string; n: string; x: number }
+export interface InviteToken { v: 1; k: 'p' | 'o'; id: string; t: string; l: string; n: string; x: number; /** wave46 iyg-guest-path: the inviter organizes the community (signed with the rest) */ o?: 1 }
 
 /** One link in the inviter's counter. */
 export interface InviteEntry {
@@ -76,10 +76,10 @@ export function inviteSettingsOf(s: InviteSettings | undefined): { max: number; 
 }
 
 /** A new signed link entry. `id` = 16 random bytes base64url (the nonce). */
-export function createInvite(o: { kind: InviteKind; tag: string; label: string; inviterDid: string; inviterName: string; id: string; now: number; settings?: InviteSettings; sign: Signer }): InviteEntry {
+export function createInvite(o: { kind: InviteKind; tag: string; label: string; inviterDid: string; inviterName: string; id: string; now: number; settings?: InviteSettings; sign: Signer; organizer?: boolean }): InviteEntry {
   const { max, days } = inviteSettingsOf(o.settings)
   const x = o.now + days * DAY
-  const tok: InviteToken = { v: 1, k: o.kind === 'personal' ? 'p' : 'o', id: o.id, t: o.tag, l: o.label.slice(0, 60), n: o.inviterName.slice(0, 40), x }
+  const tok: InviteToken = { v: 1, k: o.kind === 'personal' ? 'p' : 'o', id: o.id, t: o.tag, l: o.label.slice(0, 60), n: o.inviterName.slice(0, 40), x, ...(o.organizer ? { o: 1 as const } : {}) }
   const payload = toB64u(te.encode(JSON.stringify(tok)))
   return { id: o.id, kind: o.kind, tag: o.tag, label: tok.l, at: o.now, x, max: o.kind === 'personal' ? 1 : max, tok: `${payload}.${o.sign(signedBytes(o.inviterDid, payload))}`, uses: [], tries: [] }
 }
@@ -89,7 +89,7 @@ const parseToken = (raw: unknown): InviteToken | null => {
   const t = raw as Record<string, unknown>
   if (t.v !== 1 || (t.k !== 'p' && t.k !== 'o') || typeof t.id !== 'string' || !B64U.test(t.id) || t.id.length > 32) return null
   if (typeof t.t !== 'string' || !t.t || typeof t.l !== 'string' || typeof t.n !== 'string' || typeof t.x !== 'number' || !Number.isFinite(t.x)) return null
-  return { v: 1, k: t.k, id: t.id, t: t.t, l: t.l, n: t.n, x: t.x }
+  return { v: 1, k: t.k, id: t.id, t: t.t, l: t.l, n: t.n, x: t.x, ...(t.o === 1 ? { o: 1 as const } : {}) }
 }
 
 /** Checks a token against the inviter's DID (the link's `connect=`): signature, shape, expiry. */

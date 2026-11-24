@@ -7,10 +7,11 @@
 import { createPrivateKey, hkdfSync, randomBytes, sign } from 'node:crypto'
 import { buildConnectLinkUrl } from '../../demo/src/connect_link.ts'
 import { addInvite, createInvite, inviteLink, inviteStatus, revokeInvites, type InviteEntry, type InviteSettings } from '../../trustweb/src/invite_policy.ts'
+import { parseCommunity } from '../../trustweb/src/ext/community-mighty/community_data.ts' // wave46 iyg-guest-path
 import { S, commitTo, load, schema, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
 
-interface InvRec { me?: { id?: string; displayName?: string }; identity?: { did?: string; signingSecretKey?: string; keyAgreementSecretKey?: string }; invites?: InviteEntry[]; inviteSettings?: InviteSettings }
+interface InvRec { me?: { id?: string; displayName?: string }; identity?: { did?: string; signingSecretKey?: string; keyAgreementSecretKey?: string }; invites?: InviteEntry[]; inviteSettings?: InviteSettings; extData?: Record<string, unknown> }
 
 const PKCS8_ED25519 = Buffer.from('302e020100300506032b657004220420', 'hex')
 const DEFAULT_ORIGIN = 'https://app.trustweb.one/'
@@ -47,7 +48,7 @@ export function inviteTools(o: RecordToolsOptions): Tool[] {
       const r = load(o.file) as InvRec
       const k = keysOf(r)
       const settings: InviteSettings = { ...r.inviteSettings, ...(typeof a.max_uses === 'number' ? { max: a.max_uses } : {}), ...(typeof a.days === 'number' ? { days: a.days } : {}) }
-      const e = createInvite({ kind: a.kind, tag, label: typeof a.label === 'string' && a.label.trim() ? a.label.trim() : tag, inviterDid: k.did, inviterName: r.me?.displayName ?? '', id: randomBytes(16).toString('base64url'), now: now().getTime(), settings, sign: k.sign })
+      const e = createInvite({ kind: a.kind, tag, label: typeof a.label === 'string' && a.label.trim() ? a.label.trim() : tag, inviterDid: k.did, inviterName: r.me?.displayName ?? '', id: randomBytes(16).toString('base64url'), now: now().getTime(), settings, sign: k.sign, organizer: parseCommunity(r.extData?.['community-mighty']).meta?.[tag]?.organizers.includes('me') === true })   // wave46 iyg-guest-path
       commitTo(o.file, now, (x) => { (x as InvRec).invites = addInvite((x as InvRec).invites, e) })
       const connect = buildConnectLinkUrl(typeof a.origin === 'string' && a.origin ? a.origin : DEFAULT_ORIGIN, k.did, { id: r.me?.id ?? '', displayName: r.me?.displayName ?? '' }, k.qk)
       return { link: inviteLink(connect, e), id: e.id, kind: e.kind, tag: e.tag, max: e.max, expiresAt: e.x }

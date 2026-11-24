@@ -29,6 +29,7 @@ import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
 import { ownName } from './own_name' // wave46 iyg-reviewfix D2
 import { parseCommunity } from './ext/community-mighty/community_data' // wave46 iyg-reviewfix F2
 import { communityRosterNames, rosterDue, rosterNames, rosterSignature, rosterTags } from './event_roster' // wave46 iyg-roster
+import { applyComm, commOut } from './community_meta' // wave46 iyg-guest-path
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
@@ -91,6 +92,8 @@ export interface EnvelopeHost<P extends { id: string }> {
   /** An event this device holds just got more fields: redraw. */
   changed(): void
   later(fn: () => void, ms: number): void
+  /** wave46 iyg-guest-path: the name of a community tag on this phone (what the guests are told). */
+  tagName?(tag: string): string | undefined
   /** Wave 44c event-autosave: my connected peers (the hosts an rsvp goes to, the guests a changed conference link goes to). */
   peers?(): P[]
 }
@@ -212,6 +215,34 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     host.save()
     host.changed()
     await rosterSync() // wave46 iyg-roster: the joiner gets the others, the others get the joiner (was: intimate community only, joiner only)
+    const tag = communityOfEvent(ev)
+    if (tag) await sendComm(peer, tag, true) // wave46 iyg-guest-path: this event now belongs to the community on the joiner's phone
+    return true
+  }
+
+  /* wave46 iyg-guest-path: the organizer tells a member the community's name, organizer and events (community_meta.ts); once per change, `force` for a joiner. */
+  async function sendComm(peer: P, tag: string, force = false): Promise<boolean> {
+    const st = host.state()
+    const c = commOut(st, tag, host.tagName?.(tag))
+    if (!c || !host.members?.(tag).some((m) => m.id === peer.id)) return true
+    const json = JSON.stringify(c)
+    const key = 'comm:' + tag
+    if (!force && st.rosterSent?.[key]?.[peer.id]?.[0] === json) return true
+    if (retryWait(key, peer.id)) return false
+    try { await host.send(peer, { v: 1, t: 'event', comm: c }) } catch { failedAt.set(key + '|' + peer.id, host.now()); return false } // P1-2: marked only once sent
+    st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [json] } }
+    host.save()
+    return true
+  }
+  /** wave46 iyg-guest-path-fix P1-2: a failed roster/comm send is tried again on the next trigger, at most once per REPLAY_GAP_MS per peer and key. */
+  const failedAt = new Map<string, number>()
+  const retryWait = (key: string, peerId: string): boolean => host.now() - (failedAt.get(key + '|' + peerId) ?? -Infinity) < REPLAY_GAP_MS
+  function onComm(peer: P, c: NonNullable<EventEnvelope['comm']>): boolean {
+    const st = host.state()
+    const who = st.people.find((p) => p.peerId === peer.id)
+    if (!who || !applyComm(st, who, c)) return false
+    host.save()
+    host.changed()
     return true
   }
 
@@ -224,6 +255,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const sig = rosterSignature(st)
     if (sig === rosterSeen) return
     rostering = true
+    let failed = false
     try {
       const personOf = (id: string): Person | undefined => st.people.find((p) => p.peerId === id && p.deleted_at === undefined)
       const sendNames = async (key: string, names: string[], to: P[], envOf: (who: string, gone?: true) => EventEnvelope): Promise<void> => {
@@ -233,10 +265,13 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
           const gone = sent.filter((n) => !now.has(n.toLowerCase())) // F8: told once, no longer on the roster: taken back
           const due = rosterDue(sent, names, ownName(st, personOf(peer.id) ?? {})).slice(0, ROSTER_CAP)
           if (!due.length && !gone.length) continue
-          st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [...sent.filter((n) => !gone.includes(n)), ...due] } }   // marked first: a failed send is not retried in a storm
+          if (retryWait(key, peer.id)) { failed = true; continue }
+          let told = sent
+          try {   // P1-2: a name is marked told only once its send resolved; a failure stops this peer until the next trigger
+            for (const who of gone) { await host.send(peer, envOf(who, true)); told = told.filter((n) => n !== who); st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: told } } }
+            for (const who of due) { await host.send(peer, envOf(who)); told = [...told, who]; st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: told } } }
+          } catch { failedAt.set(key + '|' + peer.id, host.now()); failed = true }
           host.save()
-          for (const who of gone) await host.send(peer, envOf(who, true)).catch(() => undefined)
-          for (const who of due) await host.send(peer, envOf(who)).catch(() => undefined)
         }
       }
       for (const ev of st.events ?? []) {
@@ -245,7 +280,8 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
       for (const tag of rosterTags(st)) {
         await sendNames('tag:' + tag, communityRosterNames(st, tag), host.members?.(tag) ?? [], (who, gone) => ({ v: 1, t: 'event', seen: { tag, shown: true, who, ...(gone ? { gone } : {}) } }))
       }
-      rosterSeen = sig
+      for (const tag of rosterTags(st)) for (const peer of host.members?.(tag) ?? []) if (!(await sendComm(peer, tag))) failed = true // wave46 iyg-guest-path
+      if (!failed) rosterSeen = sig
     } finally { rostering = false }
   }
 
@@ -332,6 +368,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     /** A sealed event envelope from a connected peer. */
     async onEnvelope(peer: P, env: EventEnvelope): Promise<EnvelopeOutcome> {
       if (env.sync) return (await replay(peer).catch(() => false)) ? 'answered' : 'ignored' // wave45 events-refetch
+      if (env.comm) return onComm(peer, env.comm) ? 'filled' : 'ignored' // wave46 iyg-guest-path
       if (env.seen) return onSeen(peer, env.seen) ? 'filled' : 'ignored' // wave44c seen-through
       if (env.merge) return (await merge.onEnvelope(peer, env.merge).catch(() => false)) ? 'filled' : 'ignored' // wave45 merge-events
       if (env.joined) return (await onJoined(peer, env.joined).catch(() => false)) ? 'filled' : 'ignored' // wave44c answers-44d

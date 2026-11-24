@@ -157,7 +157,7 @@ describe('G5 event already happened', () => {
   it('an existing community: members who already hold the tag get the roster', async () => {
     const h = phone('Hanna', [P('a', 'Anna', { peerId: 'pa', fields: { iyg: 'true' } }), P('b', 'Ben', { peerId: 'pb', fields: { iyg: 'true' } })], [], { 'community-mighty': { meta: { iyg: { kind: 'managed', organizers: ['me'], intimate: true } } } })
     await h.env.rosterSync()
-    expect(h.sent.map(([p, e]) => [p, e.seen.who]).sort()).toEqual([['pa', 'Ben'], ['pb', 'Anna']])
+    expect(h.sent.filter(([, e]) => e.seen).map(([p, e]) => [p, e.seen.who]).sort()).toEqual([['pa', 'Ben'], ['pb', 'Anna']])   // wave46 iyg-guest-path: the organizer also sends each member a `comm` envelope
   })
   it('a guest who holds the event (joined by QR or link) takes the roster; one only tagged by the host (never held it) ignores it', async () => {
     const holder = phone('Anna', [P('h', 'Hanna', { peerId: 'ph' })], [{ ...past, hosts: ['Hanna'], showAll: undefined }])

@@ -30,6 +30,8 @@ export interface ModeHost {
   overview: () => boolean
   tabButton: (target: string, label: string, iconSvg: string, onclick: () => void) => HTMLElement
   tabsEl: () => HTMLElement
+  /** wave46 iyg-guest-path-fix: the Community view is the screen now. */
+  inCommunity: () => boolean
   /** The bottom row and the screen follow a change. */
   changed: () => void
   /** Shows the Community view (mounted at once), or Web for 'web'. */
@@ -89,7 +91,7 @@ export function createModeShell(host: ModeHost) {
     const cur = now()
     const b = (m: UiInterface): HTMLElement => el('button', {
       type: 'button', role: 'radio', class: 'mode-opt' + (m === cur ? ' on' : ''), 'aria-checked': String(m === cur), 'data-mode': m,
-      onclick: () => { if (m !== cur) void pick(m) },
+      onclick: () => { if (m !== cur || (m === 'community' && !host.inCommunity())) void pick(m) }, // wave46 iyg-guest-path-fix: Community already marked (a guest joined a community event) but another screen shows: the tap opens it
     }, [S.mode[m]])
     return el('div', { class: 'mode-pill', role: 'radiogroup', 'aria-label': S.mode.pickAria, 'data-mode-pill': '' }, [b('personal'), b('community')])
   }

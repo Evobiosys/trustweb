@@ -480,6 +480,8 @@ export interface EventEnvelope {
   /** wave46 iyg-shared-resource: one resource shared into a community AND its event(s), synced (trustweb resource_sync.ts). `updatedAt` = the author's clock (last writer wins), `by` = the author's name (a host forwards it on), `retracted` = hidden for everyone. */
   res?: { id: string; text: string; communityId: string; eventIds: string[]; updatedAt: number; by: string; kind?: string; link?: string; blocks?: unknown[]; retracted?: true } | ResRetraction
   // wave46 iyg-reviewfix F5: a retraction on the wire carries no content
+  /** wave46 iyg-guest-path: the organizer's device tells a member what its phone needs to treat a community as one (trustweb community_meta.ts). `ev` = the community's events the sender hosts. */
+  comm?: { tag: string; name?: string; kind?: 'managed' | 'informal'; intimate?: boolean; ev: string[] }
 }
 /** wave46 iyg-reviewfix F5: what a retraction of a synced resource carries over the wire. */
 export interface ResRetraction { id: string; retracted: true; updatedAt: number; communityId: string }
