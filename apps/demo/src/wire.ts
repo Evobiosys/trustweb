@@ -164,6 +164,7 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
   if ('seen' in o) return hasWant || hasLink ? null : parseSeen(o.seen) // wave44c seen-through
   if ('gc' in o) return hasWant || hasLink ? null : parseGroupChat(o.gc) // wave45 event-group-chat
+  if ('comm' in o) return hasWant || hasLink ? null : parseComm(o.comm) // wave46 iyg-guest-path
   if ('res' in o) return hasWant || hasLink ? null : parseRes(o.res) // wave46 iyg-shared-resource
   if ('gg' in o) return hasWant || hasLink ? null : parseGroupOp(o.gg) // wave45 group-chat-list
   if ('joined' in o) { // answers-44d: {id} only
@@ -241,6 +242,17 @@ function parseGroupChat(v: unknown): EventEnvelope | null {
   if ((x.k === 'msg') !== ('text' in x)) return null
   if (x.k === 'msg' && (!isNonEmptyString(x.text) || x.text.length > EVENT_CHAT_TEXT_MAX)) return null
   return { v: WIRE_VERSION, t: 'event', gc: { id: x.id, m: x.m, k: x.k, by: x.by, ts: x.ts, ...(x.k === 'msg' ? { text: x.text as string } : {}) } }
+}
+
+/* wave46 iyg-guest-path */
+/** A community tag (as an id), an optional name (1..VIA_NAME_MAX), an optional intimate flag, at most 50 event ids; anything else is null. */
+function parseComm(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  if (typeof x.tag !== 'string' || !QID_RE.test(x.tag) || !Array.isArray(x.ev) || x.ev.length > 50 || !x.ev.every((e) => typeof e === 'string' && QID_RE.test(e))) return null
+  if ('name' in x && (!isNonEmptyString(x.name) || x.name.length > VIA_NAME_MAX)) return null
+  if ('intimate' in x && typeof x.intimate !== 'boolean') return null
+  return { v: WIRE_VERSION, t: 'event', comm: { tag: x.tag, ...(typeof x.name === 'string' ? { name: x.name } : {}), ...(typeof x.intimate === 'boolean' ? { intimate: x.intimate } : {}), ev: [...x.ev] as string[] } }
 }
 
 /* wave46 iyg-shared-resource */

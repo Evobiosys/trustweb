@@ -96,8 +96,9 @@ describe('rosterSync (host device)', () => {
   it('a community roster goes to connected members as {tag, shown, who}', async () => {
     const h = phone('Hanna', [P('a', 'Anna', { peerId: 'pa', fields: { iyg: 'true' } }), P('b', 'Ben', { peerId: 'pb', fields: { iyg: 'true' } })], [], meta({ intimate: true, organizers: ['me'] }))
     await h.env.rosterSync()
-    expect(h.sent.map(([p, e]) => [p, e.seen])).toEqual(expect.arrayContaining([['pa', { tag: 'iyg', shown: true, who: 'Ben' }], ['pb', { tag: 'iyg', shown: true, who: 'Anna' }]]))
-    expect(h.sent).toHaveLength(2)
+    const seen = h.sent.filter(([, e]) => e.seen)   // wave46 iyg-guest-path: the organizer also sends each member a `comm` envelope
+    expect(seen.map(([p, e]) => [p, e.seen])).toEqual(expect.arrayContaining([['pa', { tag: 'iyg', shown: true, who: 'Ben' }], ['pb', { tag: 'iyg', shown: true, who: 'Anna' }]]))
+    expect(seen).toHaveLength(2)
   })
   it('property: random modes never put an off person or the recipient in an envelope', async () => {
     let seed = 7
