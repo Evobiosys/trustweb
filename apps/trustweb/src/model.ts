@@ -19,7 +19,7 @@ import type { GoogleSync } from './google_sync'   // wave45 google-contacts-sync
 import type { InboxItem } from './notify_inbox'
 import type { MergeAsk } from './event_merge' // wave45 merge-events
 import type { StatedRelation } from './relations_model'
-import type { ChatThread, SharedItem } from '../../demo/src/types'
+import type { ChatThread, EventEnvelope, ResRetraction, SharedItem } from '../../demo/src/types' // wave46 iyg-shared-resource: EventEnvelope, ResRetraction
 import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
 import type { ResViews } from './resource_notion'   // wave45 resources-notion-views
@@ -505,7 +505,7 @@ export interface Person {
   /** Wave 44: either side asked to keep this second-hand person anonymous: drawn without a name. Local only. */
   anonymous?: boolean
   /** Wave 44c seen-through (seen_through.ts): how I came to see this second-hand person: an event introduction, an intro ask, a resource ask; the ask text (the resource chip) and the event. Local only. */
-  seen?: { source: 'event' | 'intro' | 'ask'; at: number; resource?: string; event?: string }
+  seen?: { source: 'event' | 'intro' | 'ask'; at: number; resource?: string; event?: string; tag?: string /* wave46 iyg-roster */ }
   /** Wave 36: ISO time of a delete; the person stays in the record for 30 days (deleted_people.ts), then goes for good. Local only. */
   deleted_at?: string
   /** wave 36 complete-view: keep-in-touch every N days; absent or 0 = off (Off is stored as 0 so a sync does not bring it back); local only. */
@@ -739,6 +739,8 @@ export interface InventoryItem {
   included: boolean
   /** Wave 27 (forget.ts): paused by "Be forgotten: TrustWeb"; Share again sets included back. Absent: not paused. */
   retractedAt?: number
+  /** wave46 iyg-reviewfix F4: I hid a received resource (local only, never deleted; stays hidden when the author updates it). */
+  hidden?: true
   createdAt: number
   /** Where it came from (provenance.ts). This phone only. Absent before 2026-10-06: migrated to typed or demo. */
   source?: ItemSource
@@ -780,6 +782,14 @@ export interface InventoryItem {
   blocks?: ResBlock[]
   /** Wave 44c community-resources: when I first opened a received (sharedBy) resource; absent = still new. */
   openedAt?: number
+  /** wave46 iyg-shared-resource (resource_sync.ts): one resource in a community AND these events (the first is `eventId`); synced to the people of both. Absent = a private or single-scope item. */
+  eventIds?: string[]
+  synced?: true
+  /** The author's last edit (the author's clock; last writer wins). Absent = createdAt. */
+  updatedAt?: number
+  /** Mine: the content last sent (fingerprint), so an edit is noticed. Received: the person (id) whose device delivered it first, the only one besides the author who may update it. This phone only. */
+  syncFp?: string
+  sharedFrom?: string
 }
 
 /** One bullet of a resource's outline; shared as a whole subtree or as its line alone. */
@@ -1294,6 +1304,10 @@ export interface AppState {
   eventMerged?: Record<string, string>
   /** wave45 merge-events: merge asks between hosts (in: to me; out: mine, waiting). They name peer ids, so THIS DEVICE ONLY (sync_core.ts SYNC_EXCLUDED). */
   eventMergeAsks?: MergeAsk[]
+  /** wave46 iyg-roster (event_roster.ts): the names this device already sent each peer per event id (or `tag:<community>`), so a roster goes once. Peer ids: THIS DEVICE ONLY. */
+  rosterSent?: Record<string, Record<string, string[]>>
+  /** wave46 iyg-assemble (resource_sync.ts): my synced resources as last sent, by id; a removed one stays as a retracted tombstone for 30 days. THIS DEVICE ONLY. */
+  resKnown?: Record<string, Exclude<EventEnvelope['res'], ResRetraction | undefined>>
   /** Wave 45 offline-outbox: envelopes the relay did not take yet, sent when it is back (outbox.ts). THIS DEVICE ONLY: never synced, exported or asked. */
   sendQueue?: OutboxItem[]
   /** Wave 44: my calendars, their tags switched off, my conference rooms (event_draft.ts). THIS DEVICE ONLY. */

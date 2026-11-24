@@ -462,12 +462,12 @@ export interface EventEnvelope {
   /** Wave 44 steer-open-space: the schedule of an online open space (instead of `want` / `link`): `open` = the sender, a host, says the event is an open space; `acts` are checked by the receiver (open_space.ts). */
   os?: { id: string; open?: true; acts: unknown[]; poll?: unknown }
   /** Wave 44c event-autosave: the guest's answer to the host (yes = "I will attend"), and the host's conference links, sent only after a yes. */
-  rsvp?: { id: string; yes: boolean }
+  rsvp?: { id: string; yes: boolean; show?: 'open' | 'discoverable' | 'off' /* wave46 iyg-reviewfix F1 */ }
   conf?: { id: string; links: { provider: 'kmeet' | 'zoom' | 'jitsi' | 'custom'; url: string }[] }
   /** Wave 44c seen-through: a host introduces a person at event `id` to its attendees; `who` (the name) only when that person's device said yes (`shown`). */
-  seen?: { id: string; shown: boolean; who?: string }
+  seen?: { id?: string; shown: boolean; who?: string; tag?: string; gone?: true /* wave46 iyg-reviewfix F8: the host takes this name back */ } // wave46 iyg-roster: `tag` without `id` = a community roster name (event_roster.ts)
   /** answers-44d: the guest accepted the invitation to event `id` (sent to the inviter and the hosts, who mark them joined). */
-  joined?: { id: string }
+  joined?: { id: string; show?: 'open' | 'discoverable' | 'off' /* wave46 iyg-reviewfix F1: how the guest shows at this event */ }
   /** wave45 event-group-chat: one item of the event's ONE shared thread: a message (`text`), or a join / leave notice. `m` = the item id (dedupe), `by` = the author's name (a host forwards it on), `ts` = the author's clock. */
   gc?: { id: string; m: string; k: 'msg' | 'join' | 'leave'; by: string; ts: number; text?: string }
   /** wave45 group-chat-list: one op of a group (a chat independent of events, trustweb group_chat.ts): `g` = group id, `m` = op id, `by` = the actor's name,
@@ -477,7 +477,12 @@ export interface EventEnvelope {
   merge?: { step: 'ask' | 'yes' | 'no' | 'done'; keep: string; gone: string; link?: string }
   /** wave45 events-refetch: "send me the events you announced to my communities" (alone in the envelope). */
   sync?: true
+  /** wave46 iyg-shared-resource: one resource shared into a community AND its event(s), synced (trustweb resource_sync.ts). `updatedAt` = the author's clock (last writer wins), `by` = the author's name (a host forwards it on), `retracted` = hidden for everyone. */
+  res?: { id: string; text: string; communityId: string; eventIds: string[]; updatedAt: number; by: string; kind?: string; link?: string; blocks?: unknown[]; retracted?: true } | ResRetraction
+  // wave46 iyg-reviewfix F5: a retraction on the wire carries no content
 }
+/** wave46 iyg-reviewfix F5: what a retraction of a synced resource carries over the wire. */
+export interface ResRetraction { id: string; retracted: true; updatedAt: number; communityId: string }
 /** wave45 group-chat-list: see EventEnvelope.gg. */
 export interface GroupOp {
   g: string; m: string; k: 'msg' | 'join' | 'leave' | 'check' | 'list' | 'item' | 'roster'; by: string; ts: number; text?: string

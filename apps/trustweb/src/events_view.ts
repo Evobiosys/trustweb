@@ -39,6 +39,8 @@ export interface EventsViewHooks {
   redraw: () => void
   /** The per-person Web Curator page (the default tap on an attendee). */
   curatorPerson: (personId: string) => void
+  /** wave46 iyg-roster: the seen-through card of a person I see via a friend. */
+  openSeen?: (personId: string) => void
   avatar: (name: string, id: string) => HTMLElement
   /** A card with an Undo button. */
   undoNotice: (title: string, onUndo: () => void) => void
@@ -63,7 +65,7 @@ export interface EventsViewHooks {
   /** Wave 27: the QR page of an event (qr_modes.ts): the event and my connect code in one code. */
   showQr?: (ev: TwEvent, host?: boolean) => void
   /** Wave 43: opens the ask-for-support sheet (an event that offers support shows its button). */
-  askSupport?: () => void
+  askSupport?: (eventId: string) => void
   /** Wave 43 web-focus-filter: show the Web with only this event's people. */
   focusWeb?: (ev: TwEvent) => void
   /** Wave 44c event-autosave: my answer ("I will attend" or not) goes to the hosts; a saved event's conference link to the guests who accepted. */
@@ -371,7 +373,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       el('label', { class: 'meta' }, [V.showMe]),
       el('div', { class: 'seg', role: 'group', 'aria-label': V.showMe }, EVENT_VISIBILITIES.map((m) => el('button', {
         type: 'button', class: m === mode ? 'on' : '', 'aria-pressed': String(m === mode), 'data-event-visibility-opt': m,
-        onclick: () => { applyEventSettings(ev, { showMe: m }); h.save(); h.redraw() },
+        onclick: () => { applyEventSettings(ev, { showMe: m }); if (ev.attended) h.rsvp?.(ev); h.save(); h.redraw() },   // wave46 iyg-reviewfix F1: the hosts hear my new mode
       }, [V.modes[m]]))),
       el('p', { class: 'meta' }, [V.modeHints[mode]]),
       host ? el('div', { class: 'chips', 'data-event-share-community-row': '' }, [toggle(ev.shareCommunity === true, V.share, 'data-event-share-community', () => { applyEventSettings(ev, { shareCommunity: ev.shareCommunity !== true }); h.save(); h.redraw() })]) : null,
@@ -545,7 +547,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const ctag = communityOfEvent(ev)
     if (ctag) h.communityView?.(ctag)   // answers-44d (memo 6): a community event opens in the Community view
     const scroller = el('div', { class: 'scroll events-page', onscroll: () => { pageScroll = { id: ev.id, top: scroller.scrollTop } } }, [
-      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson, webBubble: h.state().eventBubbleOff ? undefined : h.webBubble }),
+      ...eventTop(ev, { state: h.state, save: h.save, redraw: h.redraw, shareIcons: (e) => shareRow(e, true), communityName: h.communityName, openCommunity: h.openCommunity, messageAll: h.messageAll, addPeople: picker, inviteMany: h.inviteMany && mayInvite(ev, h.state()) ? (e) => h.inviteMany?.(e, h.redraw) : undefined, eventResources: h.eventResources, openPerson: h.curatorPerson, openSeen: h.openSeen, webBubble: h.state().eventBubbleOff ? undefined : h.webBubble }),
       hostDefaultCard(ev),
       tagChip,
       sinceLine(ev),
@@ -557,7 +559,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.conditions ? editable(el('p', { 'data-event-conditions': '' }, [ev.conditions]), ev, 'conditions') : null,
       ...(h.plan?.(ev) ?? []),
       h.feedRow?.(ev) ?? null,
-      offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.() }, [S.w43press.askSupport]) : null,
+      offersOf(ev).support && h.askSupport ? el('button', { class: 'btn btn-ghost wide', 'data-event-ask-support': '', onclick: () => h.askSupport?.(ev.id) }, [S.w43press.askSupport]) : null,
       el('div', { class: 'chips' }, [attended, notify, eventModeToggle({ state: h.state, save: h.save, redraw: h.redraw }, ev.id)]),
       notifyHint ? el('p', { class: 'meta', 'data-event-notify-hint': '' }, [S.w43press.notifyHint]) : null,
       nameReveal(ev),

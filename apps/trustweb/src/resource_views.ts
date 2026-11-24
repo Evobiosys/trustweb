@@ -5,6 +5,7 @@
  */
 import type { AppState, InventoryItem, ResourceKind } from './model'
 import type { ColourTag } from './colour_tags'
+import { goneFromView } from './resource_scope.ts' // wave46 iyg-reviewfix
 
 export const RESOURCE_KINDS: readonly ResourceKind[] = ['book', 'publication', 'reference', 'recording', 'link', 'other']
 export type ResourceView = 'list' | 'outliner' | 'person'
@@ -48,7 +49,7 @@ export function playUrl(i: Pick<InventoryItem, 'link'>): string | null {
 }
 
 export function filterResources<T extends InventoryItem>(items: readonly T[], f: ResourceFilter): T[] {
-  return items.filter((i) => (!f.kind || kindOf(i) === f.kind) && (!f.sharedBy || i.sharedBy === f.sharedBy) && (!f.communityId || i.communityId === f.communityId))
+  return items.filter((i) => !goneFromView(i) && (!f.kind || kindOf(i) === f.kind) && (!f.sharedBy || i.sharedBy === f.sharedBy) && (!f.communityId || i.communityId === f.communityId))
 }
 
 /** "Suggested by others" = someone shared it with me; the rest is mine. */

@@ -70,7 +70,7 @@ describe('the reveal flow (controller)', () => {
     g.state.events[0].attended = true
     expect(attendChanged(g.state, g.state.events[0])).toBe(true)
     await g.env.rsvp(g.state.events[0])
-    expect(g.sent).toEqual([{ to: 'peerX', env: { v: 1, t: 'event', rsvp: { id: 'ev1', yes: true } } }])
+    expect(g.sent).toEqual([{ to: 'peerX', env: { v: 1, t: 'event', rsvp: { id: 'ev1', yes: true, show: 'discoverable' } } }])   // iyg-reviewfix F1: the guest's show travels
     expect(conferenceState(g.state.events[0])).toBe('asked')
 
     const h = side(HOST, [hostEvent()], [{ id: 'g', name: GUEST, peerId: 'peerX' }])

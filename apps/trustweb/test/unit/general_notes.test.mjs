@@ -232,6 +232,7 @@ describe('PRIVACY: the General note is Only me', () => {
       'same_person.ts', // joins the two notes when the owner declares two persons one (nothing leaves the device)
       'record_diff.ts', // dev-only edit stream: labels a note edit as kind "note" in the local dev-edits.jsonl (loopback dev server, never shipped)
       'import_tags.ts', // wave 39: snapOf fingerprints the person (the note included) to tell "edited since the import"; nothing leaves the device
+      'seen_through.ts', // wave46 iyg-reviewfix F8: dropSeenThrough reads it only to keep a card I wrote on (never sent)
       'demo_to_live.ts', // carries a demo person's whole record to the live phone of the same owner, on this device (no network)
     ])
     const hits = []

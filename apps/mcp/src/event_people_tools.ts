@@ -3,7 +3,7 @@
  * wave45 event-people-list, MCP parity of the event page's "People at this event": event_people_list reads the list as the page shows it (hosts
  * first, then who joins; a long one shows its first 10 until Show all), event_people_add is "Add people" (tags a person with the event).
  */
-import { PEOPLE_COLLAPSE_AT, PEOPLE_SHOWN, peopleAtEvent, visiblePeople } from '../../trustweb/src/event_people_list.ts'
+import { PEOPLE_COLLAPSE_AT, PEOPLE_SHOWN, peopleAtEvent, viaPeopleAt, visiblePeople } from '../../trustweb/src/event_people_list.ts'
 import { commitTo, findPerson, load, needText, schema, S, type Rec, type RecordToolsOptions } from './record_tools.ts'
 import type { Tool } from './protocol.ts'
 
@@ -28,8 +28,8 @@ export function eventPeopleTools(o: RecordToolsOptions): Tool[] {
         const hosts = (e.hosts?.length ? e.hosts : (e.organizers as string[] | undefined) ?? []).map(String)
         const hostSet = new Set(hosts.map((n) => n.trim().toLowerCase()))
         const joining = r.people.filter((p) => p.deleted_at === undefined && !p.via && Array.isArray(p.events) && (p.events as string[]).includes(e.id) && !hostSet.has(p.name.trim().toLowerCase()))
-        const all = peopleAtEvent(r.people, hosts, joining)
-        return { total: all.length, people: visiblePeople(all, a.all === true).map((x) => ({ id: x.id ?? null, name: x.name, host: x.host })) }
+        const all = peopleAtEvent(r.people, hosts, joining, viaPeopleAt(r.people as never, (id) => id === e.id || (r.eventMerged as Record<string, string> | undefined)?.[id] === e.id)) // wave46 iyg-roster: people seen through a friend
+        return { total: all.length, people: visiblePeople(all, a.all === true).map((x) => ({ id: x.id ?? null, name: x.name, host: x.host, ...(x.via !== undefined ? { via: x.via } : {}) })) }
       },
     },
     ...(o.write ? [{

@@ -15,6 +15,8 @@ export const SUPPORT_PARAM = 'support'
 export const HERE_PARAM = 'support-here'
 /** Wave 42: the asker closed the ask early: `<app url>?support-cancel=<id>`; the helper's copy goes away. */
 export const CANCEL_PARAM = 'support-cancel'
+/** Wave 46 iyg-ask-reach: a host tells the asker who answered through it (support_relay.ts). */
+export const VIA_PARAM = 'support-via'  // wave46 iyg-ask-reach
 
 /** What would help, in the order they show. */
 export const SUPPORT_CHIPS = ['listen', 'call', 'meet', 'sit', 'practical', 'know'] as const
@@ -28,6 +30,22 @@ export enum SupportWindow {
 export const SUPPORT_NOTE_MAX = 200
 /** At most this many received asks are kept. */
 export const SUPPORT_IN_MAX = 20
+
+/** Wave 46 iyg-ask-reach: who the ask is meant for beyond my own contacts: a community tag and/or an event id (`name` = its label), `relayed` + `from` once a host passed it on. Old clients ignore it. */
+export interface SupportScope { tag?: string; event?: string; name?: string; relayed?: true; from?: string }  // wave46 iyg-ask-reach
+export const SCOPE_TEXT_MAX = 40
+
+/** A scope off the wire or a tool call: only known fields, ids as short strings; undefined when it names no tag and no event. */
+export function cleanScope(v: unknown): SupportScope | undefined {  // wave46 iyg-ask-reach
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  const text = (x: unknown): string | undefined => (typeof x === 'string' && x.trim() ? x.trim().slice(0, SCOPE_TEXT_MAX) : undefined)
+  const tag = text(o.tag)
+  const event = text(o.event)
+  if (!tag && !event) return undefined
+  const name = text(o.name)
+  const from = text(o.from)
+  return { ...(tag ? { tag } : {}), ...(event ? { event } : {}), ...(name ? { name } : {}), ...(o.relayed === true ? { relayed: true as const } : {}), ...(from ? { from } : {}) }
+}
 
 /** An ask this phone sent. `to` and `here` hold peer ids. */
 export interface SupportAsk {
@@ -45,6 +63,9 @@ export interface SupportAsk {
   agent?: true
   /** Wave 42: closed over MCP; the app tells the people it went to, then drops the ask. */
   cancelled?: true
+  scope?: SupportScope  // wave46 iyg-ask-reach
+  /** Wave 46: names of people reached through a host who said "I'm here" (they are no peer of mine). */
+  hereVia?: string[]  // wave46 iyg-ask-reach
 }
 
 /** An ask this phone received from `peerId`. */
@@ -54,6 +75,9 @@ export interface SupportIn {
   chips: SupportChip[]
   note: string
   until: number
+  scope?: SupportScope  // wave46 iyg-ask-reach
+  /** Wave 46: the peers this phone passed the ask on to (only they may answer through it). */
+  relayedTo?: string[]  // wave46 iyg-ask-reach
 }
 
 /** The widest audience the ask may reach. */
@@ -90,14 +114,14 @@ const knownChips = (v: unknown): SupportChip[] =>
   SUPPORT_CHIPS.filter((c) => Array.isArray(v) && v.includes(c))
 
 export function buildSupport(
-  o: { chips: readonly string[]; note: string; window: SupportWindow; ids: readonly string[] }, now: number, id: string,
+  o: { chips: readonly string[]; note: string; window: SupportWindow; ids: readonly string[]; scope?: SupportScope }, now: number, id: string,
 ): SupportAsk {
-  return { id, chips: knownChips(o.chips), note: o.note.trim().slice(0, SUPPORT_NOTE_MAX), until: closeAt(now, o.window), to: [...o.ids], here: [] }
+  return { id, chips: knownChips(o.chips), note: o.note.trim().slice(0, SUPPORT_NOTE_MAX), until: closeAt(now, o.window), to: [...o.ids], here: [], ...(o.scope ? { scope: o.scope } : {}) }
 }
 
 /** The ask text for one person: no recipient list, so nobody learns who else was asked. */
-export function supportText(appUrl: string, a: Pick<SupportAsk, 'id' | 'chips' | 'note' | 'until'>): string {
-  return `${appUrl}?${SUPPORT_PARAM}=${encodeURIComponent(JSON.stringify({ id: a.id, chips: a.chips, note: a.note, until: a.until }))}`
+export function supportText(appUrl: string, a: Pick<SupportAsk, 'id' | 'chips' | 'note' | 'until' | 'scope'>): string {
+  return `${appUrl}?${SUPPORT_PARAM}=${encodeURIComponent(JSON.stringify({ id: a.id, chips: a.chips, note: a.note, until: a.until, ...(a.scope ? { scope: a.scope } : {}) }))}`
 }
 
 export function hereText(appUrl: string, id: string): string {
@@ -106,7 +130,7 @@ export function hereText(appUrl: string, id: string): string {
 
 /** Does this text claim to be a support text (well formed or not)? */
 export function isSupportText(appUrl: string, text: string): boolean {
-  return typeof text === 'string' && (text.startsWith(`${appUrl}?${SUPPORT_PARAM}=`) || text.startsWith(`${appUrl}?${HERE_PARAM}=`) || text.startsWith(`${appUrl}?${CANCEL_PARAM}=`))
+  return typeof text === 'string' && (text.startsWith(`${appUrl}?${SUPPORT_PARAM}=`) || text.startsWith(`${appUrl}?${HERE_PARAM}=`) || text.startsWith(`${appUrl}?${CANCEL_PARAM}=`) || text.startsWith(`${appUrl}?${VIA_PARAM}=`))
 }
 
 export const closeText = (appUrl: string, id: string): string => `${appUrl}?${CANCEL_PARAM}=${encodeURIComponent(id)}`
@@ -132,13 +156,14 @@ export function bundlePeople<T extends Pick<Person, 'ring' | 'fields' | 'peerId'
   return people.filter((p) => p.peerId && rings.includes(ringSlot(p)))
 }
 
-export function parseSupportText(appUrl: string, text: string): Pick<SupportAsk, 'id' | 'chips' | 'note' | 'until'> | null {
+export function parseSupportText(appUrl: string, text: string): Pick<SupportAsk, 'id' | 'chips' | 'note' | 'until' | 'scope'> | null {
   const head = `${appUrl}?${SUPPORT_PARAM}=`
   if (typeof text !== 'string' || !text.startsWith(head)) return null
   try {
     const o = JSON.parse(decodeURIComponent(text.slice(head.length))) as Record<string, unknown>
     if (typeof o.id !== 'string' || !o.id || o.id.length > 40 || typeof o.until !== 'number' || !Number.isFinite(o.until)) return null
-    return { id: o.id, chips: knownChips(o.chips), note: typeof o.note === 'string' ? o.note.slice(0, SUPPORT_NOTE_MAX) : '', until: o.until }
+    const scope = cleanScope(o.scope)  // wave46 iyg-ask-reach
+    return { id: o.id, chips: knownChips(o.chips), note: typeof o.note === 'string' ? o.note.slice(0, SUPPORT_NOTE_MAX) : '', until: o.until, ...(scope ? { scope } : {}) }
   } catch {
     return null
   }
@@ -194,4 +219,10 @@ export function audience<T extends Pick<Person, 'id' | 'ring' | 'fields' | 'peer
   const out = new Set(a.exclude)
   const inc = new Set(a.include)
   return connected.filter((p) => !out.has(p.id) && (inc.has(p.id) || (closest(p) ? !a.notClosest : inZone(p))))
+}
+
+/** The note as a new client shows it: a relayed ask's "<Asker>: " prefix (relayText) comes off, once. */
+export const noteOf = (a: { note: string; scope?: SupportScope }): string => {
+  const prefix = a.scope?.relayed && a.scope.from ? `${a.scope.from}: ` : ''
+  return prefix && a.note.startsWith(prefix) ? a.note.slice(prefix.length) : a.note
 }

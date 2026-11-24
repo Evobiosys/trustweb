@@ -154,6 +154,8 @@ function parseAskAgain(): AskAgainEnvelope {
 // ----- END TrustWeb wave 6i -----
 
 // ----- BEGIN TrustWeb wave 43c (connect-extras): the event envelope (types.ts EventEnvelope) -----
+/** wave46 iyg-reviewfix F1: a visibility mode on a joined / rsvp envelope. */
+const isShow = (v: unknown): v is 'open' | 'discoverable' | 'off' => v === 'open' || v === 'discoverable' || v === 'off'
 /** Exactly one of `want` (an event id) or `link` (bounded text); anything else is null. Nothing else a sender put in is read. */
 function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   const hasWant = 'want' in o
@@ -162,10 +164,11 @@ function parseEvent(o: Record<string, unknown>): EventEnvelope | null {
   if ('rsvp' in o || 'conf' in o) return hasWant || hasLink ? null : parseReveal(o)   // wave44c event-autosave
   if ('seen' in o) return hasWant || hasLink ? null : parseSeen(o.seen) // wave44c seen-through
   if ('gc' in o) return hasWant || hasLink ? null : parseGroupChat(o.gc) // wave45 event-group-chat
+  if ('res' in o) return hasWant || hasLink ? null : parseRes(o.res) // wave46 iyg-shared-resource
   if ('gg' in o) return hasWant || hasLink ? null : parseGroupOp(o.gg) // wave45 group-chat-list
   if ('joined' in o) { // answers-44d: {id} only
     const j = o.joined as Record<string, unknown> | null
-    return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id } }
+    return hasWant || hasLink || typeof j !== 'object' || j === null || typeof j.id !== 'string' || !QID_RE.test(j.id) ? null : { v: WIRE_VERSION, t: 'event', joined: { id: j.id, ...(isShow(j.show) ? { show: j.show } : {}) } }   // wave46 iyg-reviewfix F1: show kept when valid
   }
   if ('merge' in o) return hasWant || hasLink ? null : parseMerge(o.merge) // wave45 merge-events
   if ('sync' in o) return hasWant || hasLink || o.sync !== true ? null : { v: WIRE_VERSION, t: 'event', sync: true } // wave45 events-refetch
@@ -201,7 +204,7 @@ function parseReveal(o: Record<string, unknown>): EventEnvelope | null {
   if (('rsvp' in o) === ('conf' in o)) return null
   const v = (o.rsvp ?? o.conf) as Record<string, unknown> | null
   if (typeof v !== 'object' || v === null || typeof v.id !== 'string' || !QID_RE.test(v.id)) return null
-  if ('rsvp' in o) return typeof v.yes === 'boolean' ? { v: WIRE_VERSION, t: 'event', rsvp: { id: v.id, yes: v.yes } } : null
+  if ('rsvp' in o) return typeof v.yes === 'boolean' ? { v: WIRE_VERSION, t: 'event', rsvp: { id: v.id, yes: v.yes, ...(isShow(v.show) ? { show: v.show } : {}) } } : null   // wave46 iyg-reviewfix F1
   if (!Array.isArray(v.links) || v.links.length > CONF_LINKS_MAX) return null
   const links: NonNullable<EventEnvelope['conf']>['links'] = []
   for (const l of v.links as unknown[]) {
@@ -218,9 +221,14 @@ function parseReveal(o: Record<string, unknown>): EventEnvelope | null {
 function parseSeen(v: unknown): EventEnvelope | null {
   if (typeof v !== 'object' || v === null) return null
   const x = v as Record<string, unknown>
-  if (typeof x.id !== 'string' || !QID_RE.test(x.id) || typeof x.shown !== 'boolean') return null
+  if (typeof x.shown !== 'boolean') return null
+  if (!('id' in x) && typeof x.tag === 'string' && QID_RE.test(x.tag)) { // wave46 iyg-roster: a community roster name, always with a yes
+    return x.shown && isNonEmptyString(x.who) && x.who.length <= VIA_NAME_MAX ? { v: WIRE_VERSION, t: 'event', seen: { tag: x.tag, shown: true, who: x.who, ...(x.gone === true ? { gone: true as const } : {}) } } : null
+  }
+  if (typeof x.id !== 'string' || !QID_RE.test(x.id)) return null
   if ('who' in x && (!x.shown || !isNonEmptyString(x.who) || x.who.length > VIA_NAME_MAX)) return null
-  return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}) } }
+  if (x.gone === true && !(x.shown && typeof x.who === 'string')) return null // wave46 iyg-reviewfix F8: taking a name back needs the name
+  return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}), ...(x.gone === true ? { gone: true as const } : {}) } }
 }
 
 /* wave45 event-group-chat */
@@ -233,6 +241,29 @@ function parseGroupChat(v: unknown): EventEnvelope | null {
   if ((x.k === 'msg') !== ('text' in x)) return null
   if (x.k === 'msg' && (!isNonEmptyString(x.text) || x.text.length > EVENT_CHAT_TEXT_MAX)) return null
   return { v: WIRE_VERSION, t: 'event', gc: { id: x.id, m: x.m, k: x.k, by: x.by, ts: x.ts, ...(x.k === 'msg' ? { text: x.text as string } : {}) } }
+}
+
+/* wave46 iyg-shared-resource */
+const RES_TEXT_MAX = 120
+const RES_EVENTS_MAX = 8
+const RES_BLOCKS_BYTES_MAX = 16_000
+const RES_KINDS = ['book', 'publication', 'reference', 'recording', 'link', 'other']
+/** id, title (1..120), community tag id, 1..8 event ids, the author's clock, author name (1..VIA_NAME_MAX); optional kind, https link, outline (array, at most 16 KB; its blocks are checked by the receiver), retracted. Anything else is null. */
+function parseRes(v: unknown): EventEnvelope | null {
+  if (typeof v !== 'object' || v === null) return null
+  const x = v as Record<string, unknown>
+  if (x.retracted === true) { // wave46 iyg-reviewfix F5: nothing but the four fields is read
+    return typeof x.id === 'string' && QID_RE.test(x.id) && isNonEmptyString(x.communityId) && x.communityId.length <= 80 && typeof x.updatedAt === 'number' && Number.isFinite(x.updatedAt)
+      ? { v: WIRE_VERSION, t: 'event', res: { id: x.id, retracted: true, updatedAt: x.updatedAt, communityId: x.communityId } } : null
+  }
+  if (typeof x.id !== 'string' || !QID_RE.test(x.id) || !isNonEmptyString(x.text) || x.text.length > RES_TEXT_MAX) return null
+  if (!isNonEmptyString(x.communityId) || x.communityId.length > 80 || !Array.isArray(x.eventIds) || x.eventIds.length < 1 || x.eventIds.length > RES_EVENTS_MAX || !x.eventIds.every((e) => typeof e === 'string' && QID_RE.test(e))) return null
+  if (typeof x.updatedAt !== 'number' || !Number.isFinite(x.updatedAt) || !isNonEmptyString(x.by) || x.by.length > VIA_NAME_MAX) return null
+  if ('kind' in x && !RES_KINDS.includes(x.kind as string)) return null
+  if ('link' in x && !isHttps(x.link)) return null
+  if ('blocks' in x && (!Array.isArray(x.blocks) || JSON.stringify(x.blocks).length > RES_BLOCKS_BYTES_MAX)) return null
+  return { v: WIRE_VERSION, t: 'event', res: { id: x.id, text: x.text, communityId: x.communityId, eventIds: x.eventIds as string[], updatedAt: x.updatedAt, by: x.by,
+    ...('kind' in x ? { kind: x.kind as string } : {}), ...('link' in x ? { link: x.link as string } : {}), ...('blocks' in x ? { blocks: x.blocks as unknown[] } : {}), ...(x.retracted === true ? { retracted: true as const } : {}) } }
 }
 
 /* wave45 group-chat-list */

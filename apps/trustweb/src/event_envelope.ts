@@ -17,19 +17,24 @@ import { mergePoll } from './open_space_poll'
 import { addItem } from './notify_inbox'
 import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_visibility'
 import { S } from './strings'
-import type { AppState, TwEvent } from './model'
+import type { AppState, Person, TwEvent } from './model'
 import { namedHost } from './event_conference'
-import { addSeenThrough } from './seen_through' // wave44c seen-through
+import { addSeenThrough, dropSeenThrough } from './seen_through' // wave44c seen-through
 import { randomId } from '../../demo/src/crypto'
-import { applyJoined, isIntimate } from './event_community' // wave44c answers-44d
+import { applyJoined } from './event_community' // wave44c answers-44d
 import { createEventMerge } from './event_merge_flow' // wave45 merge-events
 import { resolveEvent } from './event_merge'
 import { mayAnnounce, seesEvent } from './community_event_access' // wave45 community-events-invite-only; answers-45a: seesEvent
 import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
+import { ownName } from './own_name' // wave46 iyg-reviewfix D2
+import { parseCommunity } from './ext/community-mighty/community_data' // wave46 iyg-reviewfix F2
+import { communityRosterNames, rosterDue, rosterNames, rosterSignature, rosterTags } from './event_roster' // wave46 iyg-roster
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
 export const EVENT_SHOW_WINDOW_MS = 10 * 60_000
 /** The scanner asks again after these delays while the event stays incomplete (the shower may be a moment late). */
+/** At most this many names go to one peer in one run (a big community is told over several runs). */
+const ROSTER_CAP = 60
 export const EVENT_WANT_RETRY_MS: readonly number[] = [5_000, 30_000, 120_000]
 
 /** The short QR leaves the place out; an event without one is still waiting for the rest. */
@@ -70,7 +75,7 @@ export function receiveAnnounce(s: Pick<AppState, 'events' | 'notifInbox'>, ev: 
 }
 
 export interface EnvelopeHost<P extends { id: string }> {
-  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts' | 'extData'>>
+  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts' | 'extData' | 'rosterSent' | 'peers'>>
   /** Wave 44: the connected peers of the people who carry this community tag (the ones an announce goes to). */
   members?(tag: string): P[]
   /** Wave 44 steer-open-space: the connected people at this event (tagged or invited): the schedule of an open space goes to them. */
@@ -148,6 +153,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const ev = held(r.id)
     const st = host.state()
     if (!ev || !isEventHost(ev, st.me.displayName, st.people)) return false
+    if (r.show) { const g = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined); if (g) { noteShow(g, r.id, r.show); host.save() } }   // wave46 iyg-reviewfix F1
     const rest = (ev.confTo ?? []).filter((id) => id !== peer.id)
     const to = r.yes && ev.conference?.length ? [...rest, peer.id] : rest
     if (to.length) ev.confTo = to; else delete ev.confTo
@@ -168,12 +174,26 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     return true
   }
 
+  /** wave46 iyg-reviewfix F2: who may roster a community to me: an organizer of it on my device, or a host of one of its events I attend. A mere member may not. */
+  const namesCommunity = (st: ReturnType<typeof host.state>, who: Person, tag: string): boolean =>
+    parseCommunity(st.extData?.['community-mighty']).meta?.[tag]?.organizers.includes(who.id) === true
+    || (st.events ?? []).some((e) => e.attended && communityOfEvent(e) === tag && isEventHost(e, who.name, st.people))
+
   /** Wave 44c seen-through: an introduction counts only from a host of an event I attend; the person sits outside my rings via that host. */
   function onSeen(peer: P, seen: NonNullable<EventEnvelope['seen']>): boolean {
-    const ev = held(seen.id)
     const st = host.state()
     const who = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined && !p.via)
+    if (seen.id === undefined) { // wave46 iyg-roster: a community roster name; the sender must hold that community tag on my device
+      if (!who || !seen.tag || !seen.who || !namesCommunity(st, who, seen.tag)) return false
+      if (seen.gone) { if (!dropSeenThrough(st, { via: who.id, who: seen.who, tag: seen.tag, now: host.now() })) return false; host.save(); host.changed(); return true }   // F8
+      if (!addSeenThrough(st, { via: who.id, who: seen.who, shown: true, source: 'event', tag: seen.tag, now: host.now(), id: 'seen-' + randomId(10) })) return false
+      host.save()
+      host.changed()
+      return true
+    }
+    const ev = held(seen.id)
     if (!ev || !ev.attended || !who || !isEventHost(ev, who.name, st.people)) return false
+    if (seen.gone) { if (!seen.who || !dropSeenThrough(st, { via: who.id, who: seen.who, event: ev.id, now: host.now() })) return false; host.save(); host.changed(); return true }   // F8
     if (!addSeenThrough(st, { via: who.id, who: seen.who, shown: seen.shown, source: 'event', event: ev.id, now: host.now(), id: 'seen-' + randomId(10) })) return false
     host.save()
     host.changed()
@@ -186,16 +206,47 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const id = resolveEvent(st, j.id) // wave45 merge-events: a joined record for a merged event lands on the kept one; the joiner is told
     const ev = held(id)
     if (ev && id !== j.id) await merge.tell(peer, ev, j.id)
+    const guest = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined)
+    if (ev && guest && j.show) { noteShow(guest, id, j.show); host.save() }   // wave46 iyg-reviewfix F1
     if (!ev || !applyJoined(st as Pick<AppState, 'people' | 'events'>, peer.id, id)) return false
     host.save()
     host.changed()
-    const tag = communityOfEvent(ev)
-    const who = st.people.find((p) => p.peerId === peer.id)
-    if (who && tag && isEventHost(ev, st.me.displayName, st.people) && isIntimate(st as Pick<AppState, 'people' | 'extData'>, tag)) {
-      const env: EventEnvelope = { v: 1, t: 'event', seen: { id: ev.id, shown: true, who: who.name.trim().slice(0, 40) } }
-      for (const other of host.recipients?.(ev) ?? []) if (other.id !== peer.id) await host.send(other, env).catch(() => undefined)
-    }
+    await rosterSync() // wave46 iyg-roster: the joiner gets the others, the others get the joiner (was: intimate community only, joiner only)
     return true
+  }
+
+  /* wave46 iyg-roster: tell each connected recipient the names it has not heard (event_roster.ts); on a join, an edit of showAll, a save, app start. One run at a time. */
+  let rostering = false
+  let rosterSeen = '' // F10: the inputs of the last finished run
+  async function rosterSync(): Promise<void> {
+    if (rostering) return
+    const st = host.state()
+    const sig = rosterSignature(st)
+    if (sig === rosterSeen) return
+    rostering = true
+    try {
+      const personOf = (id: string): Person | undefined => st.people.find((p) => p.peerId === id && p.deleted_at === undefined)
+      const sendNames = async (key: string, names: string[], to: P[], envOf: (who: string, gone?: true) => EventEnvelope): Promise<void> => {
+        const now = new Set(names.map((n) => n.toLowerCase()))
+        for (const peer of to) {
+          const sent = st.rosterSent?.[key]?.[peer.id] ?? []
+          const gone = sent.filter((n) => !now.has(n.toLowerCase())) // F8: told once, no longer on the roster: taken back
+          const due = rosterDue(sent, names, ownName(st, personOf(peer.id) ?? {})).slice(0, ROSTER_CAP)
+          if (!due.length && !gone.length) continue
+          st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [...sent.filter((n) => !gone.includes(n)), ...due] } }   // marked first: a failed send is not retried in a storm
+          host.save()
+          for (const who of gone) await host.send(peer, envOf(who, true)).catch(() => undefined)
+          for (const who of due) await host.send(peer, envOf(who)).catch(() => undefined)
+        }
+      }
+      for (const ev of st.events ?? []) {
+        await sendNames(ev.id, rosterNames(st, ev), host.recipients?.(ev) ?? [], (who, gone) => ({ v: 1, t: 'event', seen: { id: ev.id, shown: true, who, ...(gone ? { gone } : {}) } }))
+      }
+      for (const tag of rosterTags(st)) {
+        await sendNames('tag:' + tag, communityRosterNames(st, tag), host.members?.(tag) ?? [], (who, gone) => ({ v: 1, t: 'event', seen: { tag, shown: true, who, ...(gone ? { gone } : {}) } }))
+      }
+      rosterSeen = sig
+    } finally { rostering = false }
   }
 
   /* wave45 events-refetch: a connected person asks for what I announced; the announce envelopes go again (their receiver skips events it holds). Only members of the community, at most once per REPLAY_GAP_MS. */
@@ -216,19 +267,20 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
   }
 
   return {
+    rosterSync, // wave46 iyg-roster
     /** wave45 merge-events: start a merge (event_merge_flow.ts) or answer the other host's ask. */
     merge: { start: merge.start, answer: merge.answer },
     /** answers-44d: I accepted the invitation: the person whose link or code I took (`by`) and the hosts I am connected to are told, sealed. */
     async joined(ev: TwEvent, by?: { name: string; did?: string }): Promise<void> {
       const st = host.state()
       const ids = st.people.filter((p) => p.peerId && p.deleted_at === undefined && !p.via && ((by && ((by.did && p.did === by.did) || p.name.trim() === by.name.trim())) || namedHost(ev, p.name, st.people))).map((p) => p.peerId as string)
-      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', joined: { id: ev.id } }).catch(() => undefined) }
+      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', joined: { id: ev.id, show: visibilityOf(ev) } }).catch(() => undefined) }
     },
     /** Wave 44c: my "I will attend" (or not) goes to the hosts of the event I am connected to. */
     async rsvp(ev: TwEvent): Promise<void> {
       const st = host.state()
       const ids = st.people.filter((p) => p.peerId && namedHost(ev, p.name, st.people)).map((p) => p.peerId as string)
-      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', rsvp: { id: ev.id, yes: ev.attended } }).catch(() => undefined) }
+      for (const id of new Set(ids)) { const peer = peerOf(id); if (peer) await host.send(peer, { v: 1, t: 'event', rsvp: { id: ev.id, yes: ev.attended, show: visibilityOf(ev) } }).catch(() => undefined) }
     },
     /** Wave 44c: the host changed the conference link: the guests who accepted get the new one. */
     async pushConference(ev: TwEvent): Promise<void> {
