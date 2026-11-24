@@ -17,6 +17,8 @@ import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { ColourTag } from './colour_tags'
 import { tagPerson, createTag } from './tag_create'
 import { joinSpace } from './ext/community-mighty/community_model'
+import { parseCommunity } from './ext/community-mighty/community_data' // wave46 iyg-guest-path
+import { joinedCommunity } from './community_meta' // wave46 iyg-guest-path
 import type { AppState, Peer, Person } from './model'
 import { S } from './strings'
 import { groupOfTag } from './group_store' // wave45 group-chat-list
@@ -55,7 +57,7 @@ export function createInvites(d: InviteDeps, hash: string) {
     const s = d.state()
     const id = d.identity()
     const label = name ?? d.tags().find((t) => t.id === tag)?.label ?? tag
-    const e = createInvite({ kind, tag, label, inviterDid: id.did, inviterName: s.me.displayName, id: toB64u(randomBytes(16)), now: Date.now(), settings: s.inviteSettings, sign: (b) => signBytes(id, b) })
+    const e = createInvite({ kind, tag, label, inviterDid: id.did, inviterName: s.me.displayName, id: toB64u(randomBytes(16)), now: Date.now(), settings: s.inviteSettings, sign: (b) => signBytes(id, b), organizer: parseCommunity(s.extData?.['community-mighty']).meta?.[tag]?.organizers.includes('me') === true })   // wave46 iyg-guest-path
     s.invites = addInvite(s.invites, e)
     d.save()
     return e
@@ -198,6 +200,7 @@ export function createInvites(d: InviteDeps, hash: string) {
     ensureTag(v.inv.t, v.inv.l)
     tagPerson(person, v.inv.t)
     joinSpace(d.state(), d.tags(), v.inv.t, Date.now())
+    joinedCommunity(d.state(), v.inv.t, v.inv.l, person, v.inv.o === 1)   // wave46 iyg-guest-path
     d.save()
     d.toast(T.joined(v.inv.l))
   }
