@@ -15,6 +15,7 @@ import type { DeliveryIo } from './support_delivery_view'
 import { planDelivery, sentVia } from './support_delivery'
 import {
   SUPPORT_CHIPS, SUPPORT_IN_MAX, SupportWindow, buildSupport, closeText, emergencyNumber, hereText, isOpen, openAsks, supportText,
+  noteOf, // wave46 iyg-reviewfix F7
 } from './support_ask'
 import type { SupportIn, SupportScope } from './support_ask'
 import { cancelAsk, inboxRows } from './support_inbox'
@@ -230,7 +231,7 @@ export function supportCards(io: SupportIo): HTMLElement[] {
     const drop = (): void => { s.supportIn = (s.supportIn ?? []).filter((x) => x !== a); io.save(); io.render() }
     return [el('div', { class: 'card support-card', 'data-support-card': a.id }, [
       el('p', {}, [a.scope?.relayed ? S.w46ask.cardVia(a.scope.from ?? person.name, a.chips.map((c) => S.supportChip[c]).join(', '), person.name) : S.supportCard(person.name, a.chips.map((c) => S.supportChip[c]).join(', '))]),   // wave46 iyg-ask-reach
-      a.note ? el('p', { class: 'hint' }, [a.note]) : null,
+      noteOf(a) ? el('p', { class: 'hint' }, [noteOf(a)]) : null,   // iyg-reviewfix F7
       el('div', { class: 'row' }, [
         el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-support-here': a.id, onclick: () => {
           void io.send(peer, hereText(io.appUrl, a.id)).catch(() => { /* the chat opens anyway */ })

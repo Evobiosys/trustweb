@@ -220,3 +220,9 @@ export function audience<T extends Pick<Person, 'id' | 'ring' | 'fields' | 'peer
   const inc = new Set(a.include)
   return connected.filter((p) => !out.has(p.id) && (inc.has(p.id) || (closest(p) ? !a.notClosest : inZone(p))))
 }
+
+/** The note as a new client shows it: a relayed ask's "<Asker>: " prefix (relayText) comes off, once. */
+export const noteOf = (a: { note: string; scope?: SupportScope }): string => {
+  const prefix = a.scope?.relayed && a.scope.from ? `${a.scope.from}: ` : ''
+  return prefix && a.note.startsWith(prefix) ? a.note.slice(prefix.length) : a.note
+}

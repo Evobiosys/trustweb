@@ -113,7 +113,7 @@ describe('relayed text and the answer back', () => {
   it('same ask, marked relayed with the asker name (clipped); receivers parse it', () => {
     const t = relayText(APP, { ...ask({ event: 'ev1', name: 'Winter IYG' }), scope: { event: 'ev1', name: 'Winter IYG' } }, 'A'.repeat(60))
     const back = parseSupportText(APP, t)
-    expect(back.note).toBe('hello')
+    expect(back.note).toBe('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA: hello')
     expect(back.id).toBe('ask1')
     expect(back.scope).toEqual({ event: 'ev1', name: 'Winter IYG', relayed: true, from: 'A'.repeat(40) })
   })

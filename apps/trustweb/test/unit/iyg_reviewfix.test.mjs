@@ -245,3 +245,27 @@ describe('F6 a synced item shows its scope, not audience controls', () => {
     expect(() => by.resource_retract.run({ id: 'zz' })).toThrow()
   })
 })
+
+import { relayText } from '../../src/support_relay.ts'
+import { noteOf, parseSupportText } from '../../src/support_ask.ts'
+
+describe('F7 an old app shows who asked', () => {
+  const APP = 'https://app.example.test/'
+  const ask = { id: 'ask1', chips: ['listen'], note: 'hello', until: NOW + 1e6, scope: { event: 'ev1', name: 'Winter' } }
+  it('the relayed note starts with "<Asker>: " so an app that ignores scope still names the asker', () => {
+    const back = parseSupportText(APP, relayText(APP, ask, 'Anna'))
+    expect(back.note).toBe('Anna: hello')
+    expect(back.scope).toMatchObject({ relayed: true, from: 'Anna' })
+  })
+  it('a new client strips the prefix once, only when scope.from says so', () => {
+    const back = parseSupportText(APP, relayText(APP, ask, 'Anna'))
+    expect(noteOf(back)).toBe('hello')
+    expect(noteOf({ note: 'Anna: hello' })).toBe('Anna: hello')
+    expect(noteOf({ note: 'Anna: Anna: hi', scope: { relayed: true, from: 'Anna' } })).toBe('Anna: hi')
+    expect(noteOf({ note: 'plain', scope: { relayed: true, from: 'Anna' } })).toBe('plain')
+  })
+  it('the note stays within the ask limit', () => {
+    const back = parseSupportText(APP, relayText(APP, { ...ask, note: 'n'.repeat(200) }, 'A'.repeat(40)))
+    expect(back.note.length).toBeLessThanOrEqual(200)
+  })
+})

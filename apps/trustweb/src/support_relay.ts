@@ -9,7 +9,7 @@ import { parseCommunity, isManager } from './ext/community-mighty/community_data
 import { mayAnnounce } from './community_event_access.ts'
 import { eventOrganizers, isEventHost } from './event_roles'
 import { askPeers } from './non_responsive'
-import { SCOPE_TEXT_MAX, VIA_PARAM, supportText } from './support_ask'
+import { SCOPE_TEXT_MAX, SUPPORT_NOTE_MAX, VIA_PARAM, supportText } from './support_ask'
 import type { AppState, Peer, Person } from './model'
 import type { SupportAsk, SupportScope } from './support_ask'
 
@@ -53,8 +53,10 @@ export function relayPeers(s: RelayState, ask: { id: string; scope?: SupportScop
 
 /** The text a relayed ask travels as: the same ask, marked relayed, with the asker's name. */
 export function relayText(appUrl: string, ask: Pick<SupportAsk, 'id' | 'chips' | 'note' | 'until'> & { scope: SupportScope }, askerName: string): string {
-  return supportText(appUrl, { ...ask, scope: { ...ask.scope, relayed: true, from: askerName.slice(0, SCOPE_TEXT_MAX) } })
+  const from = askerName.slice(0, SCOPE_TEXT_MAX)
+  return supportText(appUrl, { ...ask, note: `${from}: ${ask.note}`.slice(0, SUPPORT_NOTE_MAX), scope: { ...ask.scope, relayed: true, from } }) // F7: an old app ignores scope and shows the note: it names the asker there
 }
+
 
 /** A relayed receiver said "I'm here": the host passes it to the asker with the name. */
 export const viaHereText = (appUrl: string, id: string, name: string): string => `${appUrl}?${VIA_PARAM}=${encodeURIComponent(JSON.stringify({ id, name: name.slice(0, SCOPE_TEXT_MAX) }))}`
