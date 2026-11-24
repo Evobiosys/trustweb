@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 46 iyg-ask-reach: scope on the wire (+ old payloads), who a host passes a scoped ask to, single hop, "I'm here" back through the host. Fake names only. */
 import { SUPPORT_PARAM, buildSupport, cleanScope, parseSupportText, supportText, SupportWindow } from '../../src/support_ask.ts'
-import { eventHostPeople, parseViaHere, relayPeers, relayText, scopeOfFilter, viaHereText } from '../../src/support_relay.ts'
+import { canAskHere, eventHostPeople, parseViaHere, relayPeers, relayText, scopeOfFilter, viaHereText } from '../../src/support_relay.ts'
 import { MAX_FANOUT } from '../../src/hops.ts'
 import { communityTools } from '../../../mcp/src/community_tools.ts'
 
@@ -10,7 +10,7 @@ const NOW = Date.UTC(2026, 10, 24, 10)
 const person = (id, extra = {}) => ({ id: 'p-' + id, name: id, ring: 'friend', fields: {}, peerId: id, ...extra })
 const peers = (...ids) => ids.map((id) => ({ id, displayName: id }))
 const ask = (scope) => ({ id: 'ask1', chips: ['listen'], note: 'hello', until: NOW + 1e6, ...(scope ? { scope } : {}) })
-const hostEvent = (over = {}) => ({ id: 'ev1', name: 'Winter IYG', from: '2026-12-30', where: 'Vienna', createdAt: 1, attended: true, ...over })
+const hostEvent = (over = {}) => ({ id: 'ev1', name: 'Winter IYG', from: '2026-12-30', where: 'Vienna', createdAt: 1, attended: true, offers: { support: true }, ...over })
 const state = (over = {}) => ({
   me: { id: 'me', displayName: 'Hana Host' },
   people: [person('anna', { events: ['ev1'] }), person('ben', { events: ['ev1'] }), person('cy', { events: ['ev1'] }), person('dora')],
@@ -50,6 +50,10 @@ describe('scope on the wire', () => {
 
 describe('relay: who the host passes it on to (event)', () => {
   const scope = { event: 'ev1', name: 'Winter IYG' }
+  it('a host who did not switch "Ask for support" on passes nothing on', () => {
+    expect(relayPeers(state({ events: [hostEvent({ offers: undefined })] }), ask(scope), 'anna')).toEqual([])
+    expect(relayPeers(state({ events: [hostEvent({ offers: { support: false } })] }), ask(scope), 'anna')).toEqual([])
+  })
   it('a host passes it to the other attendees, never back to the sender', () => {
     expect(ids(relayPeers(state(), ask(scope), 'anna'))).toEqual(['ben', 'cy'])
   })
@@ -132,5 +136,24 @@ describe('MCP parity: support_ask takes the scope', () => {
     expect(out.asked).toBe(1)
     expect(rec.supportAsks[0].scope).toEqual({ event: 'ev1', name: 'Winter IYG' })
     expect(() => tool.run({ text: 'x', audience: ['closest-few'], scope: { name: 'no ids' } })).toThrow()
+  })
+})
+
+describe('canAskHere: the event page offers the ask', () => {
+  const guestCopy = (over = {}) => hostEvent({ offers: undefined, fromLink: true, hosts: ['Hana Host'], ...over })
+  const guest = (events) => ({ people: [person('hana', { name: 'Hana Host', peerId: 'hana' })], events })
+  it('a guest copy (joined by link or QR, no host switch on it) offers it when a connected host can pass it on', () => {
+    expect(canAskHere(guest([guestCopy()]), guestCopy())).toBe(true)
+  })
+  it('also for an event that is over', () => {
+    expect(canAskHere(guest([guestCopy({ from: '2020-01-01', to: '2020-01-02' })]), guestCopy({ from: '2020-01-01', to: '2020-01-02' }))).toBe(true)
+  })
+  it('not when I am no attendee, the host is not connected, or it is my own event with the switch off', () => {
+    expect(canAskHere(guest([guestCopy({ attended: false })]), guestCopy({ attended: false }))).toBe(false)
+    expect(canAskHere({ people: [], events: [guestCopy()] }, guestCopy())).toBe(false)
+    expect(canAskHere(state(), hostEvent({ offers: undefined }))).toBe(false)
+  })
+  it('my own event with the switch on', () => {
+    expect(canAskHere(state(), hostEvent())).toBe(true)
   })
 })

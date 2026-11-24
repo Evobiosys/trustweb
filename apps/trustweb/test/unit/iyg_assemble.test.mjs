@@ -114,7 +114,7 @@ describe('G4 via people next to asks and resources', () => {
   it('a via person is no resource recipient, no ask relay target', () => {
     const s = base({ people: [person('pa', 'Anna'), viaAnna] })
     expect(recipientsOf(s, { communityId: 'iyg', eventIds: ['e1'] }).map((p) => p.id)).toEqual(['pa'])
-    const rs = { me: { id: 'me', displayName: 'Hanna' }, people: [person('pa', 'Anna', { events: ['e1'] }), person('pb', 'Ben', { events: ['e1'] }), viaAnna], peers: [{ id: 'peer-pa' }, { id: 'peer-pb' }], events: s.events, supportIn: [] }
+    const rs = { me: { id: 'me', displayName: 'Hanna' }, people: [person('pa', 'Anna', { events: ['e1'] }), person('pb', 'Ben', { events: ['e1'] }), viaAnna], peers: [{ id: 'peer-pa' }, { id: 'peer-pb' }], events: s.events.map((e) => ({ ...e, offers: { support: true } })), supportIn: [] }
     expect(relayPeers(rs, { id: 'k1', scope: { event: 'e1', name: 'Winter OG' } }, 'peer-pa').map((p) => p.id)).toEqual(['peer-pb'])
   })
   it('a resource whose author is only a via person creates no person', () => {
