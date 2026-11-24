@@ -26,6 +26,7 @@ import { createEventMerge } from './event_merge_flow' // wave45 merge-events
 import { resolveEvent } from './event_merge'
 import { mayAnnounce, seesEvent } from './community_event_access' // wave45 community-events-invite-only; answers-45a: seesEvent
 import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
+import { parseCommunity } from './ext/community-mighty/community_data' // wave46 iyg-reviewfix F2
 import { communityRosterNames, rosterDue, rosterNames, rosterTags } from './event_roster' // wave46 iyg-roster
 
 /** How long after showing the event QR a new connection gets the event (a scan follows the show within minutes). */
@@ -172,12 +173,17 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     return true
   }
 
+  /** wave46 iyg-reviewfix F2: who may roster a community to me: an organizer of it on my device, or a host of one of its events I attend. A mere member may not. */
+  const namesCommunity = (st: ReturnType<typeof host.state>, who: Person, tag: string): boolean =>
+    parseCommunity(st.extData?.['community-mighty']).meta?.[tag]?.organizers.includes(who.id) === true
+    || (st.events ?? []).some((e) => e.attended && communityOfEvent(e) === tag && isEventHost(e, who.name, st.people))
+
   /** Wave 44c seen-through: an introduction counts only from a host of an event I attend; the person sits outside my rings via that host. */
   function onSeen(peer: P, seen: NonNullable<EventEnvelope['seen']>): boolean {
     const st = host.state()
     const who = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined && !p.via)
     if (seen.id === undefined) { // wave46 iyg-roster: a community roster name; the sender must hold that community tag on my device
-      if (!who || !seen.tag || !seen.who || String(who.fields?.[seen.tag]) !== 'true') return false
+      if (!who || !seen.tag || !seen.who || !namesCommunity(st, who, seen.tag)) return false
       if (!addSeenThrough(st, { via: who.id, who: seen.who, shown: true, source: 'event', tag: seen.tag, now: host.now(), id: 'seen-' + randomId(10) })) return false
       host.save()
       host.changed()

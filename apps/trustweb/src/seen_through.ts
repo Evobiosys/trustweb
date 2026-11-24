@@ -15,6 +15,8 @@ import type { Person } from './model'
 export type SeenSource = 'event' | 'intro' | 'ask'
 /** The longest name a seen-through item carries (wire.ts VIA_NAME_MAX). */
 export const SEEN_WHO_MAX = 40
+/** wave46 iyg-reviewfix F2: the most named cards one friend's event or roster introductions may add. */
+export const ROSTER_CARDS_MAX = 200
 /** The context of an intro answer's item (travels; the asker's card shows it), so the asker files it as an introduction, not as a tip. */
 export const INTRO_CONTEXT = 'An introduction'
 /** What a yes to a show ask shares (the friend's device only reads that it is a yes). */
@@ -68,6 +70,7 @@ export function addSeenThrough(s: People, x: SeenInput): string | undefined {
     if (name) { hit.name = name; delete hit.anonymous }
     return hit.id
   }
+  if (name && x.source === 'event' && s.people.filter((p) => alive(p) && p.via === x.via && p.seen?.source === 'event').length >= ROSTER_CARDS_MAX) return undefined // wave46 iyg-reviewfix F2
   s.people.push({ id: x.id, name, context: '', ring: 'none' as Person['ring'], metAt: x.now, lines: [], via: x.via, ...(name ? {} : { anonymous: true }), seen })
   return x.id
 }

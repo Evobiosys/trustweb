@@ -115,7 +115,7 @@ describe('rosterSync (host device)', () => {
 })
 
 describe('onSeen with a tag (guest device)', () => {
-  const guest = (holds = true) => phone('Anna', [P('h', 'Hanna', { peerId: 'ph', ...(holds ? { fields: { iyg: 'true' } } : {}) })], [])
+  const guest = (holds = true) => phone('Anna', [P('h', 'Hanna', { peerId: 'ph', fields: { iyg: 'true' } })], [], holds ? meta({ organizers: ['h'] }) : undefined)   // F2: organizer, not just a member
   it('a tag roster from a member who holds the tag adds a via person with seen.tag', async () => {
     const g = guest()
     expect(await g.env.onEnvelope({ id: 'ph' }, { v: 1, t: 'event', seen: { tag: 'iyg', shown: true, who: 'Ben' } })).toBe('filled')

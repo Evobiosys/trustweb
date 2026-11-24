@@ -59,3 +59,32 @@ describe('F1 an off guest is never named', () => {
     expect(parse(JSON.stringify({ v: 1, t: 'event', rsvp: { id: 'e1abcd', yes: true } })).rsvp).toEqual({ id: 'e1abcd', yes: true })
   })
 })
+
+import { addSeenThrough } from '../../src/seen_through.ts'
+
+describe('F2 a tag roster counts only from an organizer or a host of one of the community\'s events', () => {
+  const seen = (who = 'Ben') => ({ v: 1, t: 'event', seen: { tag: 'iyg', shown: true, who } })
+  it('a plain member holding the tag cannot plant names', async () => {
+    const g = phone('Anna', [P('h', 'Mallory', { peerId: 'ph', fields: { iyg: 'true' } })], [])
+    expect(await g.env.onEnvelope({ id: 'ph' }, seen())).toBe('ignored')
+    expect(g.state.people.map((p) => p.name)).toEqual(['Mallory'])
+  })
+  it('an organizer of that community on my device is taken', async () => {
+    const g = phone('Anna', [P('h', 'Hanna', { peerId: 'ph', fields: { iyg: 'true' } })], [], meta({ organizers: ['h'] }))
+    expect(await g.env.onEnvelope({ id: 'ph' }, seen())).toBe('filled')
+  })
+  it('a host of an event of that community I attend is taken', async () => {
+    const g = phone('Anna', [P('h', 'Hanna', { peerId: 'ph' })], [ev({ communityId: 'iyg', hosts: ['Hanna'], attended: true })])
+    expect(await g.env.onEnvelope({ id: 'ph' }, seen())).toBe('filled')
+    const n = phone('Anna', [P('h', 'Hanna', { peerId: 'ph' })], [ev({ communityId: 'other', hosts: ['Hanna'], attended: true })])
+    expect(await n.env.onEnvelope({ id: 'ph' }, seen())).toBe('ignored')
+  })
+  it('one friend adds at most 200 roster cards; names are cut to 40', () => {
+    const s = { people: [P('f', 'Friend')] }
+    for (let i = 0; i < 205; i++) addSeenThrough(s, { via: 'f', who: 'Guest ' + i, shown: true, source: 'event', tag: 'iyg', now: 1, id: 'x' + i })
+    expect(s.people.filter((p) => p.via === 'f')).toHaveLength(200)
+    const t = { people: [P('f', 'Friend')] }
+    addSeenThrough(t, { via: 'f', who: 'y'.repeat(60), shown: true, source: 'event', tag: 'iyg', now: 1, id: 'z' })
+    expect(t.people[1].name).toHaveLength(40)
+  })
+})
