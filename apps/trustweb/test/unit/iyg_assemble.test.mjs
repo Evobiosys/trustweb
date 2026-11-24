@@ -138,7 +138,7 @@ describe('G4 via people next to asks and resources', () => {
 describe('G5 event already happened', () => {
   const P = (id, name, over = {}) => ({ id, name, ring: 'friend', lines: [], metAt: 0, ...over })
   function phone(name, people, events, extData) {
-    const state = { v: 1, me: { id: 'm', displayName: name }, peers: [], people, log: [], events, ...(extData ? { extData } : {}) }
+    const state = { v: 1, me: { id: 'm', displayName: name }, peers: people.filter((p) => p.peerId).map((p) => ({ id: p.peerId, displayName: p.name })), people, log: [], events, ...(extData ? { extData } : {}) }
     const sent = []
     const env = createEventEnvelopes({
       state: () => state, save: () => {}, now: () => NOW, link: () => '', send: async (p, e) => { sent.push([p.id, e]) },

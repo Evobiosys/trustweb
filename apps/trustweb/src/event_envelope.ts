@@ -26,6 +26,7 @@ import { createEventMerge } from './event_merge_flow' // wave45 merge-events
 import { resolveEvent } from './event_merge'
 import { mayAnnounce, seesEvent } from './community_event_access' // wave45 community-events-invite-only; answers-45a: seesEvent
 import { REPLAY_GAP_MS } from './events_refetch' // wave45 events-refetch
+import { ownName } from './own_name' // wave46 iyg-reviewfix D2
 import { parseCommunity } from './ext/community-mighty/community_data' // wave46 iyg-reviewfix F2
 import { communityRosterNames, rosterDue, rosterNames, rosterSignature, rosterTags } from './event_roster' // wave46 iyg-roster
 
@@ -74,7 +75,7 @@ export function receiveAnnounce(s: Pick<AppState, 'events' | 'notifInbox'>, ev: 
 }
 
 export interface EnvelopeHost<P extends { id: string }> {
-  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts' | 'extData' | 'rosterSent'>>
+  state(): Pick<AppState, 'events' | 'me' | 'people'> & Partial<Pick<AppState, 'notifInbox' | 'eventAlerts' | 'extData' | 'rosterSent' | 'peers'>>
   /** Wave 44: the connected peers of the people who carry this community tag (the ones an announce goes to). */
   members?(tag: string): P[]
   /** Wave 44 steer-open-space: the connected people at this event (tagged or invited): the schedule of an open space goes to them. */
@@ -230,7 +231,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
         for (const peer of to) {
           const sent = st.rosterSent?.[key]?.[peer.id] ?? []
           const gone = sent.filter((n) => !now.has(n.toLowerCase())) // F8: told once, no longer on the roster: taken back
-          const due = rosterDue(sent, names, personOf(peer.id)?.name ?? '').slice(0, ROSTER_CAP)
+          const due = rosterDue(sent, names, ownName(st, personOf(peer.id) ?? {})).slice(0, ROSTER_CAP)
           if (!due.length && !gone.length) continue
           st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [...sent.filter((n) => !gone.includes(n)), ...due] } }   // marked first: a failed send is not retried in a storm
           host.save()

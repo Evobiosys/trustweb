@@ -9,8 +9,9 @@ import { decodeFromQr as parse } from '../../../demo/src/wire.ts'
 const P = (id, name, over = {}) => ({ id, name, ring: 'friend', lines: [], metAt: 0, ...over })
 const ev = (over = {}) => ({ id: 'e1', name: 'IYG', from: '2026-12-01', where: 'Alm', createdAt: 1, attended: true, hosts: ['Hanna'], ...over })
 const meta = (m) => ({ 'community-mighty': { meta: { iyg: { kind: 'informal', organizers: [], ...m } } } })
-const rec = (people, extData) => ({ me: { id: 'm', displayName: 'Hanna' }, people, events: [], ...(extData ? { extData } : {}) })
-const guests = () => [P('a', 'Anna', { events: ['e1'], eventShow: { e1: 'open' } }), P('b', 'Ben', { events: ['e1'], eventShow: { e1: 'discoverable' } }), P('c', 'Cleo', { events: ['e1'], eventShow: { e1: 'off' } }), P('d', 'Dora', { events: ['e1'], via: 'a' }), P('g', 'Gone', { events: ['e1'], deleted_at: '2026-01-01' })]
+const peersOf = (people) => people.filter((p) => p.peerId).map((p) => ({ id: p.peerId, displayName: p.name }))   // D2: the roster names what each announced
+const rec = (people, extData) => ({ me: { id: 'm', displayName: 'Hanna' }, people, peers: peersOf(people), events: [], ...(extData ? { extData } : {}) })
+const guests = () => [P('a', 'Anna', { events: ['e1'], peerId: 'pa', eventShow: { e1: 'open' } }), P('b', 'Ben', { events: ['e1'], peerId: 'pb', eventShow: { e1: 'discoverable' } }), P('c', 'Cleo', { events: ['e1'], peerId: 'pc', eventShow: { e1: 'off' } }), P('d', 'Dora', { events: ['e1'], peerId: 'pd', via: 'a' }), P('g', 'Gone', { events: ['e1'], peerId: 'pg', deleted_at: '2026-01-01' })]
 
 describe('rosterNames', () => {
   it('showAll: open + discoverable, never off, via, deleted', () => {
@@ -28,7 +29,7 @@ describe('rosterNames', () => {
   })
   it('names are cut to 40 and each once', () => {
     const long = 'x'.repeat(60)
-    expect(rosterNames(rec([P('a', long, { events: ['e1'] }), P('b', 'anna', { events: ['e1'] }), P('c', 'Anna', { events: ['e1'] })]), ev({ showAll: true }))).toEqual(['x'.repeat(40), 'anna'])
+    expect(rosterNames(rec([P('a', long, { events: ['e1'], peerId: 'pa' }), P('b', 'anna', { events: ['e1'], peerId: 'pb' }), P('c', 'Anna', { events: ['e1'], peerId: 'pc' })]), ev({ showAll: true }))).toEqual(['x'.repeat(40), 'anna'])
   })
 })
 
@@ -40,7 +41,7 @@ describe('rosterDue', () => {
 })
 
 describe('communityRosterNames', () => {
-  const people = [P('a', 'Anna', { fields: { iyg: 'true' } }), P('b', 'Ben', { fields: { iyg: 'true' } }), P('z', 'Zed')]
+  const people = [P('a', 'Anna', { peerId: 'pa', fields: { iyg: 'true' } }), P('b', 'Ben', { peerId: 'pb', fields: { iyg: 'true' } }), P('z', 'Zed')]
   it('an organizer of an intimate community in mode members names its members', () => {
     expect(communityRosterNames(rec(people, meta({ intimate: true, organizers: ['me'] })), 'iyg').sort()).toEqual(['Anna', 'Ben'])
   })
@@ -52,7 +53,7 @@ describe('communityRosterNames', () => {
 })
 
 function phone(name, people, events, extData) {
-  const state = { v: 1, me: { id: 'm', displayName: name }, peers: [], people, log: [], events, ...(extData ? { extData } : {}) }
+  const state = { v: 1, me: { id: 'm', displayName: name }, peers: peersOf(people), people, log: [], events, ...(extData ? { extData } : {}) }
   const sent = []
   const env = createEventEnvelopes({
     state: () => state, save: () => {}, now: () => 1000, link: () => '', send: async (p, e) => { sent.push([p.id, e]) },
@@ -81,6 +82,7 @@ describe('rosterSync (host device)', () => {
     await h.env.rosterSync()
     expect(h.sent).toEqual([])
     h.state.people.push(P('d', 'Dora', { events: ['e1'], peerId: 'pd' }))
+    h.state.peers.push({ id: 'pd', displayName: 'Dora' })
     await h.env.rosterSync()
     expect(h.sent.filter(([p]) => p === 'pa').map(([, e]) => e.seen.who)).toEqual(['Dora'])
     expect(h.sent.filter(([p]) => p === 'pd').map(([, e]) => e.seen.who).sort()).toEqual(['Anna', 'Ben'])

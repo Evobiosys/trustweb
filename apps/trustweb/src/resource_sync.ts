@@ -21,12 +21,13 @@ import { cleanHelloName } from './hello'
 import { stripUnsafe } from './safe_text'
 import { BLOCK_TEXT_MAX } from './resource_blocks'
 import { REPLAY_GAP_MS } from './events_refetch'
+import { ownName } from './own_name' // wave46 iyg-reviewfix D2
 import { communityOfEvent } from './event_visibility'
 import { parseCommunity } from './ext/community-mighty/community_data'
 
 export type Res = Exclude<NonNullable<EventEnvelope['res']>, ResRetraction>
 export type Outcome = 'new' | 'updated' | 'ignored'
-type Rec = Pick<AppState, 'people' | 'me' | 'inventory'> & Partial<Pick<AppState, 'events' | 'extData'>>
+type Rec = Pick<AppState, 'people' | 'me' | 'inventory'> & Partial<Pick<AppState, 'events' | 'extData' | 'peers'>>
 
 const SKEW_MS = 5 * 60_000
 const TOMBSTONE_MS = 30 * 86_400_000
@@ -43,6 +44,8 @@ export const FORWARD_WINDOW_MS = 10 * 60_000
 
 const live = (p: Person): boolean => p.deleted_at === undefined && !p.via
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
+/** D2: `n` is this person's name: my label for them or the name they announced. */
+const isNamed = (s: Rec, p: Person, n: string): boolean => sameName(p.name, n) || (!!ownName(s, p) && sameName(ownName(s, p), n))
 const cleanName = (raw: unknown): string => cleanHelloName(String(raw ?? '')).slice(0, NAME_MAX)
 const cleanText = (raw: unknown): string => stripUnsafe(String(raw ?? '')).replace(/\s+/g, ' ').trim().slice(0, TEXT_MAX)
 const eventsOf = (s: Rec, ids: readonly string[]): TwEvent[] => (s.events ?? []).filter((e) => ids.includes(e.id))
@@ -102,7 +105,7 @@ export function applyIncoming(s: Rec, who: Person, p: Res | ResRetraction, now: 
   if (retraction || p.retracted) {
     if (!have?.sharedBy || have.communityId !== p.communityId || !live(who) || !mayShareInto(s, who, have.communityId, eventIdsOf(have))) return 'ignored'
     const at = Math.min(p.updatedAt, now + SKEW_MS)
-    if (have.sharedFrom !== who.id && !sameName(who.name, have.sharedBy)) return 'ignored'
+    if (have.sharedFrom !== who.id && !isNamed(s, who, have.sharedBy)) return 'ignored'
     if (at <= (have.updatedAt ?? have.createdAt)) return 'ignored'
     Object.assign(have, { updatedAt: at, included: false, retractedAt: at })
     return 'updated'
@@ -114,8 +117,8 @@ export function applyIncoming(s: Rec, who: Person, p: Res | ResRetraction, now: 
   const text = cleanText(full.text)
   if (!text) return 'ignored'
   const at = Math.min(full.updatedAt, now + SKEW_MS)
-  const by = (eventsOf(s, full.eventIds).some((e) => namedHost(e, who.name, s.people)) && cleanName(full.by)) || cleanName(who.name) || 'TrustWeb'
-  if (have && (!have.sharedBy || (have.sharedFrom !== who.id && !sameName(who.name, have.sharedBy)) || at <= (have.updatedAt ?? have.createdAt))) return 'ignored'
+  const by = (eventsOf(s, full.eventIds).some((e) => namedHost(e, who.name, s.people)) && cleanName(full.by)) || cleanName(ownName(s, who)) || 'TrustWeb' // D2: the name they announced, never my label for them
+  if (have && (!have.sharedBy || (have.sharedFrom !== who.id && !isNamed(s, who, have.sharedBy)) || at <= (have.updatedAt ?? have.createdAt))) return 'ignored'
   if (!have && (s.inventory.filter((i) => i.sharedFrom === who.id).length >= PER_SENDER_MAX || s.inventory.filter((i) => i.sharedBy && i.communityId === full.communityId).length >= PER_SCOPE_MAX)) return 'ignored' // F4
   const blocks = full.blocks ? cleanBlocks(full.blocks) : []
   const fields: Partial<InventoryItem> = {
@@ -205,7 +208,7 @@ export function createResourceSync<P extends { id: string }>(h: ResourceSyncHost
         recent.push(h.now())
         // F3: only into the scopes the sender belongs to on my device: the community when it is in it, else just the events it attends or hosts
         const scope = { communityId: inCommunity(s, who, kept.communityId) ? kept.communityId : '', eventIds: kept.eventIds.filter((id) => who.events?.includes(id) || eventsOf(s, [id]).some((e) => namedHost(e, who.name, s.people))) }
-        await push(kept, recipientsOf(s, scope).filter((p) => p.id !== who.id && !sameName(p.name, kept.by)))
+        await push(kept, recipientsOf(s, scope).filter((p) => p.id !== who.id && !isNamed(s, p, kept.by)))
       }
       return true
     },
@@ -219,11 +222,11 @@ export function createResourceSync<P extends { id: string }>(h: ResourceSyncHost
       for (const i of s.inventory) {
         if (!(syncedMine(i) || (i.sharedBy && i.communityId && iHostAny(eventIdsOf(i))))) continue
         const r = payloadOf(i, i.sharedBy ?? myName())
-        if (!r.communityId || sameName(who.name, r.by) || !inScope(s, who, r.communityId, r.eventIds) || (sent.get(peer.id)?.get(r.id) ?? -Infinity) >= r.updatedAt) continue
+        if (!r.communityId || isNamed(s, who, r.by) || !inScope(s, who, r.communityId, r.eventIds) || (sent.get(peer.id)?.get(r.id) ?? -Infinity) >= r.updatedAt) continue
         n += await push(r, [who])
       }
       for (const r of Object.values(known())) { // an item I removed: its retraction reaches whoever was offline
-        if (!r.retracted || sameName(who.name, r.by) || !inScope(s, who, r.communityId, r.eventIds) || (sent.get(peer.id)?.get(r.id) ?? -Infinity) >= r.updatedAt || s.inventory.some((i) => i.id === r.id)) continue
+        if (!r.retracted || isNamed(s, who, r.by) || !inScope(s, who, r.communityId, r.eventIds) || (sent.get(peer.id)?.get(r.id) ?? -Infinity) >= r.updatedAt || s.inventory.some((i) => i.id === r.id)) continue
         n += await push(r, [who])
       }
       return n

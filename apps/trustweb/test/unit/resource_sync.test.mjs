@@ -15,7 +15,8 @@ const et = { slug: eventTagSlug, label: eventTagLabel }
 const ev1 = { id: 'e1', name: 'Winter OG', communityId: 'iyg' }
 const ev2 = { id: 'e2', name: 'Summer OG', communityId: 'iyg' }
 const person = (id, name, extra = {}) => ({ id, name, ring: 'friends', peerId: `peer-${id}`, lines: [], fields: { iyg: 'true' }, ...extra })
-const rec = (over = {}) => ({
+const withPeers = (r) => ({ ...r, peers: r.peers ?? r.people.filter((p) => p.peerId).map((p) => ({ id: p.peerId, displayName: p.name })) })   // iyg-reviewfix D2: a sender's own name comes from its peer
+const rec = (over = {}) => withPeers({
   me: { displayName: 'Hanna' },
   people: [person('pa', 'Anna'), person('pb', 'Ben'), person('pz', 'Zed', { fields: {} })],
   events: [{ ...ev1, attended: true, hosts: ['Hanna'], createdAt: 1 }, { ...ev2, attended: true, hosts: ['Hanna'], createdAt: 1 }],

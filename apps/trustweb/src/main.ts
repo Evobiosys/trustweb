@@ -61,6 +61,7 @@ import { planFlush } from './support_flush'
 import { communityChatLive } from './ext/community_mode/chat_row'
 import { addMember, metaOf, parseCommunity, rememberAudience } from './ext/community-mighty/community_data'
 import type { SupportIo } from './support_ask_view'
+import { ownName } from './own_name' // wave46 iyg-reviewfix D2
 import { relayPeers, relayText, parseViaHere, supportTextFor, viaHereText } from './support_relay'   // wave46 iyg-ask-reach
 import { ASK_MODES, AskMode, closeText, isOpen, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
@@ -121,7 +122,7 @@ import { decodeModeLink, INTRODUCE_PERMISSIONS, parseIntroducePermission } from 
 import type { QrContext } from './qr_modes'
 import { openQrPage } from './qr_modes_view'
 import { tapEdit } from './tap_edit'
-import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
+import { HELLO_NAME_MAX, NAMELESS_PEER, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
@@ -4999,7 +5000,7 @@ function onSupportText(peer: Peer, text: string): void {
     if ((s.supportIn ?? []).some((x) => x.id === ask.id && x.peerId !== peer.id)) return   // wave46 iyg-ask-reach: the same ask came another way already
     const fwd = relayPeers(s, ask, peer.id)   // wave46 iyg-ask-reach: a host passes a scoped ask on, once
     s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id, ...(fwd.length ? { relayedTo: fwd.map((x) => x.id) } : {}) }, Date.now())
-    if (fwd.length && ask.scope) { const text = relayText(APP_URL, { ...ask, scope: ask.scope }, person.name); for (const x of fwd) void net.sendText(x, text).catch(() => undefined) }   // wave46 iyg-ask-reach
+    if (fwd.length && ask.scope) { const text = relayText(APP_URL, { ...ask, scope: ask.scope }, ownName(s, person) || NAMELESS_PEER); for (const x of fwd) void net.sendText(x, text).catch(() => undefined) }   // wave46 iyg-ask-reach; iyg-reviewfix D2: the name they announced, never my label
     save()
     if (sourceNotifies(s, { kind: 'support', peerId: peer.id })) toast(S.supportGotOne(person.name))
     if (screen === Screen.Web) render()
@@ -5012,7 +5013,7 @@ function onSupportText(peer: Peer, text: string): void {
   // wave46 iyg-ask-reach: "I'm here" from someone I passed an ask on to goes to its asker, by name; the asker's "who answered" line shows it
   const relayed = id ? (s.supportIn ?? []).find((x) => x.id === id && x.relayedTo?.includes(peer.id)) : undefined
   const asker = relayed ? s.peers.find((x) => x.id === relayed.peerId) : undefined
-  if (id && asker && person) void net.sendText(asker, viaHereText(APP_URL, id, person.name)).catch(() => undefined)
+  if (id && asker && person && ownName(s, person)) void net.sendText(asker, viaHereText(APP_URL, id, ownName(s, person))).catch(() => undefined)   // D2
   const via = parseViaHere(APP_URL, text)
   const mine = via ? (s.supportAsks ?? []).find((x) => x.id === via.id && x.to.includes(peer.id) && isOpen(x, Date.now())) : undefined
   if (via && mine && !(mine.hereVia ?? []).includes(via.name)) { mine.hereVia = [...(mine.hereVia ?? []), via.name]; save(); if (screen === Screen.Web) render() }

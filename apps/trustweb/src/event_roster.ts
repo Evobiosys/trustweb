@@ -11,19 +11,20 @@ import { DEFAULT_EVENT_VISIBILITY, communityOfEvent, isVisibility } from './even
 import { isEventHost } from './event_roles'
 import { isIntimate, membersOf } from './event_community'
 import { mayAnnounce } from './community_event_access'
+import { ownName } from './own_name' // wave46 iyg-reviewfix D1/D2
 import { parseCommunity } from './ext/community-mighty/community_data'
 
 export const ROSTER_NAME_MAX = 40
 /** wave46 iyg-reviewfix F10: how many rosters were really computed (a perf guard in the tests counts it; a save that changed nothing computes none). */
 export const rosterWork = { names: 0 }
-type Rec = Pick<AppState, 'people' | 'me'> & Partial<Pick<AppState, 'extData' | 'events'>>
+type Rec = Pick<AppState, 'people' | 'me'> & Partial<Pick<AppState, 'extData' | 'events' | 'peers'>>
 
-/** Each name once (case-insensitive), cut to the wire limit, nameless ones left out. */
-function named(people: readonly Person[]): string[] {
+/** Each name once (case-insensitive), cut to the wire limit. D1: only people connected to me at least once (a peerId), never a plain tagged contact. D2: the name each announced themselves, never my label; none announced = left out. */
+function named(s: Rec, people: readonly Person[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const p of people) {
-    const n = p.name.trim().slice(0, ROSTER_NAME_MAX)
+    const n = ownName(s, p).slice(0, ROSTER_NAME_MAX)
     if (n && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n) }
   }
   return out
@@ -39,14 +40,14 @@ export function rosterNames(s: Rec, ev: TwEvent): string[] {
   rosterWork.names++
   const tag = communityOfEvent(ev)
   if (!isEventHost(ev, s.me.displayName, s.people) || !(ev.showAll === true || (tag && isIntimate(s, tag)))) return []
-  return named(attendees(s as AppState, ev.id).filter((p) => rosterListed(p, ev.id, ev.showAll === true) && firstHand(p)))
+  return named(s, attendees(s as AppState, ev.id).filter((p) => rosterListed(p, ev.id, ev.showAll === true) && firstHand(p)))
 }
 
 /** The members of an intimate community I organize (mode members): the names that go to its connected members. */
 export function communityRosterNames(s: Rec, tag: string): string[] {
   rosterWork.names++
   const mine = parseCommunity(s.extData?.['community-mighty']).meta?.[tag]?.organizers.includes('me') === true
-  return mine && mayAnnounce(s, tag) && isIntimate(s, tag) ? named(membersOf(s, tag)) : []
+  return mine && mayAnnounce(s, tag) && isIntimate(s, tag) ? named(s, membersOf(s, tag)) : []
 }
 
 /** The communities this device may roster. */

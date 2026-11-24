@@ -425,3 +425,35 @@ describe('D3 the scope name goes only to people inside the scope', () => {
     expect(supportTextFor(APP, s, a(undefined), s.people[1])).not.toContain('scope')
   })
 })
+
+import { ownName } from '../../src/own_name.ts'
+
+describe('D1 + D2 rosters name only connected people, by the name they announced', () => {
+  const peers = [{ id: 'pa', displayName: 'Anna Real' }, { id: 'pn', displayName: 'Someone' }]
+  const people = [P('a', 'Mom', { events: ['e1'], peerId: 'pa' }), P('t', 'Tagged Only', { events: ['e1'] }), P('n', 'Nameless', { events: ['e1'], peerId: 'pn' }), P('x', 'Ghost', { events: ['e1'], peerId: 'gone' })]
+  it('ownName: the announced name, never the label; "" for none, the nameless peer or no peer', () => {
+    const s = { peers }
+    expect(ownName(s, people[0])).toBe('Anna Real')
+    expect(ownName(s, people[1])).toBe('')
+    expect(ownName(s, people[2])).toBe('')
+    expect(ownName(s, people[3])).toBe('')
+    expect(ownName({}, people[0])).toBe('')
+  })
+  it('D1 + D2: the event roster lists Anna Real only: no tagged contact, no label, no nameless peer', () => {
+    expect(rosterNames({ me: { displayName: 'Hanna' }, people, peers, events: [] }, ev({ showAll: true }))).toEqual(['Anna Real'])
+  })
+  it('a roster sent to a peer carries the announced name; the label never leaves', async () => {
+    const h = phone('Hanna', [P('a', 'Mom', { events: ['e1'], peerId: 'pa' }), P('b', 'Dad', { events: ['e1'], peerId: 'pb' })], [ev({ showAll: true })])
+    h.state.peers = [{ id: 'pa', displayName: 'Anna Real' }, { id: 'pb', displayName: 'Ben Real' }]
+    await h.env.rosterSync()
+    expect(h.sent.map(([p, e]) => [p, e.seen.who]).sort()).toEqual([['pa', 'Ben Real'], ['pb', 'Anna Real']])
+    expect(JSON.stringify(h.sent)).not.toMatch(/Mom|Dad/)
+  })
+  it('D2 resources: a forwarded author is the name they announced, not my label', async () => {
+    const w = rworld({ me: { displayName: 'Hanna' }, events: [{ id: 'e1', name: 'Winter', communityId: 'iyg', attended: true, hosts: ['Hanna'], createdAt: 1 }], people: [rp('ps', 'Annie-label'), rp('pa', 'Ben')] })
+    w.s.peers = [{ id: 'peer-ps', displayName: 'Anna Real' }, { id: 'peer-pa', displayName: 'Ben Real' }]
+    await w.sync.onEnvelope({ id: 'peer-ps' }, rres({ by: 'Anna Real' }))
+    expect(w.s.inventory[0].sharedBy).toBe('Anna Real')
+    expect(w.sent.map(([p, e]) => [p, e.res.by])).toEqual([['peer-pa', 'Anna Real']])
+  })
+})
