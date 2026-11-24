@@ -5,7 +5,7 @@
  */
 import type { AppState, InventoryItem, ResourceKind } from './model'
 import type { ColourTag } from './colour_tags'
-import { goneFromView } from './resource_scope' // wave46 iyg-reviewfix
+import { goneFromView } from './resource_scope.ts' // wave46 iyg-reviewfix
 
 export const RESOURCE_KINDS: readonly ResourceKind[] = ['book', 'publication', 'reference', 'recording', 'link', 'other']
 export type ResourceView = 'list' | 'outliner' | 'person'
