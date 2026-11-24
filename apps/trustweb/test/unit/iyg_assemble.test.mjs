@@ -7,7 +7,7 @@ import { allTools } from '../../../mcp/src/tools.ts'
 import { editSynced } from '../../src/resource_scope.ts'
 import { createResourceSync, recipientsOf } from '../../src/resource_sync.ts'
 import { addSeenThrough } from '../../src/seen_through.ts'
-import { relayPeers } from '../../src/support_relay.ts'
+import { communityHostPeople, relayPeers } from '../../src/support_relay.ts'
 import { createEventEnvelopes } from '../../src/event_envelope.ts'
 import { buildViaMembers } from '../../src/ext/community-mighty/community_model.ts'
 
@@ -183,5 +183,16 @@ describe('G1 MCP resource_edit', () => {
     expect(() => f.by.resource_edit.run({ id: 'r1', title: 'x', link: 'http://example.test' })).toThrow()
     expect(() => f.by.resource_edit.run({ id: 'r2', title: 'x' })).toThrow()
     expect(f.rec().inventory[0].text).toBe('Sled guide')
+  })
+})
+
+describe('G3b community ask reaches the host', () => {
+  const guestView = () => ({
+    people: [person('ph', 'Hanna', { ring: 'acquaintance', fields: { iyg: 'true' } }), person('pc', 'Cleo', { ring: 'acquaintance', fields: { iyg: 'true' } }), person('pv', 'Vera', { peerId: undefined, via: 'ph' })],
+    events: [{ id: 'e1', name: 'Winter OG', communityId: 'iyg', attended: true, hosts: ['Hanna'], createdAt: 1 }, { id: 'e2', name: 'Other', communityId: 'zzz', attended: true, hosts: ['Cleo'], createdAt: 1 }],
+  })
+  it('the hosts of the community\'s events, connected only, no other acquaintance', () => {
+    expect(communityHostPeople(guestView(), 'iyg').map((p) => p.name)).toEqual(['Hanna'])
+    expect(communityHostPeople(guestView(), 'none')).toEqual([])
   })
 })

@@ -29,6 +29,12 @@ export function eventHostPeople(s: Pick<AppState, 'people' | 'events'>, eventId:
   return s.people.filter((p) => p.deleted_at === undefined && p.peerId && (refs.includes(p.id.toLowerCase()) || refs.includes(p.name.trim().toLowerCase())))
 }
 
+/** wave46 iyg-assemble (G3b): the connected hosts of the events of a community (any ring): an ask limited to the community must reach them, they pass it on. */
+export function communityHostPeople(s: Pick<AppState, 'people' | 'events'>, tag: string): Person[] {
+  const ids = (s.events ?? []).filter((e) => (e.communityId ?? e.community) === tag).flatMap((e) => eventHostPeople(s, e.id).map((p) => p.id))
+  return s.people.filter((p) => ids.includes(p.id))
+}
+
 /** The peers this device passes an incoming scoped ask on to; empty unless I host/announce the scope, the sender belongs to it, and the ask is new and not relayed already. */
 export function relayPeers(s: RelayState, ask: { id: string; scope?: SupportScope }, senderPeerId: string): Peer[] {
   const scope = ask.scope

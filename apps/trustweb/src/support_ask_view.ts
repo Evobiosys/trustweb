@@ -20,7 +20,7 @@ import type { SupportIn, SupportScope } from './support_ask'
 import { cancelAsk, inboxRows } from './support_inbox'
 import { agentAsks, approveAgentAsk, discardAgentAsk } from './support_flush'
 import { draftable } from './drafts_dom'
-import { eventHostPeople, scopeOfFilter } from './support_relay'  // wave46 iyg-ask-reach
+import { communityHostPeople, eventHostPeople, scopeOfFilter } from './support_relay'  // wave46 iyg-ask-reach
 import { tagLabel as eventLabel } from './events'  // wave46 iyg-ask-reach
 import { roleLabels, eventOrganizers } from './event_roles'  // wave46 iyg-ask-reach
 
@@ -46,7 +46,8 @@ function recipients(io: SupportIo, f: AudienceFilter & FilterExtras): { peer: Pe
   // wave46 iyg-ask-reach: an event chip also reaches the event's hosts (unless hidden): they pass the ask on to the people the asker does not know
   const hidden = chipIds(f.exclude, s.people, tagTester(s.people, loadColourTags()))
   const chip = f.add.find((c) => c.startsWith('event:'))
-  const hosts = chip ? eventHostPeople(s, chip.slice(6)).filter((p) => p.peerId && open.has(p.peerId) && !hidden.includes(p.id) && !reached.includes(p)) : []
+  // wave46 iyg-assemble: a community-limited ask also reaches the hosts of its events
+  const hosts = (chip ? eventHostPeople(s, chip.slice(6)) : f.only ? communityHostPeople(s, f.only) : []).filter((p) => p.peerId && open.has(p.peerId) && !hidden.includes(p.id) && !reached.includes(p))
   return [...reached, ...hosts]
     .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name, person: p }))
 }
