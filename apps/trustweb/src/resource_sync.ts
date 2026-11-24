@@ -113,7 +113,7 @@ export function applyIncoming(s: Rec, who: Person, p: Res | ResRetraction, now: 
   if (!full) return 'ignored'
   const mine = eventsOf(s, full.eventIds).filter((e) => e.attended || isEventHost(e, s.me.displayName, s.people))
   if (!live(who) || (!holds(full.communityId) && mine.length === 0) || !mayShareInto(s, who, full.communityId, full.eventIds)) return 'ignored'
-  if (eventsOf(s, full.eventIds).some((e) => communityOfEvent(e) !== full.communityId)) return 'ignored' // F3: an event of another community
+  if (eventsOf(s, full.eventIds).some((e) => { const c = communityOfEvent(e); return c !== undefined && c !== full.communityId })) return 'ignored' // F3: an event I know to belong to another community (one that came by QR, without a community, is not foreign)
   const text = cleanText(full.text)
   if (!text) return 'ignored'
   const at = Math.min(full.updatedAt, now + SKEW_MS)

@@ -39,6 +39,7 @@ export function communityHostPeople(s: Pick<AppState, 'people' | 'events'>, tag:
 export function relayHostPeople(s: Pick<AppState, 'people' | 'events' | 'extData'>, scope: { tag?: string; event?: string }): Person[] {
   if (scope.event) return eventHostPeople(s, scope.event)
   const organizers = scope.tag ? parseCommunity(s.extData?.['community-mighty']).meta?.[scope.tag]?.organizers ?? [] : []
+  if (!organizers.length) return scope.tag ? communityHostPeople(s, scope.tag) : [] // a guest's phone often names no organizer: then the hosts of the community's events are the best I know
   return s.people.filter((p) => p.deleted_at === undefined && p.peerId && organizers.includes(p.id))
 }
 

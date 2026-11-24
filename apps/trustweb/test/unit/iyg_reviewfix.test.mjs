@@ -128,6 +128,10 @@ describe('F3 a res stays inside its own scope', () => {
     expect(applyIncoming(s, plain, rres({ eventIds: ['e1', 'e2'] }), NOW, anyTag)).toBe('ignored')
     expect(applyIncoming(s, plain, rres({ eventIds: ['e1'] }), NOW, anyTag)).toBe('new')
   })
+  it('an event I know without a community (it came by QR) is not foreign', () => {
+    const s = rrec({ events: [{ id: 'e1', name: 'Winter', attended: true, hosts: ['Hanna'], createdAt: 1 }] })
+    expect(applyIncoming(s, rp('ph', 'Hanna'), rres(), NOW, anyTag)).toBe('new')
+  })
   it('a community holder is taken for its events', () => {
     expect(applyIncoming(rrec(), rp('pm', 'Mia'), rres({ eventIds: ['e1', 'e2'] }), NOW, anyTag)).toBe('new')
   })
@@ -360,9 +364,10 @@ describe('F9 an ask reaches only hosts who can relay that scope', () => {
   it('event scope: the event\'s named hosts', () => {
     expect(relayHostPeople(s(), { event: 'e1' }).map((p) => p.name)).toEqual(['Hanna'])
   })
-  it('community scope: only its organizers on my device, not every event host', () => {
-    expect(relayHostPeople(s(), { tag: 'iyg' })).toEqual([])
+  it('community scope: where my device names organizers only they, not every event host; where it names none, the hosts of its events', () => {
     expect(relayHostPeople(s(meta({ organizers: ['o'] })), { tag: 'iyg' }).map((p) => p.name)).toEqual(['Olga'])
+    expect(relayHostPeople(s(), { tag: 'iyg' }).map((p) => p.name)).toEqual(['Hanna'])
+    expect(relayHostPeople(s(), { tag: 'other' })).toEqual([])
   })
   it('no scope or an unknown event: nobody', () => {
     expect(relayHostPeople(s(), {})).toEqual([])

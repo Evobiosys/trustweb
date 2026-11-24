@@ -76,6 +76,9 @@ async function scenario(browser, server, label, evId, hostRecord) {
   const payload = await h.page.getAttribute('[data-qr-modes]', 'data-payload')
   const a = await guestJoins(browser, server, 'Anna', payload)
   const b = await guestJoins(browser, server, 'Ben', payload)
+  if (label === 'intimate') { // iyg-reviewfix F1: without the host's showAll only a guest who shows 'open' is named; the new mode reaches the host as a fresh rsvp
+    for (const g of [a, b]) { await openEventPage(g.page, evId); await g.page.locator('[data-event-visibility-opt="open"]').evaluate((n) => n.click()); await g.page.waitForTimeout(600) }
+  }
   const peers = async (p) => (await record(p)).peers.length
   t.ok(label + ': Anna and Ben are each connected only to Hanna', (await peers(a.page)) === 1 && (await peers(b.page)) === 1)
   for (const [me, other, otherName] of [[a, b, 'Ben'], [b, a, 'Anna']]) {
