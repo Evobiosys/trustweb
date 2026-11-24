@@ -216,3 +216,32 @@ describe('F5 a retraction carries no content', () => {
     expect(listResources(items, [], {}).items.map((i) => i.id)).toEqual(['r2'])
   })
 })
+
+import { retractSynced, sharedWithLine } from '../../src/resource_scope.ts'
+
+describe('F6 a synced item shows its scope, not audience controls', () => {
+  it('one line names the community and its events', () => {
+    const item = { communityId: 'iyg', eventIds: ['e1', 'e2'] }
+    const line = sharedWithLine(item, (t) => 'IYG ' + t, (id) => ({ e1: 'Winter', e2: 'Summer' })[id], (c, e) => `Shared with ${c}${e ? ` and ${e}` : ''}`)
+    expect(line).toBe('Shared with IYG iyg and Winter, Summer')
+    expect(sharedWithLine({ communityId: 'iyg' }, (t) => t, () => '', (c, e) => `${c}|${e}`)).toBe('iyg|')
+  })
+  it('Remove retracts my own synced item only', () => {
+    const items = [{ id: 'a', text: 'T', included: true, synced: true }, { id: 'b', text: 'T', included: true }, { id: 'c', text: 'T', included: true, synced: true, sharedBy: 'X' }]
+    expect(retractSynced(items, 'a')).toBe(true)
+    expect(items[0].included).toBe(false)
+    expect(retractSynced(items, 'b')).toBe(false)
+    expect(retractSynced(items, 'c')).toBe(false)
+    expect(items[1].included).toBe(true)
+  })
+  it('MCP resource_retract does the same', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tw-w46-rf6-'))
+    const file = path.join(dir, 'record.json')
+    writeFileSync(file, JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Ana' }, people: [], inventory: [{ id: 'a', text: 'T', audience: 'me', included: true, createdAt: 1, synced: true }], events: [] }))
+    writeFileSync(path.join(dir, 'colourtags.json'), '[]')
+    const by = Object.fromEntries(allTools({ file, write: true, now: () => new Date(NOW) }).map((t) => [t.name, t]))
+    by.resource_retract.run({ id: 'a' })
+    expect(JSON.parse(readFileSync(file, 'utf8')).inventory[0].included).toBe(false)
+    expect(() => by.resource_retract.run({ id: 'zz' })).toThrow()
+  })
+})

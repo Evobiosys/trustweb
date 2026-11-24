@@ -5725,6 +5725,7 @@ export const S = {
   /* wave46 iyg-reviewfix */
   w46rf: {
     hide: 'Hide this resource',
+    remove: 'Remove from the event and its community',
     sharedWith: (community: string, events: string) => `Shared with ${community}${events ? ` and ${events}` : ''}`,
     askFrom: (asker: string) => `${asker}: `,
   },

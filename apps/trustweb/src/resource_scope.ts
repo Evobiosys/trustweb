@@ -156,3 +156,18 @@ export function hideReceived(items: readonly InventoryItem[], id: string): boole
   item.hidden = true
   return true
 }
+
+/* wave46 iyg-reviewfix (F6) */
+/** The one line a synced item shows instead of audience controls: its community and its events, as the caller words it. */
+export function sharedWithLine(i: Pick<InventoryItem, 'communityId' | 'eventIds' | 'eventId'>, community: (tag: string) => string, eventName: (id: string) => string, say: (community: string, events: string) => string): string {
+  const ids = i.eventIds ?? (i.eventId ? [i.eventId] : [])
+  return say(community(i.communityId ?? ''), ids.map(eventName).filter(Boolean).join(', '))
+}
+
+/** Remove = retract: switches my own synced item off; the next save tells everyone (resource_sync.ts). False for anything else. */
+export function retractSynced(items: readonly InventoryItem[], id: string): boolean {
+  const item = items.find((i) => i.id === id)
+  if (!item?.synced || item.sharedBy) return false
+  item.included = false
+  return true
+}

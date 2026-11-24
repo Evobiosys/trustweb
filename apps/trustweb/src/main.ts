@@ -316,7 +316,7 @@ import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { connectedPlaces } from './connected_places'
 import { resourceList, recentChip } from './resource_list'
-import { scopeOf, itemTags, hideReceived } from './resource_scope'
+import { scopeOf, itemTags, hideReceived, retractSynced, sharedWithLine } from './resource_scope'
 import { EVENT_TAG, scopedResources, tagRow } from './resource_scope_view'
 import { addPeerItem, peerItems } from './peer_items'
 import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
@@ -3923,8 +3923,8 @@ function itemSheet(itemId: string): void {
     item.synced ? editSection(item, (ok) => { if (ok) { save(); render(); itemSheet(item.id); toast(S.w46asm.editSaved) } else toast(S.w46asm.editBad) }) : null,   // wave46 iyg-assemble: G1
     el('p', { class: 'meta' }, [S.itemSheetLead]),
     el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience] ?? S.audienceLabel[Audience.OnlyMe]) : S.itemPaused]),
-    ...itemAudienceChooser(item),
-    ...degreesChooser(item, (d) => { item.degrees = d; redraw() }),
+    ...(item.synced ? syncedSummary(item, redraw) : [...itemAudienceChooser(item),   // wave46 iyg-reviewfix F6: a synced item has no audience controls, only its scope, Edit and Remove
+    ...degreesChooser(item, (d) => { item.degrees = d; redraw() })]),
     sourceFor(item.source, item.text),
     itemContextView(item),
     ...provenanceStateView(item),
@@ -3961,6 +3961,13 @@ function provenanceStateView(item: InventoryItem): HTMLElement[] {
     class: 'btn btn-ghost btn-sm', 'data-item-reviewed': item.id,
     onclick: () => { if (markReviewed(item, Date.now())) { save(); render(); toast(S.provReviewedDone) } itemSheet(item.id) },
   }, [S.provReviewed])]
+}
+
+/** wave46 iyg-reviewfix F6: what a synced item shows in place of the audience controls: where it is shared, and Remove (the retract). Edit sits above (editSection). */
+function syncedSummary(item: InventoryItem, redraw: () => void): HTMLElement[] {
+  const tags = loadColourTags()
+  const line = sharedWithLine(item, (t) => tags.find((x) => x.id === t)?.label ?? t, (id) => st().events?.find((e) => e.id === id)?.name ?? '', S.w46rf.sharedWith)
+  return [el('p', { class: 'meta', 'data-item-shared-with': item.id }, [line]), el('button', { class: 'btn btn-ghost', type: 'button', 'data-item-retract': item.id, onclick: () => { retractSynced(st().inventory, item.id); redraw() } }, [S.w46rf.remove])]
 }
 
 /** All four choices on the item's sheet (wave 2, P22): the three tiers and "Only me". */
