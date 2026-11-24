@@ -5,7 +5,7 @@
  * Pure, DOM-free.
  */
 import type { Person } from './model'
-import { SUPPORT_NOTE_MAX, SupportWindow, buildSupport, isOpen } from './support_ask'
+import { SUPPORT_NOTE_MAX, SupportWindow, buildSupport, isOpen, noteOf } from './support_ask'
 import type { SupportAsk, SupportChip, SupportIn } from './support_ask'
 
 export interface InboxRow {
@@ -26,7 +26,7 @@ interface InboxState { supportAsks?: SupportAsk[]; supportIn?: SupportIn[]; peop
 /** Open asks only, the one ending soonest first. Empty = nothing to show (the caller says so in words). */
 export function inboxRows(s: InboxState, now: number): InboxRow[] {
   const mine = (s.supportAsks ?? []).filter((a) => isOpen(a, now) && !a.cancelled && !a.agent).map((a): InboxRow => ({ kind: 'mine', id: a.id, chips: a.chips, note: a.note, until: a.until, asked: a.to.length, answered: a.here.length }))
-  const theirs = (s.supportIn ?? []).filter((a) => isOpen(a, now)).map((a): InboxRow => ({ kind: 'theirs', id: a.id, who: s.people.find((p) => p.peerId === a.peerId)?.name ?? '', chips: a.chips, note: a.note, until: a.until }))
+  const theirs = (s.supportIn ?? []).filter((a) => isOpen(a, now)).map((a): InboxRow => ({ kind: 'theirs', id: a.id, who: s.people.find((p) => p.peerId === a.peerId)?.name ?? '', chips: a.chips, note: noteOf(a), until: a.until }))
   return [...mine, ...theirs].sort((a, b) => a.until - b.until)
 }
 

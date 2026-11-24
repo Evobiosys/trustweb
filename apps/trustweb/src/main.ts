@@ -40,6 +40,8 @@ import { defineSeenActions } from './seen_through_actions' // review-44c
 import { defineA44dActions } from './a44d_actions' // answers-44d
 import { installEventMerge } from './event_merge_view' // wave45 merge-events
 import { installEventsRefetch } from './events_refetch_actions' // wave45 events-refetch
+import { createResourceSync } from './resource_sync' // wave46 iyg-shared-resource
+import { editSection, receivedSheet } from './resource_sync_view' // wave46 iyg-shared-resource
 import { eventPageHooks } from './a44d_event_host' // answers-44d
 import { createEventChatView } from './event_group_chat_view' // wave45 event-group-chat
 import { installGroupChat } from './group_chat_view' // wave45 group-chat-list
@@ -59,7 +61,9 @@ import { planFlush } from './support_flush'
 import { communityChatLive } from './ext/community_mode/chat_row'
 import { addMember, metaOf, parseCommunity, rememberAudience } from './ext/community-mighty/community_data'
 import type { SupportIo } from './support_ask_view'
-import { ASK_MODES, AskMode, closeText, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
+import { ownName } from './own_name' // wave46 iyg-reviewfix D2
+import { relayPeers, relayText, parseViaHere, supportTextFor, viaHereText } from './support_relay'   // wave46 iyg-ask-reach
+import { ASK_MODES, AskMode, closeText, isOpen, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
 import { PROVIDERS, guessProvider, validateEmail, composeHref, senderHint, providerLabel, type PrimaryEmail } from './primary_email'
@@ -118,7 +122,7 @@ import { decodeModeLink, INTRODUCE_PERMISSIONS, parseIntroducePermission } from 
 import type { QrContext } from './qr_modes'
 import { openQrPage } from './qr_modes_view'
 import { tapEdit } from './tap_edit'
-import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
+import { HELLO_NAME_MAX, NAMELESS_PEER, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
@@ -313,7 +317,7 @@ import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { connectedPlaces } from './connected_places'
 import { resourceList, recentChip } from './resource_list'
-import { scopeOf, itemTags } from './resource_scope'
+import { scopeOf, itemTags, hideReceived, retractSynced, sharedWithLine } from './resource_scope'
 import { EVENT_TAG, scopedResources, tagRow } from './resource_scope_view'
 import { addPeerItem, peerItems } from './peer_items'
 import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
@@ -744,8 +748,10 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
+let sweepResources: () => void = () => undefined   // wave46 iyg-shared-resource: set once resSync exists
 function save(): void {
   if (state && !superseded) {
+    sweepResources()   // wave46 iyg-shared-resource
     announceDue()
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
@@ -926,6 +932,7 @@ const net = new Net({
     save()
     sendHelloTo(peer)
     void eventEnv.connected(peer)   // wave 43c: the event whose QR was just shown goes to the person who scanned it
+    void resSync.catchUp(peer)   // wave46 iyg-shared-resource
     void autoShareProfile(peer, 'public')
     applyHeldContact(peer, person)
     closeSheet()
@@ -973,7 +980,7 @@ const net = new Net({
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
-  onEvent: (peer, env) => { if (env.gg) void groups.onEnvelope(peer, env.gg); else if (env.gc) void eventChat.onEnvelope(peer, env.gc); else void eventEnv.onEnvelope(peer, env).then((o) => eventChat.afterEnvelope(peer, env, o)) },   // wave45 event-group-chat
+  onEvent: (peer, env) => { if (env.gg) void groups.onEnvelope(peer, env.gg); else if (env.gc) void eventChat.onEnvelope(peer, env.gc); else if (env.res) void resSync.onEnvelope(peer, env.res); else void eventEnv.onEnvelope(peer, env).then((o) => { void eventChat.afterEnvelope(peer, env, o); if (env.joined || env.rsvp?.yes) void resSync.catchUp(peer) }) },   // wave45 event-group-chat
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -3903,6 +3910,7 @@ function itemSheet(itemId: string): void {
   const s = st()
   const item = s.inventory.find((i) => i.id === itemId)
   if (!item) return
+  if (item.sharedFrom) { openSheet(receivedSheet(item, emojiOn(s), closeSheet, () => { hideReceived(s.inventory, item.id); save(); closeSheet(); render() })); return }   // iyg-reviewfix F4: Hide   // wave46 iyg-shared-resource: someone else's, read-only
   const redraw = (): void => { save(); render(); itemSheet(item.id) }
   openSheet([
     // Jakob's sketch (10-07, #21/#22): the X top right, the on/off switch below it on the right; then who, then how far.
@@ -3913,10 +3921,11 @@ function itemSheet(itemId: string): void {
         onOffSwitch(item.included, () => { item.included = !item.included; redraw() }, { 'data-item-switch': item.id }),
       ]),
     ]),
+    item.synced ? editSection(item, (ok) => { if (ok) { save(); render(); itemSheet(item.id); toast(S.w46asm.editSaved) } else toast(S.w46asm.editBad) }) : null,   // wave46 iyg-assemble: G1
     el('p', { class: 'meta' }, [S.itemSheetLead]),
     el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience] ?? S.audienceLabel[Audience.OnlyMe]) : S.itemPaused]),
-    ...itemAudienceChooser(item),
-    ...degreesChooser(item, (d) => { item.degrees = d; redraw() }),
+    ...(item.synced ? syncedSummary(item, redraw) : [...itemAudienceChooser(item),   // wave46 iyg-reviewfix F6: a synced item has no audience controls, only its scope, Edit and Remove
+    ...degreesChooser(item, (d) => { item.degrees = d; redraw() })]),
     sourceFor(item.source, item.text),
     itemContextView(item),
     ...provenanceStateView(item),
@@ -3953,6 +3962,13 @@ function provenanceStateView(item: InventoryItem): HTMLElement[] {
     class: 'btn btn-ghost btn-sm', 'data-item-reviewed': item.id,
     onclick: () => { if (markReviewed(item, Date.now())) { save(); render(); toast(S.provReviewedDone) } itemSheet(item.id) },
   }, [S.provReviewed])]
+}
+
+/** wave46 iyg-reviewfix F6: what a synced item shows in place of the audience controls: where it is shared, and Remove (the retract). Edit sits above (editSection). */
+function syncedSummary(item: InventoryItem, redraw: () => void): HTMLElement[] {
+  const tags = loadColourTags()
+  const line = sharedWithLine(item, (t) => tags.find((x) => x.id === t)?.label ?? t, (id) => st().events?.find((e) => e.id === id)?.name ?? '', S.w46rf.sharedWith)
+  return [el('p', { class: 'meta', 'data-item-shared-with': item.id }, [line]), el('button', { class: 'btn btn-ghost', type: 'button', 'data-item-retract': item.id, onclick: () => { retractSynced(st().inventory, item.id); redraw() } }, [S.w46rf.remove])]
 }
 
 /** All four choices on the item's sheet (wave 2, P22): the three tiers and "Only me". */
@@ -4981,7 +4997,10 @@ function onSupportText(peer: Peer, text: string): void {
   const person = personOf(s.people, peer.id)
   if (ask) {
     if (!person || ask.until <= Date.now()) return
-    s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id }, Date.now())
+    if ((s.supportIn ?? []).some((x) => x.id === ask.id && x.peerId !== peer.id)) return   // wave46 iyg-ask-reach: the same ask came another way already
+    const fwd = relayPeers(s, ask, peer.id)   // wave46 iyg-ask-reach: a host passes a scoped ask on, once
+    s.supportIn = addSupportIn(s.supportIn, { ...ask, peerId: peer.id, ...(fwd.length ? { relayedTo: fwd.map((x) => x.id) } : {}) }, Date.now())
+    if (fwd.length && ask.scope) { const text = relayText(APP_URL, { ...ask, scope: ask.scope }, ownName(s, person) || NAMELESS_PEER); for (const x of fwd) void net.sendText(x, text).catch(() => undefined) }   // wave46 iyg-ask-reach; iyg-reviewfix D2: the name they announced, never my label
     save()
     if (sourceNotifies(s, { kind: 'support', peerId: peer.id })) toast(S.supportGotOne(person.name))
     if (screen === Screen.Web) render()
@@ -4990,7 +5009,14 @@ function onSupportText(peer: Peer, text: string): void {
   const closed = parseCloseText(APP_URL, text)
   if (closed) { s.supportIn = applyCancel(s.supportIn, closed, peer.id); save(); if (screen === Screen.Web) render(); return }
   const id = parseHereText(APP_URL, text)
-  if (id && recordHere(s.supportAsks ?? [], id, peer.id, Date.now())) { save(); if (screen === Screen.Web) render() }
+  if (id && recordHere(s.supportAsks ?? [], id, peer.id, Date.now())) { save(); if (screen === Screen.Web) render(); return }
+  // wave46 iyg-ask-reach: "I'm here" from someone I passed an ask on to goes to its asker, by name; the asker's "who answered" line shows it
+  const relayed = id ? (s.supportIn ?? []).find((x) => x.id === id && x.relayedTo?.includes(peer.id)) : undefined
+  const asker = relayed ? s.peers.find((x) => x.id === relayed.peerId) : undefined
+  if (id && asker && person && ownName(s, person)) void net.sendText(asker, viaHereText(APP_URL, id, ownName(s, person))).catch(() => undefined)   // D2
+  const via = parseViaHere(APP_URL, text)
+  const mine = via ? (s.supportAsks ?? []).find((x) => x.id === via.id && x.to.includes(peer.id) && isOpen(x, Date.now())) : undefined
+  if (via && mine && !(mine.hereVia ?? []).includes(via.name)) { mine.hereVia = [...(mine.hereVia ?? []), via.name]; save(); if (screen === Screen.Web) render() }
 }
 
 /** Wave 42 (support_flush.ts): asks the MCP server wrote into the record are sent now; cancelled ones are withdrawn. */
@@ -4999,9 +5025,9 @@ function flushQueuedAsks(): void {
   const s = st()
   const plan = planFlush(s.supportAsks, Date.now())
   if (!plan.send.length && !plan.withdraw.length && plan.keep.length === (s.supportAsks?.length ?? 0)) return
-  const tell = (ids: readonly string[], text: string): void => { for (const id of ids) { const peer = s.peers.find((p) => p.id === id); if (peer) void net.sendText(peer, text).catch(() => undefined) } }
-  for (const a of plan.send) tell(a.to, supportText(APP_URL, a))
-  for (const a of plan.withdraw) tell(a.to, closeText(APP_URL, a.id))
+  const tell = (ids: readonly string[], text: (to: Person | undefined) => string): void => { for (const id of ids) { const peer = s.peers.find((p) => p.id === id); if (peer) void net.sendText(peer, text(s.people.find((p) => p.peerId === id && p.deleted_at === undefined))).catch(() => undefined) } }
+  for (const a of plan.send) tell(a.to, (to) => (to ? supportTextFor(APP_URL, s, a, to) : supportText(APP_URL, { ...a, scope: a.scope && { ...a.scope, name: undefined } })))   // wave46 iyg-reviewfix D3: the scope name only to people inside it
+  for (const a of plan.withdraw) tell(a.to, () => closeText(APP_URL, a.id))
   s.supportAsks = plan.keep
   save()
 }
@@ -5542,7 +5568,8 @@ const eventEnv = createEventEnvelopes<Peer>({
   members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
   recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
 })
-announceDue = () => { eventEnv.announceDue() }
+announceDue = () => { eventEnv.announceDue(); void eventEnv.rosterSync() }   // wave46 iyg-roster: also on every save (joins, showAll switched on, a peer connects)
+setTimeout(() => { void eventEnv.rosterSync() }, 8000)   // wave46 iyg-roster: catch-up on app start
 const eventMerge = installEventMerge(appActions, { st, openSheet, closeSheet, toast: (m) => toast(m), redraw: render, ...eventEnv.merge }) // wave45 merge-events (+ MCP event_merge, event_merge_answer)
 refetchEvents = installEventsRefetch(appActions, { now: Date.now, peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 events-refetch (+ MCP events_refetch)
 setDraftHost({ state: st, save })   // wave44c event-autosave
@@ -5554,19 +5581,22 @@ const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
 const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
 /** answers-44d: the event page's community, chat and resources hooks (also the registry's, a44d_actions.ts). */
 const eventChat = createEventChatView<Peer>({ st, save, openSheet, newId: () => randomId(10), peers: () => st().peers, send: (p, e) => net.sendEvent(p, e) })   // wave45 event-group-chat
+/** wave46 iyg-shared-resource: one resource in a community and its events, synced (resource_sync.ts; also MCP resource_add audience both:<event>). */
+const resSync = createResourceSync<Peer>({ state: st, save, now: Date.now, peers: () => st().peers, send: (p, e) => net.sendEvent(p, e), holdsCommunity: (tag) => loadColourTags().some((t) => t.id === tag), changed: render })
+sweepResources = () => { void resSync.sweep() }
 const eventHost = eventPageHooks({
   st, save, tags: loadColourTags, openSheet, closeSheet, toast: (m) => toast(m), groupChat: eventChat,
   showCommunity: () => openExtView('community'), chooseCommunity: () => modeShell.choose('community'), showResources: () => go(Screen.Inventory), showWeb: () => go(Screen.Web),
 })
 const eventsView = createEventsView({
   focusWeb: webFocus, ...eventHost,
-  state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
+  state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar, openSeen: (id) => seenThrough.open(id),   // wave46 iyg-roster
   undoNotice, refetch: (explicit) => refetchEvents(explicit),   // wave45 events-refetch
 
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
   showQr: (ev, host) => eventQr(ev, false, host),
-  askSupport: () => supportSheet(supportIo),
+  askSupport: (eventId) => supportSheet(supportIo, eventId),   // wave46 iyg-ask-reach: the event scope preselected
   feedRow: (ev) => feed.eventRow(ev),
   plan: (ev) => [...eventPlanSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), meDid: () => st().identity?.did, flush: flushQueuedAsks }), ...openSpaceSection(ev, { state: st, save, redraw: render, newId: () => randomId(8), push: (e) => { void eventEnv.pushOpenSpace(e) }, noteFor: (e, a) => coNotes?.activityNote?.(e, a) ?? null })],
   extra: (ev) => [...[cal, coNotes].flatMap((m) => m?.eventSection?.(ev) ?? []), ...seenThrough.eventSection(ev), ...eventMerge.eventSection(ev)],
@@ -5609,6 +5639,7 @@ const extHooks: ExtHooks = {
 const twBus = createBus()
 twBus.on('save', () => save())
 twBus.on('open-person', (id) => { if (typeof id === 'string') openCardPage(id) })
+twBus.on('open-seen', (id) => { if (typeof id === 'string') seenThrough.open(id) })   // wave46 iyg-roster
 twBus.on('open-event', (id) => { if (typeof id === 'string') extHooks.openEvent(id) })
 twBus.on('open-item', (id) => { if (typeof id === 'string') itemSheet(id) })   // wave44c community-resources
 twBus.on('import-contacts', (d) => { const x = d as { contacts: ImportedContact[]; name: string }; offerContacts({ state: st, save, toast: (msg) => toast(msg), changed: render, pages }, x.contacts, x.name) })

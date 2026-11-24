@@ -3962,6 +3962,7 @@ export const S = {
       resources_list: 'List your resources, filtered by kind, who shared them or community, in a list, outliner or by person; scope community or event adds the sections Shared by me, New and General',
       resource_set_kind: 'Say whether a resource is a book, publication, reference, recording or link',
       resource_set_suggester: 'Say who suggested a resource to you',
+      /* wave46 iyg-assemble */ resource_edit: 'Change the title and link of a resource of yours that is shared with an event and its community',
       /* wave45 community-documents */ community_documents_list: 'List the documents (shared links) of a community',
       /* wave44c community-resources */ resource_mark_opened: 'Mark a resource shared with you as opened (it leaves the New section)',
       feed_list: 'Read the Feed',
@@ -5697,5 +5698,35 @@ export const S = {
     closeFollowPeople: 'Per person',
     closeFollowPeopleHint: 'Struck through: this person asks first, like everyone outside Closest and Close.',
     followAllowed: (name: string, group: string) => `${name} (Closest/Close) now follows your ${group} settings.`,
+  },
+  /* wave46 iyg-ask-reach */
+  w46ask: {
+    passOn: (host: string, where: string) => `${host} passes it on to everyone at ${where} you are not connected to, as long as their device is online.`,
+    hostFallback: 'The host',
+    cardVia: (from: string, chips: string, via: string) => `${from} could use support${chips ? ': ' + chips : ''} (via ${via})`,
+    hereVia: (names: string) => `Also here, through the host: ${names}.`,
+    hereSent: (from: string) => `${from} will see that you are here.`,
+  },
+  /* wave46 iyg-shared-resource */
+  w46sr: {
+    onlyEvent: 'Only for this event',
+    both: 'For the event and its community',
+    bothWith: (event: string) => `${event} and its community`,
+    readOnly: (name: string) => `Shared by ${name}. Only they can change it; it updates here by itself.`,
+  },
+  /* wave46 iyg-assemble */
+  w46asm: {
+    editTitle: 'Title',
+    editLink: 'Link (https, optional)',
+    editSave: 'Save change',
+    editSaved: 'Saved. Everyone in the event and its community gets the change.',
+    editBad: 'Needs a title; a link must start with https://',
+  },
+  /* wave46 iyg-reviewfix */
+  w46rf: {
+    hide: 'Hide this resource',
+    remove: 'Remove from the event and its community',
+    sharedWith: (community: string, events: string) => `Shared with ${community}${events ? ` and ${events}` : ''}`,
+    askFrom: (asker: string) => `${asker}: `,
   },
 } as const

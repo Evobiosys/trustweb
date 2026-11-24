@@ -4,7 +4,7 @@ import { el } from '../../demo/src/ui/dom'
 import type { InventoryItem } from './model'
 import { eventTagLabel, eventTagSlug } from './event_tag'
 import { resourceList } from './resource_list'
-import { addEventPrivate, addScoped, communityEvents, forPage, itemTags, markOpened, partitionScope, type EventTagRules, type Page, type Scope } from './resource_scope'
+import { addBoth, addEventPrivate, addScoped, communityEvents, forPage, itemTags, markOpened, partitionScope, type EventTagRules, type Page, type Scope } from './resource_scope'
 import { ageCompact } from './feed_row'
 import { inlineEdit } from './membranes_five_view'
 import { typedSource } from './provenance'
@@ -57,15 +57,24 @@ export function sharedByLine(i: InventoryItem, nameOf: (id: string) => string | 
 function addRow(c: ScopedCtx, newId: () => string): HTMLElement {
   const row = el('div', { class: 'meta card-res-row', 'data-rs-add-row': '' })
   const show = (): void => row.replaceChildren(el('button', { class: 'card-res-add', type: 'button', 'data-rs-add': '' }, [S.a44d.addResource]))
-  /* wave45 resource-event-private: in a community, "Visible to" the whole community or only one of its events (P7: a small optional pick). */
+  /* wave45 resource-event-private: in a community, "Visible to" the whole community or only one of its events (P7: a small optional pick).
+     wave46 iyg-shared-resource: also "<event> and its community" (one synced item in both views), and in an event view "For the event and its community". */
   const evs = c.scope.kind === 'community' ? communityEvents(c.events, c.scope.id) : []
-  const pick = evs.length === 0 ? null : el('select', { class: 'field meta', 'data-rs-add-audience': '', 'aria-label': S.w45rep.visibleTo }, [
-    el('option', { value: '' }, [S.w45rep.wholeCommunity]), ...evs.map((e) => el('option', { value: e.id }, [S.w45rep.onlyEvent(EVENT_TAG.label(e.tagName ?? e.name))]))])
+  const own = c.scope.kind === 'event' ? c.events.find((e) => e.id === c.scope.id) : undefined
+  const option = (value: string, label: string): HTMLElement => el('option', { value }, [label])
+  const options = c.scope.kind === 'event'
+    ? (own && (own.communityId ?? own.community) ? [option('', S.w46sr.onlyEvent), option(`both:${own.id}`, S.w46sr.both)] : [])
+    : evs.length === 0 ? [] : [option('', S.w45rep.wholeCommunity), ...evs.map((e) => option(e.id, S.w45rep.onlyEvent(EVENT_TAG.label(e.tagName ?? e.name)))), ...evs.map((e) => option(`both:${e.id}`, S.w46sr.bothWith(EVENT_TAG.label(e.tagName ?? e.name))))]
+  const pick = options.length === 0 ? null : el('select', { class: 'field meta', 'data-rs-add-audience': '', 'aria-label': S.w45rep.visibleTo }, options)
   const edit = (): void => row.replaceChildren(...(pick ? [pick] : []), inlineEdit(S.a44d.addResource, '', 'data-rs-add-input', (typed) => {
-    const ev = evs.find((e) => e.id === (pick as HTMLSelectElement | null)?.value)
-    const made = typed === null ? null : ev
-      ? addEventPrivate(c.items as InventoryItem[], ev, EVENT_TAG, c.page, typed, newId(), Date.now(), typedSource())
-      : addScoped(c.items as InventoryItem[], c.scope, c.page, typed, newId(), Date.now(), typedSource())
+    const v = (pick as HTMLSelectElement | null)?.value ?? ''
+    const both = v.startsWith('both:') ? c.events.find((e) => e.id === v.slice(5)) : undefined
+    const ev = evs.find((e) => e.id === v)
+    const made = typed === null ? null : both
+      ? addBoth(c.items as InventoryItem[], [both], EVENT_TAG, c.page, typed, newId(), Date.now(), typedSource())
+      : ev
+        ? addEventPrivate(c.items as InventoryItem[], ev, EVENT_TAG, c.page, typed, newId(), Date.now(), typedSource())
+        : addScoped(c.items as InventoryItem[], c.scope, c.page, typed, newId(), Date.now(), typedSource())
     if (made) { c.save(); c.render() } else show()
   }))
   row.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-rs-add]')) edit() })

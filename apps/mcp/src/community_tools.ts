@@ -13,8 +13,8 @@ import { SCAN_RINGS, connectedPerson, placementOf } from '../../trustweb/src/sca
 import type { Tool } from './protocol.ts'
 
 type Obj = Record<string, unknown>
-interface Person extends Obj { id: string; name: string; ring: string; peerId?: string; fields?: Record<string, unknown>; deleted_at?: string }
-interface Ask extends Obj { id: string; chips: string[]; note: string; until: number; to: string[]; here: string[]; queued?: true; agent?: true; cancelled?: true }
+interface Person extends Obj { events?: string[]; id: string; name: string; ring: string; peerId?: string; fields?: Record<string, unknown>; deleted_at?: string }
+interface Ask extends Obj { scope?: { tag?: string; event?: string; name?: string }; id: string; chips: string[]; note: string; until: number; to: string[]; here: string[]; queued?: true; agent?: true; cancelled?: true }
 interface In extends Obj { id: string; peerId: string; chips: string[]; note: string; until: number }
 interface Rec extends Obj { people: Person[]; peers?: { id: string; did?: string }[]; identity?: { did?: string }; connectPlacement?: string; extData?: Record<string, unknown>; supportAsks?: Ask[]; supportIn?: In[] }
 
@@ -56,6 +56,7 @@ function resolve(r: Rec, tokens: readonly unknown[]): string[] {
   for (const t of tokens.map(str)) {
     const live = alive(r).filter((p) => p.peerId)
     if (t.startsWith('community:')) { const id = need(r, t.slice(10)); live.filter((p) => p.ring === 'closest' || (FRIENDS.includes(p.ring) && holds(p, id))).forEach((p) => out.add(p.peerId!)) }
+    else if (t.startsWith('event:')) live.filter((p) => Array.isArray(p.events) && p.events.includes(t.slice(6))).forEach((p) => out.add(p.peerId!))   // wave46 iyg-ask-reach
     else if (t === 'closest-few') live.filter((p) => p.ring === 'closest').forEach((p) => out.add(p.peerId!))
     else if (t === 'closest-allies') live.filter((p) => p.ring === 'closest' || p.ring === 'close').forEach((p) => out.add(p.peerId!))
     else { const p = person(r, t); if (p.peerId) out.add(p.peerId) }
@@ -234,19 +235,24 @@ export function communityTools(e: CommunityToolsEnv): { read: Tool[]; write: Too
     },
     {
       name: 'support_ask', description: 'Ask for support. audience = tokens: community:<id> (its members who are Friends or closer; Closest few always), closest-few, closest-allies, or a person (id or exact name). Connected people only. Queued: the app shows it as a card (Send | Discard) and sends it only when the person taps Send. Returns the count asked.',
-      inputSchema: schema({ text: S(`what would help, up to ${NOTE_MAX} characters`), audience: { type: 'array', items: { type: 'string' }, description: 'audience tokens' }, window: S('today (default) | week') }, ['text', 'audience']),
+      inputSchema: schema({ text: S(`what would help, up to ${NOTE_MAX} characters`), audience: { type: 'array', items: { type: 'string' }, description: 'audience tokens' }, window: S('today (default) | week'), scope: { type: 'object', description: 'wave46: who the ask is meant for beyond my contacts: {event?: event id, tag?: community id, name?: label}; the host of that event/community passes it on once to the people there I am not connected to (needs event or tag)' } }, ['text', 'audience']),
       run: (a) => {
         const text = str(a.text).trim()
         if (!text) throw new Error('text is required')
         const now = e.now()
         const d = new Date(now)
         const until = a.window === 'week' ? now.getTime() + 7 * 86_400_000 : new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()
+        const sc = (a.scope ?? {}) as Obj
+        const tag = str(sc.tag).trim().slice(0, 40)
+        const event = str(sc.event).trim().slice(0, 40)
+        if (a.scope !== undefined && !tag && !event) throw new Error('scope needs an event or a tag')   // wave46 iyg-ask-reach
+        const scope = tag || event ? { ...(tag ? { tag } : {}), ...(event ? { event } : {}), ...(str(sc.name).trim() ? { name: str(sc.name).trim().slice(0, 40) } : {}) } : undefined
         let out: Obj = {}
         e.commit((r) => {
           const to = resolve(r, Array.isArray(a.audience) ? a.audience : [])
           if (!to.length) throw new Error('nobody to ask: no connected person in that audience')
           const id = `mcp${now.getTime().toString(36)}${(r.supportAsks?.length ?? 0).toString(36)}`
-          r.supportAsks = [{ id, chips: [], note: text.slice(0, NOTE_MAX), until, to, here: [], queued: true, agent: true }, ...(r.supportAsks ?? [])]
+          r.supportAsks = [{ id, chips: [], note: text.slice(0, NOTE_MAX), until, to, here: [], queued: true, agent: true, ...(scope ? { scope } : {}) }, ...(r.supportAsks ?? [])]
           out = { id, asked: to.length, queued: true, needsTap: true }
         })
         return out

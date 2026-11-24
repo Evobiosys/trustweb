@@ -107,9 +107,11 @@ describe('an accepted event invitation reaches the inviter (4c)', () => {
       return { H, O, J }
     }
     const small = await make({ intimate: true })
+    small.J.state.events[0].showMe = 'open' // iyg-reviewfix F1: only a guest who shows 'open' is named without the host's showAll
     await small.J.env.joined(small.J.state.events[0], { name: 'Hostia' })
     await until(() => small.O.state.people.some((p) => p.via && p.name === 'Jana Joiner'))
     const big = await make({ intimate: false })
+    big.J.state.events[0].showMe = 'open'
     await big.J.env.joined(big.J.state.events[0], { name: 'Hostia' })
     await until(() => big.H.state.people.find((p) => p.name === 'Jana Joiner').events?.includes('evnet2'))
     await sleep(400)

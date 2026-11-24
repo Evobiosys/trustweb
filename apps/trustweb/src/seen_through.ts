@@ -15,6 +15,8 @@ import type { Person } from './model'
 export type SeenSource = 'event' | 'intro' | 'ask'
 /** The longest name a seen-through item carries (wire.ts VIA_NAME_MAX). */
 export const SEEN_WHO_MAX = 40
+/** wave46 iyg-reviewfix F2: the most named cards one friend's event or roster introductions may add. */
+export const ROSTER_CARDS_MAX = 200
 /** The context of an intro answer's item (travels; the asker's card shows it), so the asker files it as an introduction, not as a tip. */
 export const INTRO_CONTEXT = 'An introduction'
 /** What a yes to a show ask shares (the friend's device only reads that it is a yes). */
@@ -42,7 +44,7 @@ export function readSeen(it: unknown): { text: string; context: string; shown: b
 const alive = (p: Person): boolean => p.deleted_at === undefined
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase()
 
-export interface SeenInput { via: string; who?: string; shown: boolean; source: SeenSource; resource?: string; event?: string; now: number; id: string }
+export interface SeenInput { via: string; who?: string; shown: boolean; source: SeenSource; resource?: string; event?: string; tag?: string; now: number; id: string }
 
 /**
  * Adds (or updates) the person `via` my friend told me about. Returns their id; undefined when `via` is nobody I know.
@@ -57,15 +59,18 @@ export function addSeenThrough(s: People, x: SeenInput): string | undefined {
     const mine = s.people.find((p) => alive(p) && !p.via && same(p.name, name))
     if (mine) return mine.id
   }
-  const seen = { source: x.source, at: x.now, ...(x.resource ? { resource: x.resource.slice(0, 200) } : {}), ...(x.event ? { event: x.event } : {}) }
-  const sameSeen = (p: Person): boolean => p.seen?.source === x.source && p.seen?.resource === seen.resource && p.seen?.event === seen.event
+  const seen = { source: x.source, at: x.now, ...(x.resource ? { resource: x.resource.slice(0, 200) } : {}), ...(x.event ? { event: x.event } : {}), ...(x.tag ? { tag: x.tag } : {}) }
+  const sameSeen = (p: Person): boolean => p.seen?.source === x.source && p.seen?.resource === seen.resource && p.seen?.event === seen.event && p.seen?.tag === seen.tag
   const hit = s.people.find((p) => alive(p) && p.via === x.via && (name ? same(p.name, name) : p.anonymous === true && sameSeen(p)))
     ?? (name ? s.people.find((p) => alive(p) && p.via === x.via && p.anonymous === true && sameSeen(p)) : undefined)
+  const other = hit ? undefined : name ? s.people.find((p) => alive(p) && p.via && same(p.name, name)) : undefined
+  if (other) return other.id // the same name told by a second friend: one card
   if (hit) {
-    hit.seen = seen
+    hit.seen = { ...seen, ...(!seen.event && hit.seen?.event ? { event: hit.seen.event } : {}), ...(!seen.tag && hit.seen?.tag ? { tag: hit.seen.tag } : {}) } // wave46: a second source keeps the first
     if (name) { hit.name = name; delete hit.anonymous }
     return hit.id
   }
+  if (name && x.source === 'event' && s.people.filter((p) => alive(p) && p.via === x.via && p.seen?.source === 'event').length >= ROSTER_CARDS_MAX) return undefined // wave46 iyg-reviewfix F2
   s.people.push({ id: x.id, name, context: '', ring: 'none' as Person['ring'], metAt: x.now, lines: [], via: x.via, ...(name ? {} : { anonymous: true }), seen })
   return x.id
 }
@@ -93,4 +98,20 @@ export function seenThroughList(s: People): SeenRow[] {
     viaName: s.people.find((f) => f.id === p.via)?.name ?? '', source: p.seen?.source ?? 'intro',
     ...(p.seen?.resource ? { resource: p.seen.resource } : {}), ...(p.seen?.event ? { event: p.seen.event } : {}), at: p.seen?.at ?? p.metAt,
   }))
+}
+
+/* wave46 iyg-reviewfix F8 */
+/** True when a card carries something of mine besides the introduction: notes, a connection, a tag, an event of mine. */
+const mine = (p: Person): boolean => p.lines.length > 0 || !!p.generalNote || !!p.sharedNotes?.length || !!p.peerId || !!p.events?.length || Object.values(p.fields ?? {}).some((v) => String(v) === 'true')
+
+/**
+ * A host takes a name back (it turned off, left, was removed, was renamed): the card my friend `via` introduced for that event / community loses that
+ * source; a card with no source left and nothing of mine on it goes to the trash window (deleted_at, restorable). Only the same friend; true when anything changed.
+ */
+export function dropSeenThrough(s: People, x: { via: string; who: string; event?: string; tag?: string; now: number }): boolean {
+  const p = s.people.find((q) => alive(q) && q.via === x.via && !q.anonymous && same(q.name, x.who) && q.seen && (x.event ? q.seen.event === x.event : q.seen.tag === x.tag))
+  if (!p?.seen) return false
+  if (x.event) delete p.seen.event; else delete p.seen.tag
+  if (!p.seen.event && !p.seen.tag && p.seen.source === 'event' && !mine(p)) p.deleted_at = new Date(x.now).toISOString()
+  return true
 }
