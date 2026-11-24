@@ -269,3 +269,84 @@ describe('F7 an old app shows who asked', () => {
     expect(back.note.length).toBeLessThanOrEqual(200)
   })
 })
+
+import { dropSeenThrough } from '../../src/seen_through.ts'
+
+describe('F8 a name told is taken back', () => {
+  const host = (extra = {}) => phone('Hanna', [P('a', 'Anna', { events: ['e1'], peerId: 'pa' }), P('b', 'Ben', { events: ['e1'], peerId: 'pb' }), P('c', 'Cleo', { events: ['e1'], peerId: 'pc' })], [ev({ showAll: true, ...extra })])
+  const goneTo = (h, id) => h.sent.filter(([p, e]) => p === id && e.seen.gone).map(([, e]) => e.seen.who).sort()
+  it('a guest who turns off is taken back from everyone who heard the name, and from the list sent', async () => {
+    const h = host()
+    await h.env.rosterSync()
+    h.sent.length = 0
+    h.state.people[2].eventShow = { e1: 'off' }
+    await h.env.rosterSync()
+    expect(goneTo(h, 'pa')).toEqual(['Cleo'])
+    expect(goneTo(h, 'pb')).toEqual(['Cleo'])
+    expect(goneTo(h, 'pc')).toEqual([])
+    expect(h.sent.find(([, e]) => e.seen.gone)[1].seen).toEqual({ id: 'e1', shown: true, who: 'Cleo', gone: true })
+    expect(h.state.rosterSent.e1.pa).not.toContain('Cleo')
+    h.sent.length = 0
+    await h.env.rosterSync()
+    expect(h.sent).toEqual([])
+  })
+  it('leaving (untagged) and a rename: gone(old) then seen(new)', async () => {
+    const h = host()
+    await h.env.rosterSync()
+    h.sent.length = 0
+    h.state.people[1].name = 'Benny'
+    h.state.peers[1].displayName = 'Benny'
+    h.state.people[2].events = []
+    await h.env.rosterSync()
+    const toA = h.sent.filter(([p]) => p === 'pa').map(([, e]) => `${e.seen.gone ? 'gone' : 'seen'}:${e.seen.who}`)
+    expect(toA).toEqual(expect.arrayContaining(['gone:Ben', 'gone:Cleo', 'seen:Benny']))
+    expect(toA.indexOf('gone:Ben')).toBeLessThan(toA.indexOf('seen:Benny'))
+  })
+  it('showAll switched off takes every name back', async () => {
+    const h = host()
+    await h.env.rosterSync()
+    h.sent.length = 0
+    delete h.state.events[0].showAll
+    await h.env.rosterSync()
+    expect(goneTo(h, 'pa')).toEqual(['Ben', 'Cleo'])
+  })
+  it('a community roster is taken back the same way', async () => {
+    const h = phone('Hanna', [P('a', 'Anna', { peerId: 'pa', fields: { iyg: 'true' } }), P('b', 'Ben', { peerId: 'pb', fields: { iyg: 'true' } })], [], meta({ intimate: true, organizers: ['me'] }))
+    await h.env.rosterSync()
+    h.sent.length = 0
+    h.state.people[1].fields = {}
+    await h.env.rosterSync()
+    expect(h.sent.map(([p, e]) => [p, e.seen])).toEqual([['pa', { tag: 'iyg', shown: true, who: 'Ben', gone: true }]])
+  })
+  it('wire: gone needs a name and a yes; otherwise ignored', () => {
+    expect(parse(JSON.stringify({ v: 1, t: 'event', seen: { id: 'e1abcd', shown: true, who: 'Ben', gone: true } })).seen).toEqual({ id: 'e1abcd', shown: true, who: 'Ben', gone: true })
+    expect(parse(JSON.stringify({ v: 1, t: 'event', seen: { tag: 'iyg', shown: true, who: 'Ben', gone: true } })).seen).toEqual({ tag: 'iyg', shown: true, who: 'Ben', gone: true })
+    expect(parse(JSON.stringify({ v: 1, t: 'event', seen: { id: 'e1abcd', shown: true, gone: true } }))).toBeNull()
+  })
+  const seenOn = (ev1 = 'e1') => ({ people: [P('f', 'Friend'), P('x', 'Ben', { via: 'f', anonymous: undefined, seen: { source: 'event', at: 1, event: ev1 } })] })
+  it('dropSeenThrough: a card only that event vouched for goes (soft), one with notes or another source stays', () => {
+    const s = seenOn()
+    expect(dropSeenThrough(s, { via: 'f', who: 'ben', event: 'e1', now: 5 })).toBe(true)
+    expect(s.people[1].deleted_at).toBeDefined()
+    const n = seenOn(); n.people[1].lines = [{ id: 'l', text: 'note' }]
+    expect(dropSeenThrough(n, { via: 'f', who: 'Ben', event: 'e1', now: 5 })).toBe(true)
+    expect(n.people[1].deleted_at).toBeUndefined()
+    expect(n.people[1].seen.event).toBeUndefined()
+    const t = seenOn(); t.people[1].seen.tag = 'iyg'
+    dropSeenThrough(t, { via: 'f', who: 'Ben', event: 'e1', now: 5 })
+    expect(t.people[1]).toMatchObject({ seen: { tag: 'iyg' } })
+    expect(t.people[1].deleted_at).toBeUndefined()
+    const o = seenOn()
+    expect(dropSeenThrough(o, { via: 'other', who: 'Ben', event: 'e1', now: 5 })).toBe(false)
+    expect(dropSeenThrough(o, { via: 'f', who: 'Ben', event: 'e2', now: 5 })).toBe(false)
+  })
+  it('the guest device applies it only from the same friend who is host / organizer', async () => {
+    const g = phone('Anna', [P('h', 'Hanna', { peerId: 'ph' }), P('z', 'Zoe', { peerId: 'pz' })], [ev({ hosts: ['Hanna'], attended: true })])
+    await g.env.onEnvelope({ id: 'ph' }, { v: 1, t: 'event', seen: { id: 'e1', shown: true, who: 'Ben' } })
+    expect(g.state.people.find((p) => p.name === 'Ben')).toMatchObject({ via: 'h' })
+    expect(await g.env.onEnvelope({ id: 'pz' }, { v: 1, t: 'event', seen: { id: 'e1', shown: true, who: 'Ben', gone: true } })).toBe('ignored')
+    expect(g.state.people.find((p) => p.name === 'Ben').deleted_at).toBeUndefined()
+    expect(await g.env.onEnvelope({ id: 'ph' }, { v: 1, t: 'event', seen: { id: 'e1', shown: true, who: 'Ben', gone: true } })).toBe('filled')
+    expect(g.state.people.find((p) => p.name === 'Ben').deleted_at).toBeDefined()
+  })
+})

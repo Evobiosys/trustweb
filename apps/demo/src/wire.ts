@@ -223,11 +223,12 @@ function parseSeen(v: unknown): EventEnvelope | null {
   const x = v as Record<string, unknown>
   if (typeof x.shown !== 'boolean') return null
   if (!('id' in x) && typeof x.tag === 'string' && QID_RE.test(x.tag)) { // wave46 iyg-roster: a community roster name, always with a yes
-    return x.shown && isNonEmptyString(x.who) && x.who.length <= VIA_NAME_MAX ? { v: WIRE_VERSION, t: 'event', seen: { tag: x.tag, shown: true, who: x.who } } : null
+    return x.shown && isNonEmptyString(x.who) && x.who.length <= VIA_NAME_MAX ? { v: WIRE_VERSION, t: 'event', seen: { tag: x.tag, shown: true, who: x.who, ...(x.gone === true ? { gone: true as const } : {}) } } : null
   }
   if (typeof x.id !== 'string' || !QID_RE.test(x.id)) return null
   if ('who' in x && (!x.shown || !isNonEmptyString(x.who) || x.who.length > VIA_NAME_MAX)) return null
-  return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}) } }
+  if (x.gone === true && !(x.shown && typeof x.who === 'string')) return null // wave46 iyg-reviewfix F8: taking a name back needs the name
+  return { v: WIRE_VERSION, t: 'event', seen: { id: x.id, shown: x.shown, ...(x.shown && typeof x.who === 'string' ? { who: x.who } : {}), ...(x.gone === true ? { gone: true as const } : {}) } }
 }
 
 /* wave45 event-group-chat */

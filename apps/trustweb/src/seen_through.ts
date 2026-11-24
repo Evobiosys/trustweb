@@ -99,3 +99,19 @@ export function seenThroughList(s: People): SeenRow[] {
     ...(p.seen?.resource ? { resource: p.seen.resource } : {}), ...(p.seen?.event ? { event: p.seen.event } : {}), at: p.seen?.at ?? p.metAt,
   }))
 }
+
+/* wave46 iyg-reviewfix F8 */
+/** True when a card carries something of mine besides the introduction: notes, a connection, a tag, an event of mine. */
+const mine = (p: Person): boolean => p.lines.length > 0 || !!p.generalNote || !!p.sharedNotes?.length || !!p.peerId || !!p.events?.length || Object.values(p.fields ?? {}).some((v) => String(v) === 'true')
+
+/**
+ * A host takes a name back (it turned off, left, was removed, was renamed): the card my friend `via` introduced for that event / community loses that
+ * source; a card with no source left and nothing of mine on it goes to the trash window (deleted_at, restorable). Only the same friend; true when anything changed.
+ */
+export function dropSeenThrough(s: People, x: { via: string; who: string; event?: string; tag?: string; now: number }): boolean {
+  const p = s.people.find((q) => alive(q) && q.via === x.via && !q.anonymous && same(q.name, x.who) && q.seen && (x.event ? q.seen.event === x.event : q.seen.tag === x.tag))
+  if (!p?.seen) return false
+  if (x.event) delete p.seen.event; else delete p.seen.tag
+  if (!p.seen.event && !p.seen.tag && p.seen.source === 'event' && !mine(p)) p.deleted_at = new Date(x.now).toISOString()
+  return true
+}

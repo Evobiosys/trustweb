@@ -19,7 +19,7 @@ import { announceDue, communityOfEvent, noteShow, visibilityOf } from './event_v
 import { S } from './strings'
 import type { AppState, Person, TwEvent } from './model'
 import { namedHost } from './event_conference'
-import { addSeenThrough } from './seen_through' // wave44c seen-through
+import { addSeenThrough, dropSeenThrough } from './seen_through' // wave44c seen-through
 import { randomId } from '../../demo/src/crypto'
 import { applyJoined } from './event_community' // wave44c answers-44d
 import { createEventMerge } from './event_merge_flow' // wave45 merge-events
@@ -184,6 +184,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     const who = st.people.find((p) => p.peerId === peer.id && p.deleted_at === undefined && !p.via)
     if (seen.id === undefined) { // wave46 iyg-roster: a community roster name; the sender must hold that community tag on my device
       if (!who || !seen.tag || !seen.who || !namesCommunity(st, who, seen.tag)) return false
+      if (seen.gone) { if (!dropSeenThrough(st, { via: who.id, who: seen.who, tag: seen.tag, now: host.now() })) return false; host.save(); host.changed(); return true }   // F8
       if (!addSeenThrough(st, { via: who.id, who: seen.who, shown: true, source: 'event', tag: seen.tag, now: host.now(), id: 'seen-' + randomId(10) })) return false
       host.save()
       host.changed()
@@ -191,6 +192,7 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     }
     const ev = held(seen.id)
     if (!ev || !ev.attended || !who || !isEventHost(ev, who.name, st.people)) return false
+    if (seen.gone) { if (!seen.who || !dropSeenThrough(st, { via: who.id, who: seen.who, event: ev.id, now: host.now() })) return false; host.save(); host.changed(); return true }   // F8
     if (!addSeenThrough(st, { via: who.id, who: seen.who, shown: seen.shown, source: 'event', event: ev.id, now: host.now(), id: 'seen-' + randomId(10) })) return false
     host.save()
     host.changed()
@@ -220,22 +222,24 @@ export function createEventEnvelopes<P extends { id: string }>(host: EnvelopeHos
     try {
       const st = host.state()
       const personOf = (id: string): Person | undefined => st.people.find((p) => p.peerId === id && p.deleted_at === undefined)
-      const sendNames = async (key: string, names: string[], to: P[], envOf: (who: string) => EventEnvelope): Promise<void> => {
+      const sendNames = async (key: string, names: string[], to: P[], envOf: (who: string, gone?: true) => EventEnvelope): Promise<void> => {
+        const now = new Set(names.map((n) => n.toLowerCase()))
         for (const peer of to) {
-          const due = rosterDue(st.rosterSent?.[key]?.[peer.id], names, personOf(peer.id)?.name ?? '').slice(0, ROSTER_CAP)
-          if (!due.length) continue
-          st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [...(st.rosterSent?.[key]?.[peer.id] ?? []), ...due] } }   // marked first: a failed send is not retried in a storm
+          const sent = st.rosterSent?.[key]?.[peer.id] ?? []
+          const gone = sent.filter((n) => !now.has(n.toLowerCase())) // F8: told once, no longer on the roster: taken back
+          const due = rosterDue(sent, names, personOf(peer.id)?.name ?? '').slice(0, ROSTER_CAP)
+          if (!due.length && !gone.length) continue
+          st.rosterSent = { ...st.rosterSent, [key]: { ...st.rosterSent?.[key], [peer.id]: [...sent.filter((n) => !gone.includes(n)), ...due] } }   // marked first: a failed send is not retried in a storm
           host.save()
+          for (const who of gone) await host.send(peer, envOf(who, true)).catch(() => undefined)
           for (const who of due) await host.send(peer, envOf(who)).catch(() => undefined)
         }
       }
       for (const ev of st.events ?? []) {
-        const names = rosterNames(st, ev)
-        if (names.length) await sendNames(ev.id, names, host.recipients?.(ev) ?? [], (who) => ({ v: 1, t: 'event', seen: { id: ev.id, shown: true, who } }))
+        await sendNames(ev.id, rosterNames(st, ev), host.recipients?.(ev) ?? [], (who, gone) => ({ v: 1, t: 'event', seen: { id: ev.id, shown: true, who, ...(gone ? { gone } : {}) } }))
       }
       for (const tag of rosterTags(st)) {
-        const names = communityRosterNames(st, tag)
-        if (names.length) await sendNames('tag:' + tag, names, host.members?.(tag) ?? [], (who) => ({ v: 1, t: 'event', seen: { tag, shown: true, who } }))
+        await sendNames('tag:' + tag, communityRosterNames(st, tag), host.members?.(tag) ?? [], (who, gone) => ({ v: 1, t: 'event', seen: { tag, shown: true, who, ...(gone ? { gone } : {}) } }))
       }
     } finally { rostering = false }
   }
