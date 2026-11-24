@@ -21,9 +21,8 @@ import type { SupportIn, SupportScope } from './support_ask'
 import { cancelAsk, inboxRows } from './support_inbox'
 import { agentAsks, approveAgentAsk, discardAgentAsk } from './support_flush'
 import { draftable } from './drafts_dom'
-import { communityHostPeople, eventHostPeople, scopeOfFilter } from './support_relay'  // wave46 iyg-ask-reach
+import { relayHostPeople, scopeOfFilter } from './support_relay'  // wave46 iyg-ask-reach
 import { tagLabel as eventLabel } from './events'  // wave46 iyg-ask-reach
-import { roleLabels, eventOrganizers } from './event_roles'  // wave46 iyg-ask-reach
 
 export interface SupportIo {
   st: () => AppState
@@ -48,7 +47,8 @@ function recipients(io: SupportIo, f: AudienceFilter & FilterExtras): { peer: Pe
   const hidden = chipIds(f.exclude, s.people, tagTester(s.people, loadColourTags()))
   const chip = f.add.find((c) => c.startsWith('event:'))
   // wave46 iyg-assemble: a community-limited ask also reaches the hosts of its events
-  const hosts = (chip ? eventHostPeople(s, chip.slice(6)) : f.only ? communityHostPeople(s, f.only) : []).filter((p) => p.peerId && open.has(p.peerId) && !hidden.includes(p.id) && !reached.includes(p))
+  const hosts = relayHostPeople(s, chip ? { event: chip.slice(6) } : { tag: f.only }).filter(   // wave46 iyg-reviewfix F9: only hosts who can relay that scope
+    (p) => p.peerId && open.has(p.peerId) && !hidden.includes(p.id) && !reached.includes(p))
   return [...reached, ...hosts]
     .map((p) => ({ peer: s.peers.find((x) => x.id === p.peerId) as Peer, name: p.name, person: p }))
 }
@@ -63,8 +63,8 @@ const audienceKey = (f: AudienceFilter & FilterExtras): string => (f.only ? `tag
 function passOnLine(io: SupportIo, scope: SupportScope | undefined): HTMLElement | null {
   if (!scope) return null
   const s = io.st()
-  const ev = scope.event ? s.events?.find((e) => e.id === scope.event) : undefined
-  const host = (ev ? roleLabels(s, ev.hosts?.length ? ev.hosts : eventOrganizers(ev))[0] : undefined) ?? S.w46ask.hostFallback
+  const host = relayHostPeople(s, scope).find((p) => p.peerId)?.name // F9: only a host who can relay is named; nobody = no line
+  if (!host) return null
   return el('p', { class: 'hint', 'data-support-passon': '' }, [S.w46ask.passOn(host, scope.name ?? scope.event ?? scope.tag ?? '')])
 }
 

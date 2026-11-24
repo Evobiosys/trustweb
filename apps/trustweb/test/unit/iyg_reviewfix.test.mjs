@@ -350,3 +350,22 @@ describe('F8 a name told is taken back', () => {
     expect(g.state.people.find((p) => p.name === 'Ben').deleted_at).toBeDefined()
   })
 })
+
+import { relayHostPeople } from '../../src/support_relay.ts'
+
+describe('F9 an ask reaches only hosts who can relay that scope', () => {
+  const people = [P('h', 'Hanna', { peerId: 'ph' }), P('o', 'Olga', { peerId: 'po' }), P('g', 'Gus', { peerId: 'pg' }), P('d', 'Dan')]
+  const evs = [ev({ id: 'e1', communityId: 'iyg', hosts: ['Hanna'], attended: true })]
+  const s = (extData) => ({ people, events: evs, ...(extData ? { extData } : {}) })
+  it('event scope: the event\'s named hosts', () => {
+    expect(relayHostPeople(s(), { event: 'e1' }).map((p) => p.name)).toEqual(['Hanna'])
+  })
+  it('community scope: only its organizers on my device, not every event host', () => {
+    expect(relayHostPeople(s(), { tag: 'iyg' })).toEqual([])
+    expect(relayHostPeople(s(meta({ organizers: ['o'] })), { tag: 'iyg' }).map((p) => p.name)).toEqual(['Olga'])
+  })
+  it('no scope or an unknown event: nobody', () => {
+    expect(relayHostPeople(s(), {})).toEqual([])
+    expect(relayHostPeople(s(), { event: 'zz' })).toEqual([])
+  })
+})

@@ -35,6 +35,13 @@ export function communityHostPeople(s: Pick<AppState, 'people' | 'events'>, tag:
   return s.people.filter((p) => ids.includes(p.id))
 }
 
+/** wave46 iyg-reviewfix F9: the connected people who can actually pass an ask of this scope on (relayPeers on their device): the event's hosts for an event; the community's organizers for a community. */
+export function relayHostPeople(s: Pick<AppState, 'people' | 'events' | 'extData'>, scope: { tag?: string; event?: string }): Person[] {
+  if (scope.event) return eventHostPeople(s, scope.event)
+  const organizers = scope.tag ? parseCommunity(s.extData?.['community-mighty']).meta?.[scope.tag]?.organizers ?? [] : []
+  return s.people.filter((p) => p.deleted_at === undefined && p.peerId && organizers.includes(p.id))
+}
+
 /** The peers this device passes an incoming scoped ask on to; empty unless I host/announce the scope, the sender belongs to it, and the ask is new and not relayed already. */
 export function relayPeers(s: RelayState, ask: { id: string; scope?: SupportScope }, senderPeerId: string): Peer[] {
   const scope = ask.scope
