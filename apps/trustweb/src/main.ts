@@ -370,7 +370,8 @@ import { autosaveOf, draftable, draftsSettingsRows, restoredNotice, setDraftHost
 import { openSpaceSection } from './open_space_view'
 import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
-import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
+import { decodeEventLink, encodeEventLink, leanForLink, linkOrigin, toBase64Url } from './event_link'   // wave47 invite-fits-chat
+import { refusalOfError, sendToChat } from './send_notice'   // wave47 invite-fits-chat
 import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
@@ -4471,7 +4472,7 @@ function askLinksRow(p: Person): HTMLElement | null {
     el('button', {
       class: 'btn btn-ghost', disabled: wait,
       onclick: () => {
-        net.sendText(peer, requestText(APP_URL, wants)).then(() => { p.contactAsked = Date.now(); save(); personSheet(p.id) }, () => toast(S.chatOffline))
+        net.sendText(peer, requestText(APP_URL, wants)).then(() => { p.contactAsked = Date.now(); save(); personSheet(p.id) }, (e: unknown) => toast(S.sendRefused[refusalOfError(e)]))   // wave47 invite-fits-chat
       },
     }, [S.chReqAsk]),
     p.contactAsked ? el('p', { class: 'meta' }, [S.chReqAsked(when(p.contactAsked))]) : null,
@@ -5616,14 +5617,13 @@ const extHooks: ExtHooks = {
   atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
   openItem: (id) => { closeSheet(); itemSheet(id) },
   openCalendar: () => { closeSheet(); go(Screen.Events) },
-  eventLink: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+  eventLink: (ev, lean = 0) => { const l = leanForLink(eventForLink(st(), ev), revealedBy(eventsBy(), ev), lean); return encodeEventLink(l.ev, linkOrigin(location.origin), 'peer', l.by) },   // wave47 invite-fits-chat
   sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
   me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
   sendInvite: async (personId, text) => {
-    const peerId = st().people.find((p) => p.id === personId)?.peerId
-    const ok = peerId ? await submitText(chatIo(), peerId, text) : false
-    toast(ok ? S.cal.inviteSent : S.chatOffline)
-    return ok
+    const why = await sendToChat(chatIo(), st().people.find((p) => p.id === personId)?.peerId, text)   // wave47 invite-fits-chat: was "No connection right now" for every refusal
+    toast(why ? S.sendRefused[why] : S.cal.inviteSent)
+    return !why
   },
   page: (title, body, mark) => pages.open(title, body, mark),
   backupNow: () => backup.backUpNow(),

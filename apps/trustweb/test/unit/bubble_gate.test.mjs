@@ -79,15 +79,19 @@ describe('introduction gate: the dragged one asks, the dropped-onto one accepts'
     expect(m.state.introPending).toBeUndefined()
   })
 
-  it('when the request cannot go out nothing stays pending and the requester is not told', async () => {
-    const f = phone({ me: { id: 'me', displayName: 'Jakob' }, people: [P('a'), P('b')], peers, log: [] })
-    const bad = createBubbleConnect({ ...{ st: () => f.state, save() {}, render() {}, openSheet: (n) => { f.out.sheet = n }, closeSheet() {}, toast: (x) => f.out.toasts.push(x), appUrl: app, send: async () => true, connectVia() {} }, sendProtocol: async () => { throw new Error('offline') } })
-    bad.introduce('a', 'b')
-    button(f.out.sheet, 'data-introduce-yes').attrs.onclick()
-    await tick(); await tick()
-    expect(f.state.introPending).toBeUndefined()
-    expect(f.out.toasts.at(-1)).toContain('No connection')
-  })
+  // wave47 invite-fits-chat: the notice names why it could not go out; "No connection" (S.chatOffline) is for the transport alone, where the message really waits.
+  for (const [thrown, says] of [['blocked', 'You blocked this person'], ['no peer', 'not connected with this person'], ['relay exploded', 'could not be sent']]) {
+    it(`when the request cannot go out (${thrown}) nothing stays pending, the requester is not told, and the notice says why`, async () => {
+      const f = phone({ me: { id: 'me', displayName: 'Jakob' }, people: [P('a'), P('b')], peers, log: [] })
+      const bad = createBubbleConnect({ ...{ st: () => f.state, save() {}, render() {}, openSheet: (n) => { f.out.sheet = n }, closeSheet() {}, toast: (x) => f.out.toasts.push(x), appUrl: app, send: async () => true, connectVia() {} }, sendProtocol: async () => { throw new Error(thrown) } })
+      bad.introduce('a', 'b')
+      button(f.out.sheet, 'data-introduce-yes').attrs.onclick()
+      await tick(); await tick()
+      expect(f.state.introPending).toBeUndefined()
+      expect(f.out.toasts.at(-1)).toContain(says)
+      expect(f.out.toasts.at(-1)).not.toContain('No connection')
+    })
+  }
 
   it('the acceptor sees "<requester> would like to connect with you, introduced by <me>"; Accept answers ok and connects the requester', async () => {
     const link = `${app}?connect=${encodeURIComponent('did:peer:2.a')}&id=peer-a&name=Ada&acq=1`
