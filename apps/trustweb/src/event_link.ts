@@ -39,6 +39,18 @@ export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
 }
 
+/** wave47 invite-fits-chat: what an event link leaves out, step by step, so it fits a bounded carrier (one chat message, chat.ts CHAT_TEXT_MAX): 0 nothing; 1 my did
+ * (the invited person holds me already; my name stays); 2 also the themes; 3 also the conditions; 4 also the organizer line. What makes the event work on the
+ * other phone (id, name, dates, place, hosts, tag, mode, show-all) is never left out. Pure: the event handed in is not changed. */
+export const LINK_LEAN_MAX = 4
+export function leanForLink(ev: TwEvent, by: EventBy | undefined, lean: number): { ev: TwEvent; by?: EventBy } {
+  const out: TwEvent = { ...ev }
+  if (lean >= 2) delete out.themes
+  if (lean >= 3) delete out.conditions
+  if (lean >= LINK_LEAN_MAX) delete out.organizer
+  return { ev: out, ...(by ? { by: lean >= 1 ? { name: by.name } : by } : {}) }
+}
+
 /** Wave 43b: the short form the event QR uses (`#evs=` / `#evs_host=`): [id, name, from, to, core from, core to, hosts, mode, tag name] as a JSON array,
  * the same fields as the long form; `mode` is 'e' for the event-only variant (B5); the tag name as the long form carries it (P4). Empty tail entries are dropped. */
 export const shortFields = (ev: Pick<LinkedEvent, 'id' | 'name' | 'from' | 'to' | 'core' | 'hosts' | 'linkMode' | 'tagName' | 'hostDefault'>): string => {

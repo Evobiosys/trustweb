@@ -13,6 +13,7 @@ import { codeText, requestText } from './bubble_links'
 import { LogOutcome } from './model'
 import { linkEntries } from './person_links'
 import type { AppState } from './model'
+import { refusalOfError } from './send_notice'
 import { S } from './strings'
 
 const SVG = 'http://www.w3.org/2000/svg'
@@ -70,7 +71,7 @@ export function createBubbleConnect(d: BubbleConnectDeps): { introduce(requester
     if (!text) return S.introduceBlock['too-long']
     addOnce(s, 'introPending', { id, requester: a.id, acceptor: b.id, at: Date.now() })
     d.save()
-    try { await d.sendProtocol(b.peerId!, text) } catch { takeById(s, 'introPending', id); d.save(); return S.chatOffline }
+    try { await d.sendProtocol(b.peerId!, text) } catch (e) { takeById(s, 'introPending', id); d.save(); return S.sendRefused[refusalOfError(e)] }   // wave47 invite-fits-chat: the real reason, not "No connection"
     void d.send(a.peerId!, S.introduceAskedText(s.me.displayName, b.name))
     s.log.unshift({ id: `intro-${id}`, at: Date.now(), from: s.me.displayName, text: S.introduceLog(a.name, b.name), outcome: LogOutcome.Shared })
     d.save()
@@ -138,7 +139,7 @@ export function createBubbleConnect(d: BubbleConnectDeps): { introduce(requester
         takeById(d.st(), 'introInbox', item.id); d.save(); d.closeSheet()
         if (k === 'ok') d.connectVia(item.link)
         else d.render()
-      }, () => d.toast(S.chatOffline))
+      }, (e: unknown) => d.toast(S.sendRefused[refusalOfError(e)]))
     }
     d.openSheet([
       el('div', { 'data-introduce-gate': '' }, [

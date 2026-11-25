@@ -564,6 +564,7 @@ export const S = {
     notConnected: 'Not on TrustWeb yet: share the event link yourself.',
     inviteText: (eventName: string, link: string) => `You are invited: ${eventName}\n${link}`,
     inviteSent: 'Invite is in your chat with them; it goes out when they are reachable.',
+    inviteTooLong: "This event's link is too long for one chat message. Use Share event link and send it yourself.",   // wave47 invite-fits-chat
     modeCalendar: 'Calendar',
     icsExport: 'Export .ics',
     icsImport: 'Import .ics',
@@ -2717,6 +2718,15 @@ export const S = {
   chatNotConnected: (name: string) => `${name} is not connected on TrustWeb yet. Connect first to chat here.`,
   chatEmpty: (name: string) => `Nothing written yet. Say hello to ${name}.`,
   chatOffline: 'No connection right now. Your message waits here and goes out when you are back online.',
+  /** wave47 invite-fits-chat: a refused send names its reason (send_notice.ts); chatOffline above is for the transport only. */
+  sendRefused: {
+    'not-connected': 'You are not connected with this person on TrustWeb yet. Nothing was sent.',
+    empty: 'There is nothing to send.',
+    'too-long': 'This is too long for one chat message. Nothing was sent.',
+    'thread-full': 'Too many of your messages to this person are still waiting to go out. Nothing was added.',
+    blocked: 'You blocked this person. Nothing was sent.',
+    failed: 'This could not be sent. Please try again.',
+  },
   chatPlaceholder: 'Write a message',
   chatLongHint: 'Use Signal for longer messages',
   chatSend: 'Send',

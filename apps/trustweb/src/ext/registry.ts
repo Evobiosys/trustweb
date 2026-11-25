@@ -58,7 +58,8 @@ export interface ExtHooks {
   /** Shows the calendar screen. */
   openCalendar: () => void
   /** My event link as a peer (event_link.ts); never carries invitees. */
-  eventLink: (ev: TwEvent) => string
+  /** `lean` (wave47 invite-fits-chat): how much the link leaves out to fit a chat message (event_link.ts leanForLink); 0 or absent = the whole link. */
+  eventLink: (ev: TwEvent, lean?: number) => string
   /** Scheduling (cal5): a sheet over the app, its close, a short notice, the origin links carry, and who I am to others. */
   sheet: (children: (Node | null)[]) => void
   closeSheet: () => void

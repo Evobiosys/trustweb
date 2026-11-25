@@ -17,7 +17,7 @@ import { createTasks } from './tasks_view'
 import { tasksOn } from './tasks'
 import { createScheduling } from './scheduling_view'
 import { createIcs } from './ics_view'
-import { inviteText, invitees, personDropOnEvent, removeInvitee } from './invitees'
+import { fittingInviteText, invitees, personDropOnEvent, removeInvitee } from './invitees'
 import { calendarTagsRow } from './calendar_tags_view'
 import { calendarVisible } from '../../event_draft'
 
@@ -49,7 +49,11 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
     const send = p.peerId
       ? el('button', {
         class: 'btn btn-ghost btn-sm', 'data-cal-send': p.id,
-        onclick: () => { void h.sendInvite(p.id, inviteText(h.eventLink(ev), ev.name)).then((ok) => { if (ok) hint.textContent = S.cal.inviteSent }) },
+        onclick: () => {
+          const text = fittingInviteText(ev.name, (lean) => h.eventLink(ev, lean))   // wave47 invite-fits-chat: was the whole link, too long for a chat message with a real did in it
+          if (!text) { h.toast(S.cal.inviteTooLong); return }
+          void h.sendInvite(p.id, text).then((ok) => { if (ok) hint.textContent = S.cal.inviteSent })
+        },
       }, [S.cal.sendInvite])
       : null
     return el('div', { class: 'prow', 'data-cal-invitee': p.id }, [

@@ -85,11 +85,25 @@ export function emptyBook(): ChatBook {
   return {}
 }
 
+/** The text as the chat would keep it, whatever its length; '' for anything that is not a text. */
+const tidyChatText = (raw: unknown): string =>
+  (typeof raw === 'string' ? stripUnsafe(raw).replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : '')
+
 /** Text fit to send, show and keep: no hidden or bidi characters, tidy line breaks; null when empty or over the bound. */
 export function cleanChatText(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null
-  const text = stripUnsafe(raw).replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  const text = tidyChatText(raw)
   return text.length > 0 && text.length <= CHAT_TEXT_MAX ? text : null
+}
+
+/** wave47 invite-fits-chat: why queueOutgoing would take nothing (the notice names it, send_notice.ts); null = it queues. */
+export type QueueRefusal = 'not-connected' | 'empty' | 'too-long' | 'thread-full'
+export function queueRefusal(book: ChatBook, peerId: string | undefined, raw: unknown): QueueRefusal | null {
+  if (!peerId) return 'not-connected'
+  const size = tidyChatText(raw).length
+  if (size === 0) return 'empty'
+  if (size > CHAT_TEXT_MAX) return 'too-long'
+  // At most one fewer waiting message than the thread holds: an unsent message is never dropped to make room, and an arriving one always fits.
+  return threadOf(book, peerId).messages.filter((m) => m.state === MessageState.Pending).length >= CHAT_KEEP_PER_PERSON - 1 ? 'thread-full' : null
 }
 
 export function messageKey(dir: ChatDirection, sentAt: number, text: string): string {
@@ -142,10 +156,8 @@ export interface Queued {
  */
 export function queueOutgoing(book: ChatBook, peerId: string, raw: unknown, now: number, re?: ChatRe | null): Queued {
   const text = cleanChatText(raw)
-  if (!text || !peerId) return { book, message: null }
+  if (!text || queueRefusal(book, peerId, raw)) return { book, message: null }
   const thread = threadOf(book, peerId)
-  // At most one fewer waiting message than the thread holds: an unsent message is never dropped to make room, and an arriving one always fits.
-  if (thread.messages.filter((m) => m.state === MessageState.Pending).length >= CHAT_KEEP_PER_PERSON - 1) return { book, message: null }
   const lastOut = [...thread.messages].reverse().find((m) => m.dir === ChatDirection.Out)
   const sentAt = Math.max(now, (lastOut?.sentAt ?? 0) + 1)
   const message: ChatMessage = {
