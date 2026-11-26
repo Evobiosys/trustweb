@@ -2,6 +2,7 @@
  * Event link (E2, wave 7): `<origin>/#ev=<base64url(JSON)>` (`#ev_host=` for the host's` carries the event itself and nothing about people (I1): only the
  * public fields the organizer chose to send. The fragment never reaches a server. Pure and DOM-free.
  */
+import { CONNECT_CODE_RE } from './connect_code'
 import { newEvent } from './events'
 import type { TwEvent } from './model'
 import { SHORT_LINK_ORIGINS } from './short_link'
@@ -13,7 +14,8 @@ export type LinkKind = 'peer' | 'host'
 export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked' | 'nameReveal' | 'confTo'> & { kind: LinkKind; by?: EventBy }
 
 /** Who sent the link: their own name and own identity, nothing about third people (I1). */
-export interface EventBy { name: string; did?: string; /** My nickname (Me.nickname): only the nickname reveal (events.ts revealedBy) may put it in a link as the name. */ nick?: string }
+export interface EventBy { name: string; did?: string; /** My nickname (Me.nickname): only the nickname reveal (events.ts revealedBy) may put it in a link as the name. */ nick?: string
+  /** hotfix guest-visible: my persistent connect code (22 characters, connect_code.ts): reaches me like the did does, in a tenth of the room. Travels where the did travels. */ code?: string }
 
 const MAX_BYTES = 4096
 const SRV = /^[0-9a-f]{16}$/
@@ -35,12 +37,12 @@ export function linkOrigin(pageOrigin: string): string {
 
 export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?: EventBy): string {
   const { id, name, from, to, core, where, conditions, themes, organizer, hosts, hostNamesTags, tagName, linkMode, hostDefault, showAll } = ev
-  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(linkMode === 'event' ? { mode: 'event' as const } : {}), ...(showAll ? { showAll: true as const } : {}), ...(tagName ? { tagName } : {}), ...(hostDefault ? { hostDefault } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}), ...(ev.conference?.length ? { conf: true } : {}) }   // wave44c event-autosave: only that a conference link waits, never the link
+  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}), ...(by.code ? { code: by.code } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(linkMode === 'event' ? { mode: 'event' as const } : {}), ...(showAll ? { showAll: true as const } : {}), ...(tagName ? { tagName } : {}), ...(hostDefault ? { hostDefault } : {}), ...(to ? { to } : {}), ...(core ? { core } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}), ...(ev.conference?.length ? { conf: true } : {}) }   // wave44c event-autosave: only that a conference link waits, never the link
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
 }
 
 /** wave47 invite-fits-chat: what an event link leaves out, step by step, so it fits a bounded carrier (one chat message, chat.ts CHAT_TEXT_MAX): 0 nothing; 1 my did
- * (the invited person holds me already; my name stays); 2 also the themes; 3 also the conditions; 4 also the organizer line. What makes the event work on the
+ * (the invited person holds me already; my name stays, and my 22-character connect code when I have one, so a blank browser can still reach me); 2 also the themes; 3 also the conditions; 4 also the organizer line. What makes the event work on the
  * other phone (id, name, dates, place, hosts, tag, mode, show-all) is never left out. Pure: the event handed in is not changed. */
 export const LINK_LEAN_MAX = 4
 export function leanForLink(ev: TwEvent, by: EventBy | undefined, lean: number): { ev: TwEvent; by?: EventBy } {
@@ -48,7 +50,7 @@ export function leanForLink(ev: TwEvent, by: EventBy | undefined, lean: number):
   if (lean >= 2) delete out.themes
   if (lean >= 3) delete out.conditions
   if (lean >= LINK_LEAN_MAX) delete out.organizer
-  return { ev: out, ...(by ? { by: lean >= 1 ? { name: by.name } : by } : {}) }
+  return { ev: out, ...(by ? { by: lean >= 1 ? { name: by.name, ...(by.code ? { code: by.code } : {}) } : by } : {}) }
 }
 
 /** Wave 43b: the short form the event QR uses (`#evs=` / `#evs_host=`): [id, name, from, to, core from, core to, hosts, mode, tag name] as a JSON array,
@@ -95,9 +97,10 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     const b = typeof f.by === 'object' && f.by !== null ? (f.by as Record<string, unknown>) : undefined
     const byName = text(b?.name)?.trim()
     const byDid = text(b?.did)
+    const byCode = text(b?.code)
     const { createdAt: _c, attended: _a, ...rest } = ev
     const srv = params.get('srv')
-    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(f.mode === 'event' ? { linkMode: 'event' as const } : {}), ...(f.hostDefault === 'open' || f.hostDefault === 'discoverable' || f.hostDefault === 'off' ? { hostDefault: f.hostDefault } : {}), ...(f.showAll === true ? { showAll: true as const } : {}), ...(f.conf === true ? { confHidden: true as const } : {}) }
+    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}), ...(byCode && CONNECT_CODE_RE.test(byCode) ? { code: byCode } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(f.mode === 'event' ? { linkMode: 'event' as const } : {}), ...(f.hostDefault === 'open' || f.hostDefault === 'discoverable' || f.hostDefault === 'off' ? { hostDefault: f.hostDefault } : {}), ...(f.showAll === true ? { showAll: true as const } : {}), ...(f.conf === true ? { confHidden: true as const } : {}) }
   } catch {
     return null
   }

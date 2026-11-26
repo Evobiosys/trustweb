@@ -112,7 +112,7 @@ export function revealedBy(by: EventBy | undefined, ev: Pick<TwEvent, 'nameRevea
   if (r === 'nick' && nick) return { name: nick }
   if (r === 'nick' && NICK_FALLBACK === 'hidden') return undefined
   if (r === 'first' || r === 'nick') { const name = firstName(by.name); return name ? { name } : undefined }
-  return { name: by.name, ...(by.did ? { did: by.did } : {}) }
+  return { name: by.name, ...(by.did ? { did: by.did } : {}), ...(by.code ? { code: by.code } : {}) }   // hotfix guest-visible
 }
 
 export function isPast(ev: TwEvent, now: number): boolean {

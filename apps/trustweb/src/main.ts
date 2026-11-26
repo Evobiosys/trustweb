@@ -370,6 +370,7 @@ import { autosaveOf, draftable, draftsSettingsRows, restoredNotice, setDraftHost
 import { openSpaceSection } from './open_space_view'
 import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
+import { hostToReach } from './event_reach'   // hotfix guest-visible
 import { decodeEventLink, encodeEventLink, leanForLink, linkOrigin, toBase64Url } from './event_link'   // wave47 invite-fits-chat
 import { refusalOfError, sendToChat } from './send_notice'   // wave47 invite-fits-chat
 import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
@@ -5578,7 +5579,7 @@ refetchEvents = installEventsRefetch(appActions, { now: Date.now, peers: () => s
 setDraftHost({ state: st, save })   // wave44c event-autosave
 restoreRecordDraft()
 const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown, skip) => eventEnv.introduce(id, who, shown, skip) }) // wave44c seen-through
-const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
+const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().connectCode?.code ? { code: st().connectCode?.code } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
 const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
@@ -6098,6 +6099,24 @@ function afterConnectOpen(personId?: string): void {
   else if (personId) personSheet(personId)
 }
 
+/** An event link accepted with the join sheet's button (a co-notes link joins without this: no connect without a tap): the event is mine; with `addInviter` the inviter becomes a person in my web, and
+ * a host I do not hold yet is connected first (hotfix guest-visible: a blank browser opening the link is otherwise unknown to the host), then the inviter and the hosts are told. */
+function acceptEventLink(ev: LinkedEvent, withInviter: boolean): string {
+  const id = joinEvent(st(), ev, Date.now())
+  const by = withInviter ? ev.by : undefined
+  const reach = by ? hostToReach(by, st()) : null
+  const finish = (): void => {
+    if (by) addInviter(st(), by, id, S.eventInvitedContext(ev.name), randomId(8), Date.now())
+    save()
+    const held = st().events?.find((e) => e.id === id)
+    if (held) void eventEnv.joined(held, ev.by)   // answers-44d: the inviter and the hosts see that I joined
+  }
+  save()
+  if (reach && by) void connectByCode(reach, Ring.Acquaintance, by.name, S.eventInvitedContext(ev.name)).then(finish, finish)   // a failure (offline, other relay) leaves the host untold, as before
+  else finish()
+  return id
+}
+
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
 const openedHits = new Set<string>()
 function maybeOpenPendingEvent(): void {
@@ -6122,12 +6141,8 @@ function maybeOpenPendingEvent(): void {
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement
   const add = (): void => {
-    const now = Date.now()
-    const id = joinEvent(st(), ev, now)
-    if (ev.by && addBox.checked) addInviter(st(), ev.by, id, S.eventInvitedContext(ev.name), randomId(8), now)
-    save(); closeSheet(); openEvents(id, linkOpensEdit(ev))
-    const held = st().events?.find((e) => e.id === id)
-    if (held) void eventEnv.joined(held, ev.by)   // answers-44d: the inviter and the hosts see that I joined
+    const id = acceptEventLink(ev, addBox.checked)
+    closeSheet(); openEvents(id, linkOpensEdit(ev))   // the event shows at once; the connect inside may take seconds
   }
   // The organizer's logo, if the server has one: filled in later, the sheet never waits for it (the title stays the link's own name).
   const logoSlot = ev.srv ? el('div', { 'data-org-logo': '' }) : null
