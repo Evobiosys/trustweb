@@ -64,7 +64,7 @@ import type { SupportIo } from './support_ask_view'
 import { ownName } from './own_name' // wave46 iyg-reviewfix D2
 import { relayPeers, relayText, parseViaHere, supportTextFor, viaHereText } from './support_relay'   // wave46 iyg-ask-reach
 import { ASK_MODES, AskMode, closeText, isOpen, nextAskMode, parseCloseText, parseHereText, parseSupportText, recordHere, supportText } from './support_ask'
-import { allowReachOut } from './reach_out_guard'
+import { allowReachOut, EVENT_JOIN_PER_HOUR } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
 import { PROVIDERS, guessProvider, validateEmail, composeHref, senderHint, providerLabel, type PrimaryEmail } from './primary_email'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -953,6 +953,15 @@ const net = new Net({
     save()
     if (!heldToasted) { heldToasted = true; toast(S.reachOutsHeld(s.reachOutHeld)) }
     return true
+  },
+  // hotfix guest-visible review F4: an event-link joiner (I shared that link on purpose): its own cap, never held by the reach-out pause; over it no card and no answer, the guest's app retries.
+  refuseEventJoin: () => {
+    const s = st()
+    const r = allowReachOut(s.eventJoinLog ?? [], Date.now(), EVENT_JOIN_PER_HOUR)
+    if (!r.ok) return true
+    s.eventJoinLog = r.log
+    save()
+    return false
   },
   // A phone opened one of this phone's demo-account codes: hold it until the
   // owner allows it in his own view (owner 2026-10-06). Matched by the name

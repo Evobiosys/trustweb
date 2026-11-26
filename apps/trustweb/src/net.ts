@@ -216,6 +216,8 @@ export interface NetHooks {
   holdPeer(peer: Peer): boolean
   /** A new peer came in through a reach-out (public link): true drops it unanswered (over the hourly cap, or paused; reach_out_guard.ts). */
   refuseReachOut?(): boolean
+  /** A new peer came in through an event link (ack `ev`): true drops it unanswered (over the event-join cap, reach_out_guard.ts EVENT_JOIN_PER_HOUR); the reach-out pause never holds it. */
+  refuseEventJoin?(): boolean
   /** The other side of the hold: a peer we already hold sent its ack again, i.e. the owner allowed us. */
   onPeerConfirmed(peer: Peer): void
   /** Ring for a peer who just scanned this device's code. */
@@ -639,7 +641,8 @@ export class Net {
       return true
     }
     if (!inv && this.hooks.holdPeer(incoming)) return true
-    if (!inv && (env.reachOut || env.ev) && this.hooks.refuseReachOut?.()) return true   // hotfix guest-visible review F4: a link joiner counts against the same hourly budget
+    if (!inv && env.reachOut && this.hooks.refuseReachOut?.()) return true
+    if (!inv && env.ev && !env.reachOut && this.hooks.refuseEventJoin?.()) return true   // hotfix guest-visible review F4: a link joiner has its own hourly budget
     const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut && !inv ? { ring: Ring.Intending, reachOut: true as const } : {}) })
     this.hooks.save()
     this.hooks.onPeerConnected(peer)

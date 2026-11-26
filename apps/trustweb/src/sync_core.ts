@@ -66,7 +66,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // relay identity, keys, peers, hosting secret, connect codes
   'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'seenHandshakeNonces', 'handshakeLog', 'invites', 'invitesTaken', 'hideReports', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
   // queues, caches and counters of this phone
-  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'birthdayNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
+  'reachOutLog', 'eventJoinLog', 'reachOutHeld', 'reachOutsPaused', 'releasedTies', 'engagementNoticeDay', 'keepNoticeDay', 'birthdayNoticeDay', 'browserOnlyDismissed', 'engagementSince', 'awayAsks', 'sentAsks',
   'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'eventMergeAsks' /* wave45 merge-events: peer ids */, 'rosterSent' /* wave46 iyg-roster: peer ids */, 'resKnown' /* wave46 iyg-assemble: sent-state of my synced resources */, 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'notifFeatureSeen', 'onbDismissed', 'webSearchConsent', 'serverTranscriptionConsentAt',

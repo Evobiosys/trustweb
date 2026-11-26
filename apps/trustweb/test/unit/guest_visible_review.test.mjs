@@ -14,6 +14,7 @@ import { byForLink, hostToReach, ownReachCode } from '../../src/event_reach.ts'
 import { rosterAudience } from '../../src/event_roster.ts'
 import { fittingInviteText, inviteText } from '../../src/ext/calendar/invitees.ts'
 import { Net } from '../../src/net.ts'
+import { allowReachOut, EVENT_JOIN_PER_HOUR } from '../../src/reach_out_guard.ts'
 import { Ring } from '../../src/model.ts'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -41,6 +42,7 @@ async function phone(name, over = {}) {
     ringForNewPeer: () => Ring.Closest,   // the host's Meet-code placement
     onLogChanged: () => {}, askScope: () => undefined, onText: () => {}, mayPassOnFrom: () => true, samePerson: () => false,
     refuseReachOut: () => { p.refused++; return p.budgetOut === true },
+    refuseEventJoin: () => { p.joinAsked = (p.joinAsked ?? 0) + 1; return p.joinBudgetOut === true },
     ...over,
   }, { answerWindowMs: 600, relayOrigin })
   await p.net.start()
@@ -64,20 +66,37 @@ describe('F1 a link joiner lands in the host Acquaintance zone, whatever the hos
   })
 })
 
-describe('F4 event-link connects count against the reach-out budget (10 an hour, the one shared with reach-outs)', () => {
-  it('a refused budget makes no card and no connected peer; a plain scan never asks the budget', async () => {
+describe('F4 event-link connects have their own hourly budget (EVENT_JOIN_PER_HOUR), apart from reach-outs', () => {
+  it('a refused event budget makes no card and no connected peer; a plain scan never asks either budget', async () => {
     const host = await phone('Hanna')
-    host.budgetOut = true
+    host.joinBudgetOut = true
     const scanner = await phone('Sam')
     const joiner = await phone('Jo')
     await joiner.net.completeConnect(linkOf(host), Ring.Acquaintance, false, undefined, true)
-    await until(() => host.refused === 1)
+    await until(() => host.joinAsked === 1)
     await sleep(300)
     expect(host.connected).toHaveLength(0)
     expect(host.state.peers).toHaveLength(0)
     await scanner.net.completeConnect(linkOf(host), Ring.Acquaintance)
     await until(() => host.connected.length === 1)
-    expect(host.refused).toBe(1)
+    expect(host.joinAsked).toBe(1)
+    expect(host.refused).toBe(0)
+  })
+  it('a used-up or paused reach-out budget never holds an event-link joiner (the host shared that link on purpose)', async () => {
+    const host = await phone('Hedda')
+    host.budgetOut = true
+    const joiner = await phone('Jun')
+    await joiner.net.completeConnect(linkOf(host), Ring.Acquaintance, false, undefined, true)
+    await until(() => host.connected.length === 1)
+    expect(host.refused).toBe(0)
+    expect(host.joinAsked).toBe(1)
+  })
+  it('the event budget is far above the reach-out budget: a whole workshop joins within the hour, a flood does not', () => {
+    expect(EVENT_JOIN_PER_HOUR).toBeGreaterThanOrEqual(100)
+    let log = []; const now = 1_800_000_000_000
+    for (let i = 0; i < EVENT_JOIN_PER_HOUR; i++) { const r = allowReachOut(log, now + i, EVENT_JOIN_PER_HOUR); expect(r.ok).toBe(true); log = r.log }
+    expect(allowReachOut(log, now + EVENT_JOIN_PER_HOUR, EVENT_JOIN_PER_HOUR).ok).toBe(false)
+    expect(allowReachOut(log, now + 3_600_001 + EVENT_JOIN_PER_HOUR, EVENT_JOIN_PER_HOUR).ok).toBe(true)
   })
 })
 

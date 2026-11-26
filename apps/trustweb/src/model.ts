@@ -1198,6 +1198,8 @@ export interface AppState {
   schemaVersion?: number
   /** Times (ms) of the reach-outs via my link that landed on my web in the last hour (reach_out_guard.ts), how many were held, and the owner's pause. Local only. */
   reachOutLog?: number[]
+  /** Times (ms) of the event-link joiners that connected in the last hour (reach_out_guard.ts EVENT_JOIN_PER_HOUR). Local only. */
+  eventJoinLog?: number[]
   reachOutHeld?: number
   reachOutsPaused?: true
   /** Wave 16: reach-outs waiting for Add or Dismiss under the web (wants_to_connect.ts). This device only. Absent: none; older builds ignore it. */
