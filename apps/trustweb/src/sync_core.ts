@@ -198,8 +198,8 @@ function withoutImage(it: InventoryItem): InventoryItem {
 
 /** What one device decides alone about an event (where it came from, whether its counter hit went out): never sent. */
 function syncEvent(ev: TwEvent): TwEvent {
-  const { fromLink: _f, hitTagged: _h, srv: _s, ...rest } = ev
-  void _f; void _h; void _s
+  const { fromLink: _f, hitTagged: _h, srv: _s, hostPending: _p, ...rest } = ev
+  void _f; void _h; void _s; void _p
   return rest
 }
 

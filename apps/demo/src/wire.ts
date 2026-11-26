@@ -425,7 +425,7 @@ function parseConnectAck(o: Record<string, unknown>): ConnectAckEnvelope | null 
   // Unlike ConnectEnvelope.did (optional there), `did` is REQUIRED here --
   // see types.ts's doc comment on ConnectAckEnvelope.
   if (!isNonEmptyString(o.did)) return null
-  return { v: WIRE_VERSION, t: 'connect-ack', from: o.from, did: o.did, ...(o.reachOut === true ? { reachOut: true as const } : {}) }
+  return { v: WIRE_VERSION, t: 'connect-ack', from: o.from, did: o.did, ...(o.reachOut === true ? { reachOut: true as const } : {}), ...(o.ev === true ? { ev: true as const } : {}) }
 }
 
 // ----- BEGIN TrustWeb wave 43c (social-hosting): types.ts HostEnvelope -----

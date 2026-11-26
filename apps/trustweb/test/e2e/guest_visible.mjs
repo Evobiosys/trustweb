@@ -62,13 +62,14 @@ const withoutDid = (link) => {
   return link.split('#ev=')[0] + '#ev=' + Buffer.from(JSON.stringify(o)).toString('base64url')
 }
 /** A guest opens `link`; `first` = before the onboarding (the fragment must survive it). */
-async function guestOpens(browser, server, name, link, first) {
+async function guestOpens(browser, server, name, link, first, untick = false) {
   const g = await newPhone(browser, server)
   const hash = link.slice(link.indexOf('#'))
   if (first) { await g.page.goto(ORIGIN + '/' + hash); await g.page.waitForLoadState('networkidle').catch(() => {}); await g.page.waitForTimeout(1200); await onboard(g.page, name) }
   else { await g.page.goto(ORIGIN + '/'); await g.page.waitForLoadState('networkidle').catch(() => {}); await g.page.waitForTimeout(1200); await onboard(g.page, name); await g.page.goto('about:blank'); await g.page.goto(ORIGIN + '/' + hash) }
   const sheet = await appears(g.page.locator('[data-event-join]'), 25_000)
   t.ok(name + ': the join sheet opens from the link', sheet)
+  if (sheet && untick) await g.page.locator('[data-event-add-inviter]').uncheck()
   if (sheet) { await g.page.locator('[data-event-join]').click(); await g.page.waitForTimeout(600) }
   return g
 }
@@ -86,7 +87,7 @@ async function main() {
     const h = await newPhone(browser, server)
     await h.page.goto(ORIGIN + '/'); await h.page.waitForLoadState('networkidle').catch(() => {}); await h.page.waitForTimeout(1200)
     await onboard(h.page, 'Hanna')
-    await setRecord(h.page, ev)
+    await setRecord(h.page, ev + `; r.connectPlacement = 'closest'`)   // review F1: the host's Meet-code placement is the closest zone
     await h.page.reload(); await h.page.waitForTimeout(1200)
     await h.page.locator('.status-pill').first().click(); await h.page.waitForTimeout(1500)   // draws Meet: the connect code is made
     await h.page.evaluate(() => document.querySelectorAll('.overlay.on').forEach((n) => n.classList.remove('on')))
@@ -111,6 +112,32 @@ async function main() {
       await shot(me.page, `guest-visible-${other === 'Ben' ? 'anna' : 'ben'}.png`)
     }
     await openEventPage(h.page, 'e1'); await shot(h.page, 'guest-visible-host.png')
+    const rings = (await record(h.page)).people.filter((p) => ['Anna', 'Ben'].includes(p.name)).map((p) => p.ring)
+    t.ok('review F1: the host placement is Closest, and both link joiners land in Acquaintances', rings.length === 2 && rings.every((r) => r === 'acquaintance'), JSON.stringify(rings))
+    t.ok('review F2: the pre-ticked box says it connects', /^\s*Connect with Hanna so they and the people at this event can see you/.test(await (async () => { const g = await newPhone(browser, server); await g.page.goto(ORIGIN + '/' + full.slice(full.indexOf('#'))); await g.page.waitForLoadState('networkidle').catch(() => {}); await g.page.waitForTimeout(1200); await onboard(g.page, 'Gus'); await g.page.goto('about:blank'); await g.page.goto(ORIGIN + '/' + full.slice(full.indexOf('#'))); await g.page.locator('[data-event-join]').waitFor({ timeout: 25_000 }); const text = await g.page.locator('label:has([data-event-add-inviter])').innerText(); await g.ctx.close(); return text })()))
+
+    // review F2: the box unticked adds the event and sends nothing: no lookup, no connection, the host never lists the guest
+    const opensBefore = server.opens.length
+    const eve = await guestOpens(browser, server, 'Eve', full, false, true)
+    await new Promise((r) => setTimeout(r, 4000))
+    t.ok('review F2: unticked: Eve holds the event, no connection, no lookup of the host', (await record(eve.page)).events.some((e) => e.id === 'e1') && (await record(eve.page)).peers.length === 0 && server.opens.length === opensBefore)
+    t.ok('review F2: unticked: Hanna never lists Eve', !(await joiners(h.page, 'e1')).includes('Eve'))
+
+    // review F3: a crafted link names the host "Trusted Host" but carries Hanna's code: the card keeps what Hanna announces, and the guest is told
+    const crafted = (() => { const o = JSON.parse(Buffer.from(full.split('#ev=')[1].split('&')[0], 'base64url').toString()); o.by = { name: 'Trusted Host', code: o.by.code }; return full.split('#ev=')[0] + '#ev=' + Buffer.from(JSON.stringify(o)).toString('base64url') })()
+    const dan = await guestOpens(browser, server, 'Dan', crafted, false)
+    const danHost = await until(async () => (await record(dan.page)).people.find((p) => p.peerId))
+    t.ok('review F3: the host card is named Hanna, never Trusted Host', danHost?.name === 'Hanna' && !(await record(dan.page)).people.some((p) => p.name === 'Trusted Host'), danHost?.name)
+    t.ok('review F3: the guest is told what the link said and what the person calls themselves', /The link said Trusted Host; the person you connected with calls themselves Hanna/.test(await dan.page.locator('body').innerText()))
+
+    // review F6: the host lookup fails (rate limit): the guest is told, the event stays, and the connect goes through once the app is online again
+    server.openStatus = 429
+    const fay = await guestOpens(browser, server, 'Fay', withoutDid(full), false)
+    t.ok('review F6: Fay is told she is not connected yet', /Not connected with Hanna yet; it retries when you are online/.test(await fay.page.locator('body').innerText()))
+    t.ok('review F6: the event is held and marked pending', (await record(fay.page)).events.find((e) => e.id === 'e1')?.hostPending === true && (await record(fay.page)).peers.length === 0)
+    server.openStatus = null
+    await fay.page.evaluate(() => window.dispatchEvent(new Event('online')))
+    t.ok('review F6: back online she connects and Hanna lists her', !!(await until(async () => (await record(fay.page)).peers.length === 1 && (await joiners(h.page, 'e1')).includes('Fay'))))
 
     // a host who hides the name: the link reaches nobody (privacy: no name, did or code); the guest still holds the event
     await setRecord(h.page, `r.events[0].nameReveal = 'hidden'`)
@@ -123,7 +150,7 @@ async function main() {
     t.ok('hidden: Cleo holds the event and no connection', (await record(cleo.page)).events.some((e) => e.id === 'e1') && (await record(cleo.page)).peers.length === 0)
     t.ok('hidden: Hanna never lists Cleo, and Anna and Ben never hear of her', !(await joiners(h.page, 'e1')).includes('Cleo') && !(await record(anna.page)).people.some((p) => p.name === 'Cleo'))
     t.ok('no page errors', errors.length === 0, errors.join(' | '))
-    for (const p of [h, anna, ben, cleo]) await p.ctx.close()
+    for (const p of [h, anna, ben, cleo, eve, dan, fay]) await p.ctx.close()
   } finally {
     await browser?.close()
     await front?.stop?.()

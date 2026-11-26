@@ -363,14 +363,15 @@ import { backScreen } from './scoped_back'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
 import { eventForLink } from './event_roles'
-import { addInviter, applyHostLink, attendees, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
+import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, tagPerson, whenLabel as eventWhen } from './events'
 import { afterConnect, eventLinkView } from './event_join'
 import { createEventEnvelopes } from './event_envelope'
 import { autosaveOf, draftable, draftsSettingsRows, restoredNotice, setDraftHost } from './drafts_dom' // wave44c event-autosave
 import { openSpaceSection } from './open_space_view'
 import { communityMembers } from './event_visibility'
 import { pastAsksRow } from './past_asks_view'
-import { hostToReach } from './event_reach'   // hotfix guest-visible
+import { byForLink, hostToReach, ownReachCode } from './event_reach'   // hotfix guest-visible
+import { rosterAudience } from './event_roster'   // hotfix guest-visible review F5
 import { decodeEventLink, encodeEventLink, leanForLink, linkOrigin, toBase64Url } from './event_link'   // wave47 invite-fits-chat
 import { refusalOfError, sendToChat } from './send_notice'   // wave47 invite-fits-chat
 import { eventModeOn, leaveEventMode, rememberEventMode } from './event_mode'
@@ -2009,7 +2010,7 @@ function screenQr(plain = false): void {
 function eventQr(ev: TwEvent, plain = false, host = false): void {
   eventEnv.shown(ev.id)
   // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy). Wave 43: the host link when the page's host toggle is on (the QR follows the link).
-  void qrPage((link) => ({ kind: 'event', link, title: emojiTitle(ev.name, emojiOn(st())), eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : revealedBy(eventsBy(), ev)) }), plain)
+  void qrPage((link) => ({ kind: 'event', link, title: emojiTitle(ev.name, emojiOn(st())), eventLink: encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), host ? 'host' : 'peer', host ? undefined : linkBy(ev)) }), plain)
 }
 
 /** The tag's code carries the tag and the public usernames of the people who carry it (never those who asked to be asked first). */
@@ -2896,13 +2897,13 @@ function openPendingShare(): boolean {
 }
 
 /** The add sheet's "code, name or DID" (add_by_code.ts): look it up, connect, and make the person in the ring picked. A failure comes back as words, nothing is added. */
-async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean; previous?: string }> {
+async function connectByCode(input: string, ring: Ring, name: string, where: string, ev = false): Promise<AddFailure | { person: Person; existed: boolean; previous?: string }> {
   const out = await resolveAddInput({ origin: SERVER_ORIGIN, fetch: (i, init) => fetch(i, init) }, input)
   if (!out.ok) return out.failure
   if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
   const admitted = admitLink(out.link)
   if (!admitted.ok) return { type: 'stamp', reason: admitted.reason }
-  const peer = await net.completeConnect(out.link, ring)
+  const peer = await net.completeConnect(out.link, ring, false, undefined, ev)   // hotfix guest-visible review F1: ev = through an event link
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
   const existed = person !== undefined
@@ -5567,10 +5568,10 @@ const web = createWebView({
 /** Wave 43c connect-extras (event_envelope.ts): the full event after a QR connect, from the shower's device, sealed; no server holds it. */
 const eventEnv = createEventEnvelopes<Peer>({
   state: st, save, now: Date.now, send: (p, e) => net.sendEvent(p, e), peers: () => st().peers, pending: () => pendingEvent, setPending: (p) => { pendingEvent = p }, changed: render, later: (fn, ms) => { setTimeout(fn, ms) },
-  link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
+  link: (ev) => encodeEventLink(eventForLink(st(), ev), linkOrigin(location.origin), 'peer', linkBy(ev)),
   members: (tag) => communityMembers(st(), tag).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),
   tagName: (tag) => loadColourTags().find((t) => t.id === tag)?.label,   // wave46 iyg-guest-path
-  recipients: (ev) => [...new Set([...(ev.people ?? []), ...attendees(st(), ev.id).map((p) => p.id)])].flatMap((id) => st().peers.filter((x) => x.id === st().people.find((p) => p.id === id)?.peerId)),   // wave 44 steer-open-space
+  recipients: (ev) => rosterAudience(st(), ev).flatMap((p) => st().peers.filter((x) => x.id === p.peerId)),   // wave 44 steer-open-space; hotfix guest-visible review F5: who joined, never an invitee who did not
 })
 announceDue = () => { eventEnv.announceDue(); void eventEnv.rosterSync() }   // wave46 iyg-roster: also on every save (joins, showAll switched on, a peer connects)
 setTimeout(() => { void eventEnv.rosterSync() }, 8000)   // wave46 iyg-roster: catch-up on app start
@@ -5579,7 +5580,14 @@ refetchEvents = installEventsRefetch(appActions, { now: Date.now, peers: () => s
 setDraftHost({ state: st, save })   // wave44c event-autosave
 restoreRecordDraft()
 const seenThrough = createSeenThrough({ st, toast, openSheet, closeSheet, askIntro: (p, t) => net.askIntro(p, t), askShow: (p, w, t) => net.askShow(p, w, t), introduce: (id, who, shown, skip) => eventEnv.introduce(id, who, shown, skip) }) // wave44c seen-through
-const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(st().connectCode?.code ? { code: st().connectCode?.code } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
+const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}), ...(ownReachCode(st()) ? { code: ownReachCode(st()) } : {}), ...(st().me.nickname ? { nick: st().me.nickname } : {}) } : undefined)
+/** hotfix guest-visible review F7/F9: whom the link of `ev` names. A full-name link without a connect code makes one (the next link carries it); a guest copy names the host it came from. */
+const linkBy = (ev: TwEvent): EventBy | undefined => {
+  if (ev.fromLink && ev.by) return byForLink(ev, undefined)   // the host's own reach, whatever my own name setting is
+  const by = revealedBy(byForLink(ev, eventsBy()), ev)
+  if (by?.did && !by.code && !ev.fromLink) void ensureConnectCode()
+  return by
+}
 const undoNotice = (title: string, onUndo: () => void, ms = 30000): void =>
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], ms)
 const webFocus = createWebFocus({ state: st, save, showWeb: () => go(Screen.Web), showEvent: (id) => { eventsView.open(id); go(Screen.Events) }, atWeb: () => screen === Screen.Web })
@@ -5618,7 +5626,7 @@ const extHooks: ExtHooks = {
   atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
   openItem: (id) => { closeSheet(); itemSheet(id) },
   openCalendar: () => { closeSheet(); go(Screen.Events) },
-  eventLink: (ev, lean = 0) => { const l = leanForLink(eventForLink(st(), ev), revealedBy(eventsBy(), ev), lean); return encodeEventLink(l.ev, linkOrigin(location.origin), 'peer', l.by) },   // wave47 invite-fits-chat
+  eventLink: (ev, lean = 0) => { const l = leanForLink(eventForLink(st(), ev), linkBy(ev), lean); return encodeEventLink(l.ev, linkOrigin(location.origin), 'peer', l.by) },   // wave47 invite-fits-chat
   sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
   me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
   sendInvite: async (personId, text) => {
@@ -6099,22 +6107,39 @@ function afterConnectOpen(personId?: string): void {
   else if (personId) personSheet(personId)
 }
 
-/** An event link accepted with the join sheet's button (a co-notes link joins without this: no connect without a tap): the event is mine; with `addInviter` the inviter becomes a person in my web, and
- * a host I do not hold yet is connected first (hotfix guest-visible: a blank browser opening the link is otherwise unknown to the host), then the inviter and the hosts are told. */
-function acceptEventLink(ev: LinkedEvent, withInviter: boolean): string {
-  const id = joinEvent(st(), ev, Date.now())
-  const by = withInviter ? ev.by : undefined
-  const reach = by ? hostToReach(by, st()) : null
-  const finish = (): void => {
-    if (by) addInviter(st(), by, id, S.eventInvitedContext(ev.name), randomId(8), Date.now())
-    save()
-    const held = st().events?.find((e) => e.id === id)
-    if (held) void eventEnv.joined(held, ev.by)   // answers-44d: the inviter and the hosts see that I joined
-  }
+/** hotfix guest-visible (review F2/F3/F6): the host of an event I joined through a link. A host I do not hold yet is connected first (an event-link connect: the host files me in
+ * its Acquaintances), the card is named by what that person announces (a different name than the link's is said out loud), and the host and the hosts are told I joined. A connect that
+ * did not go through leaves the event marked `hostPending` and says so; it retries when the app opens, comes online or the link is opened again. */
+async function connectEventHost(id: string): Promise<void> {
+  const e = st().events?.find((x) => x.id === id)
+  const by = e?.by
+  if (!e || !by) return
+  const reach = hostToReach(by, st())
+  let told: { name: string; did?: string } = by
+  if (reach) {
+    const out = await connectByCode(reach, Ring.Acquaintance, '', S.eventInvitedContext(e.name), true)
+    if (!('person' in out)) { e.hostPending = true; save(); toast(S.eventHostPending(by.name)); return }
+    tagPerson(st(), out.person.id, id)
+    const said = out.person.name.trim()
+    if (said !== NAMELESS_PEER && said !== by.name.trim()) toast(S.eventHostNamedAs(by.name, said))   // a did link names nobody yet: the name arrives in their hello
+    told = { name: said, ...(by.did ? { did: by.did } : {}) }
+  } else addInviter(st(), by, id, S.eventInvitedContext(e.name), randomId(8), Date.now())
+  delete e.hostPending
   save()
-  if (reach && by) void connectByCode(reach, Ring.Acquaintance, by.name, S.eventInvitedContext(ev.name)).then(finish, finish)   // a failure (offline, other relay) leaves the host untold, as before
-  else finish()
+  void eventEnv.joined(e, told)   // answers-44d: the host (the card I just made, by its own name) and the hosts see that I joined
+}
+
+/** An event link accepted with the join sheet's button: the event is mine. With the box ticked the host is connected too; unticked nothing leaves this phone. */
+function acceptEventLink(ev: LinkedEvent, connect: boolean): string {
+  const id = joinEvent(st(), ev, Date.now())
+  save()
+  if (connect && ev.by) void connectEventHost(id)
   return id
+}
+
+/** The hosts of events whose connect did not go through (connectEventHost) try again. */
+function retryEventHosts(): void {
+  for (const e of st().events ?? []) if (e.hostPending) void connectEventHost(e.id)
 }
 
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
@@ -6137,7 +6162,7 @@ function maybeOpenPendingEvent(): void {
     return
   }
   const kept = eventMerge.keptOf(ev.id); if (kept) { openEvents(kept); return } // wave45 merge-events: an old link opens the kept event
-  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id, linkOpensEdit(ev)); return }
+  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); retryEventHosts(); openEvents(ev.id, linkOpensEdit(ev)); return }   // hotfix guest-visible review F6: a held event whose host connect failed tries again
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement
   const add = (): void => {
@@ -6161,7 +6186,7 @@ function maybeOpenPendingEvent(): void {
     ev.srv ? el('p', { class: 'meta', 'data-org-counts-note': '' }, [S.evOrgCounts]) : null,
     ev.conditions ? el('p', {}, [ev.conditions]) : null,
     ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
-    ev.by ? el('label', { class: 'meta' }, [addBox, ` ${S.eventAddInviter(ev.by.name)}`]) : null,
+    ev.by ? el('label', { class: 'meta' }, [addBox, ` ${hostToReach(ev.by, st()) ? S.eventConnectInviter(ev.by.name) : S.eventAddInviter(ev.by.name)}`]) : null,   // hotfix guest-visible review F2: the box says what ticking does
     el('button', { class: 'btn btn-electric wide', 'data-event-join': '', onclick: add }, [S.eventLinkAdd]),
     el('button', { class: 'btn btn-ghost wide', 'data-event-notme': '', onclick: closeSheet }, [S.eventLinkNotMe]),
   ])
@@ -8900,6 +8925,7 @@ window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverA
 const refreshDrain = (): void => { if (state && !state.testOf?.handedOverAt) net.refresh() }
 watchWake(refreshDrain, { now: () => Date.now(), every: (fn, ms) => setInterval(fn, ms), stop: (h) => clearInterval(h as ReturnType<typeof setInterval>) })
 window.addEventListener('online', refreshDrain)
+window.addEventListener('online', retryEventHosts)   // hotfix guest-visible review F6
 window.addEventListener('online', () => backup.backOnline())
 window.addEventListener('pagehide', () => backup.hidden())
 window.addEventListener('pageshow', (e) => { if (e.persisted) refreshDrain() })
@@ -8944,6 +8970,7 @@ if (state && !state.testOf?.handedOverAt) {
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
+  retryEventHosts()   // hotfix guest-visible review F6
   offerApkHint(offerDemoContent)
   offerNotifications()
   offerKeepCopy()

@@ -76,9 +76,9 @@ describe('fittingInviteText: the invite fits one chat message', () => {
   it('the last step counts: a long organizer line goes out only when nothing else helps, and then the invite fits', () => {
     const e = ev({ organizer: 'o'.repeat(380) })
     const at = linkAt(e, { name: 'Ana' })
-    expect(inviteText(at(LINK_LEAN_MAX - 1), e.name).length).toBeGreaterThan(CHAT_TEXT_MAX)
+    expect(inviteText(at(3), e.name).length).toBeGreaterThan(CHAT_TEXT_MAX)
     const text = fittingInviteText(e.name, at)
-    expect(text).toBe(inviteText(at(LINK_LEAN_MAX), e.name))
+    expect(text).toBe(inviteText(at(4), e.name))
     expect(decoded(text).organizer).toBeUndefined()
     expect(decoded(text)).toMatchObject({ id: e.id, name: e.name, where: e.where, by: { name: 'Ana' } })
   })

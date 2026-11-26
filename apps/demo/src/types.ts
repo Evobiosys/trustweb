@@ -227,6 +227,8 @@ export interface ConnectAckEnvelope {
   did: string
   /** Wave 8: the sender reached out through the receiver's public link (no relationship before). Additive; absent otherwise. */
   reachOut?: true
+  /** hotfix guest-visible review F1: the sender connects through an event link: the receiver files them in its Acquaintances whatever its placement is, and counts the connect against its reach-out budget. Additive. */
+  ev?: true
   /** Wave 44 steer-invite-link (TrustWeb invite_policy.ts): the signed community invite token, only ever inside the sealed connect-ack2. */
   inv?: string
 }

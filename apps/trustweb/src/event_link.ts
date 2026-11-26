@@ -42,15 +42,15 @@ export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?
 }
 
 /** wave47 invite-fits-chat: what an event link leaves out, step by step, so it fits a bounded carrier (one chat message, chat.ts CHAT_TEXT_MAX): 0 nothing; 1 my did
- * (the invited person holds me already; my name stays, and my 22-character connect code when I have one, so a blank browser can still reach me); 2 also the themes; 3 also the conditions; 4 also the organizer line. What makes the event work on the
+ * (the invited person holds me already; my name stays, and my 22-character connect code when I have one, so a blank browser can still reach me); 2 also the themes; 3 also the conditions; 4 also the organizer line; 5 also my connect code (the one thing that lets a blank browser reach me goes last, so an invite that fitted before this code existed still fits). What makes the event work on the
  * other phone (id, name, dates, place, hosts, tag, mode, show-all) is never left out. Pure: the event handed in is not changed. */
-export const LINK_LEAN_MAX = 4
+export const LINK_LEAN_MAX = 5
 export function leanForLink(ev: TwEvent, by: EventBy | undefined, lean: number): { ev: TwEvent; by?: EventBy } {
   const out: TwEvent = { ...ev }
   if (lean >= 2) delete out.themes
   if (lean >= 3) delete out.conditions
-  if (lean >= LINK_LEAN_MAX) delete out.organizer
-  return { ev: out, ...(by ? { by: lean >= 1 ? { name: by.name, ...(by.code ? { code: by.code } : {}) } : by } : {}) }
+  if (lean >= 4) delete out.organizer
+  return { ev: out, ...(by ? { by: lean >= 1 ? { name: by.name, ...(by.code && lean < LINK_LEAN_MAX ? { code: by.code } : {}) } : by } : {}) }   // hotfix guest-visible review F8: the code goes last
 }
 
 /** Wave 43b: the short form the event QR uses (`#evs=` / `#evs_host=`): [id, name, from, to, core from, core to, hosts, mode, tag name] as a JSON array,
