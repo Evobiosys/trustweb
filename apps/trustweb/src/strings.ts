@@ -710,6 +710,10 @@ export const S = {
   eventInvitedBy: (name: string) => `${name} invited you`,
   eventAddInviter: (name: string) => `Add ${name} to my web`,
   eventInvitedContext: (event: string) => `invited me to ${event}`,
+  /* hotfix guest-visible review */
+  eventConnectInviter: (name: string) => `Connect with ${name} so they and the people at this event can see you`,
+  eventHostPending: (name: string) => `Not connected with ${name} yet; it retries when you are online`,
+  eventHostNamedAs: (said: string, is: string) => `The link said ${said}; the person you connected with calls themselves ${is}`,
   eventLinkNotMe: 'Not me',
   eventLinkNudge: 'Tag the people you met here',
   eventsHost: 'Host',

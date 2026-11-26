@@ -216,6 +216,8 @@ export interface NetHooks {
   holdPeer(peer: Peer): boolean
   /** A new peer came in through a reach-out (public link): true drops it unanswered (over the hourly cap, or paused; reach_out_guard.ts). */
   refuseReachOut?(): boolean
+  /** A new peer came in through an event link (ack `ev`): true drops it unanswered (over the event-join cap, reach_out_guard.ts EVENT_JOIN_PER_HOUR); the reach-out pause never holds it. */
+  refuseEventJoin?(): boolean
   /** The other side of the hold: a peer we already hold sent its ack again, i.e. the owner allowed us. */
   onPeerConfirmed(peer: Peer): void
   /** Ring for a peer who just scanned this device's code. */
@@ -494,7 +496,7 @@ export class Net {
   }
 
   /** The scanning side of the one-scan ceremony: add the peer, tell them who we are. */
-  async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false, inv?: string): Promise<Peer> {
+  async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false, inv?: string, ev = false): Promise<Peer> {
     const s = this.hooks.state()
     this.ensureIdentity()
     // Wave 44: a QR of an app before v2 carries no key: refused before anything is added (never a cleartext ack).
@@ -509,6 +511,7 @@ export class Net {
       ring,
       connectedAt: Date.now(),
       ...(reachOut ? { reachOut: true as const } : {}),
+      ...(ev ? { ev: true as const } : {}),   // hotfix guest-visible review F1
       handshake: mode,
       ...(mode === 'qr' && params.qk ? { qk: params.qk } : {}),
       ...(inv ? { inv } : {}),
@@ -531,7 +534,7 @@ export class Net {
       if (!this.channel) return
       this.ackAttempts.set(peer.did, nextAttempts(this.ackAttempts.get(peer.did), Date.now()))
       const identity = this.ensureIdentity()
-      await this.channel.sendRaw(peer.did, await sealConnectAck({ ...buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true), ...(peer.inv ? { inv: peer.inv } : {}) }, identity, peer.did, peer.qk))
+      await this.channel.sendRaw(peer.did, await sealConnectAck({ ...buildConnectAck(this.hooks.state().me, identity, peer.reachOut === true, peer.ev === true), ...(peer.inv ? { inv: peer.inv } : {}) }, identity, peer.did, peer.qk))
       const stored = this.peerByDid(peer.did)
       if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
     } catch {
@@ -622,7 +625,7 @@ export class Net {
       id: known?.id ?? env.from.id,
       displayName: known && known.displayName !== NAMELESS_PEER ? known.displayName : told,
       did: env.did,
-      ring: known?.ring ?? this.hooks.ringForNewPeer(),
+      ring: known?.ring ?? (env.ev === true && !env.inv ? Ring.Acquaintance : this.hooks.ringForNewPeer()),   // hotfix guest-visible review F1: an event-link joiner never lands in the Meet-code placement
       connectedAt: Date.now(),
       ...(mode ? { handshake: known?.handshake ?? mode } : {}),
     }
@@ -639,6 +642,7 @@ export class Net {
     }
     if (!inv && this.hooks.holdPeer(incoming)) return true
     if (!inv && env.reachOut && this.hooks.refuseReachOut?.()) return true
+    if (!inv && env.ev && !env.reachOut && this.hooks.refuseEventJoin?.()) return true   // hotfix guest-visible review F4: a link joiner has its own hourly budget
     const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut && !inv ? { ring: Ring.Intending, reachOut: true as const } : {}) })
     this.hooks.save()
     this.hooks.onPeerConnected(peer)

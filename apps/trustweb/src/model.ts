@@ -397,6 +397,10 @@ export interface TwEvent {
   attended: boolean
   /** Came in through an event link (event_link.ts): shows the organizer and the tag nudge. */
   fromLink?: true
+  /** hotfix guest-visible: who the link said it came from (name, did, connect code): the host to connect to, and what a re-shared copy names. */
+  by?: { name: string; did?: string; code?: string }
+  /** hotfix guest-visible review F6: the connect to that host did not go through yet; retried when the app opens, comes online or the link is opened again. Local only. */
+  hostPending?: true
   /** Who hosted it: names the organizer typed about themselves. One by default, co-hosts the exception. */
   hosts?: string[]
   /** Default true: the host may name this event's tag for everyone (event_link.ts host link). */
@@ -702,6 +706,8 @@ export interface Peer {
   askAgainSentAt?: number
   /** Wave 8: this connection began as a reach-out through a public link (sent in the connect-ack; kept so a resend carries it). */
   reachOut?: true
+  /** hotfix guest-visible review F1: this connection began through an event link (sent in the connect-ack; kept so a resend carries it). Local only. */
+  ev?: true
   /** Wave 43c (device_alias.ts): the DIDs of this person's other devices, told by them in a sealed 'devices' envelope; travels with sync. */
   alsoDids?: string[]
   /** Wave 43c: this connection arrived by device sync (another of my devices made it). This device never sends it a connect-ack. This device only. */
@@ -1192,6 +1198,8 @@ export interface AppState {
   schemaVersion?: number
   /** Times (ms) of the reach-outs via my link that landed on my web in the last hour (reach_out_guard.ts), how many were held, and the owner's pause. Local only. */
   reachOutLog?: number[]
+  /** Times (ms) of the event-link joiners that connected in the last hour (reach_out_guard.ts EVENT_JOIN_PER_HOUR). Local only. */
+  eventJoinLog?: number[]
   reachOutHeld?: number
   reachOutsPaused?: true
   /** Wave 16: reach-outs waiting for Add or Dismiss under the web (wants_to_connect.ts). This device only. Absent: none; older builds ignore it. */

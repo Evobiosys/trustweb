@@ -65,3 +65,8 @@ export function rosterDue(sent: readonly string[] | undefined, names: readonly s
   const have = new Set([...(sent ?? []), to].map((n) => n.trim().toLowerCase()))
   return names.filter((n) => !have.has(n.toLowerCase()))
 }
+
+/** F5: who hears the roster of `ev`: the people who joined it (tagged), never an invitee who did not. */
+export function rosterAudience(s: Pick<AppState, 'people'>, ev: TwEvent): Person[] {
+  return attendees(s as AppState, ev.id)
+}
